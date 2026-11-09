@@ -6,10 +6,12 @@ import unittest
 from whoop.health import (
     Baseline,
     RecoveryResult,
+    STRESS_MAX,
     detect_sleep,
     recovery_score,
     strain_label,
     strain_score,
+    stress_score,
     total_sleep_hours,
 )
 from whoop.records import RecordHeader, V18Sample
@@ -191,6 +193,70 @@ class TestRecovery(unittest.TestCase):
             for rhr in (40.0, 55.0, 75.0):
                 result = recovery_score(ln, rhr, 8.0, 8.0, baseline())
                 self.assertTrue(0.0 <= result.score <= 100.0)
+
+
+class TestStress(unittest.TestCase):
+    def test_no_baseline_gives_no_index(self):
+        result = stress_score(3.4, None)
+        self.assertIsNone(result.index)
+        self.assertIn("baseline", result.reason)
+        self.assertEqual(result.band, "unavailable")
+
+    def test_short_baseline_gives_no_index(self):
+        self.assertIsNone(stress_score(3.4, baseline(days=6)).index)
+
+    def test_seven_days_is_enough(self):
+        self.assertIsNotNone(stress_score(3.4, baseline(days=7)).index)
+
+    def test_missing_hrv_gives_no_index(self):
+        result = stress_score(None, baseline())
+        self.assertIsNone(result.index)
+        self.assertEqual(result.band, "unavailable")
+
+    def test_zero_sd_gives_no_index_rather_than_dividing_by_zero(self):
+        flat = Baseline(4.0, 0.0, 55.0, 3.0, days=14)
+        self.assertIsNone(stress_score(3.4, flat).index)
+
+    def test_at_the_norm_is_zero(self):
+        result = stress_score(4.0, baseline())
+        self.assertEqual(result.index, 0.0)
+        self.assertEqual(result.band, "low")
+
+    def test_above_the_norm_is_not_negative_stress(self):
+        result = stress_score(4.9, baseline())
+        self.assertEqual(result.index, 0.0)
+        self.assertEqual(result.band, "low")
+
+    def test_index_counts_standard_deviations_below_the_norm(self):
+        # mean 4.0, sd 0.3: each 0.3 of lnRMSSD below the norm is one point.
+        for ln, expected in ((3.7, 1.0), (3.4, 2.0), (3.1, 3.0)):
+            with self.subTest(ln=ln):
+                self.assertAlmostEqual(stress_score(ln, baseline()).index, expected, places=6)
+
+    def test_band_boundaries(self):
+        for ln, band in (
+            (4.0, "low"), (3.71, "low"), (3.7, "elevated"),
+            (3.41, "elevated"), (3.4, "high"), (2.0, "high"),
+        ):
+            with self.subTest(ln=ln):
+                self.assertEqual(stress_score(ln, baseline()).band, band)
+
+    def test_far_below_the_norm_is_clipped(self):
+        result = stress_score(1.0, baseline())
+        self.assertEqual(result.index, STRESS_MAX)
+        self.assertEqual(result.band, "high")
+
+    def test_monotonic_as_hrv_falls(self):
+        indices = [stress_score(4.6 - 0.05 * i, baseline()).index for i in range(60)]
+        self.assertEqual(indices, sorted(indices))
+        self.assertEqual(indices[0], 0.0)
+        self.assertEqual(indices[-1], STRESS_MAX)
+
+    def test_index_stays_in_range(self):
+        for ln in (0.0, 2.0, 4.0, 6.0, 20.0):
+            with self.subTest(ln=ln):
+                index = stress_score(ln, baseline()).index
+                self.assertTrue(0.0 <= index <= STRESS_MAX)
 
 
 if __name__ == "__main__":

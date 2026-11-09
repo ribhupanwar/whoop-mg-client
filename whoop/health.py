@@ -15,6 +15,11 @@ from the strap alone. What is here instead:
   * Recovery - a baseline-relative composite of lnRMSSD, resting HR and sleep
     duration. It returns no score at all until a personal baseline exists,
     because a recovery number without a baseline is meaningless.
+  * Stress - how far current lnRMSSD sits below the personal awake-quiet norm,
+    in standard deviations, clipped to 0-3. Acute stress withdraws vagal tone,
+    which lowers RMSSD. It is scored against an AWAKE baseline, never the sleep
+    one: lnRMSSD is systematically higher in sleep, so comparing a daytime
+    window against a sleep norm would read as stressed every waking hour.
 """
 
 import math
@@ -34,6 +39,10 @@ STRAIN_MAX = 21.0
 
 MIN_BASELINE_DAYS = 7
 RECOVERY_WEIGHTS = {"hrv": 0.5, "rhr": 0.2, "sleep": 0.3}
+
+STRESS_MAX = 3.0
+STRESS_ELEVATED_SD = 1.0
+STRESS_HIGH_SD = 2.0
 
 
 @dataclass
@@ -254,3 +263,41 @@ def recovery_score(
         rhr_component=round(components["rhr"], 1),
         sleep_component=round(components["sleep"], 1) if "sleep" in components else None,
     )
+
+
+@dataclass
+class StressResult:
+    index: float | None
+    reason: str | None
+
+    @property
+    def band(self) -> str:
+        if self.index is None:
+            return "unavailable"
+        if self.index < STRESS_ELEVATED_SD:
+            return "low"
+        if self.index < STRESS_HIGH_SD:
+            return "elevated"
+        return "high"
+
+
+def stress_score(ln_rmssd: float | None, baseline: Baseline | None) -> StressResult:
+    """Standard deviations of lnRMSSD below the personal norm, clipped to 0-3.
+
+    Vagal withdrawal is the published acute-stress marker, so a window sitting
+    below its own awake-quiet norm scores higher. At or above the norm the index
+    is 0 - HRV above your normal is not "negative stress".
+
+    `baseline` MUST be built from awake-quiet windows. Exercise also collapses
+    RMSSD, for metabolic rather than psychological reasons, so the caller must
+    only pass HRV from a verified-quiet run (see metrics.resting_hrv).
+    """
+    if baseline is None or baseline.days < MIN_BASELINE_DAYS:
+        return StressResult(None, f"needs at least {MIN_BASELINE_DAYS} days of awake-quiet baseline")
+    if ln_rmssd is None:
+        return StressResult(None, "needs HRV from a verified-quiet window")
+    if baseline.ln_rmssd_sd <= 0:
+        return StressResult(None, "baseline has no HRV variation to scale against")
+
+    deviation = (baseline.ln_rmssd_mean - ln_rmssd) / baseline.ln_rmssd_sd
+    return StressResult(index=round(max(0.0, min(STRESS_MAX, deviation)), 2), reason=None)

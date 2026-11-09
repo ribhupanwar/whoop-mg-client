@@ -21,10 +21,12 @@ from whoop.health import (
     Baseline,
     RecoveryResult,
     SleepPeriod,
+    StressResult,
     detect_sleep,
     recovery_score,
     strain_label,
     strain_score,
+    stress_score,
     total_sleep_hours,
 )
 from whoop.metrics import (
@@ -59,6 +61,7 @@ class Report:
     trimp_value: float | None
     strain: float | None
     recovery: RecoveryResult
+    stress: StressResult
 
 
 def build_report(
@@ -70,6 +73,7 @@ def build_report(
     rhr_override: float | None,
     sleep_need: float | None,
     baseline: Baseline | None,
+    stress_baseline: Baseline | None = None,
 ) -> Report:
     ordered = sorted(samples, key=lambda s: s.unix)
     wearing = [s for s in ordered if s.wearing]
@@ -99,6 +103,13 @@ def build_report(
         sleep_need,
         baseline,
     )
+    # A sleep capture's longest quiet run is sleep, and sleep lnRMSSD is not
+    # comparable to an awake-quiet norm. Score stress only on awake captures.
+    stress = (
+        StressResult(None, "sleep capture - stress needs an awake-quiet window")
+        if periods
+        else stress_score(hrv_result.ln_rmssd, stress_baseline)
+    )
 
     return Report(
         source=source,
@@ -122,6 +133,7 @@ def build_report(
         trimp_value=trimp_value,
         strain=strain_score(trimp_value),
         recovery=recovery,
+        stress=stress,
     )
 
 
@@ -130,27 +142,49 @@ def _fmt(value: float | None, suffix: str = "", places: int = 1) -> str:
 
 
 DEFAULT_BASELINE = "baseline.json"
+CAPTURE_STATES = frozenset({"awake", "sleep"})
 
 
 def load_daily(path: Path) -> dict[str, dict]:
-    """Day-keyed readings, so re-running a capture updates rather than duplicates."""
+    """Readings keyed by date and capture state, so re-running one updates it.
+
+    Awake and sleep lnRMSSD are different populations - sleep runs higher - so
+    they must not share a key: an overnight recording would otherwise overwrite
+    the daytime reading the stress baseline is built from.
+    """
     if not path.exists():
         return {}
     raw = json.loads(path.read_text(encoding="utf-8"))
-    return {row["date"]: row for row in raw.get("days", [])}
+    return {f"{row['date']}|{row['state']}": row for row in raw.get("days", [])}
 
 
-def record_day(path: Path, date: str, ln_rmssd: float, rhr: float) -> int:
+def record_day(
+    path: Path, date: str, ln_rmssd: float, rhr: float, state: str = "awake"
+) -> int:
+    """Store one capture state's reading and return how many days that state has."""
+    if state not in CAPTURE_STATES:
+        raise ValueError(f"state must be one of {sorted(CAPTURE_STATES)}")
     days = load_daily(path)
-    days[date] = {"date": date, "ln_rmssd": ln_rmssd, "rhr": rhr}
+    days[f"{date}|{state}"] = {
+        "date": date, "state": state, "ln_rmssd": ln_rmssd, "rhr": rhr,
+    }
     ordered = [days[key] for key in sorted(days)]
     path.write_text(json.dumps({"days": ordered}, indent=2) + "\n", encoding="utf-8")
-    return len(ordered)
+    return sum(1 for row in ordered if row["state"] == state)
 
 
 def baseline_from_file(path: Path) -> Baseline | None:
     days = load_daily(path)
     rows = [days[key] for key in sorted(days)]
+    return Baseline.from_daily(
+        [r["ln_rmssd"] for r in rows], [r["rhr"] for r in rows]
+    )
+
+
+def stress_baseline_from_file(path: Path) -> Baseline | None:
+    """Awake-quiet days only, because stress is scored against an awake norm."""
+    days = load_daily(path)
+    rows = [days[key] for key in sorted(days) if days[key]["state"] == "awake"]
     return Baseline.from_daily(
         [r["ln_rmssd"] for r in rows], [r["rhr"] for r in rows]
     )
@@ -199,6 +233,13 @@ def print_report(report: Report) -> None:
             f"  HRV {report.recovery.hrv_component}"
             f"  RHR {report.recovery.rhr_component}"
             f"  sleep {report.recovery.sleep_component}"
+        )
+    if report.stress.index is None:
+        print(f"  Stress     : unavailable - {report.stress.reason}")
+    else:
+        print(
+            f"  Stress     : {report.stress.index:.2f} / 3  [{report.stress.band}]"
+            "  SD of lnRMSSD below your awake-quiet norm"
         )
     print(f"\n  {DISCLAIMER}")
 
@@ -258,6 +299,15 @@ def render_html(report: Report) -> str:
             "Strain",
             _fmt(report.strain) + " / 21",
             f"{strain_label(report.strain)} · TRIMP {_fmt(report.trimp_value)}",
+        ),
+        _card(
+            "Stress",
+            _fmt(report.stress.index, places=2) + " / 3",
+            (
+                f"{report.stress.band} · lnRMSSD vs your awake-quiet norm"
+                if report.stress.index is not None
+                else report.stress.reason
+            ),
         ),
     ]
 
@@ -351,11 +401,12 @@ def main() -> int:
     parser.add_argument("--sleep-need", type=float, default=8.0)
     parser.add_argument(
         "--baseline", default=DEFAULT_BASELINE,
-        help="day-keyed JSON history; read to score recovery",
+        help="JSON history keyed by date and capture state; scores recovery and stress",
     )
     parser.add_argument(
         "--record", action="store_true",
-        help="append this capture's resting HRV and RHR to the baseline file",
+        help="append this capture's resting HRV and RHR to the baseline file, "
+             "tagged awake or sleep by whether a sleep period was detected",
     )
     parser.add_argument("--out", default="dashboard.html")
     args = parser.parse_args()
@@ -382,16 +433,18 @@ def main() -> int:
             date = datetime.fromtimestamp(
                 max(s.unix for s in samples), timezone.utc
             ).date().isoformat()
-            count = record_day(history, date, result.ln_rmssd, measured)
+            state = "sleep" if detect_sleep(samples) else "awake"
+            count = record_day(history, date, result.ln_rmssd, measured, state)
             print(
-                f"  Recorded {date}: lnRMSSD {result.ln_rmssd:.3f},"
+                f"  Recorded {date} [{state}]: lnRMSSD {result.ln_rmssd:.3f},"
                 f" RHR {measured:.1f} bpm from a {window_s} s quiet run"
-                f"  ({count}/7 days)"
+                f"  ({count}/7 {state} days)"
             )
 
     report = build_report(
         samples, str(path), args.age, args.sex, args.max_hr,
         args.rhr, args.sleep_need, baseline_from_file(history),
+        stress_baseline=stress_baseline_from_file(history),
     )
     print_report(report)
     Path(args.out).write_text(render_html(report), encoding="utf-8")

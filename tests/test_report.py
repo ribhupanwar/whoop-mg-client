@@ -14,6 +14,7 @@ from report import (
     load_daily,
     record_day,
     render_html,
+    stress_baseline_from_file,
 )
 from whoop.health import Baseline
 from whoop.records import RecordHeader, V18Sample
@@ -102,6 +103,29 @@ class TestBuildReport(unittest.TestCase):
         self.assertEqual(report.hrv.beats, 0)
         self.assertIsNone(report.hrv.rmssd_ms)
 
+    def test_stress_is_declined_on_a_sleep_capture(self):
+        # The night's quiet run is sleep, and sleep lnRMSSD is not comparable
+        # to the awake norm stress is scored against.
+        norm = Baseline(4.0, 0.3, 55.0, 3.0, days=14)
+        report = build(overnight(), stress_baseline=norm)
+        self.assertTrue(report.sleep_periods)
+        self.assertIsNone(report.stress.index)
+        self.assertIn("awake", report.stress.reason)
+
+    def test_stress_scores_an_awake_quiet_capture(self):
+        norm = Baseline(4.0, 0.3, 55.0, 3.0, days=14)
+        report = build(
+            stretch(0, 300, 70, 0.02, rr=(800, 810, 800, 790)), stress_baseline=norm
+        )
+        self.assertFalse(report.sleep_periods)
+        self.assertIsNotNone(report.stress.index)
+        self.assertTrue(0.0 <= report.stress.index <= 3.0)
+
+    def test_stress_without_an_awake_baseline_is_unavailable(self):
+        report = build(stretch(0, 300, 70, 0.02, rr=(800, 810, 800, 790)))
+        self.assertIsNone(report.stress.index)
+        self.assertEqual(report.stress.band, "unavailable")
+
 
 class TestBaselineStore(unittest.TestCase):
     def setUp(self):
@@ -118,7 +142,7 @@ class TestBaselineStore(unittest.TestCase):
         self.assertEqual(record_day(self.path, "2026-11-09", 3.900, 70.0), 1)
         days = load_daily(self.path)
         self.assertEqual(len(days), 1)
-        self.assertAlmostEqual(days["2026-11-09"]["rhr"], 70.0, places=6)
+        self.assertAlmostEqual(days["2026-11-09|awake"]["rhr"], 70.0, places=6)
 
     def test_days_are_stored_in_date_order(self):
         record_day(self.path, "2026-11-11", 4.0, 68.0)
@@ -146,6 +170,38 @@ class TestBaselineStore(unittest.TestCase):
         report = build(overnight(), baseline=baseline)
         self.assertIsNotNone(report.recovery.score)
         self.assertTrue(0 <= report.recovery.score <= 100)
+
+    def test_awake_and_sleep_on_one_date_do_not_overwrite(self):
+        record_day(self.path, "2026-11-09", 3.8, 72.0, "awake")
+        record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep")
+        days = load_daily(self.path)
+        self.assertEqual(len(days), 2)
+        self.assertAlmostEqual(days["2026-11-09|awake"]["ln_rmssd"], 3.8, places=6)
+        self.assertAlmostEqual(days["2026-11-09|sleep"]["ln_rmssd"], 4.6, places=6)
+
+    def test_stress_baseline_excludes_sleep_days(self):
+        # Sleep lnRMSSD runs higher; letting it into the awake norm would make
+        # every waking hour read as stressed.
+        for i in range(7):
+            record_day(self.path, f"2026-11-{9 + i:02d}", 3.8, 71.0, "awake")
+            record_day(self.path, f"2026-11-{9 + i:02d}", 4.6, 55.0, "sleep")
+        awake = stress_baseline_from_file(self.path)
+        self.assertEqual(awake.days, 7)
+        self.assertLess(awake.ln_rmssd_mean, 4.0)
+
+    def test_sleep_days_alone_leave_stress_without_a_baseline(self):
+        for i in range(7):
+            record_day(self.path, f"2026-11-{9 + i:02d}", 4.6, 55.0, "sleep")
+        self.assertIsNone(stress_baseline_from_file(self.path))
+
+    def test_record_day_counts_only_its_own_state(self):
+        self.assertEqual(record_day(self.path, "2026-11-09", 3.8, 71.0, "awake"), 1)
+        self.assertEqual(record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep"), 1)
+        self.assertEqual(record_day(self.path, "2026-11-10", 3.9, 70.0, "awake"), 2)
+
+    def test_unknown_state_is_rejected(self):
+        with self.assertRaises(ValueError):
+            record_day(self.path, "2026-11-09", 3.8, 71.0, "nap")
 
 
 class TestRenderHtml(unittest.TestCase):
