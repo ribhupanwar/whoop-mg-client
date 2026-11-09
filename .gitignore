@@ -1,0 +1,24 @@
+# Personal biometric captures and device identifiers - never commit.
+*.jsonl
+*.csv
+capture*.json
+session*.json
+
+# Third-party reference sources downloaded during protocol research.
+# These are AGPL-licensed and are NOT part of this clean-room implementation.
+*_reference.dart
+band_reference.dart
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
