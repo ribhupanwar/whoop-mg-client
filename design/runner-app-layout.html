@@ -1,0 +1,1030 @@
+<div id="runner-app-mockup" data-preview="live">
+<style>
+#runner-app-mockup{
+  font-family:var(--font-sans);font-size:13px;color:var(--seed-fg);
+  --app-bg:light-dark(#eef0f3,#0a0c0f);
+  --app-surface:light-dark(#ffffff,#15181d);
+  --app-raised:light-dark(#f4f6f8,#1d2128);
+  --app-fg:light-dark(#14171c,#eef1f5);
+  --app-muted:light-dark(#6b7280,#8b95a3);
+  --app-line:light-dark(#e2e5ea,#262b34);
+  --app-accent:light-dark(#0a84ff,#5aa2ff);
+  --app-good:light-dark(#1a9e4b,#4ade80);
+  --app-warn:light-dark(#b26a00,#e0a33a);
+  --app-high:light-dark(#c0392b,#ff6b5e);
+  --app-sleep:light-dark(#7b8fa8,#9db4cc);
+}
+#runner-app-mockup[data-preview="live"] [data-when="demo"]{display:none}
+#runner-app-mockup[data-preview="demo"] [data-when="live"]{display:none}
+
+#runner-app-mockup .rm-legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;
+  font-size:12px;color:var(--seed-muted);margin:0 0 12px}
+#runner-app-mockup .rm-dot{display:inline-block;width:8px;height:8px;border-radius:50%;
+  margin-right:5px;vertical-align:middle}
+#runner-app-mockup .rm-live{background:var(--app-good)}
+#runner-app-mockup .rm-waiting{background:var(--app-warn)}
+#runner-app-mockup .rm-toggle{margin-left:auto;display:flex;align-items:center;gap:7px;
+  min-height:32px;cursor:pointer;font-size:12px;color:var(--seed-fg)}
+
+#runner-app-mockup .rm-phone{position:relative;max-width:390px;margin:0 auto;
+  background:var(--app-bg);border:1px solid var(--app-line);border-radius:32px;overflow:hidden;
+  box-shadow:0 8px 30px light-dark(rgba(0,0,0,.10),rgba(0,0,0,.45))}
+#runner-app-mockup .rm-topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px 6px}
+#runner-app-mockup .rm-avatar{width:30px;height:30px;border-radius:50%;
+  border:1.5px solid var(--app-muted);display:flex;align-items:center;justify-content:center}
+#runner-app-mockup .rm-avatar svg{width:16px;height:16px;stroke:var(--app-muted);fill:none;stroke-width:1.6}
+#runner-app-mockup .rm-daynav{display:flex;align-items:center;background:var(--app-raised);
+  border-radius:999px;padding:2px}
+#runner-app-mockup .rm-daynav button{width:32px;height:32px;border:0;background:none;
+  color:var(--app-fg);cursor:pointer;font-size:14px;border-radius:50%}
+#runner-app-mockup .rm-daynav button:disabled{color:var(--app-line);cursor:default}
+#runner-app-mockup .rm-daynav span{font-size:11px;font-weight:500;letter-spacing:.08em;
+  color:var(--app-fg);padding:0 8px;min-width:62px;text-align:center}
+#runner-app-mockup .rm-batt{font-size:11px;color:var(--app-muted);display:flex;
+  align-items:center;gap:5px}
+
+#runner-app-mockup .rm-nav{padding:4px 18px 12px;display:flex;align-items:flex-start;gap:8px}
+#runner-app-mockup .rm-back{width:32px;height:32px;flex:0 0 auto;border-radius:50%;
+  background:var(--app-raised);border:1px solid var(--app-line);cursor:pointer;
+  color:var(--app-fg);font-size:16px;line-height:1;display:flex;align-items:center;
+  justify-content:center;margin-top:2px}
+#runner-app-mockup .rm-navtext{flex:1;min-width:0}
+#runner-app-mockup .rm-nav h2{margin:0;font-size:24px;font-weight:500;
+  letter-spacing:-.4px;color:var(--app-fg)}
+#runner-app-mockup .rm-nav p{margin:3px 0 0;font-size:12px;color:var(--app-muted)}
+#runner-app-mockup .rm-body{padding:0 14px 18px}
+
+#runner-app-mockup .rm-demoflag{background:light-dark(#fff4e0,#2a2114);
+  border:1px solid var(--app-warn);border-radius:10px;padding:8px 11px;
+  font-size:11.5px;color:var(--app-fg);margin-bottom:12px}
+
+#runner-app-mockup .rm-trio{display:flex;gap:6px;justify-content:space-between;
+  padding:6px 4px 16px}
+#runner-app-mockup .rm-trio-item{flex:1;text-align:center;min-width:0}
+#runner-app-mockup .rm-miniring{position:relative;width:96px;height:96px;margin:0 auto}
+#runner-app-mockup .rm-miniring svg{display:block}
+#runner-app-mockup .rm-miniring b{position:absolute;inset:0;display:flex;
+  align-items:center;justify-content:center;font-size:22px;font-weight:500;
+  color:var(--app-fg);letter-spacing:-.6px}
+#runner-app-mockup .rm-trio-label{font-size:10.5px;font-weight:500;color:var(--app-muted);
+  margin-top:8px;letter-spacing:.09em}
+
+#runner-app-mockup .rm-insight{display:flex;gap:12px;background:var(--app-surface);
+  border:1px solid var(--app-line);border-radius:16px;padding:15px;margin-bottom:12px}
+#runner-app-mockup .rm-insight-body{flex:1;min-width:0}
+#runner-app-mockup .rm-insight-body h3{margin:0 0 5px;font-size:14px;font-weight:500;color:var(--app-fg)}
+#runner-app-mockup .rm-insight-body p{margin:0;font-size:12px;color:var(--app-muted);line-height:1.5}
+#runner-app-mockup .rm-badge{width:34px;flex:0 0 auto;text-align:center}
+#runner-app-mockup .rm-badge i{display:flex;width:26px;height:26px;border-radius:8px;
+  background:var(--app-raised);border:1px solid var(--app-line);align-items:center;
+  justify-content:center;font-style:normal;font-size:13px;color:var(--app-good);margin:0 auto 4px}
+#runner-app-mockup .rm-badge span{font-size:11px;color:var(--app-muted)}
+
+#runner-app-mockup .rm-duo{display:flex;gap:10px;margin-bottom:14px}
+#runner-app-mockup .rm-tapcard{flex:1;min-width:0;text-align:left;cursor:pointer;
+  background:var(--app-surface);border:1px solid var(--app-line);border-radius:14px;
+  padding:13px;font-family:var(--font-sans);color:var(--app-fg);min-height:44px}
+#runner-app-mockup .rm-taphead{display:flex;justify-content:space-between;align-items:center;gap:6px}
+#runner-app-mockup .rm-taphead h3{margin:0;font-size:10.5px;font-weight:500;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--app-fg)}
+#runner-app-mockup .rm-chev{color:var(--app-muted);font-size:15px}
+#runner-app-mockup .rm-tapstate{display:flex;align-items:center;gap:7px;margin-top:11px}
+#runner-app-mockup .rm-tapstate .rm-pill{font-size:12px;font-weight:500;padding:3px 7px;
+  border-radius:6px;background:var(--app-raised);border:1px solid var(--app-line)}
+#runner-app-mockup .rm-tapstate div{min-width:0}
+#runner-app-mockup .rm-tapstate b{display:block;font-size:11px;font-weight:500;letter-spacing:.04em}
+#runner-app-mockup .rm-tapstate span{display:block;font-size:10.5px;color:var(--app-muted)}
+#runner-app-mockup .rm-ok{color:var(--app-good)}
+#runner-app-mockup .rm-pending{color:var(--app-warn)}
+
+#runner-app-mockup .rm-h2{font-size:19px;font-weight:500;color:var(--app-fg);
+  margin:18px 0 10px;letter-spacing:-.3px}
+#runner-app-mockup .rm-card{background:var(--app-surface);border:1px solid var(--app-line);
+  border-radius:16px;padding:14px;margin-bottom:11px}
+#runner-app-mockup .rm-cardhead{display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:11px}
+#runner-app-mockup .rm-cardhead h3{margin:0;font-size:10.5px;font-weight:500;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--app-fg)}
+#runner-app-mockup .rm-outlook{display:flex;align-items:center;gap:10px;
+  background:linear-gradient(100deg,var(--app-raised),var(--app-surface));
+  border:1px solid var(--app-line);border-radius:12px;padding:12px 14px;margin-bottom:11px;
+  width:100%;cursor:pointer;font-family:var(--font-sans);color:var(--app-fg);min-height:44px}
+#runner-app-mockup .rm-outlook svg{width:18px;height:18px;stroke:var(--app-warn);fill:none;stroke-width:1.6}
+#runner-app-mockup .rm-outlook b{flex:1;text-align:left;font-size:13px;font-weight:400}
+
+#runner-app-mockup .rm-sleeprow{display:flex;align-items:center;gap:11px;
+  background:var(--app-raised);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+#runner-app-mockup .rm-sleeppill{display:flex;align-items:center;gap:7px;
+  background:var(--app-sleep);color:light-dark(#fff,#0d1219);border-radius:9px;
+  padding:7px 12px;font-size:14px;font-weight:500;white-space:nowrap}
+#runner-app-mockup .rm-sleeprow>b{flex:1;font-size:11px;font-weight:500;
+  letter-spacing:.08em;color:var(--app-fg)}
+#runner-app-mockup .rm-sleeptime{font-size:10.5px;color:var(--app-muted);text-align:right;line-height:1.5}
+#runner-app-mockup .rm-btnrow{display:flex;gap:9px}
+#runner-app-mockup .rm-btnrow button{flex:1;min-height:42px;background:var(--app-raised);
+  border:1px solid var(--app-line);border-radius:10px;color:var(--app-fg);
+  font-family:var(--font-sans);font-size:11px;font-weight:500;letter-spacing:.05em;cursor:pointer}
+
+#runner-app-mockup .rm-actlist{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+#runner-app-mockup .rm-actrow{display:flex;align-items:center;gap:10px;
+  background:var(--app-raised);border-radius:11px;padding:9px 12px}
+#runner-app-mockup .rm-actrow svg{width:17px;height:17px;stroke:var(--app-muted);fill:none;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+#runner-app-mockup .rm-actrow b{flex:1;font-size:12px;font-weight:500;color:var(--app-fg)}
+#runner-app-mockup .rm-actrow span{font-size:11px;color:var(--app-muted);white-space:nowrap}
+
+#runner-app-mockup .rm-tonight{display:flex;align-items:center;gap:10px}
+#runner-app-mockup .rm-tonight>div{flex:1}
+#runner-app-mockup .rm-tonight b{display:block;font-size:21px;font-weight:500;
+  color:var(--app-fg);letter-spacing:-.5px}
+#runner-app-mockup .rm-tonight em{font-style:normal;font-size:9.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--app-muted);display:block;margin-top:3px;line-height:1.4}
+#runner-app-mockup .rm-tonight hr{width:26px;border:0;border-top:1px dashed var(--app-line)}
+
+#runner-app-mockup .rm-metricrow{display:flex;align-items:center;gap:11px;
+  background:var(--app-surface);border:1px solid var(--app-line);border-radius:13px;
+  padding:13px 14px;margin-bottom:8px}
+#runner-app-mockup .rm-metricrow svg{width:19px;height:19px;stroke:var(--app-muted);fill:none;
+  stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+#runner-app-mockup .rm-metricrow b{flex:1;font-size:11px;font-weight:500;
+  letter-spacing:.07em;text-transform:uppercase;color:var(--app-fg)}
+#runner-app-mockup .rm-metricval{text-align:right;white-space:nowrap}
+#runner-app-mockup .rm-metricval strong{display:block;font-size:20px;font-weight:500;
+  color:var(--app-fg);letter-spacing:-.5px}
+#runner-app-mockup .rm-metricval strong small{font-size:11px;font-weight:400;color:var(--app-muted)}
+#runner-app-mockup .rm-metricval em{font-style:normal;display:block;font-size:11px;
+  color:var(--app-muted);margin-top:1px}
+#runner-app-mockup .rm-customize{font-size:10px;font-weight:500;letter-spacing:.07em;
+  padding:5px 10px;border-radius:7px;background:var(--app-raised);
+  border:1px solid var(--app-line);color:var(--app-accent);cursor:pointer;min-height:30px}
+
+#runner-app-mockup .rm-panel{background:var(--app-surface);border:1px solid var(--app-line);
+  border-radius:16px;padding:15px;margin-bottom:11px}
+#runner-app-mockup .rm-sechead{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--app-muted);margin:0 0 8px;font-weight:500}
+#runner-app-mockup .rm-hint{font-size:11px;color:var(--app-muted);margin:9px 0 0;line-height:1.5}
+#runner-app-mockup .rm-hrhead{display:flex;align-items:flex-end;gap:10px;margin-bottom:4px}
+#runner-app-mockup .rm-hrnum{font-size:36px;font-weight:500;letter-spacing:-1.5px;
+  color:var(--app-fg);line-height:1}
+#runner-app-mockup .rm-hrmeta{font-size:11px;color:var(--app-muted);padding-bottom:4px}
+#runner-app-mockup .rm-axis{font-size:9px;fill:var(--app-muted)}
+#runner-app-mockup .rm-gridline{stroke:var(--app-line);stroke-width:1}
+#runner-app-mockup .rm-mgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+#runner-app-mockup .rm-metric{background:var(--app-surface);border:1px solid var(--app-line);
+  border-radius:14px;padding:13px}
+#runner-app-mockup .rm-metric-label{font-size:10px;color:var(--app-muted);
+  letter-spacing:.06em;text-transform:uppercase;line-height:1.35;min-height:27px}
+#runner-app-mockup .rm-metric-value{font-size:25px;font-weight:500;color:var(--app-fg);
+  margin:8px 0;letter-spacing:-.8px}
+#runner-app-mockup .rm-metric-value small{font-size:12px;font-weight:400;color:var(--app-muted)}
+#runner-app-mockup .rm-chip{display:inline-block;font-size:10px;padding:3px 7px;
+  border-radius:6px;background:var(--app-raised);border:1px solid var(--app-line);color:var(--app-muted)}
+#runner-app-mockup .rm-chip-good{background:light-dark(#eaf7ee,#16261b);
+  border-color:var(--app-good);color:var(--app-good)}
+
+#runner-app-mockup .rm-gauge{position:relative;width:230px;margin:4px auto 0}
+#runner-app-mockup .rm-gauge svg{display:block;width:100%;height:auto}
+#runner-app-mockup .rm-gaugetxt{position:absolute;left:0;right:0;top:52%;text-align:center}
+#runner-app-mockup .rm-gaugetxt b{display:block;font-size:33px;font-weight:500;
+  letter-spacing:-1px;color:var(--app-fg);line-height:1}
+#runner-app-mockup .rm-gaugetxt span{display:block;font-size:11px;font-weight:500;
+  letter-spacing:.1em;margin-top:5px;color:var(--app-muted)}
+#runner-app-mockup .rm-gaugescale{display:flex;justify-content:space-between;
+  font-size:10px;color:var(--app-muted);margin:2px 6px 0}
+#runner-app-mockup .rm-stack{display:flex;height:11px;border-radius:6px;overflow:hidden;
+  border:1px solid var(--app-line);margin:8px 0 10px}
+#runner-app-mockup .rm-stack i{display:block;height:100%}
+#runner-app-mockup .rm-split{display:flex;gap:8px}
+#runner-app-mockup .rm-split div{flex:1}
+#runner-app-mockup .rm-split b{display:block;font-size:15px;font-weight:500;color:var(--app-fg)}
+#runner-app-mockup .rm-split span{font-size:10px;color:var(--app-muted)}
+#runner-app-mockup .rm-empty{text-align:center;padding:16px 12px}
+#runner-app-mockup .rm-empty b{display:block;font-size:14px;font-weight:500;color:var(--app-fg);margin-bottom:6px}
+#runner-app-mockup .rm-empty p{margin:0;font-size:12px;color:var(--app-muted);line-height:1.5}
+
+#runner-app-mockup .rm-field{display:flex;align-items:center;gap:10px;background:var(--app-surface);
+  border:1px solid var(--app-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+#runner-app-mockup .rm-field label{font-size:12px;color:var(--app-muted);flex:1}
+#runner-app-mockup .rm-field input{width:84px;min-height:36px;text-align:right;
+  font-family:var(--font-sans);font-size:15px;background:var(--app-raised);color:var(--app-fg);
+  border:1px solid var(--app-line);border-radius:8px;padding:4px 8px}
+#runner-app-mockup .rm-zones{width:100%;border-collapse:collapse;font-size:12px}
+#runner-app-mockup .rm-zones th{text-align:left;font-size:10px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--app-muted);font-weight:500;padding:0 8px 7px}
+#runner-app-mockup .rm-zones td{padding:9px 8px;border-top:1px solid var(--app-line);color:var(--app-fg)}
+#runner-app-mockup .rm-zones td:last-child,#runner-app-mockup .rm-zones th:last-child{text-align:right}
+#runner-app-mockup .rm-zones tr.rm-easy td{background:light-dark(#eaf7ee,#16261b)}
+#runner-app-mockup .rm-swatch{display:inline-block;width:7px;height:18px;border-radius:3px;
+  margin-right:7px;vertical-align:middle}
+#runner-app-mockup .rm-daystrip{display:flex;gap:5px;justify-content:center;margin:12px 0 4px}
+#runner-app-mockup .rm-day{width:30px;height:30px;border-radius:9px;border:1px solid var(--app-line);
+  background:var(--app-raised);display:flex;align-items:center;justify-content:center;
+  font-size:11px;color:var(--app-muted)}
+#runner-app-mockup .rm-day.rm-done{background:var(--app-good);border-color:var(--app-good);
+  color:light-dark(#fff,#08130c)}
+#runner-app-mockup .rm-cta{background:var(--app-raised);border:1px solid var(--app-line);
+  border-left:3px solid var(--app-accent);border-radius:12px;padding:12px;margin-bottom:11px}
+#runner-app-mockup .rm-cta h3{margin:0 0 4px;font-size:13px;font-weight:500;color:var(--app-fg)}
+#runner-app-mockup .rm-cta p{margin:0;font-size:12px;color:var(--app-muted);line-height:1.5}
+
+#runner-app-mockup .rm-fill{font-size:10px;font-weight:500;letter-spacing:.07em;
+  padding:6px 12px;border-radius:8px;background:var(--app-raised);
+  border:1px solid var(--app-line);color:var(--app-fg);cursor:pointer;min-height:32px}
+#runner-app-mockup .rm-rowbtn{width:100%;cursor:pointer;font-family:var(--font-sans);text-align:left}
+#runner-app-mockup .rm-stresscard{display:block;width:100%;text-align:left;cursor:pointer;
+  font-family:var(--font-sans);color:var(--app-fg)}
+#runner-app-mockup .rm-stresshead{display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:9px}
+#runner-app-mockup .rm-stresshead b{font-size:10.5px;font-weight:500;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--app-fg)}
+#runner-app-mockup .rm-stressmeta{display:flex;justify-content:space-between;gap:8px;
+  font-size:11px;color:var(--app-muted);margin-bottom:7px}
+#runner-app-mockup .rm-stressval{font-weight:500;letter-spacing:.05em;white-space:nowrap}
+
+#runner-app-mockup .rm-qrow{display:flex;align-items:center;gap:10px;padding:9px 2px}
+#runner-app-mockup .rm-qrow+.rm-qrow{border-top:1px solid var(--app-line)}
+#runner-app-mockup .rm-qrow label{flex:1;font-size:12.5px;color:var(--app-fg)}
+#runner-app-mockup .rm-yn{display:flex;gap:4px}
+#runner-app-mockup .rm-yn button{min-width:44px;min-height:32px;border-radius:8px;
+  border:1px solid var(--app-line);background:var(--app-raised);color:var(--app-muted);
+  font-family:var(--font-sans);font-size:11px;cursor:pointer}
+#runner-app-mockup .rm-yn button[aria-pressed="true"]{border-color:var(--app-accent);
+  color:var(--app-accent);background:var(--app-surface)}
+#runner-app-mockup .rm-seg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
+#runner-app-mockup .rm-seg button{min-height:34px;padding:4px 12px;border-radius:9px;
+  border:1px solid var(--app-line);background:var(--app-raised);color:var(--app-muted);
+  font-family:var(--font-sans);font-size:11.5px;cursor:pointer}
+#runner-app-mockup .rm-seg button[aria-pressed="true"]{border-color:var(--app-accent);
+  color:var(--app-accent);background:var(--app-surface)}
+#runner-app-mockup .rm-notes{width:100%;min-height:64px;box-sizing:border-box;
+  background:var(--app-raised);border:1px solid var(--app-line);border-radius:10px;
+  color:var(--app-fg);font-family:var(--font-sans);font-size:12px;padding:8px 10px;resize:vertical}
+#runner-app-mockup .rm-save{width:100%;min-height:44px;border:0;border-radius:12px;
+  background:var(--app-fg);color:var(--app-bg);font-family:var(--font-sans);
+  font-size:12px;font-weight:500;letter-spacing:.06em;cursor:pointer;margin-bottom:4px}
+
+#runner-app-mockup .rm-fab{position:absolute;right:16px;bottom:78px;width:50px;height:50px;
+  border-radius:50%;background:var(--app-fg);color:var(--app-bg);border:0;font-size:26px;
+  line-height:1;cursor:pointer;box-shadow:0 3px 12px light-dark(rgba(0,0,0,.18),rgba(0,0,0,.5))}
+#runner-app-mockup .rm-tabs{display:flex;border-top:1px solid var(--app-line);
+  background:var(--app-surface);padding:6px 2px 10px}
+#runner-app-mockup .rm-tabs button{flex:1;min-height:48px;background:none;border:0;cursor:pointer;
+  font-family:var(--font-sans);font-size:10px;color:var(--app-muted);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:4px;border-radius:10px}
+#runner-app-mockup .rm-tabs button[aria-pressed="true"]{color:var(--app-fg)}
+#runner-app-mockup .rm-tabs svg{width:20px;height:20px;stroke:currentColor;fill:none;
+  stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+#runner-app-mockup .rm-foot{max-width:390px;margin:14px auto 0;font-size:11.5px;
+  color:var(--seed-muted);line-height:1.5}
+@media (prefers-reduced-motion:no-preference){
+  #runner-app-mockup .rm-screen{animation:rm-fade .16s ease}
+  @keyframes rm-fade{from{opacity:0}to{opacity:1}}
+}
+</style>
+
+<div class="rm-legend">
+  <span><i class="rm-dot rm-live"></i>Measured</span>
+  <span><i class="rm-dot rm-waiting"></i>Waiting on data</span>
+  <label class="rm-toggle" for="rm-preview">
+    <input type="checkbox" id="rm-preview"> Design preview with sample data
+  </label>
+</div>
+
+<div class="rm-phone">
+  <div class="rm-topbar">
+    <div class="rm-avatar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="9" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg></div>
+    <div class="rm-daynav">
+      <button type="button" id="rm-prevday" aria-label="Previous day">&#8249;</button>
+      <span id="rm-daylabel">TODAY</span>
+      <button type="button" id="rm-nextday" aria-label="Next day" disabled>&#8250;</button>
+    </div>
+    <div class="rm-batt"><span>99%</span>
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" style="stroke:var(--app-good);fill:none;stroke-width:1.6"><rect x="4" y="8" width="14" height="9" rx="2.5"/><path d="M20 11v3"/></svg>
+    </div>
+  </div>
+
+  <div class="rm-nav">
+    <button type="button" class="rm-back" id="rm-back" hidden aria-label="Back to Home">&#8249;</button>
+    <div class="rm-navtext">
+      <h2 id="rm-title">Home</h2>
+      <p id="rm-subtitle">Monday 9 November · day 1 of your baseline</p>
+    </div>
+  </div>
+
+  <div class="rm-body">
+    <div class="rm-demoflag" data-when="demo">
+      <strong>Design preview.</strong> Values marked sample are invented to show the
+      finished layout. They are not your measurements.
+    </div>
+
+    <!-- ============ HOME ============ -->
+    <section class="rm-screen" id="rm-screen-home">
+      <div class="rm-trio">
+        <div class="rm-trio-item">
+          <div class="rm-miniring">
+            <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Sleep ring">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
+              <circle data-when="demo" cx="50" cy="50" r="42" fill="none" stroke="var(--app-sleep)"
+                stroke-width="8" stroke-linecap="round" stroke-dasharray="263.89"
+                stroke-dashoffset="39.6" transform="rotate(-90 50 50)"/>
+            </svg>
+            <b><span data-when="live">—</span><span data-when="demo">85%</span></b>
+          </div>
+          <div class="rm-trio-label">SLEEP &#8250;</div>
+        </div>
+        <div class="rm-trio-item">
+          <div class="rm-miniring">
+            <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Recovery ring">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
+              <circle data-when="live" cx="50" cy="50" r="42" fill="none" stroke="var(--app-muted)"
+                stroke-width="8" stroke-linecap="round" stroke-dasharray="263.89"
+                stroke-dashoffset="226.19" transform="rotate(-90 50 50)"/>
+              <circle data-when="demo" cx="50" cy="50" r="42" fill="none" stroke="var(--app-good)"
+                stroke-width="8" stroke-linecap="round" stroke-dasharray="263.89"
+                stroke-dashoffset="66" transform="rotate(-90 50 50)"/>
+            </svg>
+            <b><span data-when="live">1/7</span><span data-when="demo">75%</span></b>
+          </div>
+          <div class="rm-trio-label">RECOVERY &#8250;</div>
+        </div>
+        <div class="rm-trio-item">
+          <div class="rm-miniring">
+            <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Strain ring">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
+              <circle data-when="demo" cx="50" cy="50" r="42" fill="none" stroke="var(--app-accent)"
+                stroke-width="8" stroke-linecap="round" stroke-dasharray="263.89"
+                stroke-dashoffset="237.5" transform="rotate(-90 50 50)"/>
+            </svg>
+            <b><span data-when="live">—</span><span data-when="demo">2.1</span></b>
+          </div>
+          <div class="rm-trio-label">STRAIN &#8250;</div>
+        </div>
+      </div>
+
+      <div class="rm-insight">
+        <div class="rm-insight-body">
+          <h3 data-when="live">Baseline building</h3>
+          <h3 data-when="demo">Elevated HRV</h3>
+          <p data-when="live">Your HRV measured 44.6 ms at rest this morning. Whether that
+            is high or low <em>for you</em> needs 7 days — one reading can't define normal.
+            Tonight is day 2.</p>
+          <p data-when="demo">Sample: your HRV is 6% above your usual, which signals strong
+            recovery. A planned threshold run or heavy lift both fit today.</p>
+        </div>
+        <div class="rm-badge"><i>&#10003;</i><span data-when="live">1</span><span data-when="demo">1</span></div>
+      </div>
+
+      <div class="rm-duo">
+        <button type="button" class="rm-tapcard" data-open="health">
+          <div class="rm-taphead"><h3>Health monitor</h3><span class="rm-chev">&#8250;</span></div>
+          <div class="rm-tapstate" data-when="live">
+            <span class="rm-pill rm-pending">1/7</span>
+            <div><b class="rm-pending">BUILDING</b><span>3 of 5 measured</span></div>
+          </div>
+          <div class="rm-tapstate" data-when="demo">
+            <span class="rm-pill rm-ok">&#10003;</span>
+            <div><b class="rm-ok">WITHIN RANGE</b><span>5/5 metrics · sample</span></div>
+          </div>
+        </button>
+        <button type="button" class="rm-tapcard" data-open="stress">
+          <div class="rm-taphead"><h3>Stress monitor</h3><span class="rm-chev">&#8250;</span></div>
+          <div class="rm-tapstate" data-when="live">
+            <span class="rm-pill">—</span>
+            <div><b class="rm-pending">NO BASELINE</b><span>unlocks day 7</span></div>
+          </div>
+          <div class="rm-tapstate" data-when="demo">
+            <span class="rm-pill" style="color:var(--app-accent)">0.7</span>
+            <div><b style="color:var(--app-accent)">LOW</b><span>11:49 · sample</span></div>
+          </div>
+        </button>
+      </div>
+
+      <div class="rm-h2">My Day</div>
+
+      <button type="button" class="rm-outlook" data-open="plan">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4"/></svg>
+        <b>Your Daily Outlook</b><span class="rm-chev">&#8250;</span>
+      </button>
+
+      <div class="rm-card">
+        <div class="rm-cardhead"><h3>Today's activities</h3><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-sleeprow">
+          <span class="rm-sleeppill">&#9789;
+            <span data-when="live">—</span><span data-when="demo">6:24</span></span>
+          <b>SLEEP</b>
+          <span class="rm-sleeptime" data-when="live">wear it<br>tonight</span>
+          <span class="rm-sleeptime" data-when="demo">00:26<br>07:33</span>
+        </div>
+        <div class="rm-actlist">
+          <div class="rm-actrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="2"/><path d="M9 21l2.5-5.5L9 12l1-4 3 2 3 1M11.5 15.5L15 18l1 3"/></svg>
+            <b>Run</b><span data-when="live">not captured</span><span data-when="demo">42 min · Z2</span>
+          </div>
+          <div class="rm-actrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>
+            <b>Gym workout</b><span data-when="live">not logged</span><span data-when="demo">55 min · push</span>
+          </div>
+          <div class="rm-actrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+            <b>Rest session</b><span>15 min · measured</span>
+          </div>
+        </div>
+        <div class="rm-btnrow">
+          <button type="button" id="rm-addbtn">+ ADD ACTIVITY</button>
+          <button type="button" id="rm-startbtn">&#9201; START ACTIVITY</button>
+        </div>
+        <p class="rm-hint" id="rm-acthint" hidden></p>
+      </div>
+
+      <div class="rm-card">
+        <div class="rm-cardhead"><h3>Tonight's sleep</h3><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-tonight">
+          <div><b><span data-when="live">—</span><span data-when="demo">22:28</span></b>
+            <em>Recommended<br>bedtime</em></div>
+          <hr>
+          <div style="text-align:right"><b><span data-when="live">—</span><span data-when="demo">07:45</span></b>
+            <em>Latest<br>alarm</em></div>
+        </div>
+        <p class="rm-hint">Bedtime is worked back from your sleep need and tomorrow's
+          planned session. It needs a sleep history first, so it stays blank today.</p>
+      </div>
+
+      <div class="rm-card">
+        <div class="rm-cardhead"><h3>My journal</h3>
+          <button type="button" class="rm-fill" data-open="journal">&#9998; FILL OUT</button></div>
+        <p class="rm-hint" style="margin:0">
+          <span data-when="live" id="rm-jstate-live">Not filled today — seven yes/no taps,
+            a mood and a soreness pick.</span>
+          <span data-when="demo">Filled · 2 yes · mood Good · sample</span></p>
+      </div>
+
+      <div class="rm-cardhead" style="margin:16px 0 10px">
+        <h3 style="font-size:19px;letter-spacing:-.3px;text-transform:none">My Dashboard</h3>
+        <button type="button" class="rm-customize" id="rm-customize-home">CUSTOMIZE &#9998;</button>
+      </div>
+      <p class="rm-hint" id="rm-customhint-home" hidden style="margin:0 0 10px">
+        Reordering and hiding rows is a design intent — not wired in this preview.</p>
+
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-5 3 10 2-5h7"/></svg>
+        <b>Heart rate variability</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">44.6 <small>ms</small></span><span data-when="demo">52 <small>ms</small></span></strong>
+          <em><span data-when="live">no baseline yet</span><span data-when="demo" style="color:var(--app-good)">&#9650; 49 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z"/></svg>
+        <b>Resting heart rate</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">71.8</span><span data-when="demo">57</span></strong>
+          <em><span data-when="live">no baseline yet</span><span data-when="demo" style="color:var(--app-warn)">&#9650; 56 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4c2 0 3 2 3 4s-1 3-1 5H6c0-2-1-3-1-5s0-4 2-4zM17 10c2 0 3 2 3 4s-1 3-1 5h-3c0-2-1-3-1-5s0-4 2-4z"/></svg>
+        <b>Steps</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">73</span><span data-when="demo">8,430</span></strong>
+          <em><span data-when="live">2 h 05 m of wear</span><span data-when="demo" style="color:var(--app-warn)">&#9660; 8,929 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        <b>HR zones 1–3 · weekly</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">—</span><span data-when="demo">1:02</span></strong>
+          <em><span data-when="live">set max HR</span><span data-when="demo" style="color:var(--app-good)">&#9650; 0:46 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 13l3-4 2 3 3-2"/></svg>
+        <b>HR zones 4–5 · weekly</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">—</span><span data-when="demo">0:08</span></strong>
+          <em><span data-when="live">set max HR</span><span data-when="demo" style="color:var(--app-warn)">&#9660; 0:20 sample</span></em></div>
+      </div>
+      <button type="button" class="rm-metricrow rm-rowbtn" id="rm-vo2row">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4c3 3 5 5.4 5 8a5 5 0 0 1-10 0c0-2.6 2-5 5-8z"/><path d="M9 13c0 2 1.4 3.4 3 3.4"/></svg>
+        <b>VO₂ max</b><span class="rm-chev">&#8250;</span>
+      </button>
+      <p class="rm-hint" id="rm-vo2hint" hidden style="margin:-2px 0 10px">
+        Estimate design: Uth (2004), 15.3 × max HR ÷ resting HR, once you enter a max HR you
+        have actually measured. A population formula with wide error — not a lab test, and
+        never a strap reading.</p>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c4 0 6-2.6 6-6c0-4-6-11-6-11S6 11 6 15c0 3.4 2 6 6 6z"/></svg>
+        <b>Calories</b>
+        <div class="rm-metricval">
+          <strong><span data-when="live">—</span><span data-when="demo">1,169</span></strong>
+          <em><span data-when="live">set weight + age</span><span data-when="demo" style="color:var(--app-warn)">&#9660; 2,523 sample</span></em></div>
+      </div>
+      <button type="button" class="rm-metricrow rm-stresscard" data-open="stress">
+        <div class="rm-stresshead"><b>Stress monitor</b><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-stressmeta">
+          <span><span data-when="live">no baseline yet</span><span data-when="demo">Last updated 11:49 · sample</span></span>
+          <span class="rm-stressval"><span data-when="live">—</span><span data-when="demo" style="color:var(--app-accent)">LOW 0.7</span></span>
+        </div>
+        <svg viewBox="0 0 340 46" width="100%" height="46" role="img"
+             aria-label="Stress mini chart, empty until the baseline exists">
+          <line class="rm-gridline" x1="24" y1="8" x2="334" y2="8"/>
+          <line class="rm-gridline" x1="24" y1="36" x2="334" y2="36"/>
+          <text class="rm-axis" x="2" y="11">3.0</text><text class="rm-axis" x="2" y="39">0.0</text>
+          <polyline data-when="demo" fill="none" stroke="var(--app-accent)" stroke-width="1.5"
+            stroke-linejoin="round"
+            points="24,32 48,30 72,33 96,29 120,32 144,31 168,34 192,30 216,32 240,29 264,31 288,30 312,32 334,31"/>
+        </svg>
+      </button>
+      <p class="rm-hint">The small number under a metric is your comparison value and stays
+        absent until history exists. VO₂ max and calories are published estimates, never
+        strap measurements.</p>
+    </section>
+
+    <!-- ============ HEALTH DETAIL ============ -->
+    <section class="rm-screen" id="rm-screen-health" hidden>
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Heart rate</div>
+        <div class="rm-hrhead">
+          <div class="rm-hrnum">81</div>
+          <div class="rm-hrmeta">bpm · last reading<br>
+            <span data-when="live">zone needs your max HR</span><span data-when="demo">Zone 1</span></div>
+        </div>
+        <svg viewBox="0 0 340 140" width="100%" height="140" role="img"
+             aria-label="Heart rate over 48 minutes, ranging from 66 to 85 beats per minute">
+          <line class="rm-gridline" x1="34" y1="18" x2="326" y2="18"/>
+          <line class="rm-gridline" x1="34" y1="65" x2="326" y2="65"/>
+          <line class="rm-gridline" x1="34" y1="112" x2="326" y2="112"/>
+          <text class="rm-axis" x="6" y="21">90</text><text class="rm-axis" x="6" y="68">75</text>
+          <text class="rm-axis" x="6" y="115">60</text>
+          <polyline fill="none" stroke="var(--app-accent)" stroke-width="1.7"
+            stroke-linejoin="round" stroke-linecap="round"
+            points="34.0,55.6 88.2,93.2 130.0,43.1 134.1,49.3 138.2,43.1 142.5,39.9 146.6,33.7 150.8,55.6 155.0,36.8 159.1,55.6 163.3,52.5 167.5,49.3 171.7,65.0 175.8,55.6 180.1,55.6 184.2,49.3 188.3,49.3 192.5,43.1 196.7,46.2 200.9,52.5 205.0,52.5 209.2,36.8 213.4,46.2 217.5,58.7 221.7,49.3 225.9,55.6 230.0,46.2 234.2,55.6 238.4,68.1 242.6,71.3 246.7,65.0 251.0,65.0 255.1,61.9 259.2,58.7 263.5,74.4 267.6,61.9 271.8,61.9 275.9,61.9 280.1,68.1 284.3,77.5 288.4,55.6 292.7,58.7 296.8,74.4 301.0,58.7 305.1,61.9 309.3,55.6 313.5,55.6 317.6,65.0 321.9,61.9 326.0,46.2"/>
+          <circle cx="326" cy="46.2" r="3.4" fill="var(--app-accent)"/>
+          <text class="rm-axis" x="34" y="132">09:13</text><text class="rm-axis" x="292" y="132">10:01</text>
+        </svg>
+        <p class="rm-hint" style="margin-top:2px"><i class="rm-dot rm-live"></i>Real data —
+          1956 on-wrist seconds from this morning.</p>
+      </div>
+
+      <div class="rm-mgrid">
+        <div class="rm-metric"><div class="rm-metric-label">Respiratory rate</div>
+          <div class="rm-metric-value">—</div><span class="rm-chip">not implemented</span></div>
+        <div class="rm-metric"><div class="rm-metric-label">Blood oxygen<br>SpO₂</div>
+          <div class="rm-metric-value">—</div><span class="rm-chip">raw, unvalidated</span></div>
+        <div class="rm-metric"><div class="rm-metric-label">Resting HR</div>
+          <div class="rm-metric-value">71.8 <small>bpm</small></div>
+          <span class="rm-chip" data-when="live">baseline 1/7</span>
+          <span class="rm-chip rm-chip-good" data-when="demo">within 70 – 74</span></div>
+        <div class="rm-metric"><div class="rm-metric-label">HRV · RMSSD</div>
+          <div class="rm-metric-value">44.6 <small>ms</small></div>
+          <span class="rm-chip" data-when="live">baseline 1/7</span>
+          <span class="rm-chip rm-chip-good" data-when="demo">within 41 – 48</span></div>
+        <div class="rm-metric"><div class="rm-metric-label">Skin temp<br>from baseline</div>
+          <div class="rm-metric-value"><span data-when="live">32.6 <small>°C</small></span>
+            <span data-when="demo">+0.4 <small>°C</small></span></div>
+          <span class="rm-chip" data-when="live">absolute, no baseline</span>
+          <span class="rm-chip rm-chip-good" data-when="demo">near −0.3 to +0.4</span></div>
+        <div class="rm-metric"><div class="rm-metric-label">Metrics in range</div>
+          <div class="rm-metric-value"><span data-when="live">—</span><span data-when="demo">3/3</span></div>
+          <span class="rm-chip" data-when="live">needs 7 days</span>
+          <span class="rm-chip rm-chip-good" data-when="demo">of implemented</span></div>
+      </div>
+      <p class="rm-hint">Green range chips compare today against <em>your</em> normal, so
+        they cannot appear before the baseline exists. Respiratory rate and SpO₂ stay blank
+        in both modes — the strap sends candidates but nothing validates them yet.</p>
+    </section>
+
+    <!-- ============ STRESS DETAIL ============ -->
+    <section class="rm-screen" id="rm-screen-stress" hidden>
+      <div class="rm-panel">
+        <div class="rm-gauge">
+          <svg viewBox="0 0 200 124" role="img" aria-label="Stress gauge from 0 to 3">
+            <path d="M20,100 A80,80 0 0,1 60,30.7" fill="none" stroke="var(--app-accent)" stroke-width="11" stroke-linecap="round"/>
+            <path d="M60,30.7 A80,80 0 0,1 140,30.7" fill="none" stroke="var(--app-good)" stroke-width="11"/>
+            <path d="M140,30.7 A80,80 0 0,1 180,100" fill="none" stroke="var(--app-warn)" stroke-width="11" stroke-linecap="round"/>
+            <g data-when="demo"><line x1="100" y1="100" x2="159.2" y2="52.6" stroke="var(--app-fg)" stroke-width="3.5" stroke-linecap="round"/><circle cx="100" cy="100" r="5" fill="var(--app-fg)"/></g>
+          </svg>
+          <div class="rm-gaugetxt">
+            <b><span data-when="live">—</span><span data-when="demo">2.1</span></b>
+            <span data-when="live">AWAITING BASELINE</span>
+            <span data-when="demo" style="color:var(--app-warn)">HIGH · SAMPLE</span>
+          </div>
+        </div>
+        <div class="rm-gaugescale"><span>0.0 low</span><span>1.5</span><span>3.0 high</span></div>
+        <p class="rm-hint">Index = how far current HRV sits below your resting normal, clipped
+          to 0–3. A local physiological estimate, not WHOOP's stress algorithm.</p>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Stress through the day</div>
+        <div data-when="live" class="rm-empty"><b>No stress series yet</b>
+          <p>Needs the 7-day baseline plus a full day of wear.</p></div>
+        <svg data-when="demo" viewBox="0 0 340 130" width="100%" height="130" role="img"
+             aria-label="Sample stress series, not measured data">
+          <line class="rm-gridline" x1="26" y1="20" x2="330" y2="20"/>
+          <line class="rm-gridline" x1="26" y1="60" x2="330" y2="60"/>
+          <line class="rm-gridline" x1="26" y1="100" x2="330" y2="100"/>
+          <text class="rm-axis" x="4" y="23">3.0</text><text class="rm-axis" x="4" y="63">1.5</text><text class="rm-axis" x="4" y="103">0.0</text>
+          <polyline fill="none" stroke="var(--app-good)" stroke-width="1.5" stroke-linejoin="round"
+            points="26,88 38,80 50,92 62,85 74,95 86,90 98,97 110,89 122,94 134,86 146,44 158,26 170,38 182,22 194,50 206,34 218,58 230,42 242,66 254,52 266,72 278,58 290,76 302,62 314,70 330,54"/>
+          <text class="rm-axis" x="26" y="120">00:00</text><text class="rm-axis" x="150" y="120">12:00</text><text class="rm-axis" x="304" y="120">24:00</text>
+        </svg>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Total day</div>
+        <div class="rm-stack" role="img" aria-label="Time split across low, medium and high stress">
+          <i data-when="demo" style="width:47%;background:var(--app-accent)"></i>
+          <i data-when="demo" style="width:27%;background:var(--app-good)"></i>
+          <i data-when="demo" style="width:26%;background:var(--app-warn)"></i>
+          <i data-when="live" style="width:100%;background:var(--app-raised)"></i>
+        </div>
+        <div class="rm-split">
+          <div><b><span data-when="live">—</span><span data-when="demo">11:14</span></b><span>low</span></div>
+          <div><b><span data-when="live">—</span><span data-when="demo">6:42</span></b><span>medium</span></div>
+          <div><b><span data-when="live">—</span><span data-when="demo">4:03</span></b><span>high</span></div>
+        </div>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Outside workouts</div>
+        <div class="rm-stack" role="img" aria-label="Stress outside of training sessions">
+          <i data-when="demo" style="width:30%;background:var(--app-accent)"></i>
+          <i data-when="demo" style="width:40%;background:var(--app-good)"></i>
+          <i data-when="demo" style="width:30%;background:var(--app-warn)"></i>
+          <i data-when="live" style="width:100%;background:var(--app-raised)"></i>
+        </div>
+        <p class="rm-hint" style="margin:0">Training stress is the point. This strips workouts
+          out so you can see whether the rest of your day is also running hot — for a daily
+          trainer that matters more than the all-day number.</p>
+      </div>
+    </section>
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="rm-screen" id="rm-screen-dashboard" hidden>
+      <div class="rm-cardhead" style="margin-bottom:12px">
+        <h3 style="font-size:19px;letter-spacing:-.3px;text-transform:none">My Dashboard</h3>
+        <button type="button" class="rm-customize" id="rm-customize">CUSTOMIZE &#9998;</button>
+      </div>
+      <p class="rm-hint" id="rm-customhint" hidden style="margin:0 0 10px">
+        Reordering and hiding rows is a design intent — not wired in this preview.</p>
+
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l2-5 3 10 2-5h7"/></svg>
+        <b>Heart rate variability</b>
+        <div class="rm-metricval"><strong>44.6 <small>ms</small></strong>
+          <em><span data-when="live">no baseline yet</span><span data-when="demo">49 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z"/></svg>
+        <b>Resting heart rate</b>
+        <div class="rm-metricval"><strong>71.8</strong>
+          <em><span data-when="live">no baseline yet</span><span data-when="demo">56 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4c2 0 3 2 3 4s-1 3-1 5H6c0-2-1-3-1-5s0-4 2-4zM17 10c2 0 3 2 3 4s-1 3-1 5h-3c0-2-1-3-1-5s0-4 2-4z"/></svg>
+        <b>Steps</b>
+        <div class="rm-metricval"><strong><span data-when="live">0</span><span data-when="demo">8,430</span></strong>
+          <em><span data-when="live">rest window only</span><span data-when="demo">8,929 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
+        <b>HR zones 1–3 · weekly</b>
+        <div class="rm-metricval"><strong><span data-when="live">—</span><span data-when="demo">1:02</span></strong>
+          <em><span data-when="live">set max HR</span><span data-when="demo">0:46 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M8 13l3-4 2 3 3-2"/></svg>
+        <b>HR zones 4–5 · weekly</b>
+        <div class="rm-metricval"><strong><span data-when="live">—</span><span data-when="demo">0:08</span></strong>
+          <em><span data-when="live">set max HR</span><span data-when="demo">0:20 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v6M8 7l4-3 4 3M6 14a6 6 0 0 0 12 0"/></svg>
+        <b>Strain · today</b>
+        <div class="rm-metricval"><strong><span data-when="live">—</span><span data-when="demo">2.1</span></strong>
+          <em><span data-when="live">needs max HR</span><span data-when="demo">of 21 sample</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v10M9 13a3 3 0 1 0 6 0a3 3 0 1 0-6 0"/></svg>
+        <b>Skin temperature</b>
+        <div class="rm-metricval"><strong>32.6 <small>°C</small></strong>
+          <em><span data-when="live">absolute</span><span data-when="demo">+0.4 from baseline</span></em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16l5-6 4 4 7-8"/></svg>
+        <b>Acute : chronic load</b>
+        <div class="rm-metricval"><strong>—</strong><em>needs 28 days</em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M9 12h6"/></svg>
+        <b>VO₂ max</b>
+        <div class="rm-metricval"><strong>—</strong><em>set max HR</em></div>
+      </div>
+      <div class="rm-metricrow">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21c4 0 6-2.6 6-6c0-4-6-11-6-11S6 11 6 15c0 3.4 2 6 6 6z"/></svg>
+        <b>Calories</b>
+        <div class="rm-metricval"><strong>—</strong><em>set weight + age</em></div>
+      </div>
+      <button type="button" class="rm-metricrow rm-stresscard" data-open="stress">
+        <div class="rm-stresshead"><b>Stress monitor</b><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-stressmeta">
+          <span><span data-when="live">no baseline yet</span><span data-when="demo">Last updated 11:49 · sample</span></span>
+          <span class="rm-stressval"><span data-when="live">—</span><span data-when="demo" style="color:var(--app-accent)">LOW 0.7</span></span>
+        </div>
+        <svg viewBox="0 0 340 46" width="100%" height="46" role="img"
+             aria-label="Stress mini chart, empty until the baseline exists">
+          <line class="rm-gridline" x1="24" y1="8" x2="334" y2="8"/>
+          <line class="rm-gridline" x1="24" y1="36" x2="334" y2="36"/>
+          <text class="rm-axis" x="2" y="11">3.0</text><text class="rm-axis" x="2" y="39">0.0</text>
+          <polyline data-when="demo" fill="none" stroke="var(--app-accent)" stroke-width="1.5"
+            stroke-linejoin="round"
+            points="24,32 48,30 72,33 96,29 120,32 144,31 168,34 192,30 216,32 240,29 264,31 288,30 312,32 334,31"/>
+        </svg>
+      </button>
+
+      <div class="rm-panel" style="margin-top:12px">
+        <div class="rm-sechead">Baseline progress</div>
+        <div class="rm-daystrip" role="img" aria-label="One of seven baseline days collected">
+          <div class="rm-day rm-done">1</div><div class="rm-day">2</div><div class="rm-day">3</div>
+          <div class="rm-day">4</div><div class="rm-day">5</div><div class="rm-day">6</div><div class="rm-day">7</div>
+        </div>
+        <p class="rm-hint">The small number under each metric is your comparison value.
+          It stays absent until there is history to compare against — that is the whole
+          point of a personal baseline.</p>
+      </div>
+    </section>
+
+    <!-- ============ TRAIN ============ -->
+    <section class="rm-screen" id="rm-screen-train" hidden>
+      <div class="rm-field">
+        <label for="rm-maxhr">Your max HR <span style="opacity:.7">(bpm)</span></label>
+        <input id="rm-maxhr" type="number" min="120" max="230" step="1" placeholder="e.g. 190"
+               inputmode="numeric" aria-describedby="rm-zone-hint">
+      </div>
+      <div class="rm-panel" style="padding:14px">
+        <table class="rm-zones">
+          <thead><tr><th>Zone</th><th>Use</th><th>bpm</th></tr></thead>
+          <tbody id="rm-zone-rows" aria-live="polite">
+            <tr><td><i class="rm-swatch" style="background:var(--app-muted)"></i>Z1</td><td>Recovery</td><td>—</td></tr>
+            <tr class="rm-easy"><td><i class="rm-swatch" style="background:var(--app-good)"></i>Z2</td><td>Easy aerobic</td><td>—</td></tr>
+            <tr><td><i class="rm-swatch" style="background:var(--app-accent)"></i>Z3</td><td>Tempo</td><td>—</td></tr>
+            <tr><td><i class="rm-swatch" style="background:var(--app-warn)"></i>Z4</td><td>Threshold</td><td>—</td></tr>
+            <tr><td><i class="rm-swatch" style="background:var(--app-high)"></i>Z5</td><td>VO2 max</td><td>—</td></tr>
+          </tbody>
+        </table>
+        <p class="rm-hint" id="rm-zone-hint">Karvonen heart-rate reserve, anchored on your
+          <strong>measured</strong> resting HR of 71.8 bpm. Enter a max HR you have actually
+          seen in a hard session — an age formula is only a population guess.</p>
+      </div>
+      <div class="rm-cta">
+        <h3>Most of your running belongs in Z2</h3>
+        <p>You run and lift daily, so the trap is drifting into the middle zone every day —
+          hard enough to accumulate fatigue, too easy to drive adaptation. Z2 should feel
+          conversational. Save Z4/Z5 for sessions you planned as hard.</p>
+      </div>
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Gym day</div>
+        <p class="rm-hint" style="margin:0">Lifting barely moves heart rate, so TRIMP alone
+          undercounts a heavy session. Lifts get logged separately as sets × reps × load
+          rather than pretending a HR-derived number captures them.</p>
+      </div>
+    </section>
+
+    <!-- ============ PLAN ============ -->
+    <section class="rm-screen" id="rm-screen-plan" hidden>
+      <div class="rm-cta">
+        <h3 data-when="live">Today: train on feel, not on a score</h3>
+        <h3 data-when="demo">Green — go hard if you planned it</h3>
+        <p data-when="live">Your HRV is measured and healthy. Until the baseline fills, keep
+          easy runs conversational and let the gym session follow how you actually feel.</p>
+        <p data-when="demo">Sample outlook: recovery above normal and sleep on target, so a
+          threshold run or a heavy lift both fit today.</p>
+      </div>
+      <div class="rm-panel">
+        <div class="rm-sechead">This week</div>
+        <div class="rm-actlist">
+          <div class="rm-actrow"><b>Easy run · Z2</b><span data-when="live">planned</span><span data-when="demo">42 min · done</span></div>
+          <div class="rm-actrow"><b>Push day</b><span data-when="live">planned</span><span data-when="demo">55 min · done</span></div>
+          <div class="rm-actrow"><b>Threshold run · Z4</b><span>tomorrow</span></div>
+          <div class="rm-actrow"><b>Pull day</b><span>Wednesday</span></div>
+          <div class="rm-actrow"><b>Long run · Z2</b><span>Saturday</span></div>
+        </div>
+        <p class="rm-hint">A plan skeleton, not a generated programme. Hard sessions stay
+          separated by easy days — that spacing is what makes daily training survivable.</p>
+      </div>
+      <div class="rm-panel">
+        <div class="rm-sechead">Sleep target</div>
+        <div class="rm-tonight">
+          <div><b>8:00</b><em>Hours<br>needed</em></div><hr>
+          <div style="text-align:right"><b><span data-when="live">—</span><span data-when="demo">7:22</span></b>
+            <em>Last night<br>actual</em></div>
+        </div>
+        <p class="rm-hint">Sleep need rises with training load. Once activity capture works,
+          heavy days will push this target up automatically.</p>
+      </div>
+    </section>
+
+    <!-- ============ JOURNAL ============ -->
+    <section class="rm-screen" id="rm-screen-journal" hidden>
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Yesterday's behaviours</div>
+        <div id="rm-jquestions">
+          <div class="rm-qrow"><label>Alcohol</label>
+            <div class="rm-yn" role="group" aria-label="Alcohol"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>Caffeine after 14:00</label>
+            <div class="rm-yn" role="group" aria-label="Caffeine after 14:00"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>Meal within 2 h of bed</label>
+            <div class="rm-yn" role="group" aria-label="Meal within 2 hours of bed"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>Screens in bed</label>
+            <div class="rm-yn" role="group" aria-label="Screens in bed"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>Workout after 20:00</label>
+            <div class="rm-yn" role="group" aria-label="Workout after 20:00"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>Felt sick</label>
+            <div class="rm-yn" role="group" aria-label="Felt sick"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+          <div class="rm-qrow"><label>High-stress day</label>
+            <div class="rm-yn" role="group" aria-label="High-stress day"><button type="button" aria-pressed="false">Yes</button><button type="button" aria-pressed="true">No</button></div></div>
+        </div>
+        <p class="rm-hint">Everything defaults to No — tap Yes only if it actually happened.
+          The list is ours, not WHOOP's: the strap sends no journal field, so this is your
+          own report, not a device reading.</p>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Mood on waking</div>
+        <div class="rm-seg" id="rm-jmood" role="group" aria-label="Mood on waking">
+          <button type="button" aria-pressed="false">Great</button>
+          <button type="button" aria-pressed="false">Good</button>
+          <button type="button" aria-pressed="false">Okay</button>
+          <button type="button" aria-pressed="false">Low</button>
+        </div>
+        <div class="rm-sechead">Muscle soreness</div>
+        <div class="rm-seg" id="rm-jsore" role="group" aria-label="Muscle soreness">
+          <button type="button" aria-pressed="true">None</button>
+          <button type="button" aria-pressed="false">Mild</button>
+          <button type="button" aria-pressed="false">Moderate</button>
+          <button type="button" aria-pressed="false">High</button>
+        </div>
+        <div class="rm-sechead">Notes</div>
+        <textarea class="rm-notes" id="rm-jnotes" placeholder="Anything else — travel, late shift, sick kid, race tomorrow…"></textarea>
+      </div>
+
+      <button type="button" class="rm-save" id="rm-jsave">SAVE JOURNAL</button>
+      <p class="rm-hint">Stays on this phone and never edits recovery or strain. After about
+        14 filled days, each behaviour gets a yes-days vs no-days recovery comparison —
+        correlation to inspect, not a cause proven.</p>
+    </section>
+
+  </div>
+
+  <button type="button" class="rm-fab" id="rm-fab" aria-label="Add an activity">+</button>
+
+  <nav class="rm-tabs" aria-label="App sections">
+    <button type="button" data-screen="home" aria-pressed="true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 15l2 2 4-4"/></svg>Home</button>
+    <button type="button" data-screen="health" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z"/><path d="M8 12h2l1-2 1.5 3 1-1.5H16"/></svg>Health</button>
+    <button type="button" data-screen="train" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>Train</button>
+    <button type="button" data-screen="plan" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>Plan</button>
+    <button type="button" data-screen="dashboard" aria-pressed="false">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Dashboard</button>
+  </nav>
+</div>
+
+<p class="rm-foot">Tap either monitor card to drill in; the FAB and Add Activity open the
+same logger. My Journal (below Tonight's Sleep) opens the nightly self-report — it stays on
+the phone and never edits a score. My Dashboard below it carries the same rows as the
+Dashboard tab. Live mode shows only what your strap measured — the toggle fills the rest
+with labelled sample values so you can judge the finished layout. Original visual design:
+no WHOOP assets, branding or proprietary scoring.</p>
+
+<script>
+(function(){
+  var root=document.getElementById('runner-app-mockup');
+  var titles={
+    home:['Home','Monday 9 November · day 1 of your baseline'],
+    health:['Health monitor','Vitals against your personal range'],
+    stress:['Stress monitor','Live index and the day so far'],
+    dashboard:['Dashboard','Every metric in one list'],
+    journal:['My Journal','Yesterday, in your own words'],
+    train:['Train','Heart-rate zones from your measured resting HR'],
+    plan:['Plan','Your week and tonight\'s sleep target']};
+  var ids=['home','health','stress','dashboard','journal','train','plan'];
+  var tabs=root.querySelectorAll('.rm-tabs button');
+  var heading=document.getElementById('rm-title');
+  var subtitle=document.getElementById('rm-subtitle');
+  var back=document.getElementById('rm-back');
+
+  function show(name){
+    for(var i=0;i<ids.length;i++){
+      document.getElementById('rm-screen-'+ids[i]).hidden=(ids[i]!==name);
+    }
+    for(var j=0;j<tabs.length;j++){
+      tabs[j].setAttribute('aria-pressed',
+        tabs[j].getAttribute('data-screen')===name?'true':'false');
+    }
+    back.hidden=(name!=='stress'&&name!=='journal');
+    heading.textContent=titles[name][0];
+    subtitle.textContent=titles[name][1];
+  }
+  for(var k=0;k<tabs.length;k++){
+    tabs[k].addEventListener('click',function(){show(this.getAttribute('data-screen'));});
+  }
+  var openers=root.querySelectorAll('[data-open]');
+  for(var m=0;m<openers.length;m++){
+    openers[m].addEventListener('click',function(){show(this.getAttribute('data-open'));});
+  }
+  back.addEventListener('click',function(){show('home');});
+
+  document.getElementById('rm-preview').addEventListener('change',function(){
+    root.setAttribute('data-preview',this.checked?'demo':'live');
+  });
+
+  var days=['SAT 7','SUN 8','TODAY'];
+  var dayIdx=2;
+  var dayLabel=document.getElementById('rm-daylabel');
+  var prev=document.getElementById('rm-prevday');
+  var next=document.getElementById('rm-nextday');
+  function paintDay(){
+    dayLabel.textContent=days[dayIdx];
+    prev.disabled=(dayIdx===0);
+    next.disabled=(dayIdx===days.length-1);
+    subtitle.textContent=(dayIdx===2)
+      ? 'Monday 9 November · day 1 of your baseline'
+      : 'No capture for this day yet';
+  }
+  prev.addEventListener('click',function(){if(dayIdx>0){dayIdx--;paintDay();}});
+  next.addEventListener('click',function(){if(dayIdx<days.length-1){dayIdx++;paintDay();}});
+
+  var hint=document.getElementById('rm-acthint');
+  function logMessage(text){
+    show('home');
+    hint.hidden=false;
+    hint.textContent=text;
+  }
+  document.getElementById('rm-addbtn').addEventListener('click',function(){
+    logMessage('Logger design: cardio comes from the strap automatically; lifting is entered as sets × reps × load.');
+  });
+  document.getElementById('rm-fab').addEventListener('click',function(){
+    logMessage('Logger design: pick Run, Gym, Walk or Ride. Not wired in this preview.');
+  });
+  document.getElementById('rm-startbtn').addEventListener('click',function(){
+    logMessage('Live session design: streams heart rate and zones while you train. Needs the real-time HR command, not yet sent to the band.');
+  });
+  var customHint=document.getElementById('rm-customhint');
+  document.getElementById('rm-customize').addEventListener('click',function(){
+    customHint.hidden=!customHint.hidden;
+  });
+  var homeHint=document.getElementById('rm-customhint-home');
+  document.getElementById('rm-customize-home').addEventListener('click',function(){
+    homeHint.hidden=!homeHint.hidden;
+  });
+  var vo2Hint=document.getElementById('rm-vo2hint');
+  document.getElementById('rm-vo2row').addEventListener('click',function(){
+    vo2Hint.hidden=!vo2Hint.hidden;
+  });
+
+  function bindGroup(el,exclusive){
+    el.addEventListener('click',function(ev){
+      var btn=ev.target.closest('button');
+      if(!btn||!el.contains(btn))return;
+      if(exclusive){
+        var all=el.querySelectorAll('button');
+        for(var i=0;i<all.length;i++)all[i].setAttribute('aria-pressed','false');
+        btn.setAttribute('aria-pressed','true');
+      }else{
+        var group=btn.parentElement.querySelectorAll('button');
+        for(var j=0;j<group.length;j++)group[j].setAttribute('aria-pressed','false');
+        btn.setAttribute('aria-pressed','true');
+      }
+    });
+  }
+  var questions=document.getElementById('rm-jquestions');
+  bindGroup(questions,false);
+  bindGroup(document.getElementById('rm-jmood'),true);
+  bindGroup(document.getElementById('rm-jsore'),true);
+  document.getElementById('rm-jsave').addEventListener('click',function(){
+    var yes=questions.querySelectorAll('.rm-yn button:first-child[aria-pressed="true"]').length;
+    var moodBtn=document.querySelector('#rm-jmood button[aria-pressed="true"]');
+    var mood=moodBtn?moodBtn.textContent:'—';
+    document.getElementById('rm-jstate-live').textContent=
+      'Filled today · '+yes+' yes · mood '+mood+'. Edit any time before midnight.';
+    show('home');
+  });
+
+  var RHR=71.8;
+  var bounds=[[0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];
+  var input=document.getElementById('rm-maxhr');
+  var rows=document.getElementById('rm-zone-rows').querySelectorAll('tr');
+  input.addEventListener('input',function(){
+    var max=parseFloat(input.value);
+    var valid=isFinite(max)&&max>=120&&max<=230&&max>RHR;
+    for(var i=0;i<rows.length;i++){
+      var cell=rows[i].lastElementChild;
+      if(!valid){cell.textContent='—';continue;}
+      cell.textContent=Math.round(RHR+bounds[i][0]*(max-RHR))+'–'+
+                       Math.round(RHR+bounds[i][1]*(max-RHR));
+    }
+  });
+})();
+</script>
+</div>
