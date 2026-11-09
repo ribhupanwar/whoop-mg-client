@@ -48,15 +48,3 @@ def build_command(opcode: int, body: bytes = b"", seq: int = 0) -> bytes:
     if opcode in DESTRUCTIVE_COMMANDS:
         raise ValueError(f"refusing to build destructive command 0x{opcode:02X}")
     return bytes([PacketType.COMMAND, seq & 0xFF, opcode]) + body
-
-
-def build_history_ack(seq: int, token: bytes) -> bytes:
-    """Positive HISTORY_END result: [0x23][seq][0x17][0x01] + the 8-byte token.
-
-    The token is echoed verbatim from inner[13:21] of the HISTORY_END marker.
-    Without this ACK the strap re-announces the same burst indefinitely and the
-    offload never advances.
-    """
-    if len(token) != 8:
-        raise ValueError(f"batch token must be 8 bytes, got {len(token)}")
-    return bytes([PacketType.COMMAND, seq & 0xFF, Command.HISTORICAL_DATA_RESULT, 0x01]) + token

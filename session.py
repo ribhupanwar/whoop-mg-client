@@ -22,7 +22,7 @@ from pathlib import Path
 from bleak import BleakClient, BleakScanner
 from bleak.exc import BleakError
 
-from whoop.constants import Command, PacketType, build_command, build_history_ack
+from whoop.constants import Command, PacketType, build_command
 from whoop.framing import GEN5_PROFILE, FrameReassembler, build_frame
 from whoop.gatt import GEN5
 
