@@ -1,0 +1,27 @@
+# Personal biometric captures and device identifiers - never commit.
+*.jsonl
+*.csv
+capture*.json
+session*.json
+*dashboard.html
+baseline.json
+
+# Third-party reference sources downloaded during protocol research.
+# From OpenStrap/protocol, AGPL-3.0 - NOT part of this clean-room implementation.
+# Only interoperability facts (offsets, units, enums) were taken from them.
+*_reference.dart
+band_reference.dart
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

@@ -1,0 +1,197 @@
+"""Tests for the local sleep, strain and recovery estimates."""
+
+import math
+import unittest
+
+from whoop.health import (
+    Baseline,
+    RecoveryResult,
+    detect_sleep,
+    recovery_score,
+    strain_label,
+    strain_score,
+    total_sleep_hours,
+)
+from whoop.records import RecordHeader, V18Sample
+
+
+def sample(unix, hr, accel=0.0) -> V18Sample:
+    return V18Sample(
+        header=RecordHeader(
+            version=18, flags=0x80, record_index=unix, unix=unix, subsec_q15=0
+        ),
+        heart_rate=hr,
+        dynamic_accel_g=accel,
+    )
+
+
+def stretch(start, seconds, hr, accel):
+    return [sample(start + i, hr, accel) for i in range(seconds)]
+
+
+def baseline(days=14):
+    return Baseline(
+        ln_rmssd_mean=4.0, ln_rmssd_sd=0.3, rhr_mean=55.0, rhr_sd=3.0, days=days
+    )
+
+
+class TestSleepDetection(unittest.TestCase):
+    def test_quiet_period_with_hr_drop_is_sleep(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 3600, 60, 0.02)
+        rows += stretch(4200, 600, 100, 0.5)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 1)
+        self.assertEqual(periods[0].start_unix, 600)
+        self.assertEqual(periods[0].duration_s, 3600)
+        self.assertAlmostEqual(periods[0].hours, 1.0, places=6)
+        self.assertAlmostEqual(periods[0].mean_hr, 60.0, places=6)
+
+    def test_sitting_still_without_hr_drop_is_not_sleep(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 3600, 100, 0.02)
+        rows += stretch(4200, 600, 100, 0.5)
+        self.assertEqual(detect_sleep(rows), [])
+
+    def test_short_quiet_period_is_not_sleep(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 1200, 60, 0.02)
+        rows += stretch(1800, 600, 100, 0.5)
+        self.assertEqual(detect_sleep(rows), [])
+
+    def test_brief_movement_is_closed_into_one_period(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 1200, 60, 0.02)
+        rows += stretch(1800, 120, 70, 0.5)
+        rows += stretch(1920, 1200, 60, 0.02)
+        rows += stretch(3120, 600, 100, 0.5)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 1)
+        self.assertEqual(periods[0].duration_s, 2520)
+        self.assertAlmostEqual(periods[0].quiet_fraction, 2400.0 / 2520.0, places=6)
+
+    def test_long_movement_splits_and_fragments_are_too_short(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 1200, 60, 0.02)
+        rows += stretch(1800, 400, 80, 0.5)
+        rows += stretch(2200, 1200, 60, 0.02)
+        rows += stretch(3400, 600, 100, 0.5)
+        self.assertEqual(detect_sleep(rows), [])
+
+    def test_no_active_seconds_means_no_reference(self):
+        rows = stretch(0, 3600, 60, 0.02)
+        self.assertEqual(detect_sleep(rows), [])
+
+    def test_missing_accel_is_not_quiet(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 3600, 60, None)
+        rows += stretch(4200, 600, 100, 0.5)
+        self.assertEqual(detect_sleep(rows), [])
+
+    def test_empty(self):
+        self.assertEqual(detect_sleep([]), [])
+
+    def test_total_sleep_sums_periods(self):
+        rows = stretch(0, 600, 100, 0.5)
+        rows += stretch(600, 3600, 60, 0.02)
+        rows += stretch(4200, 1800, 100, 0.5)
+        rows += stretch(6000, 3600, 60, 0.02)
+        rows += stretch(9600, 600, 100, 0.5)
+        self.assertAlmostEqual(total_sleep_hours(detect_sleep(rows)), 2.0, places=6)
+
+
+class TestStrain(unittest.TestCase):
+    def test_zero_trimp_is_zero(self):
+        self.assertEqual(strain_score(0.0), 0.0)
+
+    def test_scale_constant(self):
+        self.assertAlmostEqual(strain_score(150.0), 21.0 * (1 - 1 / math.e), places=6)
+
+    def test_monotonic_and_bounded(self):
+        values = [strain_score(t) for t in (0, 10, 50, 150, 300, 1000, 10000)]
+        self.assertEqual(values, sorted(values))
+        self.assertTrue(all(0 <= v <= 21.0 for v in values))
+        self.assertGreater(values[-1], 20.9)
+
+    def test_none_is_absent(self):
+        self.assertIsNone(strain_score(None))
+
+    def test_negative_rejected(self):
+        with self.assertRaises(ValueError):
+            strain_score(-1.0)
+
+    def test_labels(self):
+        self.assertEqual(strain_label(None), "unknown")
+        self.assertEqual(strain_label(5), "light")
+        self.assertEqual(strain_label(12), "moderate")
+        self.assertEqual(strain_label(16), "high")
+        self.assertEqual(strain_label(20), "all-out")
+
+
+class TestBaseline(unittest.TestCase):
+    def test_from_daily(self):
+        result = Baseline.from_daily([4.0, 4.2, 3.8], [55, 57, 53])
+        self.assertIsNotNone(result)
+        self.assertEqual(result.days, 3)
+        self.assertAlmostEqual(result.ln_rmssd_mean, 4.0, places=6)
+        self.assertAlmostEqual(result.rhr_mean, 55.0, places=6)
+
+    def test_too_few_days(self):
+        self.assertIsNone(Baseline.from_daily([4.0], [55]))
+        self.assertIsNone(Baseline.from_daily([], []))
+
+
+class TestRecovery(unittest.TestCase):
+    def test_no_baseline_gives_no_score(self):
+        result = recovery_score(4.0, 55.0, 8.0, 8.0, None)
+        self.assertIsNone(result.score)
+        self.assertIn("baseline", result.reason)
+        self.assertEqual(result.band, "unavailable")
+
+    def test_short_baseline_gives_no_score(self):
+        result = recovery_score(4.0, 55.0, 8.0, 8.0, baseline(days=3))
+        self.assertIsNone(result.score)
+
+    def test_missing_hrv_or_rhr_gives_no_score(self):
+        self.assertIsNone(recovery_score(None, 55.0, 8.0, 8.0, baseline()).score)
+        self.assertIsNone(recovery_score(4.0, None, 8.0, 8.0, baseline()).score)
+
+    def test_at_baseline_with_full_sleep(self):
+        # z=0 -> logistic 50 for both HRV and RHR; sleep 8/8 -> 100.
+        # (50*.5 + 50*.2 + 100*.3) / 1.0 = 65
+        result = recovery_score(4.0, 55.0, 8.0, 8.0, baseline())
+        self.assertAlmostEqual(result.score, 65.0, places=6)
+        self.assertEqual(result.band, "yellow")
+
+    def test_missing_sleep_renormalises(self):
+        # (50*.5 + 50*.2) / 0.7 = 50
+        result = recovery_score(4.0, 55.0, None, None, baseline())
+        self.assertAlmostEqual(result.score, 50.0, places=6)
+        self.assertIsNone(result.sleep_component)
+
+    def test_high_hrv_low_rhr_scores_higher(self):
+        good = recovery_score(4.6, 50.0, 8.0, 8.0, baseline())
+        poor = recovery_score(3.4, 62.0, 4.0, 8.0, baseline())
+        self.assertGreater(good.score, poor.score)
+        self.assertEqual(good.band, "green")
+        self.assertEqual(poor.band, "red")
+
+    def test_sleep_is_capped_at_need(self):
+        at_need = recovery_score(4.0, 55.0, 8.0, 8.0, baseline())
+        overslept = recovery_score(4.0, 55.0, 12.0, 8.0, baseline())
+        self.assertEqual(at_need.score, overslept.score)
+
+    def test_zero_sd_is_neutral_not_a_crash(self):
+        flat = Baseline(4.0, 0.0, 55.0, 0.0, days=14)
+        result = recovery_score(4.0, 55.0, 8.0, 8.0, flat)
+        self.assertAlmostEqual(result.score, 65.0, places=6)
+
+    def test_score_stays_in_range(self):
+        for ln in (2.0, 4.0, 6.0):
+            for rhr in (40.0, 55.0, 75.0):
+                result = recovery_score(ln, rhr, 8.0, 8.0, baseline())
+                self.assertTrue(0.0 <= result.score <= 100.0)
+
+
+if __name__ == "__main__":
+    unittest.main()
