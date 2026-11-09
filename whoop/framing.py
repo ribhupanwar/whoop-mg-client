@@ -112,20 +112,34 @@ class FrameReassembler:
                 del self._buffer[0]
                 self.dropped_bytes += 1
                 continue
+            # Validate the available header before trusting the advertised
+            # length. A corrupt header must not pin the buffer waiting for a
+            # fictitious multi-kilobyte packet.
+            if not self.profile.header_valid(self._buffer):
+                del self._buffer[0]
+                self.dropped_bytes += 1
+                self.bad_frames += 1
+                continue
             declared = self.profile.declared_len(self._buffer)
             total = self.profile.total_len(declared)
             if declared < 4 or total > 65535:
                 del self._buffer[0]
                 self.dropped_bytes += 1
+                self.bad_frames += 1
                 continue
             if len(self._buffer) < total:
                 break
             candidate = bytes(self._buffer[:total])
-            del self._buffer[:total]
             inner = parse_frame(candidate, self.profile)
             if inner is None:
+                # Rescan one byte at a time: consuming the entire bad
+                # candidate could swallow a valid frame that follows a
+                # damaged length or payload.
+                del self._buffer[0]
+                self.dropped_bytes += 1
                 self.bad_frames += 1
                 continue
+            del self._buffer[:total]
             frames.append(inner)
         return frames
 
