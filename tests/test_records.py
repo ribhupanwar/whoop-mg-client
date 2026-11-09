@@ -67,6 +67,8 @@ class TestV18(unittest.TestCase):
         self.assertEqual(sample.step_motion_counter, 1014)
         self.assertEqual(sample.step_cadence, 120)
         self.assertEqual(sample.sleep_state_byte, 1)
+        self.assertEqual(sample.sleep_state, 0)
+        self.assertAlmostEqual(sample.signal_quality_log_variance, -0.9206, places=4)
         self.assertIsNotNone(sample.gravity_g)
         self.assertAlmostEqual(sample.gravity_g[0], 0.0468, places=3)
         self.assertAlmostEqual(sample.gravity_g[1], 0.0952, places=3)
@@ -123,6 +125,37 @@ class TestV18(unittest.TestCase):
         self.assertIsNotNone(sample)
         self.assertIsNone(sample.gravity_g)
         self.assertEqual(sample.heart_rate, 94)
+
+    def test_sleep_state_is_only_bits_four_and_five(self):
+        for byte, expected in ((0x00, 0), (0x10, 1), (0x20, 2), (0x30, 3), (0xFF, 3), (0xCF, 0)):
+            with self.subTest(byte=byte):
+                record = bytearray(REAL_V18)
+                record[73] = byte
+                sample = decode_v18(bytes(record))
+                self.assertEqual(sample.sleep_state_byte, byte)
+                self.assertEqual(sample.sleep_state, expected)
+
+    def test_signal_quality_has_no_physical_clamp(self):
+        # A log variance is unbounded, unlike the accelerometer fields. Clamping
+        # it to the range seen in one capture would silently drop real seconds.
+        for value in (-40.0, -0.5, 0.0, 12.5):
+            with self.subTest(value=value):
+                record = bytearray(REAL_V18)
+                record[105:109] = struct.pack("<f", value)
+                self.assertAlmostEqual(
+                    decode_v18(bytes(record)).signal_quality_log_variance, value, places=3
+                )
+
+    def test_non_finite_signal_quality_dropped_only(self):
+        for value in (float("nan"), float("inf"), float("-inf")):
+            with self.subTest(value=value):
+                record = bytearray(REAL_V18)
+                record[105:109] = struct.pack("<f", value)
+                sample = decode_v18(bytes(record))
+                self.assertIsNotNone(sample)
+                self.assertIsNone(sample.signal_quality_log_variance)
+                self.assertEqual(sample.heart_rate, 94)
+                self.assertEqual(sample.sleep_state, 0)
 
 
 class TestV26(unittest.TestCase):

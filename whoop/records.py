@@ -113,9 +113,15 @@ class V18Sample:
     temp_aux1_c: float | None = None
     temp_aux2_c: float | None = None
     sleep_state_byte: int | None = None
+    # Bits 4-5 of sleep_state_byte. The enum is NOT established: do not attach
+    # stage names to these values until an overnight capture pins them down.
+    sleep_state: int | None = None
     cardiac_flags: int | None = None
     hr_quality_flags: int | None = None
     spo2_candidate_raw: int | None = None
+    # The band's own log-variance quality weight; lower is cleaner. Unlike the
+    # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
+    signal_quality_log_variance: float | None = None
 
     @property
     def unix(self) -> int:
@@ -154,6 +160,9 @@ def decode_v18(inner: bytes) -> V18Sample | None:
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
         dyn = None
 
+    quality = _f32(inner, 105)
+    sleep_byte = inner[73] if len(inner) > 73 else None
+
     axes = (_f32(inner, 37), _f32(inner, 41), _f32(inner, 45))
     gravity = None
     if all(a is not None and abs(a) <= FULL_SCALE_G for a in axes):
@@ -175,10 +184,12 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         temp_aux1_c=temp(61, 10.0),
         temp_aux2_c=temp(63, 10.0),
         skin_temp_c=temp(65, 100.0),
-        sleep_state_byte=inner[73] if len(inner) > 73 else None,
+        sleep_state_byte=sleep_byte,
+        sleep_state=(sleep_byte >> 4) & 0x03 if sleep_byte is not None else None,
         cardiac_flags=inner[25] if len(inner) > 25 else None,
         hr_quality_flags=inner[28] if len(inner) > 28 else None,
         spo2_candidate_raw=inner[74] if len(inner) > 74 else None,
+        signal_quality_log_variance=round(quality, 4) if quality is not None else None,
     )
 
 

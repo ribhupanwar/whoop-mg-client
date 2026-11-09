@@ -96,7 +96,7 @@ def load_samples(path: Path) -> list:
             samples.append(sample)
     samples.sort(key=lambda s: (s.unix, s.header.record_index))
     if undecoded:
-        print(f"  undecoded historical versions: {dict(undecoded)}")
+        print(f"  historical versions outside the 1 Hz stream: {dict(undecoded)}")
     return samples
 
 
@@ -231,11 +231,41 @@ def main() -> int:
     if steps:
         print(f"  step counter: {min(steps)} -> {max(steps)} (delta {max(steps)-min(steps)})")
 
-    sleep_states = Counter(s.sleep_state_byte for s in samples if s.sleep_state_byte is not None)
+    sleep_states = Counter(s.sleep_state for s in samples if s.sleep_state is not None)
     if sleep_states:
-        print(f"\n=== Band sleep/wake state (envelope, not sleep stage) ===")
+        print(f"\n=== Band-reported sleep state (raw bits 4-5 of inner[73]) ===")
         for state, count in sorted(sleep_states.items()):
-            print(f"  state {state}: {count} samples")
+            group = [s for s in samples if s.sleep_state == state]
+            hr = [s.heart_rate for s in group if s.wearing]
+            accel = [s.dynamic_accel_g for s in group if s.dynamic_accel_g is not None]
+            detail = []
+            if hr:
+                detail.append(f"mean HR {statistics.mean(hr):.1f} bpm")
+            if accel:
+                detail.append(f"mean accel {statistics.mean(accel):.3f} g")
+            suffix = "  " + ", ".join(detail) if detail else ""
+            print(f"  state {state}: {count} samples{suffix}")
+        print("  Enum NOT labelled. Pin it down against an overnight capture before naming stages.")
+
+    quality = [
+        s.signal_quality_log_variance for s in samples
+        if s.signal_quality_log_variance is not None
+    ]
+    if quality:
+        print(f"\n=== HR signal quality (band log variance, lower = cleaner) ===")
+        print(f"  populated: {len(quality)}/{len(samples)} seconds")
+        on_wrist_q = [
+            s.signal_quality_log_variance for s in wearing
+            if s.signal_quality_log_variance is not None
+        ]
+        if on_wrist_q:
+            print(f"  on-wrist: min={min(on_wrist_q):.3f}  max={max(on_wrist_q):.3f}"
+                  f"  mean={statistics.mean(on_wrist_q):.3f}")
+        off_body = [s for s in samples if not s.wearing]
+        if off_body:
+            off_zero = sum(1 for s in off_body if s.signal_quality_log_variance == 0.0)
+            print(f"  off-body seconds reporting exactly 0.0: {off_zero}/{len(off_body)}")
+        print("  Reported only. Not yet used to weight RMSSD.")
 
     report_waveforms(load_waveforms(path), samples)
     report_console(console_lines)
@@ -246,7 +276,8 @@ def main() -> int:
         writer.writerow(
             ["unix", "utc", "record_index", "hr_bpm", "rr_count", "rr_ms",
              "skin_temp_c", "dynamic_accel_g", "gx", "gy", "gz",
-             "step_counter", "cadence", "activity_class", "sleep_state"]
+             "step_counter", "cadence", "activity_class",
+             "sleep_state_byte", "sleep_state", "signal_quality_log_variance"]
         )
         for s in samples:
             g = s.gravity_g or (None, None, None)
@@ -255,7 +286,8 @@ def main() -> int:
                  s.header.record_index, s.heart_rate, len(s.rr_intervals_ms),
                  "|".join(str(r) for r in s.rr_intervals_ms), s.skin_temp_c,
                  s.dynamic_accel_g, g[0], g[1], g[2], s.step_motion_counter,
-                 s.step_cadence, s.activity_class, s.sleep_state_byte]
+                 s.step_cadence, s.activity_class, s.sleep_state_byte,
+                 s.sleep_state, s.signal_quality_log_variance]
             )
     print(f"\n  CSV written -> {out}")
     return 0
