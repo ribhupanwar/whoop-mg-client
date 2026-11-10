@@ -100,6 +100,11 @@ Using the band: turn the iPhone's own Bluetooth pairing to the strap **off**
 accept the pairing prompt on first write. The first drain can take up to two
 minutes; live HR starts as soon as notifications are subscribed.
 
+Wear the band overnight, then drain once in the morning: the app stages the
+most recent detected sleep window on-device, so the Sleep tab shows the
+hypnogram and deep/light/REM/awake minutes with no cloud round-trip. A window
+with less than 50 % heart-rate coverage is refused and says why.
+
 ## Python reference
 
 ```sh
