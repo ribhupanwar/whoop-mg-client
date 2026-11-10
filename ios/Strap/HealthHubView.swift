@@ -3,8 +3,9 @@ import SwiftUI
 /// Health tab landing — an overview hub, matching the approved layout.
 /// The vitals detail (HealthView) is a drill-in opened only from a Health
 /// Monitor card (here and on Home), never the tab itself.
-/// Only metrics this client actually measures are shown; blood pressure,
-/// respiratory rate and validated SpO₂ are explicitly absent, never guessed.
+/// Only metrics this client actually measures are shown; blood pressure is
+/// absent, respiratory rate is an RSA estimate from R-R, and SpO₂ is the
+/// band's labelled candidate rather than a clinical percentage.
 struct HealthHubView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -139,7 +140,7 @@ struct HealthHubView: View {
     private var notMeasuredPanel: some View {
         Panel {
             CardHead(title: "Not measured by this client")
-            Text("Blood pressure, respiratory rate and validated SpO₂ are not produced here — the strap's raw candidates are unvalidated and this client never guesses medical-looking numbers. Skin temperature is shown only as an absolute reading on the detail screen, never as a diagnosis.")
+            Text("Blood pressure is not produced here. Respiratory rate is an RSA estimate from R-R timing, not a chest-band measurement. SpO₂ is only the strap's unvalidated candidate byte and is never a clinical reading. Skin temperature is shown as an absolute reading on the detail screen only.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)

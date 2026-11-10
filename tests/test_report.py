@@ -487,5 +487,34 @@ class TestRenderHtml(unittest.TestCase):
         self.assertIn("needs 2+ recorded nights", page)
 
 
+class TestRespAndSpo2InReport(unittest.TestCase):
+    def test_report_carries_the_rsa_rate_and_spo2_candidate(self):
+        rows = []
+        for i in range(900):
+            rr = int(round(1000 + 80 * math.sin(2 * math.pi * 0.25 * i)))
+            row = sample(i, 58, 0.01, rr=(rr,))
+            row.spo2_candidate_raw = 96
+            row.spo2_candidate_pct = 96
+            row.spo2_candidate_status = "pct"
+            rows.append(row)
+        report = build(rows)
+        self.assertGreaterEqual(report.resp_rate.breaths_per_min, 13.0)
+        self.assertLessEqual(report.resp_rate.breaths_per_min, 17.0)
+        self.assertAlmostEqual(report.spo2.pct, 96.0)
+        page = render_html(report)
+        self.assertIn("Respiratory rate", page)
+        self.assertIn("SpO2 candidate", page)
+        self.assertIn("unvalidated, not clinical", page)
+
+    def test_flat_rr_and_no_candidate_stay_absent(self):
+        report = build(stretch(0, 900, 60, 0.01, rr=(810,)))
+        self.assertIsNone(report.resp_rate.breaths_per_min)
+        self.assertIsNone(report.spo2.pct)
+        self.assertIn("no in-band", report.spo2.reason)
+        page = render_html(report)
+        self.assertIn("Respiratory rate", page)
+        self.assertIn("no in-band", page)
+
+
 if __name__ == "__main__":
     unittest.main()

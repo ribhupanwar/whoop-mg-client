@@ -9,6 +9,7 @@ from whoop.records import (
     V26_DELTA_OFFSET,
     V26_SAMPLE_COUNT,
     decode_record,
+    decode_spo2_candidate,
     decode_v18,
     decode_v26,
     parse_header,
@@ -52,6 +53,40 @@ class TestHeader(unittest.TestCase):
 
     def test_rejects_short(self):
         self.assertIsNone(parse_header(b"\x2f\x12"))
+
+
+class TestSpo2Candidate(unittest.TestCase):
+    def test_in_band_values_are_candidates(self):
+        for raw in (70, 95, 100):
+            self.assertEqual(decode_spo2_candidate(raw), (raw, "pct"))
+
+    def test_absent_values(self):
+        self.assertEqual(decode_spo2_candidate(0), (None, "absent"))
+        self.assertEqual(decode_spo2_candidate(None), (None, "absent"))
+
+    def test_bit_seven_is_a_saturation_sentinel(self):
+        for raw in (0x80, 0xA0, 0xFF):
+            self.assertEqual(decode_spo2_candidate(raw), (None, "saturated"))
+
+    def test_other_nonzero_values_are_diagnostic(self):
+        for raw in (1, 65, 69, 101, 127):
+            self.assertEqual(decode_spo2_candidate(raw), (None, "diagnostic"))
+
+    def test_decode_v18_carries_the_candidate(self):
+        frame = bytearray(REAL_V18)
+        frame[74] = 96
+        sample = decode_v18(bytes(frame))
+        self.assertEqual(sample.spo2_candidate_raw, 96)
+        self.assertEqual(sample.spo2_candidate_pct, 96)
+        self.assertEqual(sample.spo2_candidate_status, "pct")
+
+    def test_decode_v18_never_promotes_a_sentinel_to_a_value(self):
+        frame = bytearray(REAL_V18)
+        frame[74] = 0x80
+        sample = decode_v18(bytes(frame))
+        self.assertEqual(sample.spo2_candidate_raw, 0x80)
+        self.assertIsNone(sample.spo2_candidate_pct)
+        self.assertEqual(sample.spo2_candidate_status, "saturated")
 
 
 class TestV18(unittest.TestCase):

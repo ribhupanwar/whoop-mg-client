@@ -658,10 +658,10 @@
 
       <div class="rm-panel">
         <div class="rm-cardhead"><h3>Not measured by this client</h3></div>
-        <p class="rm-hint" style="margin-top:0">Blood pressure, respiratory rate and validated
-          SpO₂ are not produced here — the strap's raw candidates are unvalidated and this
-          client never guesses medical-looking numbers. Skin temperature is shown only as an
-          absolute reading on the detail screen, never as a diagnosis.</p>
+        <p class="rm-hint" style="margin-top:0">Blood pressure is not produced here.
+          Respiratory rate is an RSA estimate from R-R timing, not a chest-band measurement.
+          SpO₂ is only the strap's unvalidated candidate byte and is never a clinical reading.
+          Skin temperature is shown as an absolute reading on the detail screen only.</p>
       </div>
 
       <p class="rm-hint">Health monitor and stress monitor are local estimates, not medical
@@ -697,9 +697,14 @@
 
       <div class="rm-mgrid">
         <div class="rm-metric"><div class="rm-metric-label">Respiratory rate</div>
-          <div class="rm-metric-value">—</div><span class="rm-chip">not implemented</span></div>
+          <div class="rm-metric-value"><span data-when="live">13.6 <small>br/min</small></span>
+            <span data-when="demo">14 <small>br/min</small></span></div>
+          <span class="rm-chip">RSA estimate from R-R</span></div>
         <div class="rm-metric"><div class="rm-metric-label">Blood oxygen<br>SpO₂</div>
-          <div class="rm-metric-value">—</div><span class="rm-chip">raw, unvalidated</span></div>
+          <div class="rm-metric-value"><span data-when="live">—</span>
+            <span data-when="demo">96 <small>%</small></span></div>
+          <span class="rm-chip" data-when="live">sleep capture only</span>
+          <span class="rm-chip" data-when="demo">unvalidated · sample</span></div>
         <div class="rm-metric"><div class="rm-metric-label">Resting HR</div>
           <div class="rm-metric-value">71.8 <small>bpm</small></div>
           <span class="rm-chip" data-when="live">baseline 1/7</span>
@@ -719,8 +724,9 @@
           <span class="rm-chip rm-chip-good" data-when="demo">of implemented</span></div>
       </div>
       <p class="rm-hint">Green range chips compare today against <em>your</em> normal, so
-        they cannot appear before the baseline exists. Respiratory rate and SpO₂ stay blank
-        in both modes — the strap sends candidates but nothing validates them yet.</p>
+        they cannot appear before the baseline exists. Respiratory rate is an RSA estimate
+        from R-R; SpO₂ appears only when the strap banks an in-band sleep candidate, and it
+        is never a clinical reading.</p>
     </section>
 
     <!-- ============ STRESS DETAIL ============ -->

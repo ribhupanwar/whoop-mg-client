@@ -14,6 +14,7 @@ from whoop.health import (
     recovery_score,
     sleep_coach,
     sleep_debt,
+    spo2_candidate_summary,
     strain_label,
     strain_score,
     stress_score,
@@ -326,6 +327,40 @@ class TestSleepCoach(unittest.TestCase):
         self.assertEqual(clock_label(390), "06:30")
         self.assertEqual(clock_label(-182), "20:58")
         self.assertEqual(clock_label(1440), "00:00")
+
+
+class TestSpo2CandidateSummary(unittest.TestCase):
+    def candidate(self, unix, pct=None, status="absent"):
+        row = sample(unix, 60)
+        row.spo2_candidate_pct = pct
+        row.spo2_candidate_status = status
+        return row
+
+    def test_mean_of_in_band_candidates(self):
+        rows = [
+            self.candidate(0, 96, "pct"),
+            self.candidate(1, 97, "pct"),
+            self.candidate(2, 0, "absent"),
+            self.candidate(3, None, "saturated"),
+            self.candidate(4, None, "diagnostic"),
+        ]
+        summary = spo2_candidate_summary(rows)
+        self.assertAlmostEqual(summary.pct, 96.5)
+        self.assertEqual(summary.readings, 2)
+        self.assertEqual(summary.saturated, 1)
+        self.assertEqual(summary.diagnostic, 1)
+        self.assertIsNone(summary.reason)
+
+    def test_no_in_band_candidate_produces_no_value(self):
+        rows = [
+            self.candidate(0, 0, "absent"),
+            self.candidate(1, None, "saturated"),
+            self.candidate(2, None, "diagnostic"),
+        ]
+        summary = spo2_candidate_summary(rows)
+        self.assertIsNone(summary.pct)
+        self.assertEqual(summary.readings, 0)
+        self.assertIn("no in-band", summary.reason)
 
 
 if __name__ == "__main__":

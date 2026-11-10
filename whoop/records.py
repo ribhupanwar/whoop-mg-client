@@ -3,6 +3,8 @@
 Clean-room implementation from documented byte offsets. v18 is the per-second
 biometric summary and the only gen5 record that becomes a 1 Hz sample. v26 is a
 25 Hz optical waveform, decoded separately because it is not a per-second summary.
+v18's last data byte is a tri-mode SpO2 candidate; it is decoded but never
+treated as a validated percentage.
 
 Shared header, inner-relative:
   [0] packet type 0x2F   [1] hist_version   [2] flags
@@ -41,6 +43,11 @@ MAX_RR_MS = 3000
 # HR outside this window is treated as absent, not as a reading.
 MIN_HR = 25
 MAX_HR = 230
+
+# v18 inner[74] (frame byte 82) is a tri-mode SpO2 candidate, not a reading.
+SPO2_CANDIDATE_MIN = 70
+SPO2_CANDIDATE_MAX = 100
+SPO2_SATURATED_BIT = 0x80
 
 FULL_SCALE_G = 16.0
 
@@ -119,6 +126,11 @@ class V18Sample:
     cardiac_flags: int | None = None
     hr_quality_flags: int | None = None
     spo2_candidate_raw: int | None = None
+    # 70-100 = the band's own candidate percentage. Candidate only: cross-device
+    # validation is split, so it never becomes a scored metric.
+    spo2_candidate_pct: int | None = None
+    # "absent" / "pct" / "saturated" / "diagnostic"; see decode_spo2_candidate.
+    spo2_candidate_status: str | None = None
     # The band's own log-variance quality weight; lower is cleaner. Unlike the
     # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
     signal_quality_log_variance: float | None = None
@@ -130,6 +142,27 @@ class V18Sample:
     @property
     def wearing(self) -> bool:
         return self.heart_rate > 0
+
+
+def decode_spo2_candidate(raw: int | None) -> tuple[int | None, str | None]:
+    """Classify the v18 SpO2 candidate byte (inner[74] / frame 82).
+
+    The byte is tri-mode: 70-100 is the band's own candidate percentage, bit 7
+    marks a saturation sentinel, any other nonzero value is a diagnostic code,
+    and zero means absent. It is only populated while the band records sleep.
+
+    This is a CANDIDATE, not a validated measurement. A public multi-night
+    validation with real spread exists, but two other capture nights moved
+    opposite to the vendor app, so the evidence is split. Never present the
+    value as a clinical SpO2 or feed it into a score.
+    """
+    if raw is None or raw == 0:
+        return None, "absent"
+    if SPO2_CANDIDATE_MIN <= raw <= SPO2_CANDIDATE_MAX:
+        return raw, "pct"
+    if raw & SPO2_SATURATED_BIT:
+        return None, "saturated"
+    return None, "diagnostic"
 
 
 def decode_v18(inner: bytes) -> V18Sample | None:
@@ -162,6 +195,8 @@ def decode_v18(inner: bytes) -> V18Sample | None:
 
     quality = _f32(inner, 105)
     sleep_byte = inner[73] if len(inner) > 73 else None
+    spo2_raw = inner[74] if len(inner) > 74 else None
+    spo2_pct, spo2_status = decode_spo2_candidate(spo2_raw)
 
     axes = (_f32(inner, 37), _f32(inner, 41), _f32(inner, 45))
     gravity = None
@@ -188,7 +223,9 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         sleep_state=(sleep_byte >> 4) & 0x03 if sleep_byte is not None else None,
         cardiac_flags=inner[25] if len(inner) > 25 else None,
         hr_quality_flags=inner[28] if len(inner) > 28 else None,
-        spo2_candidate_raw=inner[74] if len(inner) > 74 else None,
+        spo2_candidate_raw=spo2_raw,
+        spo2_candidate_pct=spo2_pct,
+        spo2_candidate_status=spo2_status,
         signal_quality_log_variance=round(quality, 4) if quality is not None else None,
     )
 

@@ -28,6 +28,8 @@ enum SampleData {
     static let hrNow = 81
     static let hrRangeLow = 48
     static let hrRangeHigh = 162
+    static let respRate = 14.0
+    static let spo2Candidate = 96
     static let hrSeries: [Double] = [
         74, 68, 78, 76, 78, 80, 83, 74, 82, 74, 75, 76, 70, 74, 74, 76,
         76, 78, 77, 75, 75, 82, 77, 71, 76, 74, 77, 74, 66, 64, 70, 70,

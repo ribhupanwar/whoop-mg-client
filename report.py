@@ -22,13 +22,17 @@ from whoop.activity import ActivitySession, detect_activities
 from whoop.health import (
     Baseline,
     RecoveryResult,
+    RespRate,
     SleepCoach,
     SleepPeriod,
+    Spo2Candidate,
     StressResult,
     clock_label,
     detect_sleep,
     recovery_score,
+    resp_rate_from_rr,
     sleep_coach,
+    spo2_candidate_summary,
     strain_label,
     strain_score,
     stress_score,
@@ -45,8 +49,9 @@ from whoop.sleep_analysis import SleepAnalysis, analyze_sleep, sleep_consistency
 
 DISCLAIMER = (
     "Local estimates from published physiology (Malik 1996 HRV, Banister TRIMP, "
-    "Karvonen HR reserve). Not WHOOP scores - WHOOP's recovery, strain and sleep "
-    "staging are proprietary and are not reproduced here."
+    "Karvonen HR reserve, RSA respiration). Not WHOOP scores - WHOOP's recovery, "
+    "strain and sleep staging are proprietary and are not reproduced here. The "
+    "SpO2 candidate comes from the band's own byte and is not a clinical reading."
 )
 
 
@@ -71,6 +76,8 @@ class Report:
     coach: SleepCoach
     activities: list[ActivitySession]
     sleep_analysis: SleepAnalysis | None
+    resp_rate: RespRate
+    spo2: Spo2Candidate
 
 
 def build_report(
@@ -135,6 +142,8 @@ def build_report(
         analyze_sleep(ordered, periods, coach.need_h, sleep_nights or [], sleep_baseline)
         if periods else None
     )
+    resp_rate = resp_rate_from_rr(ordered)
+    spo2 = spo2_candidate_summary(ordered)
 
     return Report(
         source=source,
@@ -162,6 +171,8 @@ def build_report(
         coach=coach,
         activities=activities,
         sleep_analysis=analysis,
+        resp_rate=resp_rate,
+        spo2=spo2,
     )
 
 
@@ -345,6 +356,29 @@ def print_report(report: Report) -> None:
         print(f"               from the longest quiet run: {report.hrv_window_s} s")
     else:
         print("               no quiet run of at least 60 s; HRV at rest needs stillness")
+    resp = report.resp_rate
+    if resp.breaths_per_min is None:
+        print(f"  Resp rate  : —  ({resp.reason})")
+    else:
+        print(
+            f"  Resp rate  : {resp.breaths_per_min:.1f} breaths/min"
+            f"  (RSA estimate from R-R, {resp.windows} window(s), {resp.beats} beats)"
+        )
+    spo2 = report.spo2
+    if spo2.pct is None:
+        print(f"  SpO2 cand. : —  ({spo2.reason})")
+    else:
+        extras = []
+        if spo2.saturated:
+            extras.append(f"{spo2.saturated} saturated")
+        if spo2.diagnostic:
+            extras.append(f"{spo2.diagnostic} diagnostic")
+        suffix = f", {', '.join(extras)}" if extras else ""
+        print(
+            f"  SpO2 cand. : {spo2.pct:.1f} %"
+            f"  (band candidate @82, {spo2.readings} reading(s){suffix}"
+            " - UNVALIDATED, not a clinical SpO2)"
+        )
     if report.sleep_periods:
         print(
             f"  Sleep      : {_fmt(report.sleep_hours, ' h')} across"
@@ -503,6 +537,26 @@ def render_html(report: Report) -> str:
                 f" · {report.hrv_window_s} s quiet run"
                 if report.hrv_window_s
                 else " · needs a rest/sleep window"
+            ),
+        ),
+        _card(
+            "Respiratory rate",
+            _fmt(report.resp_rate.breaths_per_min, " /min"),
+            (
+                f"RSA estimate from R-R · {report.resp_rate.windows} window(s)"
+                f" · {report.resp_rate.beats} beats"
+                if report.resp_rate.available
+                else report.resp_rate.reason or ""
+            ),
+        ),
+        _card(
+            "SpO2 candidate",
+            "—" if report.spo2.pct is None else f"{report.spo2.pct:.1f} %",
+            (
+                f"band candidate @82 · {report.spo2.readings} reading(s)"
+                " · unvalidated, not clinical"
+                if report.spo2.available
+                else report.spo2.reason or ""
             ),
         ),
         _card(
@@ -668,9 +722,11 @@ personal baseline is meaningless.</p></div></div>
 implemented: it requires validated HRV features and a trained model, and guessing
 it would fabricate medical-looking output. The band's own sleep-state byte is a
 wake/sleep envelope with an unverified value mapping, so it never drives the
-sleep decision. Activities are auto-detected from the band's gait readout, the
-step counter and sustained heart-rate elevation; sessions under ten minutes are
-not logged, and the gait enum is not vendor-verified.</footer>
+sleep decision. Respiratory rate is an RSA estimate from R-R timing, not a
+chest-band measurement. SpO2 is only the band's unvalidated @82 candidate and is
+never a clinical reading. Activities are auto-detected from the band's gait
+readout, the step counter and sustained heart-rate elevation; sessions under ten
+minutes are not logged, and the gait enum is not vendor-verified.</footer>
 </div></body></html>
 """
 

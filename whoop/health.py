@@ -26,18 +26,45 @@ from the strap alone. What is here instead:
     which estimates individual optimal sleep and cumulative debt from
     actigraphy) + a coaching allowance for tomorrow's plan. The debt addition
     is capped so one bad week cannot demand an impossible night.
+  * Respiratory rate - an RSA estimate from R-R timing, because the gen5 v18
+    wire carries no respiration ADC. It is a local estimate, not a chest-band
+    measurement.
+  * SpO2 - only the band's own tri-mode candidate byte, surfaced as a
+    candidate. Cross-device validation is split, so it is never a clinical
+    percentage and never feeds a score.
 """
 
 import math
 import statistics
 from dataclasses import dataclass
 
-from .records import V18Sample
+from .records import (
+    MAX_RR_MS,
+    MIN_RR_MS,
+    SPO2_CANDIDATE_MAX,
+    SPO2_CANDIDATE_MIN,
+    V18Sample,
+)
 
 QUIET_ACCEL_G = 0.08
 MIN_SLEEP_S = 1800
 SLEEP_GAP_TOLERANCE_S = 300
 HR_DROP_BPM = 5.0
+
+# Respiratory rate from R-R via respiratory sinus arrhythmia. WHOOP5 v18 has
+# no respiration ADC: the only signal is how beat-to-beat timing modulates with
+# breathing. These are estimator constants, not measurements.
+RSA_RESAMPLE_HZ = 4.0
+RSA_DETREND_WINDOW_S = 8.0
+RSA_MIN_PEAK_DISTANCE_S = 2.5
+RSA_WINDOW_S = 300.0
+RSA_GAP_TOLERANCE_S = 3.0
+RSA_MIN_BREATH_INTERVAL_S = 2.5  # 24 breaths/min
+RSA_MAX_BREATH_INTERVAL_S = 10.0  # 6 breaths/min
+RSA_INTERVAL_BAND = 0.4
+RESP_PLAUSIBLE_MIN_BPM = 8.0
+RESP_PLAUSIBLE_MAX_BPM = 25.0
+MIN_RSA_BEATS = 30
 
 # TRIMP at which the local strain curve reaches 21*(1-1/e) = 13.3.
 STRAIN_SCALE_TRIMP = 150.0
@@ -322,6 +349,238 @@ def stress_score(ln_rmssd: float | None, baseline: Baseline | None) -> StressRes
 
     deviation = (baseline.ln_rmssd_mean - ln_rmssd) / baseline.ln_rmssd_sd
     return StressResult(index=round(max(0.0, min(STRESS_MAX, deviation)), 2), reason=None)
+
+
+@dataclass
+class RespRate:
+    breaths_per_min: float | None
+    reason: str | None
+    beats: int
+    windows: int
+
+    @property
+    def available(self) -> bool:
+        return self.breaths_per_min is not None
+
+
+def _rr_segments(samples: list[V18Sample]) -> list[list[tuple[int, int]]]:
+    """Split the beat stream wherever R-R is missing or the record clock jumps.
+
+    Cumulative beat time cannot represent a dropout: stitching the two sides
+    would put a step into the tachogram that the peak picker reads as a breath.
+    Short gaps are tolerated because a single missed beat does not move the
+    estimate, but a multi-second gap starts a new segment.
+    """
+    ordered = sorted(samples, key=lambda s: s.unix)
+    segments: list[list[tuple[int, int]]] = []
+    current: list[tuple[int, int]] = []
+    last_unix: int | None = None
+    last_span_s = 0.0
+    for sample in ordered:
+        rr = [v for v in sample.rr_intervals_ms if MIN_RR_MS <= v <= MAX_RR_MS]
+        if not rr:
+            continue
+        # On a real capture the wall-clock step exceeds the previous record's
+        # R-R span by ~0.16 s. A multi-second excess is a dropout, not timing
+        # noise, and stitching across it would fabricate a breath.
+        if (
+            last_unix is not None
+            and sample.unix - last_unix - last_span_s > RSA_GAP_TOLERANCE_S
+        ):
+            if current:
+                segments.append(current)
+            current = []
+        current.extend((sample.unix, value) for value in rr)
+        last_unix = sample.unix
+        last_span_s = sum(rr) / 1000.0
+    if current:
+        segments.append(current)
+    return segments
+
+
+def _resample_beat_times(times: list[float], values: list[int]) -> list[float]:
+    dt = 1.0 / RSA_RESAMPLE_HZ
+    count = int(times[-1] / dt) + 1
+    grid: list[float] = []
+    seg = 0
+    for i in range(count):
+        t = i * dt
+        while seg < len(times) - 2 and times[seg + 1] < t:
+            seg += 1
+        t0, t1 = times[seg], times[seg + 1]
+        v0, v1 = values[seg], values[seg + 1]
+        if t1 <= t0:
+            grid.append(float(v0))
+        else:
+            fraction = min(max((t - t0) / (t1 - t0), 0.0), 1.0)
+            grid.append(v0 + fraction * (v1 - v0))
+    return grid
+
+
+def _detrend(values: list[float]) -> list[float]:
+    half = max(1, round(RSA_DETREND_WINDOW_S * RSA_RESAMPLE_HZ / 2.0))
+    out: list[float] = []
+    for i in range(len(values)):
+        lo = max(0, i - half)
+        hi = min(len(values) - 1, i + half)
+        window = values[lo : hi + 1]
+        out.append(values[i] - sum(window) / len(window))
+    return out
+
+
+def _find_peaks(values: list[float], min_distance: int) -> list[int]:
+    """Local maxima above zero, thinned greedily by height like scipy's picker."""
+    candidates = [
+        i
+        for i in range(1, len(values) - 1)
+        if values[i] > 0 and values[i] > values[i - 1] and values[i] >= values[i + 1]
+    ]
+    if not candidates:
+        return []
+    ordered = sorted(candidates, key=lambda i: (-values[i], i))
+    kept: list[int] = []
+    for i in ordered:
+        if all(abs(i - j) >= min_distance for j in kept):
+            kept.append(i)
+    return sorted(kept)
+
+
+def _window_rates(detrended: list[float]) -> list[float]:
+    min_distance = max(2, round(RSA_MIN_PEAK_DISTANCE_S * RSA_RESAMPLE_HZ))
+    window_samples = max(
+        min_distance * 3, round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
+    )
+    dt = 1.0 / RSA_RESAMPLE_HZ
+    rates: list[float] = []
+    for start in range(0, len(detrended), window_samples):
+        window = detrended[start : start + window_samples]
+        if len(window) < min_distance * 3:
+            continue
+        peaks = _find_peaks(window, min_distance)
+        if len(peaks) < 3:
+            continue
+        intervals = [
+            (peaks[i] - peaks[i - 1]) * dt
+            for i in range(1, len(peaks))
+        ]
+        intervals = [
+            iv
+            for iv in intervals
+            if RSA_MIN_BREATH_INTERVAL_S <= iv <= RSA_MAX_BREATH_INTERVAL_S
+        ]
+        if len(intervals) < 2:
+            continue
+        median = statistics.median(intervals)
+        if median <= 0:
+            continue
+        anchored = [iv for iv in intervals if abs(iv - median) <= RSA_INTERVAL_BAND * median]
+        mean_interval = statistics.mean(anchored) if anchored else median
+        if mean_interval > 0:
+            rates.append(60.0 / mean_interval)
+    return rates
+
+
+def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
+    """Estimate sleeping respiratory rate from R-R via RSA.
+
+    This recovers the breathing modulation of beat-to-beat timing, which tracks
+    but does not equal a chest-band or capnography rate. It is an on-device
+    estimate: the v18 wire carries no respiration ADC. Requires a still or
+    sleep window with a continuous R-R train; otherwise returns no value.
+    """
+    segments = _rr_segments(samples)
+    total_beats = sum(len(segment) for segment in segments)
+    if total_beats < MIN_RSA_BEATS:
+        return RespRate(
+            None,
+            f"needs at least {MIN_RSA_BEATS} R-R beats from a still or sleep window",
+            total_beats,
+            0,
+        )
+
+    rates: list[float] = []
+    for segment in segments:
+        if len(segment) < MIN_RSA_BEATS:
+            continue
+        times: list[float] = []
+        acc = 0.0
+        for _, rr in segment:
+            acc += rr / 1000.0
+            times.append(acc)
+        if times[-1] < RSA_WINDOW_S / 2.0:
+            continue
+        grid = _resample_beat_times(times, [rr for _, rr in segment])
+        if len(grid) < 8:
+            continue
+        detrended = _detrend(grid)
+        if statistics.pstdev(detrended) <= 1e-9:
+            continue
+        rates.extend(_window_rates(detrended))
+
+    if not rates:
+        return RespRate(
+            None,
+            "no usable RSA peak train - needs a continuous still or sleep R-R window",
+            total_beats,
+            0,
+        )
+    median = statistics.median(rates)
+    if not (RESP_PLAUSIBLE_MIN_BPM <= median <= RESP_PLAUSIBLE_MAX_BPM):
+        return RespRate(
+            None,
+            f"RSA estimate {median:.1f}/min fell outside the plausible"
+            f" {RESP_PLAUSIBLE_MIN_BPM:.0f}-{RESP_PLAUSIBLE_MAX_BPM:.0f} band",
+            total_beats,
+            len(rates),
+        )
+    return RespRate(round(median, 1), None, total_beats, len(rates))
+
+
+@dataclass
+class Spo2Candidate:
+    pct: float | None
+    readings: int
+    saturated: int
+    diagnostic: int
+    reason: str | None
+
+    @property
+    def available(self) -> bool:
+        return self.pct is not None
+
+
+def spo2_candidate_summary(samples: list[V18Sample]) -> Spo2Candidate:
+    """Mean of the band's in-band SpO2 candidates, or no value at all.
+
+    This is NOT a validated SpO2. The band banks one candidate byte per second
+    only while it records sleep; the percentage range is 70-100, bit-7 values
+    are saturation sentinels and other nonzero values are diagnostic codes.
+    Cross-device validation is split, so the value is presented as a candidate
+    and never feeds a score.
+    """
+    in_band = [
+        s.spo2_candidate_pct
+        for s in samples
+        if s.spo2_candidate_pct is not None
+        and SPO2_CANDIDATE_MIN <= s.spo2_candidate_pct <= SPO2_CANDIDATE_MAX
+    ]
+    saturated = sum(1 for s in samples if s.spo2_candidate_status == "saturated")
+    diagnostic = sum(1 for s in samples if s.spo2_candidate_status == "diagnostic")
+    if not in_band:
+        return Spo2Candidate(
+            None,
+            0,
+            saturated,
+            diagnostic,
+            "the strap banked no in-band (70-100) candidate - no SpO2 % is produced",
+        )
+    return Spo2Candidate(
+        round(statistics.mean(in_band), 1),
+        len(in_band),
+        saturated,
+        diagnostic,
+        None,
+    )
 
 
 @dataclass

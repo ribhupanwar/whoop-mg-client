@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Health detail — HR chart placeholder plus the recoverable-metric grid.
-/// Respiratory rate is intentionally absent (not recoverable from this sensor)
-/// and SpO₂ is never shown as a percentage.
+/// Respiratory rate is an RSA estimate from R-R timing (v18 carries no
+/// respiration ADC) and SpO₂ is only the band's unvalidated candidate byte,
+/// never a clinical percentage.
 struct HealthView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -13,7 +14,7 @@ struct HealthView: View {
             VStack(alignment: .leading, spacing: 0) {
                 hrPanel
                 metricGrid
-                Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Only metrics recoverable from this sensor are listed.")
+                Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Respiratory rate is an RSA estimate from R-R; SpO₂ is the band's unvalidated candidate, not a clinical reading.")
             }
         }
         .navigationTitle("Health monitor")
@@ -91,6 +92,20 @@ struct HealthView: View {
                 label: "Steps",
                 value: demo ? SampleData.steps.formatted() : "—",
                 chip: demo ? "today · sample" : "needs a capture",
+                chipGood: false
+            )
+            MetricTile(
+                label: "Respiratory rate",
+                value: demo ? String(format: "%.0f", SampleData.respRate) : "—",
+                unit: demo ? "br/min" : nil,
+                chip: demo ? "RSA estimate · sample" : "needs a still R-R window",
+                chipGood: false
+            )
+            MetricTile(
+                label: "SpO₂ candidate",
+                value: demo ? "\(SampleData.spo2Candidate)%" : "—",
+                unit: nil,
+                chip: demo ? "unvalidated · sample" : "sleep capture only",
                 chipGood: false
             )
         }

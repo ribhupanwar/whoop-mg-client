@@ -3,7 +3,8 @@ import SwiftUI
 /// The My Dashboard metric rows, shared verbatim by Home and the Dashboard tab
 /// so the ordering can never drift: HRV, RHR, Steps, HR zones 1–3 weekly,
 /// HR zones 4–5 weekly, VO₂ max, Calories, Stress Monitor.
-/// No respiratory rate (not recoverable from this sensor) and no SpO₂ percentage.
+/// No respiratory rate or SpO₂ here: both are Health-detail estimates, and
+/// SpO₂ is only an unvalidated band candidate.
 struct DashboardRows: View {
     @EnvironmentObject private var store: AppStore
     @State private var showVO2Detail = false
