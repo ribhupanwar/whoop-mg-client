@@ -172,7 +172,7 @@ final class ActivityStoreTests: XCTestCase {
 }
 
 final class ActivityDetectTests: XCTestCase {
-    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int = 0) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(
                 version: 18, flags: 0x80, recordIndex: UInt32(unix),
@@ -201,22 +201,23 @@ final class ActivityDetectTests: XCTestCase {
         )
     }
 
-    /// A six-minute walk at 120 steps/min with resting HR and a still gait
-    /// byte — the walk must come from the step counter alone.
+    /// A six-minute walk at 120 steps/min with resting HR and no gait readout
+    /// — the walk must come from the step counter alone. The trailing-minute
+    /// rate is undefined on the first tick, so the session starts one second in.
     private func walk(seconds: Int = 360) -> [V18Sample] {
-        (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2) }
+        (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2, gait: nil) }
     }
 
     func testFiveMinuteWalkIsDetectedWithoutAGaitByte() {
         let sessions = ActivityDetect.detect(walk())
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.kind, "walk")
-        XCTAssertEqual(sessions.first?.startUnix, 0)
-        XCTAssertEqual(sessions.first?.steps, 718)
+        XCTAssertEqual(sessions.first?.startUnix, 1)
+        XCTAssertEqual(sessions.first?.steps, 716)
     }
 
     func testFastSteppingIsLabelledARun() {
-        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3) }
+        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3, gait: nil) }
         XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
     }
 
