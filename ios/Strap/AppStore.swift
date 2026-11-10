@@ -150,7 +150,9 @@ final class AppStore: ObservableObject {
                 await self?.activateHealthKit(exportBacklog: true)
             }
         } else {
-            health.deactivate()
+            Task { [weak self] in
+                await self?.health.deactivate()
+            }
         }
     }
 
@@ -160,7 +162,9 @@ final class AppStore: ObservableObject {
         await health.activate()
         guard health.state.isOn, exportBacklog else { return }
         await health.export(detectedBandActivities)
-        await health.export(live: liveActivities)
+        for record in liveActivities {
+            await health.export(live: record)
+        }
     }
 
     func manualActivities(on dateKey: String) -> [ManualActivity] {

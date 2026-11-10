@@ -89,7 +89,8 @@ final class HealthKitBridge: ObservableObject {
     @MainActor
     func export(_ session: ActivitySession) async {
         let id = Self.externalID(startUnix: session.startUnix)
-        guard await !exists(id) else { return }
+        let alreadySaved = await exists(id)
+        guard !alreadySaved else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(session.startUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(session.endUnix + 1))
         var metadata: [String: Any] = [
@@ -108,7 +109,8 @@ final class HealthKitBridge: ObservableObject {
     @MainActor
     func export(live record: LiveActivityRecord) async {
         let id = Self.externalID(startUnix: record.startedUnix)
-        guard await !exists(id) else { return }
+        let alreadySaved = await exists(id)
+        guard !alreadySaved else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(record.startedUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(record.endedUnix))
         guard end > start else { return }
@@ -136,7 +138,7 @@ final class HealthKitBridge: ObservableObject {
         let builder = HKWorkoutBuilder(healthStore: store, configuration: configuration, device: .local())
         do {
             try await builder.beginCollection(at: start)
-            builder.addMetadata(metadata)
+            try await builder.addMetadata(metadata)
             try await builder.endCollection(at: end)
             _ = try await builder.finishWorkout()
         } catch {
