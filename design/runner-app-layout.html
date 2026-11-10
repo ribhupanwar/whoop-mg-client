@@ -264,6 +264,34 @@
   background:var(--app-fg);color:var(--app-bg);font-family:var(--font-sans);
   font-size:12px;font-weight:500;letter-spacing:.06em;cursor:pointer;margin-bottom:4px}
 
+#runner-app-mockup .rm-trio-btn{background:none;border:0;cursor:pointer;
+  font-family:var(--font-sans);color:inherit;padding:0}
+#runner-app-mockup .rm-sleeprowbtn{width:100%;border:0;cursor:pointer;
+  font-family:var(--font-sans);text-align:left;color:inherit}
+#runner-app-mockup .rm-chevbtn{background:none;border:0;color:var(--app-muted);
+  font-size:15px;cursor:pointer;min-height:32px;min-width:32px}
+#runner-app-mockup .rm-coachtimes{display:flex;justify-content:space-between;gap:10px;
+  margin:6px 0 12px}
+#runner-app-mockup .rm-coachtimes>div{flex:1;min-width:0}
+#runner-app-mockup .rm-coachtimes b{display:block;font-size:26px;font-weight:500;
+  letter-spacing:-.8px;color:var(--app-fg)}
+#runner-app-mockup .rm-coachtimes em{font-style:normal;font-size:9.5px;letter-spacing:.07em;
+  text-transform:uppercase;color:var(--app-muted);display:block;margin-top:3px;line-height:1.4}
+#runner-app-mockup .rm-coachtimes input{width:100%;min-height:40px;box-sizing:border-box;
+  background:var(--app-raised);border:1px solid var(--app-line);border-radius:8px;
+  color:var(--app-fg);font-family:var(--font-sans);font-size:17px;padding:4px 8px}
+#runner-app-mockup .rm-alarmrow{display:flex;align-items:center;gap:10px}
+#runner-app-mockup .rm-alarmrow b{flex:1;font-size:11px;font-weight:500;
+  letter-spacing:.08em;color:var(--app-fg)}
+#runner-app-mockup .rm-switch{width:46px;height:26px;flex:0 0 auto;border-radius:999px;
+  border:1px solid var(--app-line);background:var(--app-raised);cursor:pointer;position:relative}
+#runner-app-mockup .rm-switch::after{content:"";position:absolute;top:3px;left:3px;
+  width:18px;height:18px;border-radius:50%;background:var(--app-muted)}
+#runner-app-mockup .rm-switch[aria-checked="true"]{background:var(--app-good);
+  border-color:var(--app-good)}
+#runner-app-mockup .rm-switch[aria-checked="true"]::after{left:23px;
+  background:light-dark(#fff,#08130c)}
+
 #runner-app-mockup .rm-fab{position:absolute;right:16px;bottom:78px;width:50px;height:50px;
   border-radius:50%;background:var(--app-fg);color:var(--app-bg);border:0;font-size:26px;
   line-height:1;cursor:pointer;box-shadow:0 3px 12px light-dark(rgba(0,0,0,.18),rgba(0,0,0,.5))}
@@ -321,7 +349,7 @@
     <!-- ============ HOME ============ -->
     <section class="rm-screen" id="rm-screen-home">
       <div class="rm-trio">
-        <div class="rm-trio-item">
+        <button type="button" class="rm-trio-item rm-trio-btn" data-open="sleepcoach">
           <div class="rm-miniring">
             <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Sleep ring">
               <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
@@ -332,7 +360,7 @@
             <b><span data-when="live">—</span><span data-when="demo">85%</span></b>
           </div>
           <div class="rm-trio-label">SLEEP &#8250;</div>
-        </div>
+        </button>
         <div class="rm-trio-item">
           <div class="rm-miniring">
             <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Recovery ring">
@@ -409,13 +437,13 @@
 
       <div class="rm-card">
         <div class="rm-cardhead"><h3>Today's activities</h3><span class="rm-chev">&#8250;</span></div>
-        <div class="rm-sleeprow">
+        <button type="button" class="rm-sleeprow rm-sleeprowbtn" data-open="sleepcoach">
           <span class="rm-sleeppill">&#9789;
             <span data-when="live">—</span><span data-when="demo">6:24</span></span>
           <b>SLEEP</b>
           <span class="rm-sleeptime" data-when="live">wear it<br>tonight</span>
           <span class="rm-sleeptime" data-when="demo">00:26<br>07:33</span>
-        </div>
+        </button>
         <div class="rm-actlist">
           <div class="rm-actrow">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="2"/><path d="M9 21l2.5-5.5L9 12l1-4 3 2 3 1M11.5 15.5L15 18l1 3"/></svg>
@@ -438,7 +466,9 @@
       </div>
 
       <div class="rm-card">
-        <div class="rm-cardhead"><h3>Tonight's sleep</h3><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-cardhead"><h3>Tonight's sleep</h3>
+          <button type="button" class="rm-chevbtn" data-open="sleepcoach"
+                  aria-label="Open sleep coach">&#8250;</button></div>
         <div class="rm-tonight">
           <div><b><span data-when="live">—</span><span data-when="demo">22:28</span></b>
             <em>Recommended<br>bedtime</em></div>
@@ -446,8 +476,9 @@
           <div style="text-align:right"><b><span data-when="live">—</span><span data-when="demo">07:45</span></b>
             <em>Latest<br>alarm</em></div>
         </div>
-        <p class="rm-hint">Bedtime is worked back from your sleep need and tomorrow's
-          planned session. It needs a sleep history first, so it stays blank today.</p>
+        <p class="rm-hint">Bedtime is worked back from your wake time, your sleep need and
+          accumulated sleep debt. Open the coach to set a wake time; debt starts counting
+          from tonight's capture.</p>
       </div>
 
       <div class="rm-card">
@@ -872,6 +903,68 @@
         correlation to inspect, not a cause proven.</p>
     </section>
 
+    <!-- ============ SLEEP COACH ============ -->
+    <section class="rm-screen" id="rm-screen-sleepcoach" hidden>
+      <div class="rm-panel">
+        <p class="rm-hint" style="margin:0 0 12px;font-size:12.5px;color:var(--app-fg)">
+          <span data-when="live" id="rm-coach-sentence-live">Set a wake time below and the
+            coach works your bedtime back from it.</span>
+          <span data-when="demo">Sample: get to bed by 20:15 to reach 9.0 h of sleep by
+            06:30 — 8 h of need plus 1 h of debt.</span></p>
+        <div class="rm-sechead">Tomorrow I want to</div>
+        <div class="rm-seg" id="rm-coach-intent" role="group" aria-label="Tomorrow's plan">
+          <button type="button" data-extra="hard" aria-pressed="false">Train hard</button>
+          <button type="button" data-extra="easy" aria-pressed="true">Keep it easy</button>
+          <button type="button" data-extra="rest" aria-pressed="false">Rest day</button>
+        </div>
+        <div class="rm-coachtimes">
+          <div><b><span data-when="live" id="rm-coach-bed-live">—</span><span data-when="demo">20:15</span></b>
+            <em>Suggested<br>bedtime</em></div>
+          <div style="text-align:right">
+            <b data-when="demo">06:30</b>
+            <span data-when="live"><input type="time" id="rm-coach-wake" aria-label="Your wake time"></span>
+            <em>Your wake<br>time</em></div>
+        </div>
+        <div class="rm-sechead">Time in bed</div>
+        <div class="rm-stack" role="img" aria-label="Time in bed split into sleep need and assumed overhead">
+          <i data-when="live" id="rm-coach-bar-need" style="width:88%;background:var(--app-sleep)"></i>
+          <i data-when="live" id="rm-coach-bar-over" style="width:12%;background:var(--app-raised)"></i>
+          <i data-when="demo" style="width:88%;background:var(--app-sleep)"></i>
+          <i data-when="demo" style="width:12%;background:var(--app-raised)"></i>
+        </div>
+        <div class="rm-split">
+          <div><b><span data-when="live" id="rm-coach-need-live">—</span><span data-when="demo">9:00</span></b><span>sleep need</span></div>
+          <div><b><span data-when="live" id="rm-coach-tib-live">—</span><span data-when="demo">10:15</span></b><span>time in bed</span></div>
+        </div>
+        <p class="rm-hint">Time in bed runs longer than sleep need: 15 min assumed latency
+          and 90% assumed efficiency. This strap cannot measure either, so both stay
+          stated assumptions, not readings.</p>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-sechead">Sleep debt</div>
+        <div class="rm-metric-value" style="margin:4px 0">
+          <span data-when="live" style="font-size:15px">no nights yet</span>
+          <span data-when="demo">1.0 <small>h</small></span></div>
+        <p class="rm-hint" style="margin:0">The running shortfall against your need over the
+          last 14 nights; a longer night repays it. At most 2 h of debt joins one night's
+          need, so a bad week cannot demand an impossible bedtime. Counting starts with
+          tonight's capture.</p>
+      </div>
+
+      <div class="rm-panel" style="padding:14px">
+        <div class="rm-alarmrow"><b>ALARM</b>
+          <button type="button" class="rm-switch" id="rm-alarm" role="switch"
+                  aria-checked="false" aria-label="Haptic alarm"></button></div>
+        <div class="rm-btnrow" style="margin-top:10px">
+          <button type="button" id="rm-alarmstate">ALARM SET TO OFF</button>
+          <button type="button" id="rm-wakestate">WAKE TIME SET TO —</button>
+        </div>
+        <p class="rm-hint">The alarm is a design intent: no alarm command has been verified
+          on this strap, so nothing here is sent to the band.</p>
+      </div>
+    </section>
+
   </div>
 
   <button type="button" class="rm-fab" id="rm-fab" aria-label="Add an activity">+</button>
@@ -906,9 +999,10 @@ no WHOOP assets, branding or proprietary scoring.</p>
     stress:['Stress monitor','Live index and the day so far'],
     dashboard:['Dashboard','Every metric in one list'],
     journal:['My Journal','Yesterday, in your own words'],
+    sleepcoach:['Sleep coach','Bedtime from your wake time and sleep debt'],
     train:['Train','Heart-rate zones from your measured resting HR'],
     plan:['Plan','Your week and tonight\'s sleep target']};
-  var ids=['home','health','stress','dashboard','journal','train','plan'];
+  var ids=['home','health','stress','dashboard','journal','sleepcoach','train','plan'];
   var tabs=root.querySelectorAll('.rm-tabs button');
   var heading=document.getElementById('rm-title');
   var subtitle=document.getElementById('rm-subtitle');
@@ -922,7 +1016,7 @@ no WHOOP assets, branding or proprietary scoring.</p>
       tabs[j].setAttribute('aria-pressed',
         tabs[j].getAttribute('data-screen')===name?'true':'false');
     }
-    back.hidden=(name!=='stress'&&name!=='journal');
+    back.hidden=(name!=='stress'&&name!=='journal'&&name!=='sleepcoach');
     heading.textContent=titles[name][0];
     subtitle.textContent=titles[name][1];
   }
@@ -1010,6 +1104,65 @@ no WHOOP assets, branding or proprietary scoring.</p>
       'Filled today · '+yes+' yes · mood '+mood+'. Edit any time before midnight.';
     show('home');
   });
+
+  function clock(min){
+    var m=((min%1440)+1440)%1440;
+    var h=Math.floor(m/60), mm=m%60;
+    return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm;
+  }
+  function dur(hours){
+    var m=Math.round(hours*60);
+    return Math.floor(m/60)+':'+(m%60<10?'0':'')+(m%60);
+  }
+  var coachIntent='easy';
+  var coachWake=document.getElementById('rm-coach-wake');
+  function paintCoach(){
+    var bedEl=document.getElementById('rm-coach-bed-live');
+    var needEl=document.getElementById('rm-coach-need-live');
+    var tibEl=document.getElementById('rm-coach-tib-live');
+    var sentence=document.getElementById('rm-coach-sentence-live');
+    var wakeState=document.getElementById('rm-wakestate');
+    if(!coachWake.value){
+      bedEl.textContent='—';needEl.textContent='—';tibEl.textContent='—';
+      wakeState.textContent='WAKE TIME SET TO —';
+      sentence.textContent='Set a wake time below and the coach works your bedtime back from it.';
+      return;
+    }
+    var p=coachWake.value.split(':');
+    var wake=(+p[0])*60+(+p[1]);
+    var extra={hard:0.5,easy:0,rest:0.25}[coachIntent];
+    var need=8+extra;                 // debt unknown until nights are recorded
+    var tib=need/0.9+0.25;            // stated efficiency + latency assumptions
+    var bed=Math.round(wake-tib*60);
+    bedEl.textContent=clock(bed);
+    needEl.textContent=dur(need);
+    tibEl.textContent=dur(tib);
+    wakeState.textContent='WAKE TIME SET TO '+coachWake.value;
+    var share=Math.round(100*need/tib);
+    document.getElementById('rm-coach-bar-need').style.width=share+'%';
+    document.getElementById('rm-coach-bar-over').style.width=(100-share)+'%';
+    sentence.textContent='Get to bed by '+clock(bed)+' to reach '+need.toFixed(1)+
+      ' h of sleep by '+coachWake.value+'. Debt unknown until nights are recorded.';
+  }
+  coachWake.addEventListener('input',paintCoach);
+  document.getElementById('rm-coach-intent').addEventListener('click',function(ev){
+    var btn=ev.target.closest('button');
+    if(!btn)return;
+    coachIntent=btn.getAttribute('data-extra');
+    var all=this.querySelectorAll('button');
+    for(var i=0;i<all.length;i++)all[i].setAttribute('aria-pressed','false');
+    btn.setAttribute('aria-pressed','true');
+    paintCoach();
+  });
+  var alarmOn=false;
+  function setAlarm(on){
+    alarmOn=on;
+    document.getElementById('rm-alarm').setAttribute('aria-checked',on?'true':'false');
+    document.getElementById('rm-alarmstate').textContent='ALARM SET TO '+(on?'ON':'OFF');
+  }
+  document.getElementById('rm-alarm').addEventListener('click',function(){setAlarm(!alarmOn);});
+  document.getElementById('rm-alarmstate').addEventListener('click',function(){setAlarm(!alarmOn);});
+  paintCoach();
 
   var RHR=71.8;
   var bounds=[[0.50,0.60],[0.60,0.70],[0.70,0.80],[0.80,0.90],[0.90,1.00]];

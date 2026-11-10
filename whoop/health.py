@@ -20,6 +20,12 @@ from the strap alone. What is here instead:
     which lowers RMSSD. It is scored against an AWAKE baseline, never the sleep
     one: lnRMSSD is systematically higher in sleep, so comparing a daytime
     window against a sleep norm would read as stressed every waking hour.
+  * Sleep coach - a bedtime worked back from your wake time and tonight's sleep
+    need. Need = stated base need + accumulated sleep debt (the running
+    shortfall against your need, as in Kitamura et al. 2016, Scientific Reports,
+    which estimates individual optimal sleep and cumulative debt from
+    actigraphy) + a coaching allowance for tomorrow's plan. The debt addition
+    is capped so one bad week cannot demand an impossible night.
 """
 
 import math
@@ -43,6 +49,14 @@ RECOVERY_WEIGHTS = {"hrv": 0.5, "rhr": 0.2, "sleep": 0.3}
 STRESS_MAX = 3.0
 STRESS_ELEVATED_SD = 1.0
 STRESS_HIGH_SD = 2.0
+
+# Sleep coach defaults. The debt window and cap are coaching choices, not
+# measurements; 7-9 h is the adult range (Hirshkowitz et al. 2015, Sleep Health).
+SLEEP_DEBT_WINDOW_NIGHTS = 14
+SLEEP_DEBT_CAP_H = 2.0
+SLEEP_LATENCY_H = 0.25
+SLEEP_EFFICIENCY = 0.90
+TOMORROW_EXTRA_H = {"hard": 0.5, "easy": 0.0, "rest": 0.25}
 
 
 @dataclass
@@ -301,3 +315,74 @@ def stress_score(ln_rmssd: float | None, baseline: Baseline | None) -> StressRes
 
     deviation = (baseline.ln_rmssd_mean - ln_rmssd) / baseline.ln_rmssd_sd
     return StressResult(index=round(max(0.0, min(STRESS_MAX, deviation)), 2), reason=None)
+
+
+@dataclass
+class SleepCoach:
+    nights: int
+    debt_h: float | None
+    need_h: float
+    time_in_bed_h: float
+    wake_min: int | None
+    bedtime_min: int | None
+
+    @property
+    def reason(self) -> str | None:
+        if self.wake_min is None:
+            return "set a wake time to get a suggested bedtime"
+        return None
+
+
+def sleep_debt(night_sleep_h: list[float], base_need_h: float) -> float:
+    """Running shortfall against need over the recent nights, floored at zero.
+
+    A night longer than need repays debt; the floor stops surplus sleep from
+    banking credit against future short nights.
+    """
+    debt = 0.0
+    for actual in night_sleep_h[-SLEEP_DEBT_WINDOW_NIGHTS:]:
+        debt = max(0.0, debt + base_need_h - actual)
+    return debt
+
+
+def sleep_coach(
+    night_sleep_h: list[float],
+    wake_min: int | None,
+    base_need_h: float = 8.0,
+    tomorrow: str = "easy",
+    efficiency: float = SLEEP_EFFICIENCY,
+) -> SleepCoach:
+    """Suggested bedtime from wake time, sleep debt and tomorrow's plan.
+
+    Time in bed exceeds sleep need by assumed latency and efficiency, because
+    time in bed is not time asleep. Both are stated assumptions (90% efficiency,
+    15 min latency), not measurements - this strap cannot observe either.
+    `bedtime_min` may be negative: it then means the previous evening.
+    """
+    if tomorrow not in TOMORROW_EXTRA_H:
+        raise ValueError(f"tomorrow must be one of {sorted(TOMORROW_EXTRA_H)}")
+    if base_need_h <= 0:
+        raise ValueError("base_need_h must be positive")
+    if not 0.0 < efficiency <= 1.0:
+        raise ValueError("efficiency must be in (0, 1]")
+    recent = night_sleep_h[-SLEEP_DEBT_WINDOW_NIGHTS:]
+    debt = sleep_debt(recent, base_need_h) if recent else None
+    need = base_need_h + TOMORROW_EXTRA_H[tomorrow] + (
+        min(debt, SLEEP_DEBT_CAP_H) if debt is not None else 0.0
+    )
+    in_bed = need / efficiency + SLEEP_LATENCY_H
+    bedtime = None if wake_min is None else round(wake_min - in_bed * 60.0)
+    return SleepCoach(
+        nights=len(recent),
+        debt_h=round(debt, 2) if debt is not None else None,
+        need_h=round(need, 2),
+        time_in_bed_h=round(in_bed, 2),
+        wake_min=wake_min,
+        bedtime_min=bedtime,
+    )
+
+
+def clock_label(minutes: int) -> str:
+    """24-hour clock label; negative minutes wrap to the previous day."""
+    hours, mins = divmod(minutes % 1440, 60)
+    return f"{hours:02d}:{mins:02d}"

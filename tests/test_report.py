@@ -14,6 +14,7 @@ from report import (
     load_daily,
     record_day,
     render_html,
+    sleep_history_from_file,
     stress_baseline_from_file,
 )
 from whoop.health import Baseline
@@ -126,6 +127,24 @@ class TestBuildReport(unittest.TestCase):
         self.assertIsNone(report.stress.index)
         self.assertEqual(report.stress.band, "unavailable")
 
+    def test_coach_without_wake_time_has_no_bedtime(self):
+        report = build(stretch(0, 300, 70, 0.02))
+        self.assertIsNone(report.coach.bedtime_min)
+        self.assertIn("wake time", report.coach.reason)
+
+    def test_coach_bedtime_follows_recorded_sleep_debt(self):
+        rows = stretch(0, 300, 70, 0.02)
+        rested = build(rows, wake_min=390, sleep_history=[8.0, 8.0])
+        indebted = build(rows, wake_min=390, sleep_history=[6.0, 6.0])
+        self.assertEqual(rested.coach.debt_h, 0.0)
+        self.assertEqual(indebted.coach.debt_h, 4.0)
+        self.assertLess(indebted.coach.bedtime_min, rested.coach.bedtime_min)
+
+    def test_coach_debt_unknown_without_nights(self):
+        report = build(stretch(0, 300, 70, 0.02), wake_min=390)
+        self.assertIsNone(report.coach.debt_h)
+        self.assertIsNotNone(report.coach.bedtime_min)
+
 
 class TestBaselineStore(unittest.TestCase):
     def setUp(self):
@@ -203,6 +222,24 @@ class TestBaselineStore(unittest.TestCase):
         with self.assertRaises(ValueError):
             record_day(self.path, "2026-11-09", 3.8, 71.0, "nap")
 
+    def test_sleep_hours_round_trip_on_sleep_rows_only(self):
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep", sleep_h=7.25)
+        days = load_daily(self.path)
+        self.assertNotIn("sleep_h", days["2026-11-09|awake"])
+        self.assertAlmostEqual(days["2026-11-09|sleep"]["sleep_h"], 7.25, places=6)
+
+    def test_sleep_history_is_date_ordered_and_sleep_only(self):
+        record_day(self.path, "2026-11-11", 4.6, 55.0, "sleep", sleep_h=6.0)
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        record_day(self.path, "2026-11-10", 4.5, 56.0, "sleep", sleep_h=7.5)
+        record_day(self.path, "2026-11-12", 4.4, 57.0, "sleep")
+        self.assertEqual(sleep_history_from_file(self.path), [7.5, 6.0])
+
+    def test_sleep_history_empty_without_nights(self):
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        self.assertEqual(sleep_history_from_file(self.path), [])
+
 
 class TestRenderHtml(unittest.TestCase):
     def test_disclaimer_is_always_present(self):
@@ -247,6 +284,13 @@ class TestRenderHtml(unittest.TestCase):
     def test_staging_limitation_is_stated(self):
         page = render_html(build(stretch(0, 60, 100, accel=0.5)))
         self.assertIn("staging is not", page)
+
+    def test_coach_card_shows_bedtime_only_with_a_wake_time(self):
+        rows = stretch(0, 60, 100, accel=0.5)
+        self.assertIn("set a wake time", render_html(build(rows)))
+        page = render_html(build(rows, wake_min=390, sleep_history=[6.0]))
+        self.assertIn("Sleep coach", page)
+        self.assertIn("debt 2.00 h", page)
 
 
 if __name__ == "__main__":

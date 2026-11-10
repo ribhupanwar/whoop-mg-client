@@ -6,9 +6,14 @@ import unittest
 from whoop.health import (
     Baseline,
     RecoveryResult,
+    SLEEP_DEBT_CAP_H,
+    SLEEP_DEBT_WINDOW_NIGHTS,
     STRESS_MAX,
+    clock_label,
     detect_sleep,
     recovery_score,
+    sleep_coach,
+    sleep_debt,
     strain_label,
     strain_score,
     stress_score,
@@ -257,6 +262,70 @@ class TestStress(unittest.TestCase):
             with self.subTest(ln=ln):
                 index = stress_score(ln, baseline()).index
                 self.assertTrue(0.0 <= index <= STRESS_MAX)
+
+
+class TestSleepCoach(unittest.TestCase):
+    def test_debt_accumulates_short_nights(self):
+        self.assertAlmostEqual(sleep_debt([6.0, 6.0], 8.0), 4.0)
+
+    def test_long_night_repays_debt(self):
+        self.assertAlmostEqual(sleep_debt([6.0, 10.0], 8.0), 0.0)
+
+    def test_surplus_sleep_banks_no_credit(self):
+        self.assertAlmostEqual(sleep_debt([10.0, 10.0, 6.0], 8.0), 2.0)
+
+    def test_debt_only_looks_at_recent_window(self):
+        nights = [6.0] * (SLEEP_DEBT_WINDOW_NIGHTS + 5)
+        self.assertAlmostEqual(
+            sleep_debt(nights, 8.0), 2.0 * SLEEP_DEBT_WINDOW_NIGHTS
+        )
+
+    def test_no_nights_means_unknown_debt_not_zero(self):
+        coach = sleep_coach([], 390)
+        self.assertIsNone(coach.debt_h)
+        self.assertEqual(coach.nights, 0)
+        self.assertEqual(coach.need_h, 8.0)
+
+    def test_debt_addition_is_capped(self):
+        coach = sleep_coach([6.0, 6.0, 6.0], 390)
+        self.assertEqual(coach.debt_h, 6.0)
+        self.assertEqual(coach.need_h, 8.0 + SLEEP_DEBT_CAP_H)
+
+    def test_bedtime_is_wake_minus_time_in_bed(self):
+        coach = sleep_coach([], 390)
+        in_bed_min = round(coach.time_in_bed_h * 60)
+        self.assertEqual(coach.bedtime_min, 390 - in_bed_min)
+        self.assertLess(coach.bedtime_min, 0)  # previous evening
+        self.assertEqual(clock_label(coach.bedtime_min), "21:22")
+
+    def test_tomorrow_hard_adds_allowance(self):
+        easy = sleep_coach([], 390, tomorrow="easy")
+        hard = sleep_coach([], 390, tomorrow="hard")
+        self.assertAlmostEqual(hard.need_h - easy.need_h, 0.5)
+        self.assertLess(hard.bedtime_min, easy.bedtime_min)
+
+    def test_no_wake_time_gives_no_bedtime(self):
+        coach = sleep_coach([7.0], None)
+        self.assertIsNone(coach.bedtime_min)
+        self.assertIn("wake time", coach.reason)
+
+    def test_wake_time_gives_no_reason(self):
+        self.assertIsNone(sleep_coach([7.0], 390).reason)
+
+    def test_invalid_inputs_raise(self):
+        with self.assertRaises(ValueError):
+            sleep_coach([], 390, tomorrow="party")
+        with self.assertRaises(ValueError):
+            sleep_coach([], 390, base_need_h=0)
+        with self.assertRaises(ValueError):
+            sleep_coach([], 390, efficiency=0.0)
+        with self.assertRaises(ValueError):
+            sleep_coach([], 390, efficiency=1.2)
+
+    def test_clock_label_wraps_both_ways(self):
+        self.assertEqual(clock_label(390), "06:30")
+        self.assertEqual(clock_label(-182), "20:58")
+        self.assertEqual(clock_label(1440), "00:00")
 
 
 if __name__ == "__main__":

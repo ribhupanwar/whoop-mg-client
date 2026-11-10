@@ -20,10 +20,13 @@ from decode import load_samples
 from whoop.health import (
     Baseline,
     RecoveryResult,
+    SleepCoach,
     SleepPeriod,
     StressResult,
+    clock_label,
     detect_sleep,
     recovery_score,
+    sleep_coach,
     strain_label,
     strain_score,
     stress_score,
@@ -62,6 +65,7 @@ class Report:
     strain: float | None
     recovery: RecoveryResult
     stress: StressResult
+    coach: SleepCoach
 
 
 def build_report(
@@ -74,6 +78,9 @@ def build_report(
     sleep_need: float | None,
     baseline: Baseline | None,
     stress_baseline: Baseline | None = None,
+    wake_min: int | None = None,
+    tomorrow: str = "easy",
+    sleep_history: list[float] | None = None,
 ) -> Report:
     ordered = sorted(samples, key=lambda s: s.unix)
     wearing = [s for s in ordered if s.wearing]
@@ -110,6 +117,12 @@ def build_report(
         if periods
         else stress_score(hrv_result.ln_rmssd, stress_baseline)
     )
+    coach = sleep_coach(
+        sleep_history or [],
+        wake_min,
+        base_need_h=sleep_need if sleep_need else 8.0,
+        tomorrow=tomorrow,
+    )
 
     return Report(
         source=source,
@@ -134,6 +147,7 @@ def build_report(
         strain=strain_score(trimp_value),
         recovery=recovery,
         stress=stress,
+        coach=coach,
     )
 
 
@@ -159,15 +173,21 @@ def load_daily(path: Path) -> dict[str, dict]:
 
 
 def record_day(
-    path: Path, date: str, ln_rmssd: float, rhr: float, state: str = "awake"
+    path: Path,
+    date: str,
+    ln_rmssd: float,
+    rhr: float,
+    state: str = "awake",
+    sleep_h: float | None = None,
 ) -> int:
     """Store one capture state's reading and return how many days that state has."""
     if state not in CAPTURE_STATES:
         raise ValueError(f"state must be one of {sorted(CAPTURE_STATES)}")
     days = load_daily(path)
-    days[f"{date}|{state}"] = {
-        "date": date, "state": state, "ln_rmssd": ln_rmssd, "rhr": rhr,
-    }
+    row = {"date": date, "state": state, "ln_rmssd": ln_rmssd, "rhr": rhr}
+    if sleep_h is not None:
+        row["sleep_h"] = round(sleep_h, 3)
+    days[f"{date}|{state}"] = row
     ordered = [days[key] for key in sorted(days)]
     path.write_text(json.dumps({"days": ordered}, indent=2) + "\n", encoding="utf-8")
     return sum(1 for row in ordered if row["state"] == state)
@@ -188,6 +208,16 @@ def stress_baseline_from_file(path: Path) -> Baseline | None:
     return Baseline.from_daily(
         [r["ln_rmssd"] for r in rows], [r["rhr"] for r in rows]
     )
+
+
+def sleep_history_from_file(path: Path) -> list[float]:
+    """Night sleep durations in date order, feeding the sleep-debt balance."""
+    days = load_daily(path)
+    return [
+        days[key]["sleep_h"]
+        for key in sorted(days)
+        if days[key]["state"] == "sleep" and days[key].get("sleep_h") is not None
+    ]
 
 
 def print_report(report: Report) -> None:
@@ -241,6 +271,21 @@ def print_report(report: Report) -> None:
             f"  Stress     : {report.stress.index:.2f} / 3  [{report.stress.band}]"
             "  SD of lnRMSSD below your awake-quiet norm"
         )
+    coach = report.coach
+    if coach.bedtime_min is None:
+        print(f"  Sleep coach: unavailable - {coach.reason}")
+    else:
+        debt = (
+            f"debt {coach.debt_h:.2f} h over {coach.nights} nights"
+            if coach.debt_h is not None
+            else "debt unknown - no nights recorded yet"
+        )
+        print(
+            f"  Sleep coach: bed {clock_label(coach.bedtime_min)} ->"
+            f" wake {clock_label(coach.wake_min)},"
+            f" {coach.time_in_bed_h:.2f} h in bed for {coach.need_h:.2f} h need"
+            f"  ({debt})"
+        )
     print(f"\n  {DISCLAIMER}")
 
 
@@ -272,6 +317,20 @@ def render_html(report: Report) -> str:
         f"HRV {recovery.hrv_component} · RHR {recovery.rhr_component}"
         + (f" · sleep {recovery.sleep_component}" if recovery.sleep_component is not None else "")
     )
+
+    coach = report.coach
+    if coach.bedtime_min is None:
+        coach_value, coach_detail = "—", coach.reason or ""
+    else:
+        coach_value = f"{clock_label(coach.bedtime_min)} → {clock_label(coach.wake_min)}"
+        coach_detail = (
+            f"{coach.time_in_bed_h:.2f} h in bed · need {coach.need_h:.2f} h · "
+            + (
+                f"debt {coach.debt_h:.2f} h over {coach.nights} nights"
+                if coach.debt_h is not None
+                else "debt unknown until nights are recorded"
+            )
+        )
 
     cards = [
         _card(
@@ -309,6 +368,7 @@ def render_html(report: Report) -> str:
                 else report.stress.reason
             ),
         ),
+        _card("Sleep coach", coach_value, coach_detail),
     ]
 
     sleep_rows = "".join(
@@ -391,6 +451,16 @@ sleep decision.</footer>
 """
 
 
+def _wake_minutes(text: str) -> int:
+    try:
+        hours, minutes = (int(part) for part in text.split(":"))
+    except ValueError:
+        raise argparse.ArgumentTypeError("wake time must be HH:MM") from None
+    if not (0 <= hours < 24 and 0 <= minutes < 60):
+        raise argparse.ArgumentTypeError("wake time must be HH:MM")
+    return hours * 60 + minutes
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("capture", nargs="?", default="session3.jsonl")
@@ -399,6 +469,14 @@ def main() -> int:
     parser.add_argument("--max-hr", type=float, help="measured max HR; overrides the age estimate")
     parser.add_argument("--rhr", type=float, help="resting HR to use when none can be measured")
     parser.add_argument("--sleep-need", type=float, default=8.0)
+    parser.add_argument(
+        "--wake", type=_wake_minutes,
+        help="local wake time HH:MM; enables the sleep-coach suggested bedtime",
+    )
+    parser.add_argument(
+        "--tomorrow", choices=["hard", "easy", "rest"], default="easy",
+        help="tomorrow's plan; adds a coaching sleep allowance on top of need",
+    )
     parser.add_argument(
         "--baseline", default=DEFAULT_BASELINE,
         help="JSON history keyed by date and capture state; scores recovery and stress",
@@ -433,18 +511,26 @@ def main() -> int:
             date = datetime.fromtimestamp(
                 max(s.unix for s in samples), timezone.utc
             ).date().isoformat()
-            state = "sleep" if detect_sleep(samples) else "awake"
-            count = record_day(history, date, result.ln_rmssd, measured, state)
+            periods = detect_sleep(samples)
+            state = "sleep" if periods else "awake"
+            sleep_h = total_sleep_hours(periods) if periods else None
+            count = record_day(
+                history, date, result.ln_rmssd, measured, state, sleep_h=sleep_h
+            )
             print(
                 f"  Recorded {date} [{state}]: lnRMSSD {result.ln_rmssd:.3f},"
                 f" RHR {measured:.1f} bpm from a {window_s} s quiet run"
-                f"  ({count}/7 {state} days)"
+                + (f", sleep {sleep_h:.2f} h" if sleep_h is not None else "")
+                + f"  ({count}/7 {state} days)"
             )
 
     report = build_report(
         samples, str(path), args.age, args.sex, args.max_hr,
         args.rhr, args.sleep_need, baseline_from_file(history),
         stress_baseline=stress_baseline_from_file(history),
+        wake_min=args.wake,
+        tomorrow=args.tomorrow,
+        sleep_history=sleep_history_from_file(history),
     )
     print_report(report)
     Path(args.out).write_text(render_html(report), encoding="utf-8")
