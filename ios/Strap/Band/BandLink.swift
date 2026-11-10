@@ -255,7 +255,7 @@ final class BandLink: NSObject, ObservableObject {
         isLiveSession = false
         let started = sessionStartedUnix ?? Int(Date().timeIntervalSince1970)
         let ended = Int(Date().timeIntervalSince1970)
-        let rr = liveSamples.flatMap { $0.rrIntervalsMS.map(Double.init) }
+        let rr = liveSamples.flatMap { sample in sample.rrIntervalsMS.map { Double($0) } }
         let result = LiveSessionSummary(
             startedUnix: started,
             endedUnix: ended,
@@ -274,7 +274,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     var currentLiveHRV: HrvResult {
-        Hrv.fromRR(liveSamples.flatMap { $0.rrIntervalsMS.map(Double.init) })
+        Hrv.fromRR(liveSamples.flatMap { sample in sample.rrIntervalsMS.map { Double($0) } })
     }
 
     // MARK: - Scan and connect
@@ -419,11 +419,10 @@ final class BandLink: NSObject, ObservableObject {
             return ns.code == CBATTError.insufficientAuthentication.rawValue
                 || ns.code == CBATTError.insufficientEncryption.rawValue
         }
-        if ns.domain == CBErrorDomain {
-            return ns.code == CBError.encryptionFailed.rawValue
-                || ns.code == CBError.peerRemovedPairingInformation.rawValue
-        }
-        return false
+        // CBError has no stable encryption constant across SDKs; the message is
+        // the dependable signal for a dropped bond.
+        let text = ns.localizedDescription.lowercased()
+        return text.contains("encrypt") || text.contains("authenticat") || text.contains("pair")
     }
 
     // MARK: - Drain lifecycle

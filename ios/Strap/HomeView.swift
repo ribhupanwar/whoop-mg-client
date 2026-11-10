@@ -8,7 +8,8 @@ struct HomeView: View {
     let openPlan: () -> Void
 
     @State private var dayOffset = 0
-    @State private var activityNote: String? = nil
+    @State private var showLogger = false
+    @State private var showLiveSession = false
     @State private var showCustomizeHint = false
 
     private var demo: Bool { store.isPreview }
@@ -29,6 +30,12 @@ struct HomeView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showLogger) {
+            ActivityLoggerView()
+        }
+        .sheet(isPresented: $showLiveSession) {
+            LiveSessionView()
+        }
     }
 
     // MARK: Top bar
@@ -319,15 +326,34 @@ struct HomeView: View {
             .padding(.bottom, 10)
 
             VStack(spacing: 8) {
-                activityRow(icon: "figure.run", name: "Run", detail: demo ? "42 min · Z2" : "none detected")
-                activityRow(icon: "figure.walk", name: "Walk", detail: demo ? "28 min · errands" : "none detected")
-                activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: demo ? "55 min · push" : "none detected")
-                activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
+                if demo {
+                    activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
+                    activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands")
+                    activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push")
+                    activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
+                } else {
+                    ForEach(detectedRows, id: \.id) { row in
+                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                    }
+                    ForEach(liveRows, id: \.id) { row in
+                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                    }
+                    ForEach(manualRows, id: \.id) { row in
+                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                    }
+                    if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
+                        Text("No activities for this day yet.")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.appMuted)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding(.vertical, 8)
+                    }
+                }
             }
             .padding(.bottom, 10)
 
             if !demo {
-                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 10+ minutes appears here after each capture, no start tap.")
+                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 10+ minutes appears here after each capture. Lifting load has to be entered by hand; the band never sees it.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .lineSpacing(3)
@@ -336,17 +362,69 @@ struct HomeView: View {
             }
 
             HStack(spacing: 9) {
-                activityButton("+ ADD ACTIVITY") {
-                    activityNote = "Logger design: cardio comes from the band automatically; lifting is entered as sets × reps × load. Not wired in this preview."
-                }
-                activityButton("START ACTIVITY") {
-                    activityNote = "Live session design: streams heart rate and zones while you train. Not wired in this preview."
-                }
+                activityButton("+ ADD ACTIVITY") { showLogger = true }
+                activityButton("START ACTIVITY") { showLiveSession = true }
             }
+        }
+    }
 
-            if let activityNote {
-                Hint(activityNote)
-            }
+    // MARK: Activity rows
+
+    private struct ActivityRowModel: Identifiable {
+        let id: String
+        let icon: String
+        let name: String
+        let detail: String
+    }
+
+    private var selectedDayKey: String {
+        JournalStore.dayKey(for: shiftedDate)
+    }
+
+    private var detectedRows: [ActivityRowModel] {
+        store.detectedActivities(on: selectedDayKey).map { session in
+            let minutes = Int(session.minutes.rounded())
+            let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
+            return ActivityRowModel(
+                id: "band-\(session.startUnix)",
+                icon: Self.icon(forDetected: session.kind),
+                name: "\(session.kind.capitalized) · band",
+                detail: "\(minutes) min\(heart)"
+            )
+        }
+    }
+
+    private var liveRows: [ActivityRowModel] {
+        store.liveActivities(on: selectedDayKey).map { record in
+            let minutes = Int(record.minutes.rounded())
+            let heart = record.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
+            return ActivityRowModel(
+                id: "live-\(record.id)",
+                icon: "waveform.path.ecg",
+                name: "Live session · measured",
+                detail: "\(minutes) min\(heart)"
+            )
+        }
+    }
+
+    private var manualRows: [ActivityRowModel] {
+        store.manualActivities(on: selectedDayKey).map { activity in
+            ActivityRowModel(
+                id: "manual-\(activity.id)",
+                icon: activity.kind.icon,
+                name: "\(activity.name) · logged",
+                detail: activity.summary
+            )
+        }
+    }
+
+    private static func icon(forDetected kind: String) -> String {
+        switch kind {
+        case "run": return "figure.run"
+        case "walk": return "figure.walk"
+        case "workout": return "dumbbell.fill"
+        case "cardio": return "heart.fill"
+        default: return "figure.mixed.cardio"
         }
     }
 

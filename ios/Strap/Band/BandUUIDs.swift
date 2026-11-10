@@ -33,9 +33,9 @@ enum BandCommand: UInt8 {
 }
 
 enum BandPacket {
-    static let command = 0x23
-    static let historicalData = 0x2F
-    static let metadata = 0x31
+    static let command: UInt8 = 0x23
+    static let historicalData: UInt8 = 0x2F
+    static let metadata: UInt8 = 0x31
     /// HISTORY_END sub-opcode inside a METADATA frame.
-    static let historyEnd = 0x02
+    static let historyEnd: UInt8 = 0x02
 }
