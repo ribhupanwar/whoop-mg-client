@@ -306,10 +306,10 @@ final class ActivityDetectTests: XCTestCase {
         XCTAssertEqual(sessions[0].kind, "workout")
     }
 
-    func testShortBurstIsNotASession() {
+    func testFourMinuteBurstIsNotASession() {
         var rows = rest()
-        rows += stream(900, 300, hr: 150, accel: 0.4, spm: 160, gait: 2, step0: 100)
-        rows += coolDown(1200)
+        rows += stream(900, 240, hr: 150, accel: 0.4, spm: 160, gait: 2, step0: 100)
+        rows += coolDown(1140)
         XCTAssertTrue(ActivityDetect.detect(rows).isEmpty)
     }
 

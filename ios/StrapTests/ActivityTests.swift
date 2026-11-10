@@ -171,7 +171,7 @@ final class ActivityStoreTests: XCTestCase {
     }
 }
 
-final class ActivityDetectTests: XCTestCase {
+final class StepDrivenDetectTests: XCTestCase {
     private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(
