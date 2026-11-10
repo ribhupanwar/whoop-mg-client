@@ -10,7 +10,7 @@ final class VO2Tests: XCTestCase {
     func testAgePredictedMaxHRFeedsTheSameFormula() {
         let maxHR = Karvonen.agePredictedMaxHR(age: 30)  // 187
         XCTAssertEqual(maxHR, 187, accuracy: 0.001)
-        XCTAssertEqual(Hrv.vo2Max(maxHR: maxHR, restingHR: 55) ?? 0, 52.0, accuracy: 0.01)
+        XCTAssertEqual(Hrv.vo2Max(maxHR: maxHR, restingHR: 55) ?? 0, 52.02, accuracy: 0.001)
     }
 
     func testImpossibleInputsGiveNil() {
