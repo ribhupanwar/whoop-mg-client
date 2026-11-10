@@ -3,7 +3,7 @@
 *.csv
 capture*.json
 session*.json
-*dashboard.html
+*dashboard*.html
 baseline.json
 
 # Third-party reference sources downloaded during protocol research.

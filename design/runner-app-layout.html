@@ -203,6 +203,32 @@
 #runner-app-mockup .rm-empty b{display:block;font-size:14px;font-weight:500;color:var(--app-fg);margin-bottom:6px}
 #runner-app-mockup .rm-empty p{margin:0;font-size:12px;color:var(--app-muted);line-height:1.5}
 
+#runner-app-mockup .rm-bigring{position:relative;width:150px;height:150px;margin:2px auto 0}
+#runner-app-mockup .rm-bigring svg{display:block}
+#runner-app-mockup .rm-bigring b{position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:30px;font-weight:500;color:var(--app-fg);letter-spacing:-1px}
+#runner-app-mockup .rm-comp{padding:9px 0;border-top:1px solid var(--app-line)}
+#runner-app-mockup .rm-comp:first-child{border-top:0;padding-top:0}
+#runner-app-mockup .rm-comp-top{display:flex;justify-content:space-between;align-items:center;
+  font-size:12.5px;color:var(--app-fg)}
+#runner-app-mockup .rm-comp-top b{font-size:14px;font-weight:500}
+#runner-app-mockup .rm-comp-track{height:5px;background:var(--app-raised);border-radius:3px;
+  margin:7px 0 5px;overflow:hidden}
+#runner-app-mockup .rm-comp-track i{display:block;height:100%;background:var(--app-sleep);border-radius:3px}
+#runner-app-mockup .rm-comp-detail{font-size:10.5px;color:var(--app-muted)}
+#runner-app-mockup .rm-bars{display:flex;gap:7px;align-items:flex-end;height:110px;
+  padding:4px 2px 0}
+#runner-app-mockup .rm-bars>div{flex:1;display:flex;flex-direction:column;justify-content:flex-end;
+  align-items:center;height:100%}
+#runner-app-mockup .rm-bars i{display:block;width:100%;max-width:26px;
+  background:var(--app-sleep);border-radius:4px 4px 0 0}
+#runner-app-mockup .rm-bars span{font-size:9.5px;color:var(--app-muted);margin-top:5px}
+#runner-app-mockup .rm-bars .rm-bar-today i{background:var(--app-accent)}
+#runner-app-mockup .rm-bars .rm-bar-today span{color:var(--app-fg)}
+#runner-app-mockup .rm-barlabels{display:flex;gap:7px;padding:6px 2px 0;
+  border-top:1px solid var(--app-line);margin-top:2px}
+#runner-app-mockup .rm-barlabels span{flex:1;text-align:center;font-size:9.5px;color:var(--app-muted)}
+
 #runner-app-mockup .rm-field{display:flex;align-items:center;gap:10px;background:var(--app-surface);
   border:1px solid var(--app-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
 #runner-app-mockup .rm-field label{font-size:12px;color:var(--app-muted);flex:1}
@@ -349,7 +375,7 @@
     <!-- ============ HOME ============ -->
     <section class="rm-screen" id="rm-screen-home">
       <div class="rm-trio">
-        <button type="button" class="rm-trio-item rm-trio-btn" data-open="sleepcoach">
+        <button type="button" class="rm-trio-item rm-trio-btn" data-open="sleepanalysis">
           <div class="rm-miniring">
             <svg viewBox="0 0 100 100" width="96" height="96" role="img" aria-label="Sleep ring">
               <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
@@ -437,7 +463,7 @@
 
       <div class="rm-card">
         <div class="rm-cardhead"><h3>Today's activities</h3><span class="rm-chev">&#8250;</span></div>
-        <button type="button" class="rm-sleeprow rm-sleeprowbtn" data-open="sleepcoach">
+        <button type="button" class="rm-sleeprow rm-sleeprowbtn" data-open="sleepanalysis">
           <span class="rm-sleeppill">&#9789;
             <span data-when="live">—</span><span data-when="demo">6:24</span></span>
           <b>SLEEP</b>
@@ -973,6 +999,124 @@
       </div>
     </section>
 
+    <!-- ============ SLEEP ANALYSIS ============ -->
+    <section class="rm-screen" id="rm-screen-sleepanalysis" hidden>
+      <div class="rm-panel" style="text-align:center">
+        <div class="rm-bigring">
+          <svg viewBox="0 0 100 100" width="150" height="150" role="img" aria-label="Sleep performance ring">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--app-line)" stroke-width="8"/>
+            <circle data-when="demo" cx="50" cy="50" r="42" fill="none" stroke="var(--app-sleep)"
+              stroke-width="8" stroke-linecap="round" stroke-dasharray="263.89"
+              stroke-dashoffset="89.7" transform="rotate(-90 50 50)"/>
+          </svg>
+          <b><span data-when="live">—</span><span data-when="demo">66%</span></b>
+        </div>
+        <div class="rm-trio-label" style="margin-top:2px">SLEEP PERFORMANCE</div>
+        <p class="rm-hint" style="margin:6px 0 0">Local composite — equal weights over the
+          components below. Not WHOOP's score.</p>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-comp">
+          <div class="rm-comp-top"><span>Hours vs. needed</span>
+            <b><span data-when="live">—</span><span data-when="demo">62%</span></b></div>
+          <div class="rm-comp-track"><i data-when="demo" style="width:62%"></i></div>
+          <span class="rm-comp-detail" data-when="live">needs an overnight capture</span>
+          <span class="rm-comp-detail" data-when="demo">5:49 of 9:20 need</span>
+        </div>
+        <div class="rm-comp">
+          <div class="rm-comp-top"><span>Sleep consistency</span>
+            <b><span data-when="live">—</span><span data-when="demo">55%</span></b></div>
+          <div class="rm-comp-track"><i data-when="demo" style="width:55%"></i></div>
+          <span class="rm-comp-detail" data-when="live">needs 2+ recorded nights</span>
+          <span class="rm-comp-detail" data-when="demo">bed/wake within ±60 min of your median</span>
+        </div>
+        <div class="rm-comp">
+          <div class="rm-comp-top"><span>Sleep efficiency</span>
+            <b><span data-when="live">—</span><span data-when="demo">84%</span></b></div>
+          <div class="rm-comp-track"><i data-when="demo" style="width:84%"></i></div>
+          <span class="rm-comp-detail" data-when="live">needs an overnight capture</span>
+          <span class="rm-comp-detail" data-when="demo">quiet vs movement · actigraphy</span>
+        </div>
+        <div class="rm-comp">
+          <div class="rm-comp-top"><span>High sleep stress</span>
+            <b><span data-when="live">—</span><span data-when="demo">0%</span></b></div>
+          <div class="rm-comp-track"><i data-when="demo" style="width:2%"></i></div>
+          <span class="rm-comp-detail" data-when="live">needs 7 sleep nights of baseline</span>
+          <span class="rm-comp-detail" data-when="demo">5-min windows vs your sleep norm</span>
+        </div>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Last night's sleep</h3>
+          <span class="rm-comp-detail" data-when="demo">1:28 AM → 8:22 AM</span></div>
+        <div class="rm-hrhead">
+          <div class="rm-hrnum"><span data-when="live">—</span><span data-when="demo">5:49</span></div>
+          <div class="rm-hrmeta">hours of sleep</div>
+        </div>
+        <div data-when="demo">
+          <svg viewBox="0 0 340 90" width="100%" height="90" role="img" aria-label="Sample heart rate through the night">
+            <line x1="0" y1="70" x2="340" y2="70" class="rm-gridline"/>
+            <line x1="0" y1="45" x2="340" y2="45" class="rm-gridline"/>
+            <line x1="0" y1="20" x2="340" y2="20" class="rm-gridline"/>
+            <polyline fill="none" stroke="var(--app-sleep)" stroke-width="1.4"
+              points="0,38 12,30 22,44 32,36 45,52 55,48 66,55 78,50 90,58 102,54 114,60 126,56 138,62 150,58 162,60 174,55 186,61 198,57 210,52 222,58 234,48 246,54 258,44 270,52 282,40 294,50 306,38 318,48 330,36 340,42"/>
+            <text x="4" y="86" class="rm-axis">1:28 AM</text>
+            <text x="292" y="86" class="rm-axis">8:22 AM</text>
+          </svg>
+          <div class="rm-sechead" style="margin-top:10px">Asleep vs awake</div>
+          <div class="rm-stack" role="img" aria-label="Sample asleep versus awake split">
+            <i style="width:84%;background:var(--app-sleep)"></i>
+            <i style="width:16%;background:var(--app-raised)"></i>
+          </div>
+          <div class="rm-split">
+            <div><b>5:49</b><span>asleep (quiet)</span></div>
+            <div><b>1:05</b><span>awake (movement)</span></div>
+            <div><b>13</b><span>wake events</span></div>
+          </div>
+        </div>
+        <div class="rm-empty" data-when="live">
+          <b>No overnight capture yet</b>
+          <p>Wear the band tonight; the morning offload fills this graph, the
+            asleep/awake split and the movement-event count.</p>
+        </div>
+        <p class="rm-hint">Light/deep/REM staging is not implemented — it needs a validated
+          model. We report quiet-vs-movement only; wake events are movement bursts, not
+          verified awakenings.</p>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Weekly trends</h3></div>
+        <div class="rm-sechead">Sleep performance</div>
+        <div class="rm-bars" data-when="demo" role="img" aria-label="Sample weekly sleep performance">
+          <div><i style="height:80%"></i><span>80</span></div>
+          <div><i style="height:80%"></i><span>80</span></div>
+          <div><i style="height:84%"></i><span>84</span></div>
+          <div><i style="height:65%"></i><span>65</span></div>
+          <div><i style="height:84%"></i><span>84</span></div>
+          <div><i style="height:82%"></i><span>82</span></div>
+          <div class="rm-bar-today"><i style="height:66%"></i><span>66</span></div>
+        </div>
+        <div class="rm-bars" data-when="live" role="img" aria-label="No weekly history yet">
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div><i style="height:2%"></i><span>—</span></div>
+          <div class="rm-bar-today"><i style="height:2%"></i><span>—</span></div>
+        </div>
+        <div class="rm-barlabels"><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span></div>
+        <p class="rm-hint" data-when="live">One bar per recorded night. Trends fill in as
+          you capture; nothing is back-filled with guesses.</p>
+      </div>
+
+      <button type="button" class="rm-outlook" data-open="sleepcoach">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 12.8A9 9 0 1 1 11.2 3 7 7 0 0 0 21 12.8z"/></svg>
+        <b>Sleep coach — set tonight's bedtime</b><span class="rm-chev">&#8250;</span>
+      </button>
+    </section>
+
   </div>
 
   <button type="button" class="rm-fab" id="rm-fab" aria-label="Add an activity">+</button>
@@ -1008,9 +1152,10 @@ no WHOOP assets, branding or proprietary scoring.</p>
     dashboard:['Dashboard','Every metric in one list'],
     journal:['My Journal','Yesterday, in your own words'],
     sleepcoach:['Sleep coach','Bedtime from your wake time and sleep debt'],
+    sleepanalysis:['Sleep','Last night\'s analysis and weekly trends'],
     train:['Train','Heart-rate zones from your measured resting HR'],
     plan:['Plan','Your week and tonight\'s sleep target']};
-  var ids=['home','health','stress','dashboard','journal','sleepcoach','train','plan'];
+  var ids=['home','health','stress','dashboard','journal','sleepcoach','sleepanalysis','train','plan'];
   var tabs=root.querySelectorAll('.rm-tabs button');
   var heading=document.getElementById('rm-title');
   var subtitle=document.getElementById('rm-subtitle');
@@ -1024,7 +1169,7 @@ no WHOOP assets, branding or proprietary scoring.</p>
       tabs[j].setAttribute('aria-pressed',
         tabs[j].getAttribute('data-screen')===name?'true':'false');
     }
-    back.hidden=(name!=='stress'&&name!=='journal'&&name!=='sleepcoach');
+    back.hidden=(name!=='stress'&&name!=='journal'&&name!=='sleepcoach'&&name!=='sleepanalysis');
     heading.textContent=titles[name][0];
     subtitle.textContent=titles[name][1];
   }

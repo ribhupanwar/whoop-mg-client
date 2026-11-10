@@ -65,6 +65,10 @@ class SleepPeriod:
     end_unix: int
     quiet_fraction: float
     mean_hr: float | None
+    # Movement bursts closed inside the period: actigraphy wake events, not
+    # verified awakenings. Every raw-movement run inside a closed period was
+    # gap-filled, so counting its rising edges counts the bursts.
+    wake_events: int = 0
 
     @property
     def duration_s(self) -> int:
@@ -155,6 +159,9 @@ def detect_sleep(
                 end_unix=run[-1].unix,
                 quiet_fraction=sum(quiet[start:end]) / len(run),
                 mean_hr=statistics.mean(run_hrs),
+                wake_events=sum(
+                    1 for j in range(start + 1, end) if not quiet[j] and quiet[j - 1]
+                ),
             )
         )
     return periods

@@ -14,7 +14,9 @@ from report import (
     load_daily,
     record_day,
     render_html,
+    sleep_baseline_from_file,
     sleep_history_from_file,
+    sleep_nights_from_file,
     stress_baseline_from_file,
 )
 from whoop.health import Baseline
@@ -173,6 +175,24 @@ class TestBuildReport(unittest.TestCase):
     def test_rest_capture_has_no_activities(self):
         self.assertEqual(build(stretch(0, 300, 70, 0.02)).activities, [])
 
+    def test_sleep_analysis_appears_only_with_sleep(self):
+        self.assertIsNone(build(stretch(0, 300, 70, 0.02)).sleep_analysis)
+        analysis = build(overnight()).sleep_analysis
+        self.assertIsNotNone(analysis)
+        self.assertAlmostEqual(analysis.hours, 1.0, places=6)
+        self.assertEqual(analysis.efficiency_pct, 100.0)
+        self.assertEqual(analysis.wake_events, 0)
+        self.assertIsNotNone(analysis.performance_pct)
+        self.assertIsNone(analysis.consistency_pct)
+        self.assertIsNone(analysis.stress.high_pct)
+
+    def test_sleep_analysis_uses_recorded_nights_for_consistency(self):
+        base = 22 * 3600 + 30 * 60
+        nights = [(base + d * 86400, base + d * 86400 + 8 * 3600) for d in range(3)]
+        analysis = build(overnight(), sleep_nights=nights).sleep_analysis
+        self.assertEqual(analysis.consistency_pct, 100.0)
+        self.assertEqual(analysis.consistency_nights, 3)
+
 
 class TestBaselineStore(unittest.TestCase):
     def setUp(self):
@@ -268,6 +288,28 @@ class TestBaselineStore(unittest.TestCase):
         record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
         self.assertEqual(sleep_history_from_file(self.path), [])
 
+    def test_sleep_start_end_round_trip_and_feed_consistency(self):
+        record_day(self.path, "2026-11-10", 4.6, 55.0, "sleep", sleep_h=8.0,
+                   sleep_start=5000, sleep_end=33800)
+        record_day(self.path, "2026-11-09", 4.5, 56.0, "sleep", sleep_h=8.0,
+                   sleep_start=100, sleep_end=28900)
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        self.assertEqual(
+            sleep_nights_from_file(self.path), [(100, 28900), (5000, 33800)]
+        )
+
+    def test_sleep_nights_skip_rows_without_timestamps(self):
+        record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep", sleep_h=7.0)
+        self.assertEqual(sleep_nights_from_file(self.path), [])
+
+    def test_sleep_baseline_uses_sleep_rows_only(self):
+        for i in range(7):
+            record_day(self.path, f"2026-11-{9 + i:02d}", 3.8, 71.0, "awake")
+            record_day(self.path, f"2026-11-{9 + i:02d}", 4.6, 55.0, "sleep")
+        baseline = sleep_baseline_from_file(self.path)
+        self.assertEqual(baseline.days, 7)
+        self.assertGreater(baseline.ln_rmssd_mean, 4.0)
+
 
 class TestRenderHtml(unittest.TestCase):
     def test_disclaimer_is_always_present(self):
@@ -328,6 +370,15 @@ class TestRenderHtml(unittest.TestCase):
         self.assertIn("<table>", page)
         self.assertIn("<td>run</td>", page)
         self.assertIn("1 session(s)", page)
+
+    def test_sleep_analysis_section_only_with_sleep(self):
+        empty = render_html(build(stretch(0, 60, 100, accel=0.5)))
+        self.assertNotIn("Sleep analysis", empty)
+        page = render_html(build(overnight()))
+        self.assertIn("Sleep analysis", page)
+        self.assertIn("Hours vs. needed", page)
+        self.assertIn("Sleep efficiency", page)
+        self.assertIn("needs 2+ recorded nights", page)
 
 
 if __name__ == "__main__":

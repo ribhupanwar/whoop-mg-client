@@ -40,6 +40,7 @@ from whoop.metrics import (
     resting_hrv,
     trimp,
 )
+from whoop.sleep_analysis import SleepAnalysis, analyze_sleep
 
 DISCLAIMER = (
     "Local estimates from published physiology (Malik 1996 HRV, Banister TRIMP, "
@@ -68,6 +69,7 @@ class Report:
     stress: StressResult
     coach: SleepCoach
     activities: list[ActivitySession]
+    sleep_analysis: SleepAnalysis | None
 
 
 def build_report(
@@ -83,6 +85,8 @@ def build_report(
     wake_min: int | None = None,
     tomorrow: str = "easy",
     sleep_history: list[float] | None = None,
+    sleep_nights: list[tuple[int, int]] | None = None,
+    sleep_baseline: Baseline | None = None,
 ) -> Report:
     ordered = sorted(samples, key=lambda s: s.unix)
     wearing = [s for s in ordered if s.wearing]
@@ -126,6 +130,10 @@ def build_report(
         tomorrow=tomorrow,
     )
     activities = detect_activities(ordered)
+    analysis = (
+        analyze_sleep(ordered, periods, coach.need_h, sleep_nights or [], sleep_baseline)
+        if periods else None
+    )
 
     return Report(
         source=source,
@@ -152,6 +160,7 @@ def build_report(
         stress=stress,
         coach=coach,
         activities=activities,
+        sleep_analysis=analysis,
     )
 
 
@@ -183,6 +192,8 @@ def record_day(
     rhr: float,
     state: str = "awake",
     sleep_h: float | None = None,
+    sleep_start: int | None = None,
+    sleep_end: int | None = None,
 ) -> int:
     """Store one capture state's reading and return how many days that state has."""
     if state not in CAPTURE_STATES:
@@ -191,6 +202,10 @@ def record_day(
     row = {"date": date, "state": state, "ln_rmssd": ln_rmssd, "rhr": rhr}
     if sleep_h is not None:
         row["sleep_h"] = round(sleep_h, 3)
+    if sleep_start is not None:
+        row["sleep_start"] = sleep_start
+    if sleep_end is not None:
+        row["sleep_end"] = sleep_end
     days[f"{date}|{state}"] = row
     ordered = [days[key] for key in sorted(days)]
     path.write_text(json.dumps({"days": ordered}, indent=2) + "\n", encoding="utf-8")
@@ -224,6 +239,27 @@ def sleep_history_from_file(path: Path) -> list[float]:
     ]
 
 
+def sleep_nights_from_file(path: Path) -> list[tuple[int, int]]:
+    """(bed, wake) unix pairs in date order, feeding the consistency rule."""
+    days = load_daily(path)
+    return [
+        (days[key]["sleep_start"], days[key]["sleep_end"])
+        for key in sorted(days)
+        if days[key]["state"] == "sleep"
+        and days[key].get("sleep_start") is not None
+        and days[key].get("sleep_end") is not None
+    ]
+
+
+def sleep_baseline_from_file(path: Path) -> Baseline | None:
+    """Sleep-state days only: sleep stress is scored against the sleep norm."""
+    days = load_daily(path)
+    rows = [days[key] for key in sorted(days) if days[key]["state"] == "sleep"]
+    return Baseline.from_daily(
+        [r["ln_rmssd"] for r in rows], [r["rhr"] for r in rows]
+    )
+
+
 def print_report(report: Report) -> None:
     print(f"\n=== Local health report: {report.source} ===")
     print(f"  {report.samples} samples, {report.on_wrist} on-wrist")
@@ -254,6 +290,27 @@ def print_report(report: Report) -> None:
             f"  continuity {period.quiet_fraction * 100:.0f}%"
             f"  mean HR {_fmt(period.mean_hr, ' bpm')}"
         )
+    analysis = report.sleep_analysis
+    if analysis is not None:
+        print(
+            f"  Sleep perf : {_fmt(analysis.performance_pct, '%')}  (local composite)"
+            f"  hours/need {analysis.hours_vs_needed_pct:.0f}%"
+            f"  efficiency {analysis.efficiency_pct:.0f}%"
+            f"  wake events {analysis.wake_events}"
+        )
+        consistency = (
+            f"{analysis.consistency_pct:.0f}% over {analysis.consistency_nights} nights"
+            if analysis.consistency_pct is not None
+            else "needs 2+ recorded nights"
+        )
+        stress = (
+            f"high {analysis.stress.high_pct:.0f}%"
+            f" / medium {analysis.stress.medium_pct:.0f}%"
+            f" / low {analysis.stress.low_pct:.0f}%"
+            if analysis.stress.high_pct is not None
+            else analysis.stress.reason
+        )
+        print(f"               consistency {consistency}  ·  sleep stress {stress}")
     print(
         f"  Strain     : {_fmt(report.strain)} / 21  ({strain_label(report.strain)})"
         f"  TRIMP {_fmt(report.trimp_value)}"
@@ -324,6 +381,17 @@ def _card(title: str, value: str, detail: str) -> str:
         f'<div class="card"><div class="card-title">{html.escape(title)}</div>'
         f'<div class="card-value">{html.escape(value)}</div>'
         f'<div class="card-detail">{html.escape(detail)}</div></div>'
+    )
+
+
+def _pct_bar(label: str, pct: float | None, detail: str) -> str:
+    width = 0.0 if pct is None else max(0.0, min(100.0, pct))
+    value = "—" if pct is None else f"{pct:.0f}%"
+    return (
+        f'<div class="srow"><div class="srow-top"><span>{html.escape(label)}</span>'
+        f'<b>{value}</b></div>'
+        f'<div class="strack"><i style="width:{width:.1f}%"></i></div>'
+        f'<div class="sdetail">{html.escape(detail)}</div></div>'
     )
 
 
@@ -431,6 +499,37 @@ def render_html(report: Report) -> str:
         if activity_rows else ""
     )
 
+    analysis = report.sleep_analysis
+    analysis_html = ""
+    if analysis is not None:
+        low_stress = (
+            None if analysis.stress.high_pct is None else 100.0 - analysis.stress.high_pct
+        )
+        analysis_html = (
+            '<div class="analysis"><div class="card-title">Sleep analysis · '
+            f'local composite {_fmt(analysis.performance_pct, "%")}</div>'
+            + _pct_bar(
+                "Hours vs. needed", analysis.hours_vs_needed_pct,
+                f"{analysis.hours:.2f} h of {analysis.need_h:.2f} h need",
+            )
+            + _pct_bar(
+                "Sleep consistency", analysis.consistency_pct,
+                f"±60 min of median bed/wake · {analysis.consistency_nights} nights"
+                if analysis.consistency_pct is not None
+                else "needs 2+ recorded nights",
+            )
+            + _pct_bar(
+                "Sleep efficiency", analysis.efficiency_pct,
+                f"quiet vs movement · {analysis.wake_events} wake events",
+            )
+            + _pct_bar(
+                "Low sleep stress", low_stress,
+                "vs your sleep norm"
+                if low_stress is not None else analysis.stress.reason or "",
+            )
+            + "</div>"
+        )
+
     return f"""<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -462,6 +561,14 @@ font-weight:600;background:{color}22;color:{color};border:1px solid {color}55}}
 .card-title{{font-size:11px;letter-spacing:.1em;color:#8b949e;text-transform:uppercase}}
 .card-value{{font-size:26px;font-weight:600;margin:8px 0 4px}}
 .card-detail{{font-size:12px;color:#8b949e}}
+.analysis{{background:#161b22;border:1px solid #30363d;border-radius:10px;
+padding:16px;margin-top:14px}}
+.srow{{margin-top:12px}}
+.srow-top{{display:flex;justify-content:space-between;font-size:13px}}
+.srow-top span{{color:#8b949e}}
+.strack{{height:6px;background:#21262d;border-radius:3px;margin:6px 0 4px;overflow:hidden}}
+.strack i{{display:block;height:100%;background:#7b8fa8;border-radius:3px}}
+.sdetail{{font-size:11.5px;color:#6e7681}}
 table{{width:100%;border-collapse:collapse;margin-top:18px;font-size:13px}}
 th,td{{text-align:left;padding:8px 10px;border-bottom:1px solid #21262d}}
 th{{color:#8b949e;font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em}}
@@ -485,6 +592,7 @@ stroke-dashoffset="{offset:.2f}" transform="rotate(-90 100 100)"/>
 your own HRV and resting-HR history exist, because a recovery number without a
 personal baseline is meaningless.</p></div></div>
 <div class="grid">{''.join(cards)}</div>
+{analysis_html}
 {sleep_table}
 {activity_table}
 <footer>Sleep reports duration and continuity only. Light/deep/REM staging is not
@@ -562,7 +670,9 @@ def main() -> int:
             state = "sleep" if periods else "awake"
             sleep_h = total_sleep_hours(periods) if periods else None
             count = record_day(
-                history, date, result.ln_rmssd, measured, state, sleep_h=sleep_h
+                history, date, result.ln_rmssd, measured, state, sleep_h=sleep_h,
+                sleep_start=min(p.start_unix for p in periods) if periods else None,
+                sleep_end=max(p.end_unix for p in periods) if periods else None,
             )
             print(
                 f"  Recorded {date} [{state}]: lnRMSSD {result.ln_rmssd:.3f},"
@@ -578,6 +688,8 @@ def main() -> int:
         wake_min=args.wake,
         tomorrow=args.tomorrow,
         sleep_history=sleep_history_from_file(history),
+        sleep_nights=sleep_nights_from_file(history),
+        sleep_baseline=sleep_baseline_from_file(history),
     )
     print_report(report)
     Path(args.out).write_text(render_html(report), encoding="utf-8")
