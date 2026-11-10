@@ -1,0 +1,77 @@
+# XcodeGen spec for Strap — an original, clean-room UI client.
+# Run `xcodegen generate` from this directory (ios/). All paths below are
+# relative to this spec file, so `Strap` == ios/Strap in the repo.
+name: Strap
+options:
+  bundleIdPrefix: com.ribhupanwar
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    CODE_SIGNING_ALLOWED: "NO"
+    # XcodeGen writes an explicit Info.plist (info: below), so Xcode must not
+    # also auto-generate one — that produces a "multiple commands" conflict.
+    GENERATE_INFOPLIST_FILE: "NO"
+
+targets:
+  Strap:
+    type: application
+    platform: iOS
+    sources:
+      - path: Strap
+        excludes:
+          - "Info.plist"
+    info:
+      # XcodeGen writes this plist at generation time; it is BLE-ready even
+      # though CoreBluetooth is not implemented in this UI preview chunk.
+      path: Strap/Info.plist
+      properties:
+        CFBundleDisplayName: Strap
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
+        UIBackgroundModes:
+          - bluetooth-central
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_PREVIEWS: "YES"
+
+  StrapTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - StrapTests
+    dependencies:
+      - target: Strap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap.tests
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Strap.app/Strap"
+        BUNDLE_LOADER: "$(TEST_HOST)"
+
+schemes:
+  Strap:
+    build:
+      targets:
+        Strap: all
+        StrapTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - StrapTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release

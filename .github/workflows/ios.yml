@@ -1,0 +1,77 @@
+name: ios
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build-test-ipa:
+    # Default runner Xcode — no setup-xcode action, no secrets, no HealthKit.
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Build for iOS Simulator
+        run: |
+          set -uo pipefail
+          xcodebuild -project ios/Strap.xcodeproj -scheme Strap \
+            -destination "generic/platform=iOS Simulator" \
+            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Unit tests on a concrete iPhone simulator
+        run: |
+          set -uo pipefail
+          UDID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v["udid"] for k in sorted(d, reverse=True) for v in d[k] if v.get("isAvailable") and v["name"].startswith("iPhone")))')
+          echo "Using simulator $UDID"
+          xcodebuild -project ios/Strap.xcodeproj -scheme Strap \
+            -destination "platform=iOS Simulator,id=$UDID" \
+            -configuration Debug -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
+          exit ${PIPESTATUS[0]}
+
+      - name: Archive and package unsigned device IPA
+        run: |
+          set -uo pipefail
+          xcodebuild archive -project ios/Strap.xcodeproj -scheme Strap \
+            -configuration Release -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Strap.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee archive.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          ditto "$RUNNER_TEMP/Strap.xcarchive/Products/Applications/Strap.app" "$RUNNER_TEMP/ipa/Payload/Strap.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry Strap-unsigned.ipa Payload
+          shasum -a 256 Strap-unsigned.ipa
+
+      - name: Upload unsigned IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Strap-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/Strap-unsigned.ipa
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-logs
+          path: |
+            build.log
+            test.log
+            archive.log
+          if-no-files-found: ignore
