@@ -253,3 +253,59 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample?.spo2CandidateKind, Spo2CandidateKind.pct)
     }
 }
+
+// MARK: - Standard heart-rate profile (0x2A37)
+
+final class StandardHeartRateTests: XCTestCase {
+    private func parse(_ bytes: [UInt8]) -> (heartRate: Int, rrMS: [Int])? {
+        StandardHeartRate.parse(Data(bytes))
+    }
+
+    func testUInt8HeartRateAlone() {
+        let reading = parse([0x00, 72])
+        XCTAssertEqual(reading?.heartRate, 72)
+        XCTAssertEqual(reading?.rrMS, [])
+    }
+
+    func testUInt16HeartRate() {
+        // Flags bit0: HR is two bytes. 0x012C == 300.
+        XCTAssertEqual(parse([0x01, 0x2C, 0x01])?.heartRate, 300)
+    }
+
+    func testUInt16FlagWithoutSecondByteRejected() {
+        XCTAssertNil(parse([0x01, 0x2C]))
+        XCTAssertNil(parse([0x00]))
+        XCTAssertNil(parse([]))
+    }
+
+    func testEnergyExpendedIsSkipped() {
+        // bit3: two bytes of energy expended between HR and R-R.
+        XCTAssertEqual(parse([0x08, 65, 0x10, 0x00])?.heartRate, 65)
+        XCTAssertEqual(parse([0x08, 65, 0x10, 0x00])?.rrMS, [])
+    }
+
+    func testRRIntervalsUse1024thSecond() {
+        // 1024 raw units == exactly 1000 ms; 840 units == ~820 ms.
+        let reading = parse([0x10, 60, 0x00, 0x04, 0x48, 0x03])
+        XCTAssertEqual(reading?.heartRate, 60)
+        XCTAssertEqual(reading?.rrMS, [1000, 820])
+    }
+
+    func testImplausibleRRIsDroppedNotTheReading() {
+        // 100 units ≈ 98 ms and 4000 units ≈ 3906 ms sit outside 200…3000.
+        let reading = parse([0x10, 58, 64, 0x00, 0xA0, 0x0F, 0x00, 0x04])
+        XCTAssertEqual(reading?.heartRate, 58)
+        XCTAssertEqual(reading?.rrMS, [1000])
+    }
+
+    func testOddTrailingByteIsIgnored() {
+        XCTAssertEqual(parse([0x10, 60, 0x00, 0x04, 0x99])?.rrMS, [1000])
+    }
+
+    func testCombinedFlags() {
+        // uint16 HR + energy expended + R-R.
+        let reading = parse([0x19, 0x2C, 0x00, 0x20, 0x00, 0x00, 0x04])
+        XCTAssertEqual(reading?.heartRate, 44)
+        XCTAssertEqual(reading?.rrMS, [1000])
+    }
+}

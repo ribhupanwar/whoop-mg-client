@@ -9,6 +9,7 @@ struct SettingsView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 profilePanel
+                strapPanel
                 overridesPanel
                 sleepPanel
                 previewPanel
@@ -43,7 +44,61 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex is kept for future calorie estimates (Keytel 2005); nothing is computed from it yet.")
+            Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex selects the Banister TRIMP coefficients, which drive strain.")
+        }
+    }
+
+    // MARK: Strap
+
+    private var strapPanel: some View {
+        Panel {
+            SectionTitle("Strap")
+            HStack(spacing: 10) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(store.band.bandName ?? "WHOOP MG")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                    Text(store.band.status.title)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Spacer()
+                Button(store.band.isConnected ? "Disconnect" : "Connect") {
+                    if store.band.isConnected {
+                        store.band.disconnect()
+                    } else {
+                        store.connectBand()
+                    }
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.appAccent)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+
+            if let battery = store.band.batteryPercent {
+                Text("Battery \(battery)%")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 8)
+            }
+            if let message = store.band.lastMessage {
+                Hint(message)
+            }
+            if let summary = store.band.summary {
+                let stats = store.band.drainStats
+                Text("Last capture \(summary.sampleCount) samples · \(stats.acks) offload ACKs · \(store.band.days.count) day(s) scored")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 8)
+                Button("Read stored history again") { store.band.readHistory() }
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Color.appAccent)
+                    .padding(.top, 6)
+            }
+            Hint("Connect with the iPhone's own pairing to the strap forgotten — BLE allows one central, and a stale pairing blocks the app. The first write triggers a pairing prompt; accept it. History lands as a JSONL capture plus per-day metrics.")
         }
     }
 
@@ -186,7 +241,7 @@ struct SettingsView: View {
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 6)
-            Text("UI preview build — Bluetooth capture is not wired yet. Your data stays on this phone.")
+            Text("Reads stored history and live heart rate directly over Bluetooth. Nothing links back to WHOOP's services; your data stays on this phone.")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)

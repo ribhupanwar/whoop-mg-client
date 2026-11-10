@@ -2,7 +2,7 @@ import Foundation
 
 /// Everything the UI can show from one captured sample window. Computed once
 /// per capture so screens read plain values instead of re-deriving metrics.
-struct CaptureSummary: Equatable {
+struct CaptureSummary: Codable, Equatable {
     let sampleCount: Int
     let wearingCount: Int
     let firstUnix: Int?
@@ -124,12 +124,12 @@ enum DailyAnalysis {
         for (key, daySamples) in byDay {
             let resting = Hrv.restingHeartRate(daySamples)
             let restingHrv = Hrv.restingHRV(daySamples)
-            let sleepHours = periods.reduce(0.0) { total, period in
-                let end = Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+            let dayPeriods = periods.filter {
+                let end = Date(timeIntervalSince1970: TimeInterval($0.endUnix))
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
-                    ? total + period.hours
-                    : total
             }
+            let sleepHours = dayPeriods.reduce(0.0) { $0 + $1.hours }
+            let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
             if let maxHR, let resting, maxHR > resting {
                 strain = Hrv.strainScore(
@@ -144,10 +144,13 @@ enum DailyAnalysis {
             result.append(
                 DayMetrics(
                     dateKey: key,
+                    state: sleepHours >= 3 ? "sleep" : "awake",
                     restingHR: resting,
                     lnRMSSD: restingHrv.result.lnRMSSD,
                     hrvWindowSeconds: restingHrv.windowSeconds,
                     sleepHours: sleepHours,
+                    sleepStartUnix: longest?.startUnix,
+                    sleepEndUnix: longest?.endUnix,
                     strain: strain,
                     steps: steps
                 )
@@ -157,7 +160,8 @@ enum DailyAnalysis {
     }
 
     /// Baseline from paired daily values. Days without both resting HR and
-    /// HRV are skipped, so the two series stay aligned.
+    /// HRV are skipped, so the two series stay aligned. Pass already-filtered
+    /// days: stress needs awake days, sleep stress needs nights.
     static func baseline(from days: [DayMetrics]) -> Baseline? {
         let pairs = days.compactMap { day -> (lnRMSSD: Double, rhr: Double)? in
             guard let hrv = day.lnRMSSD, let rhr = day.restingHR else { return nil }

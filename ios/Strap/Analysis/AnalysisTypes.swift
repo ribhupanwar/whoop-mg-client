@@ -49,7 +49,7 @@ enum Stats {
 
 /// Standard HRV numbers from a beat train. All optional: an artefact-only
 /// window produces no value rather than a zero.
-struct HrvResult: Equatable {
+struct HrvResult: Codable, Equatable {
     let beats: Int
     let nnBeats: Int
     let rmssdMS: Double?
@@ -69,7 +69,7 @@ struct HrvResult: Equatable {
 // MARK: - Sleep
 
 /// A detected sleep period. Actigraphy + HR-drop only: no staging.
-struct SleepPeriod: Equatable {
+struct SleepPeriod: Codable, Equatable {
     let startUnix: Int
     let endUnix: Int
     let quietFraction: Double
@@ -83,12 +83,12 @@ struct SleepPeriod: Equatable {
 }
 
 /// One bedtime-to-waketime span, used by the consistency rule.
-struct NightSpan: Equatable {
+struct NightSpan: Codable, Equatable {
     let startUnix: Int
     let endUnix: Int
 }
 
-struct SleepStressSplit: Equatable {
+struct SleepStressSplit: Codable, Equatable {
     let highPct: Double?
     let mediumPct: Double?
     let lowPct: Double?
@@ -101,7 +101,7 @@ struct SleepStressSplit: Equatable {
     )
 }
 
-struct SleepAnalysis: Equatable {
+struct SleepAnalysis: Codable, Equatable {
     let hours: Double
     let needHours: Double
     let hoursVsNeededPct: Double
@@ -115,7 +115,7 @@ struct SleepAnalysis: Equatable {
 
 // MARK: - Activities
 
-struct ActivitySession: Equatable, Identifiable {
+struct ActivitySession: Codable, Equatable, Identifiable {
     let startUnix: Int
     let endUnix: Int
     /// "run", "walk", "workout" or "cardio" — a combined label, never the raw
@@ -135,7 +135,7 @@ struct ActivitySession: Equatable, Identifiable {
 
 /// Personal norms from one value per day. Every baseline-relative score needs
 /// at least a week of them before it means anything.
-struct Baseline: Equatable {
+struct Baseline: Codable, Equatable {
     let lnRMSSDMean: Double
     let lnRMSSDSD: Double
     let rhrMean: Double
@@ -156,7 +156,7 @@ struct Baseline: Equatable {
     }
 }
 
-struct RecoveryResult: Equatable {
+struct RecoveryResult: Codable, Equatable {
     let score: Double?
     let reason: String?
     let hrvComponent: Double?
@@ -171,7 +171,7 @@ struct RecoveryResult: Equatable {
     }
 }
 
-struct StressResult: Equatable {
+struct StressResult: Codable, Equatable {
     let index: Double?
     let reason: String?
 
@@ -185,7 +185,7 @@ struct StressResult: Equatable {
 
 // MARK: - Respiration and SpO2
 
-struct RespRate: Equatable {
+struct RespRate: Codable, Equatable {
     let breathsPerMinute: Double?
     let reason: String?
     let beats: Int
@@ -195,7 +195,7 @@ struct RespRate: Equatable {
 }
 
 /// The band's own candidate byte summarised. Never a clinical SpO2.
-struct Spo2Summary: Equatable {
+struct Spo2Summary: Codable, Equatable {
     let pct: Double?
     let readings: Int
     let saturated: Int
@@ -210,12 +210,22 @@ struct Spo2Summary: Equatable {
 /// One local day's resting values, the input to a personal baseline.
 struct DayMetrics: Identifiable, Equatable, Codable {
     let dateKey: String
+    /// "sleep" when the day carried a detected night, otherwise "awake".
+    /// Stress is scored against awake days only, sleep stress against nights.
+    let state: String
     let restingHR: Double?
     let lnRMSSD: Double?
     let hrvWindowSeconds: Int
     let sleepHours: Double
+    let sleepStartUnix: Int?
+    let sleepEndUnix: Int?
     let strain: Double?
     let steps: Int?
 
     var id: String { dateKey }
+
+    var night: NightSpan? {
+        guard let start = sleepStartUnix, let end = sleepEndUnix else { return nil }
+        return NightSpan(startUnix: start, endUnix: end)
+    }
 }

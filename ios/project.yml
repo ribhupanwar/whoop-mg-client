@@ -25,8 +25,8 @@ targets:
         excludes:
           - "Info.plist"
     info:
-      # XcodeGen writes this plist at generation time; it is BLE-ready even
-      # though CoreBluetooth is not implemented in this UI preview chunk.
+      # XcodeGen writes this plist at generation time. The BLE usage string
+      # and background-central mode are what BandLink needs to keep reading.
       path: Strap/Info.plist
       properties:
         CFBundleDisplayName: Strap
