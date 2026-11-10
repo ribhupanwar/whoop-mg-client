@@ -123,6 +123,7 @@ measured.
   scores.
 - The SpO₂ value is the band's own unvalidated candidate byte, summarised for
   curiosity only. It is never presented as clinical.
-- Sleep is quiet-vs-movement only — no staging, no "restorative sleep".
+- The hypnogram is a rules-plus-HMM estimate from wrist channels, not PSG
+  staging. "Restorative" here means our own deep+REM sum, not WHOOP's score.
 - R22 deep-buffer NVM writes and the destructive `FORGET_BONDS` (0x0F)
   command are intentionally not implemented.
