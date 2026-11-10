@@ -5,11 +5,13 @@ proprietary cloud algorithms that are not published and cannot be reproduced
 from the strap alone. What is here instead:
 
   * Sleep - a transparent actigraphy + heart-rate-drop detector. It reports
-    duration and continuity only. Sleep STAGING (light/deep/REM) is deliberately
-    not implemented: it needs validated HRV features and a trained model, and
-    guessing it would fabricate medical-looking output. The band's own
-    sleep_state byte is a wake/sleep envelope whose value mapping is unverified,
-    so it is reported but never used to decide sleep.
+    duration and continuity, and hands the window to `sleep_stage.py` for a
+    four-class estimate (awake/light/deep/REM) from HR, its variability, wrist
+    movement and R-R breathing regularity. That hypnogram is an approximation,
+    never PSG-validated, and refuses below 50 % HR coverage instead of
+    collapsing to all-light. The band's own sleep_state byte is a wake/sleep
+    envelope whose value mapping is unverified, so it is reported but never
+    used to decide sleep or a stage.
   * Strain - Banister TRIMP (see metrics.trimp) mapped through a documented
     saturating curve onto a local 0-21 scale.
   * Recovery - a baseline-relative composite of lnRMSSD, resting HR and sleep

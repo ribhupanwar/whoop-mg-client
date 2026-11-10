@@ -49,6 +49,8 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Strap/Strap.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: "YES"
+        # Custom icon in Strap/Assets.xcassets; no vendor artwork.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
 
   StrapTests:
     type: bundle.unit-test

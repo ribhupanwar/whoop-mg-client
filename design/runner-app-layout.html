@@ -1153,9 +1153,37 @@
           <p>Wear the band tonight; the morning offload fills this graph, the
             asleep/awake split and the movement-event count.</p>
         </div>
-        <p class="rm-hint">Light/deep/REM staging is not implemented — it needs a validated
-          model. We report quiet-vs-movement only; wake events are movement bursts, not
-          verified awakenings. Restorative sleep (deep + REM) is therefore absent too.</p>
+        <p class="rm-hint">Awake/light/deep/REM is a 30-second-epoch estimate from HR, its
+          variability, wrist movement and R-R breathing regularity — an approximation, not
+          PSG staging, and it refuses below 50% HR coverage. Wake events stay movement
+          bursts, not verified awakenings.</p>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Sleep stages</h3>
+          <b><span data-when="live">—</span><span data-when="demo">29% restorative</span></b></div>
+        <div data-when="demo">
+          <div class="rm-stack" role="img" aria-label="Sample stage split">
+            <i style="width:18%;background:var(--app-sleep)"></i>
+            <i style="width:46%;background:var(--app-accent)"></i>
+            <i style="width:21%;background:var(--app-good)"></i>
+            <i style="width:15%;background:var(--app-warn)"></i>
+          </div>
+          <div class="rm-split">
+            <div><b>1:45</b><span>deep</span></div>
+            <div><b>4:28</b><span>light</span></div>
+            <div><b>2:02</b><span>REM</span></div>
+            <div><b>1:28</b><span>awake</span></div>
+          </div>
+        </div>
+        <div class="rm-empty" data-when="live">
+          <b>Needs an overnight capture</b>
+          <p>Stages appear once a capture covers a detected sleep window long
+            enough to score, with at least 50% heart-rate coverage.</p>
+        </div>
+        <p class="rm-hint">30-second epochs from on-wrist HR, its 5- and 11-minute
+          variability, wrist movement and R-R breathing regularity, smoothed with an
+          HMM. An approximation, not PSG-validated — treat the shape as a hint.</p>
       </div>
 
       <div class="rm-panel">
@@ -1393,8 +1421,8 @@
         </div>
 
         <div class="rm-barlabels"><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span></div>
-        <p class="rm-hint">Restorative sleep (deep + REM) is not charted — staging needs a
-          validated model we don't have. Every series here comes from our own local rules.</p>
+        <p class="rm-hint">Restorative sleep here means our own deep+REM estimate from the
+          stage split above, not a vendor score. Every series here comes from local rules.</p>
       </div>
 
       <button type="button" class="rm-outlook" data-open="sleepcoach">

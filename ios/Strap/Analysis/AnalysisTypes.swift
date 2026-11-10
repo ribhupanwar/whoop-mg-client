@@ -68,7 +68,8 @@ struct HrvResult: Codable, Equatable {
 
 // MARK: - Sleep
 
-/// A detected sleep period. Actigraphy + HR-drop only: no staging.
+/// A detected sleep window from actigraphy + an HR drop. The stages come from
+/// a separate estimate over the same window; a period carries no stage itself.
 struct SleepPeriod: Codable, Equatable {
     let startUnix: Int
     let endUnix: Int

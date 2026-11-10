@@ -1,7 +1,8 @@
 import Foundation
 
 /// Actigraphy + heart-rate-drop sleep detector ported from `whoop/health.py`.
-/// Duration and continuity only: no light/deep/REM staging.
+/// It finds the window and scores duration/continuity; the four-class estimate
+/// is a separate pass over that window in `SleepStager`.
 enum SleepDetect {
     static let quietAccelG = 0.08
     static let minSleepS = 1800
