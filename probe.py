@@ -74,11 +74,30 @@ def rmssd(rr_ms: list[float]) -> float | None:
     return round(math.sqrt(sum(d * d for d in diffs) / len(diffs)), 2)
 
 
-async def find_band(timeout: float, address: str | None) -> str:
+async def find_band(
+    timeout: float, address: str | None, name_filter: str | None = None
+) -> str:
     if address:
         return address
     print(f"Scanning {timeout:.0f}s for a WHOOP band...")
     devices = await BleakScanner.discover(timeout=timeout, return_adv=True)
+    if name_filter:
+        # Two straps of the same model are indistinguishable by service UUID;
+        # the advertised name is what the owner recognises.
+        for dev, adv in devices.values():
+            name = (dev.name or adv.local_name or "").strip()
+            if name_filter.lower() in name.lower():
+                print(f"  found {name!r} at {dev.address} (rssi {adv.rssi})")
+                return dev.address
+        seen = sorted(
+            {
+                (dev.name or adv.local_name or "(no name)").strip()
+                for dev, adv in devices.values()
+            }
+        )
+        raise RuntimeError(
+            f"No band named {name_filter!r}. Advertised names: {', '.join(seen) or 'none'}"
+        )
     for dev, adv in devices.values():
         name = (dev.name or "").strip()
         if "whoop" in name.lower():
@@ -95,12 +114,15 @@ async def find_band(timeout: float, address: str | None) -> str:
 async def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--address", help="skip scanning, connect directly")
+    parser.add_argument(
+        "--name", help="pick the band whose advertised name contains this text"
+    )
     parser.add_argument("--scan-timeout", type=float, default=15.0)
     parser.add_argument("--seconds", type=float, default=20.0, help="HR stream duration")
     parser.add_argument("--out", default="capture.jsonl", help="raw notification log")
     args = parser.parse_args()
 
-    address = await find_band(args.scan_timeout, args.address)
+    address = await find_band(args.scan_timeout, args.address, args.name)
     print(f"\nConnecting to {address} ...")
 
     samples: list[dict] = []
