@@ -20,6 +20,10 @@ venv/
 *.egg-info/
 .pytest_cache/
 
+# Built IPAs and archives
+*.ipa
+*.zip
+
 # OS / editor
 .DS_Store
 Thumbs.db

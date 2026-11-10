@@ -90,12 +90,21 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastCapturePath: String?
     @Published private(set) var isLiveSession = false
     @Published var lastMessage: String?
+    /// Straps seen in the current discovery pass, strongest signal first.
+    @Published private(set) var discoveredBands: [DiscoveredBand] = []
+    @Published private(set) var isFindingBands = false
+    /// The band this phone last connected to. Bands of the same model share a
+    /// name, so the stored peripheral identifier is what pins the choice.
+    @Published private(set) var preferredBandID: String?
+    @Published private(set) var preferredBandName: String?
 
     private enum Keys {
         static let days = "strap.days.v1"
         static let summary = "strap.capture.summary.v1"
         static let sleepAnalysis = "strap.sleep.analysis.v1"
         static let capturePath = "strap.capture.path.v1"
+        static let preferredBandID = "strap.band.preferred.id.v1"
+        static let preferredBandName = "strap.band.preferred.name.v1"
     }
 
     private struct PendingCommand {
@@ -117,6 +126,10 @@ final class BandLink: NSObject, ObservableObject {
     private var handshakeStarted = false
     private var helloAttempts = 0
     private var scanTimeout: DispatchWorkItem?
+    private var pickerTimeout: DispatchWorkItem?
+    /// True while the picker owns the scan: sightings are listed, not connected.
+    private var pickerMode = false
+    private var discoveredPeripherals: [String: CBPeripheral] = [:]
 
     private var commandQueue: [PendingCommand] = []
     private var commandInFlight = false
@@ -150,6 +163,8 @@ final class BandLink: NSObject, ObservableObject {
             lastSleepAnalysis = saved
         }
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
+        preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
+        preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
         central = CBCentralManager(delegate: self, queue: nil)
     }
 
@@ -204,6 +219,7 @@ final class BandLink: NSObject, ObservableObject {
 
     func connect(sex: Sex, maxHR: Double?, needHours: Double) {
         configure(sex: sex, maxHR: maxHR, needHours: needHours)
+        stopPicker()
         wantsConnection = true
         if let peripheral, peripheral.state == .connected {
             maybeBeginHandshake()
@@ -216,12 +232,108 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    /// Open a discovery pass for the picker. Nothing connects until the user
+    /// taps a row, so two straps on the same desk cannot race for the link.
+    func findBands() {
+        guard central.state == .poweredOn else {
+            lastMessage = status.title
+            return
+        }
+        stopPicker()
+        pickerMode = true
+        isFindingBands = true
+        wantsConnection = true
+        central.scanForPeripherals(
+            withServices: nil,
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+        )
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isFindingBands else { return }
+            self.isFindingBands = false
+            self.pickerMode = false
+            self.central.stopScan()
+            if self.discoveredBands.isEmpty {
+                self.lastMessage = "No straps found. Bring the band close, and forget it in iPhone Settings → Bluetooth if it is paired there."
+            }
+        }
+        pickerTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 12, execute: work)
+    }
+
+    /// Connect to a strap the picker found and remember it for next launch.
+    func connect(to band: DiscoveredBand) {
+        guard central.state == .poweredOn else {
+            lastMessage = status.title
+            return
+        }
+        let target = discoveredPeripherals[band.id]
+            ?? central.retrievePeripherals(withIdentifiers: [band.uuid]).first
+        guard let target else {
+            lastMessage = "That strap is out of range now — search again."
+            return
+        }
+        pickerTimeout?.cancel()
+        pickerTimeout = nil
+        scanTimeout?.cancel()
+        scanTimeout = nil
+        isFindingBands = false
+        pickerMode = false
+        central.stopScan()
+
+        wantsConnection = true
+        preferredBandID = band.id
+        preferredBandName = band.name
+        UserDefaults.standard.set(band.id, forKey: Keys.preferredBandID)
+        UserDefaults.standard.set(band.name, forKey: Keys.preferredBandName)
+
+        // Already talking to this strap: keep the live link and its drain.
+        if let current = peripheral, current.identifier == target.identifier,
+           current.state == .connected {
+            bandName = band.name
+            discoveredBands = []
+            discoveredPeripherals = [:]
+            return
+        }
+
+        if let current = peripheral, current.state != .disconnected,
+           current.identifier != target.identifier {
+            central.cancelPeripheralConnection(current)
+        }
+        resetLink()
+        bandName = band.name
+        target.delegate = self
+        peripheral = target
+        discoveredBands = []
+        discoveredPeripherals = [:]
+        status = .connecting(band.name)
+        central.connect(target, options: nil)
+    }
+
+    /// Drop the saved choice without touching the current link; the next
+    /// Connect picks whichever strap answers first.
+    func forgetPreferredBand() {
+        preferredBandID = nil
+        preferredBandName = nil
+        UserDefaults.standard.removeObject(forKey: Keys.preferredBandID)
+        UserDefaults.standard.removeObject(forKey: Keys.preferredBandName)
+    }
+
+    private func stopPicker() {
+        pickerTimeout?.cancel()
+        pickerTimeout = nil
+        isFindingBands = false
+        pickerMode = false
+        discoveredBands = []
+        discoveredPeripherals = [:]
+        if central.state == .poweredOn { central.stopScan() }
+    }
+
     func disconnect() {
         wantsConnection = false
         if status == .draining { finishDrain() }
         scanTimeout?.cancel()
         scanTimeout = nil
-        central.stopScan()
+        stopPicker()
         if let peripheral {
             central.cancelPeripheralConnection(peripheral)
         }
@@ -299,7 +411,9 @@ final class BandLink: NSObject, ObservableObject {
             guard let self, self.status == .scanning else { return }
             self.central.stopScan()
             self.status = .failed(
-                "No strap found. If the phone is paired to the band in Settings, forget it there — the app needs sole access."
+                self.preferredBandName.map {
+                    "\($0) is not answering. Use Find another band to pick the one on your wrist."
+                } ?? "No strap found. If the phone is paired to the band in Settings, forget it there — the app needs sole access."
             )
         }
         scanTimeout = work
@@ -585,6 +699,12 @@ extension BandLink: CBCentralManagerDelegate {
                 status = .idle
             }
         case .poweredOff:
+            if pickerMode {
+                pickerTimeout?.cancel()
+                pickerTimeout = nil
+                isFindingBands = false
+                pickerMode = false
+            }
             status = .poweredOff
         case .unauthorized:
             status = .unauthorized
@@ -607,13 +727,32 @@ extension BandLink: CBCentralManagerDelegate {
             || advertisedName.lowercased().contains("whoop")
         guard services.contains(BandUUID.service) || named else { return }
 
+        let identifier = peripheral.identifier.uuidString
+        let name = peripheral.name ?? (advertisedName.isEmpty ? "WHOOP" : advertisedName)
+        discoveredPeripherals[identifier] = peripheral
+        discoveredBands = BandDiscovery.merge(
+            discoveredBands,
+            adding: DiscoveredBand(
+                id: identifier,
+                uuid: peripheral.identifier,
+                name: name,
+                rssi: RSSI.intValue,
+                lastSeenUnix: Int(Date().timeIntervalSince1970)
+            )
+        )
+
+        // The picker only lists sightings; the user taps the band to connect.
+        if pickerMode { return }
+        // With a saved band, ignore the other strap even if it advertises first.
+        if let preferredBandID, identifier != preferredBandID { return }
+
         central.stopScan()
         scanTimeout?.cancel()
         scanTimeout = nil
-        bandName = peripheral.name ?? (advertisedName.isEmpty ? "WHOOP" : advertisedName)
+        bandName = name
         peripheral.delegate = self
         self.peripheral = peripheral
-        status = .connecting(bandName ?? "WHOOP")
+        status = .connecting(name)
         central.connect(peripheral, options: nil)
     }
 
@@ -631,6 +770,9 @@ extension BandLink: CBCentralManagerDelegate {
         didFailToConnect peripheral: CBPeripheral,
         error: Error?
     ) {
+        // Switching bands cancels the old link; its callback must not wipe the
+        // new one.
+        guard peripheral === self.peripheral else { return }
         resetLink()
         status = .failed(error.map { "Could not connect: \($0.localizedDescription)" } ?? "Could not connect")
     }
@@ -640,6 +782,7 @@ extension BandLink: CBCentralManagerDelegate {
         didDisconnectPeripheral peripheral: CBPeripheral,
         error: Error?
     ) {
+        guard peripheral === self.peripheral else { return }
         let wasDraining = status == .draining
         resetLink()
         if wasDraining {

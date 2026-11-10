@@ -106,7 +106,7 @@ struct SettingsView: View {
             SectionTitle("Strap")
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(store.band.bandName ?? "WHOOP MG")
+                    Text(store.band.bandName ?? store.band.preferredBandName ?? "WHOOP MG")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(store.band.status.title)
@@ -129,6 +129,62 @@ struct SettingsView: View {
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
 
+            HStack(spacing: 12) {
+                Button(store.band.isFindingBands ? "Searching…" : "Find another band") {
+                    store.band.findBands()
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.appAccent)
+                .disabled(store.band.isFindingBands)
+
+                Spacer()
+
+                if store.band.preferredBandID != nil {
+                    Button("Forget saved band") { store.band.forgetPreferredBand() }
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+            .padding(.top, 8)
+
+            if !store.band.discoveredBands.isEmpty {
+                VStack(spacing: 0) {
+                    ForEach(store.band.discoveredBands) { band in
+                        Button {
+                            store.band.connect(to: band)
+                        } label: {
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(band.name)
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(Color.appFG)
+                                    Text("signal \(band.rssi) dBm")
+                                        .font(.system(size: 10))
+                                        .foregroundStyle(Color.appMuted)
+                                }
+                                Spacer()
+                                if band.id == store.band.preferredBandID {
+                                    Text("saved")
+                                        .font(.system(size: 10, weight: .medium))
+                                        .foregroundStyle(Color.appGood)
+                                }
+                                Text("Connect")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Color.appAccent)
+                            }
+                            .padding(.vertical, 8)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .top) {
+                            Rectangle().fill(Color.appLine).frame(height: 1)
+                        }
+                    }
+                }
+                .padding(.top, 6)
+                Hint("Strongest signal first — the strap on your wrist is usually the top row. Names match because both bands are the same model.")
+            }
+
             if let battery = store.band.batteryPercent {
                 Text("Battery \(battery)%")
                     .font(.system(size: 11))
@@ -149,7 +205,7 @@ struct SettingsView: View {
                     .foregroundStyle(Color.appAccent)
                     .padding(.top, 6)
             }
-            Hint("Connect with the iPhone's own pairing to the strap forgotten — BLE allows one central, and a stale pairing blocks the app. The first write triggers a pairing prompt; accept it. History lands as a JSONL capture plus per-day metrics.")
+            Hint("Two straps in range? Tap Find another band and pick the one on your wrist; the choice is saved by its Bluetooth identifier, so later connects go straight to it. The iPhone's own pairing to the strap must stay off — BLE allows one central, and a stale pairing blocks the app. The first write triggers a pairing prompt; accept it. History lands as a JSONL capture plus per-day metrics.")
         }
     }
 

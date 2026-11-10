@@ -105,6 +105,11 @@ most recent detected sleep window on-device, so the Sleep tab shows the
 hypnogram and deep/light/REM/awake minutes with no cloud round-trip. A window
 with less than 50 % heart-rate coverage is refused and says why.
 
+Two straps: Settings → Strap → **Find another band** lists every strap in
+range (strongest signal first) and you tap the one on your wrist. The choice
+is remembered by its Bluetooth peripheral identifier, so later connects go
+straight to that band and ignore the other one.
+
 ## Python reference
 
 ```sh
