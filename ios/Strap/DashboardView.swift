@@ -1,10 +1,10 @@
 import SwiftUI
 
 /// Dashboard tab — the exact same metric rows as Home's My Dashboard
-/// (shared component), plus the customize hint and baseline progress.
+/// (shared component), plus the customize sheet and baseline progress.
 struct DashboardView: View {
     @EnvironmentObject private var store: AppStore
-    @State private var showCustomizeHint = false
+    @State private var showCustomize = false
 
     private var demo: Bool { store.isPreview }
 
@@ -17,7 +17,7 @@ struct DashboardView: View {
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Button {
-                        showCustomizeHint.toggle()
+                        showCustomize = true
                     } label: {
                         Text("CUSTOMIZE ✎")
                             .font(.system(size: 10, weight: .medium))
@@ -32,17 +32,16 @@ struct DashboardView: View {
                 }
                 .padding(.bottom, 10)
 
-                if showCustomizeHint {
-                    Hint("Reordering and hiding rows is a design intent — not wired in this preview.")
-                        .padding(.bottom, 10)
-                }
-
                 DashboardRows()
                 baselinePanel
             }
         }
         .navigationTitle("Dashboard")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showCustomize) {
+            DashboardCustomizeSheet()
+                .environmentObject(store)
+        }
     }
 
     private var baselinePanel: some View {

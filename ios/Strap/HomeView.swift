@@ -10,7 +10,7 @@ struct HomeView: View {
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var showLiveSession = false
-    @State private var showCustomizeHint = false
+    @State private var showDashboardCustomize = false
 
     private var demo: Bool { store.isPreview }
 
@@ -35,6 +35,9 @@ struct HomeView: View {
         }
         .sheet(isPresented: $showLiveSession) {
             LiveSessionView()
+        }
+        .sheet(isPresented: $showDashboardCustomize) {
+            DashboardCustomizeSheet()
         }
     }
 
@@ -470,11 +473,12 @@ struct HomeView: View {
             let minutes = Int(session.minutes.rounded())
             let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
             let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
+            let kcal = store.activeKcal(for: session).map { " · \(Int($0.rounded())) kcal" } ?? ""
             return ActivityRowModel(
                 id: "band-\(session.startUnix)",
                 icon: Self.icon(forDetected: session.kind),
                 name: "\(session.kind.capitalized) · band",
-                detail: "\(minutes) min\(steps)\(heart)"
+                detail: "\(minutes) min\(steps)\(heart)\(kcal)"
             )
         }
     }
@@ -483,11 +487,12 @@ struct HomeView: View {
         store.liveActivities(on: selectedDayKey).map { record in
             let minutes = Int(record.minutes.rounded())
             let heart = record.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
+            let kcal = store.activeKcal(for: record).map { " · \(Int($0.rounded())) kcal" } ?? ""
             return ActivityRowModel(
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(minutes) min\(heart)"
+                detail: "\(minutes) min\(heart)\(kcal)"
             )
         }
     }
@@ -672,7 +677,7 @@ struct HomeView: View {
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Button {
-                    showCustomizeHint.toggle()
+                    showDashboardCustomize = true
                 } label: {
                     Text("CUSTOMIZE ✎")
                         .font(.system(size: 10, weight: .medium))
@@ -687,11 +692,6 @@ struct HomeView: View {
             }
             .padding(.top, 16)
             .padding(.bottom, 10)
-
-            if showCustomizeHint {
-                Hint("Reordering and hiding rows is a design intent — not wired in this preview.")
-                    .padding(.bottom, 10)
-            }
 
             DashboardRows()
         }

@@ -139,6 +139,39 @@ final class AppStore: ObservableObject {
         }
     }
 
+    // MARK: - Dashboard layout
+
+    /// What Home and Dashboard render, in the saved order. Hiding a row never
+    /// removes it from `dashboardOrder`, so unhiding restores its position.
+    var visibleDashboardRows: [DashboardRow] {
+        settings.dashboardOrder.filter { !settings.hiddenDashboardRows.contains($0) }
+    }
+
+    func isDashboardRowHidden(_ row: DashboardRow) -> Bool {
+        settings.hiddenDashboardRows.contains(row)
+    }
+
+    func setDashboardRow(_ row: DashboardRow, hidden: Bool) {
+        var hiddenRows = settings.hiddenDashboardRows.filter { $0 != row }
+        if hidden { hiddenRows.append(row) }
+        settings.hiddenDashboardRows = hiddenRows
+    }
+
+    /// Moves a row one slot at a time within the FULL order, so a step across a
+    /// hidden neighbour lands where the wearer pointed rather than being
+    /// swallowed by it.
+    func moveDashboardRow(_ row: DashboardRow, by offset: Int) {
+        guard let from = settings.dashboardOrder.firstIndex(of: row) else { return }
+        let to = from + offset
+        guard settings.dashboardOrder.indices.contains(to) else { return }
+        settings.dashboardOrder.swapAt(from, to)
+    }
+
+    func resetDashboardLayout() {
+        settings.dashboardOrder = DashboardRow.allCases
+        settings.hiddenDashboardRows = []
+    }
+
     // MARK: - Apple Health
 
     /// The toggle is the only entry point: it requests permission, then
@@ -229,6 +262,69 @@ final class AppStore: ObservableObject {
             return total + slice.reduce(0, +)
         }
         return Double(seconds) / 60.0
+    }
+
+    /// Active energy over the last capture's per-minute heart rates. Nil when
+    /// the body data or a resting HR is missing — `caloriesDetail` names the gap.
+    var captureActiveKcal: Double? {
+        guard let summary = band.summary, !summary.heartRateSeries.isEmpty,
+              let weight = settings.weightKG, let height = settings.heightCM,
+              let resting = measuredRestingHR else { return nil }
+        return Calories.activeKcal(
+            hrPerMinute: summary.heartRateSeries,
+            restingHR: resting,
+            maxHR: maxHeartRate,
+            weightKg: weight,
+            heightCm: height,
+            age: Double(settings.age),
+            sex: settings.sex
+        )
+    }
+
+    /// Why the calorie figure is absent, or what it is measured over.
+    var caloriesDetail: String {
+        if settings.weightKG == nil || settings.heightCM == nil {
+            return "needs weight + height (Settings)"
+        }
+        guard let summary = band.summary, !summary.heartRateSeries.isEmpty else {
+            return "needs a capture"
+        }
+        guard measuredRestingHR != nil else { return "needs a measured resting HR" }
+        return "active over \(summary.heartRateSeries.count) min · Keytel 2005 estimate"
+    }
+
+    /// ACTIVE kcal of a detected session. Nil without body data; zero when the
+    /// session never rose above the HR gate and had no measured walking cadence.
+    func activeKcal(for session: ActivitySession) -> Double? {
+        guard let weight = settings.weightKG, let height = settings.heightCM,
+              let resting = measuredRestingHR else { return nil }
+        return Calories.sessionActiveKcal(
+            meanHR: session.meanHR,
+            steps: session.steps,
+            minutes: session.minutes,
+            restingHR: resting,
+            maxHR: maxHeartRate,
+            weightKg: weight,
+            heightCm: height,
+            age: Double(settings.age),
+            sex: settings.sex
+        )
+    }
+
+    func activeKcal(for record: LiveActivityRecord) -> Double? {
+        guard let weight = settings.weightKG, let height = settings.heightCM,
+              let resting = measuredRestingHR else { return nil }
+        return Calories.sessionActiveKcal(
+            meanHR: record.meanHR,
+            steps: 0,
+            minutes: record.minutes,
+            restingHR: resting,
+            maxHR: maxHeartRate,
+            weightKg: weight,
+            heightCm: height,
+            age: Double(settings.age),
+            sex: settings.sex
+        )
     }
 
     private func persistSettings() {

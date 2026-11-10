@@ -4,6 +4,9 @@ import SwiftUI
 /// The design-preview toggle defaults OFF: live mode never invents a value.
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
+    /// Text state so a half-typed decimal ("70.") is not rewritten mid-entry.
+    @State private var weightText = ""
+    @State private var heightText = ""
 
     var body: some View {
         Screen {
@@ -19,6 +22,10 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            weightText = store.settings.weightKG.map { String(format: "%g", $0) } ?? ""
+            heightText = store.settings.heightCM.map { String(format: "%g", $0) } ?? ""
+        }
     }
 
     // MARK: Profile
@@ -45,8 +52,51 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex selects the Banister TRIMP coefficients, which drive strain.")
+            fieldRow(label: "Weight · kg") {
+                TextField("70", text: $weightText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.appFG)
+                    .frame(width: 84)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .onChange(of: weightText) { _, text in
+                        store.settings.weightKG = Self.parsedNumber(text)
+                    }
+            }
+            fieldRow(label: "Height · cm") {
+                TextField("175", text: $heightText)
+                    .keyboardType(.decimalPad)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 15))
+                    .foregroundStyle(Color.appFG)
+                    .frame(width: 84)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .onChange(of: heightText) { _, text in
+                        store.settings.heightCM = Self.parsedNumber(text)
+                    }
+            }
+            Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex selects the Banister TRIMP coefficients, which drive strain, and the Keytel calorie coefficients. Weight and height only price the calorie estimate — leave them blank and the app shows an em dash rather than a number built on a guess.")
         }
+    }
+
+    /// Blank means "not measured": the fields show placeholders but the stored
+    /// value stays nil, so no calorie figure is built on a stand-in body.
+    /// Text-backed so an empty field stores nil, never 0 — a zero weight would
+    /// price every energy figure as nothing.
+    static func parsedNumber(_ text: String) -> Double? {
+        let cleaned = text.replacingOccurrences(of: ",", with: ".")
+            .trimmingCharacters(in: .whitespaces)
+        guard !cleaned.isEmpty, let value = Double(cleaned), value > 0 else { return nil }
+        return value
     }
 
     // MARK: Strap

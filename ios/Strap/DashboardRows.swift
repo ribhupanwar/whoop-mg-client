@@ -6,6 +6,10 @@ import SwiftUI
 /// HR zones 4–5 weekly, VO₂ max, Calories, Stress Monitor.
 /// No respiratory rate or SpO₂ here: both are Health-detail estimates, and
 /// SpO₂ is only an unvalidated band candidate.
+///
+/// The order and visibility come from `AppSettings.dashboardOrder` /
+/// `hiddenDashboardRows`, so the Customize sheet is the only place that decides
+/// what this stack shows.
 struct DashboardRows: View {
     @EnvironmentObject private var store: AppStore
     @State private var showVO2Detail = false
@@ -14,6 +18,24 @@ struct DashboardRows: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            ForEach(store.visibleDashboardRows) { row in
+                block(for: row)
+            }
+            if store.visibleDashboardRows.isEmpty {
+                Panel {
+                    SectionTitle("No rows shown")
+                    Hint("Every dashboard row is hidden. Open Customize to bring rows back.")
+                }
+                .padding(.bottom, 8)
+            }
+            Hint("The small number under a metric is your comparison value and stays absent until history exists. VO₂ max and calories are published estimates, never strap measurements.")
+        }
+    }
+
+    @ViewBuilder
+    private func block(for row: DashboardRow) -> some View {
+        switch row {
+        case .hrv:
             MetricRow(
                 icon: "waveform.path.ecg",
                 title: "Heart rate variability",
@@ -22,6 +44,7 @@ struct DashboardRows: View {
                 detail: demo ? "▲ \(SampleData.hrvCompare) · sample" : hrvDetail,
                 detailColor: demo ? .appGood : .appMuted
             )
+        case .restingHR:
             MetricRow(
                 icon: "heart.fill",
                 title: "Resting heart rate",
@@ -29,6 +52,7 @@ struct DashboardRows: View {
                 detail: demo ? "▲ \(SampleData.rhrCompare) · sample" : rhrDetail,
                 detailColor: demo ? .appWarn : .appMuted
             )
+        case .steps:
             MetricRow(
                 icon: "figure.walk",
                 title: "Steps",
@@ -36,6 +60,7 @@ struct DashboardRows: View {
                 detail: demo ? "▼ \(SampleData.stepsCompare.formatted()) · sample" : stepsDetail,
                 detailColor: demo ? .appWarn : .appMuted
             )
+        case .zonesLow:
             MetricRow(
                 icon: "clock",
                 title: "HR zones 1–3 · weekly",
@@ -43,6 +68,7 @@ struct DashboardRows: View {
                 detail: demo ? "▲ \(SampleData.zones13Compare) · sample" : zoneDetail,
                 detailColor: demo ? .appGood : .appMuted
             )
+        case .zonesHigh:
             MetricRow(
                 icon: "bolt.fill",
                 title: "HR zones 4–5 · weekly",
@@ -50,18 +76,21 @@ struct DashboardRows: View {
                 detail: demo ? "▼ \(SampleData.zones45Compare) · sample" : zoneDetail,
                 detailColor: demo ? .appWarn : .appMuted
             )
+        case .vo2Max:
             vo2Block
+        case .calories:
             MetricRow(
                 icon: "flame.fill",
                 title: "Calories",
-                value: demo ? SampleData.calories.formatted() : "—",
+                value: demo ? SampleData.calories.formatted() : caloriesValue,
+                unit: (demo == false && store.captureActiveKcal != nil) ? "kcal" : nil,
                 detail: demo
                     ? "▼ \(SampleData.caloriesCompare.formatted()) · sample"
-                    : "estimate via Keytel 2005 — needs weight + age",
+                    : store.caloriesDetail,
                 detailColor: demo ? .appWarn : .appMuted
             )
+        case .stress:
             stressRow
-            Hint("The small number under a metric is your comparison value and stays absent until history exists. VO₂ max and calories are published estimates, never strap measurements.")
         }
     }
 
@@ -112,6 +141,10 @@ struct DashboardRows: View {
 
     private var vo2Text: String {
         store.vo2Estimate.map { String(format: "%.1f", $0) } ?? "—"
+    }
+
+    private var caloriesValue: String {
+        store.captureActiveKcal.map { String(format: "%.0f", $0) } ?? "—"
     }
 
     private var vo2Detail: String {

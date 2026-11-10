@@ -36,6 +36,13 @@ No capture files, device identifiers or third-party source are committed;
 - A VO₂ max estimate from Uth 2004 (15.3 × HRmax / HRrest): it uses a measured
   max HR when one is set and labels the age-predicted fallback, so the number
   is never passed off as a strap reading.
+- An active-energy estimate (Keytel 2005 above a Mifflin–St Jeor basal rate,
+  the pair NOOP and OpenStrap both use): minutes are priced only above 40 % of
+  heart-rate reserve, a walk the gate refuses is priced by its measured
+  cadence instead, and nothing is shown until weight and height are entered.
+- A reorderable, hideable dashboard: the same row list feeds Home and the
+  Dashboard tab, hidden rows keep their slot, and the arrangement is stored on
+  the device.
 - Optional Apple Health export (off by default): band-detected and live
   sessions become workouts with their real start, end and step count, keyed by
   an external UUID so a replay cannot duplicate them. No estimate is written
