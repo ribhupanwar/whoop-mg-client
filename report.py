@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from decode import load_samples
+from whoop.activity import ActivitySession, detect_activities
 from whoop.health import (
     Baseline,
     RecoveryResult,
@@ -66,6 +67,7 @@ class Report:
     recovery: RecoveryResult
     stress: StressResult
     coach: SleepCoach
+    activities: list[ActivitySession]
 
 
 def build_report(
@@ -123,6 +125,7 @@ def build_report(
         base_need_h=sleep_need if sleep_need else 8.0,
         tomorrow=tomorrow,
     )
+    activities = detect_activities(ordered)
 
     return Report(
         source=source,
@@ -148,6 +151,7 @@ def build_report(
         recovery=recovery,
         stress=stress,
         coach=coach,
+        activities=activities,
     )
 
 
@@ -286,6 +290,22 @@ def print_report(report: Report) -> None:
             f" {coach.time_in_bed_h:.2f} h in bed for {coach.need_h:.2f} h need"
             f"  ({debt})"
         )
+    if report.activities:
+        print(
+            f"  Activities : {len(report.activities)} session(s) auto-detected"
+            "  (gait + steps + HR, no start tap)"
+        )
+    else:
+        print(
+            "  Activities : —  (no 10-min run/walk/workout session in this capture)"
+        )
+    for session in report.activities:
+        start = datetime.fromtimestamp(session.start_unix, timezone.utc).strftime("%H:%M")
+        print(
+            f"               {start}  {session.kind}  {session.minutes:.1f} min"
+            f"  {session.steps} steps"
+            f"  mean HR {_fmt(session.mean_hr, ' bpm')}"
+        )
     print(f"\n  {DISCLAIMER}")
 
 
@@ -369,6 +389,13 @@ def render_html(report: Report) -> str:
             ),
         ),
         _card("Sleep coach", coach_value, coach_detail),
+        _card(
+            "Activities",
+            f"{len(report.activities)} session(s)" if report.activities else "—",
+            "auto-detected · gait + steps + HR"
+            if report.activities
+            else "no 10-min run/walk/workout in this capture",
+        ),
     ]
 
     sleep_rows = "".join(
@@ -385,6 +412,23 @@ def render_html(report: Report) -> str:
         "<th>Continuity</th><th>Mean HR</th></tr></thead>"
         f"<tbody>{sleep_rows}</tbody></table>"
         if sleep_rows else ""
+    )
+
+    activity_rows = "".join(
+        "<tr>"
+        f"<td>{datetime.fromtimestamp(a.start_unix, timezone.utc).strftime('%Y-%m-%d %H:%M')}</td>"
+        f"<td>{html.escape(a.kind)}</td>"
+        f"<td>{a.minutes:.1f} min</td>"
+        f"<td>{a.steps}</td>"
+        f"<td>{_fmt(a.mean_hr)}</td>"
+        "</tr>"
+        for a in report.activities
+    )
+    activity_table = (
+        "<table><thead><tr><th>Start (UTC)</th><th>Activity</th><th>Duration</th>"
+        "<th>Steps</th><th>Mean HR</th></tr></thead>"
+        f"<tbody>{activity_rows}</tbody></table>"
+        if activity_rows else ""
     )
 
     return f"""<!DOCTYPE html>
@@ -442,11 +486,14 @@ your own HRV and resting-HR history exist, because a recovery number without a
 personal baseline is meaningless.</p></div></div>
 <div class="grid">{''.join(cards)}</div>
 {sleep_table}
+{activity_table}
 <footer>Sleep reports duration and continuity only. Light/deep/REM staging is not
 implemented: it requires validated HRV features and a trained model, and guessing
 it would fabricate medical-looking output. The band's own sleep-state byte is a
 wake/sleep envelope with an unverified value mapping, so it never drives the
-sleep decision.</footer>
+sleep decision. Activities are auto-detected from the band's gait readout, the
+step counter and sustained heart-rate elevation; sessions under ten minutes are
+not logged, and the gait enum is not vendor-verified.</footer>
 </div></body></html>
 """
 

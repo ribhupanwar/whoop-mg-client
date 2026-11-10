@@ -447,17 +447,25 @@
         <div class="rm-actlist">
           <div class="rm-actrow">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="2"/><path d="M9 21l2.5-5.5L9 12l1-4 3 2 3 1M11.5 15.5L15 18l1 3"/></svg>
-            <b>Run</b><span data-when="live">not captured</span><span data-when="demo">42 min · Z2</span>
+            <b>Run</b><span data-when="live">none detected</span><span data-when="demo">42 min · Z2</span>
+          </div>
+          <div class="rm-actrow">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="13" cy="4.5" r="2"/><path d="M10 21l2-5-2-3 1-4 3 2 2 1M12 16l3 2 1 3"/></svg>
+            <b>Walk</b><span data-when="live">none detected</span><span data-when="demo">28 min · errands</span>
           </div>
           <div class="rm-actrow">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>
-            <b>Gym workout</b><span data-when="live">not logged</span><span data-when="demo">55 min · push</span>
+            <b>Gym workout</b><span data-when="live">none detected</span><span data-when="demo">55 min · push</span>
           </div>
           <div class="rm-actrow">
             <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>
             <b>Rest session</b><span>15 min · measured</span>
           </div>
         </div>
+        <p class="rm-hint" data-when="live" style="margin:0 0 10px">Run, walk and gym
+          sessions are detected automatically from the band's gait readout, step counter
+          and heart rate — anything sustained 10+ minutes appears here after each capture,
+          no start tap. Nothing in your captures so far crossed that bar.</p>
         <div class="rm-btnrow">
           <button type="button" id="rm-addbtn">+ ADD ACTIVITY</button>
           <button type="button" id="rm-startbtn">&#9201; START ACTIVITY</button>

@@ -21,7 +21,7 @@ from whoop.health import Baseline
 from whoop.records import RecordHeader, V18Sample
 
 
-def sample(unix, hr, accel=0.0, rr=()) -> V18Sample:
+def sample(unix, hr, accel=0.0, rr=(), steps=None, gait=None) -> V18Sample:
     return V18Sample(
         header=RecordHeader(
             version=18, flags=0x80, record_index=unix, unix=unix, subsec_q15=0
@@ -29,6 +29,8 @@ def sample(unix, hr, accel=0.0, rr=()) -> V18Sample:
         heart_rate=hr,
         rr_intervals_ms=list(rr),
         dynamic_accel_g=accel,
+        step_motion_counter=steps,
+        activity_class=gait,
     )
 
 
@@ -43,6 +45,20 @@ def overnight():
         + stretch(600, 3600, 60, 0.02, rr=(800, 810))
         + stretch(4200, 600, 100, 0.5)
     )
+
+
+def run_day():
+    """Quiet warm-up walk-in, a 20-min run carrying gait + steps, then cool-down."""
+    rows = [sample(i, 60, 0.02, steps=0, gait=0) for i in range(600)]
+    rows += [
+        sample(600 + i, 150, 0.8, steps=int(i * 170 / 60), gait=2)
+        for i in range(1200)
+    ]
+    last_steps = int(1199 * 170 / 60)
+    rows += [
+        sample(1800 + i, 65, 0.02, steps=last_steps, gait=0) for i in range(600)
+    ]
+    return rows
 
 
 def build(samples, **kwargs):
@@ -144,6 +160,18 @@ class TestBuildReport(unittest.TestCase):
         report = build(stretch(0, 300, 70, 0.02), wake_min=390)
         self.assertIsNone(report.coach.debt_h)
         self.assertIsNotNone(report.coach.bedtime_min)
+
+    def test_run_session_is_auto_detected(self):
+        report = build(run_day())
+        self.assertEqual(len(report.activities), 1)
+        session = report.activities[0]
+        self.assertEqual(session.kind, "run")
+        self.assertAlmostEqual(session.minutes, 20.0, places=6)
+        self.assertGreater(session.steps, 3000)
+        self.assertAlmostEqual(session.mean_hr, 150.0, places=6)
+
+    def test_rest_capture_has_no_activities(self):
+        self.assertEqual(build(stretch(0, 300, 70, 0.02)).activities, [])
 
 
 class TestBaselineStore(unittest.TestCase):
@@ -291,6 +319,15 @@ class TestRenderHtml(unittest.TestCase):
         page = render_html(build(rows, wake_min=390, sleep_history=[6.0]))
         self.assertIn("Sleep coach", page)
         self.assertIn("debt 2.00 h", page)
+
+    def test_activity_table_only_when_sessions_exist(self):
+        empty = render_html(build(stretch(0, 60, 100, accel=0.5)))
+        self.assertNotIn("<table>", empty)
+        self.assertIn("no 10-min run/walk/workout", empty)
+        page = render_html(build(run_day()))
+        self.assertIn("<table>", page)
+        self.assertIn("<td>run</td>", page)
+        self.assertIn("1 session(s)", page)
 
 
 if __name__ == "__main__":
