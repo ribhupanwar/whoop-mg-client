@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Settings — everything persists to UserDefaults through AppStore.
-/// The design-preview toggle defaults OFF: live mode shows em dashes only.
+/// The design-preview toggle defaults OFF: live mode never invents a value.
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
 

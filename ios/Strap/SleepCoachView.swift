@@ -48,7 +48,18 @@ struct SleepCoachView: View {
         .onAppear {
             if !seeded {
                 wakeMinutes = demo ? SampleData.demoWakeMinutes : store.settings.wakeTimeMinutes
+                intent = store.settings.sleepIntent
                 seeded = true
+            }
+        }
+        .onChange(of: wakeMinutes) { _, newValue in
+            if store.settings.wakeTimeMinutes != newValue {
+                store.settings.wakeTimeMinutes = newValue
+            }
+        }
+        .onChange(of: intent) { _, newValue in
+            if store.settings.sleepIntent != newValue {
+                store.settings.sleepIntent = newValue
             }
         }
     }

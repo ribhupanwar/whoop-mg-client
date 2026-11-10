@@ -125,6 +125,22 @@ enum LiveZones {
     }
 }
 
+// MARK: - Formatting
+
+enum ActivityFormat {
+    /// Minutes as h:mm, the same shape the dashboard uses for weekly zone time.
+    static func clock(minutes: Double) -> String {
+        let seconds = Int((minutes * 60).rounded())
+        return String(format: "%d:%02d", seconds / 3600, (seconds % 3600) / 60)
+    }
+
+    /// Milliseconds as a whole number with an optional unit.
+    static func whole(_ value: Double?, unit: String = "") -> String? {
+        guard let value else { return nil }
+        return String(format: "%.0f", value) + unit
+    }
+}
+
 // MARK: - Persistence
 
 /// UserDefaults-backed activity log. Manual entries and measured live

@@ -21,7 +21,8 @@ enum SleepIntent: String, Codable, CaseIterable, Identifiable {
 }
 
 /// One recorded night. `dateKey` is the wake-up morning (yyyy-MM-dd) so
-/// lexicographic sort == chronological sort. Filled by the future BLE chunk.
+/// lexicographic sort == chronological sort. Built by `AppStore.recordedNights`
+/// from the captured per-day metrics.
 struct RecordedNight: Equatable {
     let dateKey: String
     let neededHours: Double

@@ -20,16 +20,39 @@ struct PlanView: View {
 
     private var outlookBox: some View {
         CTABox {
-            Text(demo ? "Green — go hard if you planned it" : "Today: train on feel, not on a score")
+            Text(outlookTitle)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(Color.appFG)
-            Text(demo
-                 ? "Sample outlook: recovery above normal and sleep on target, so a threshold run or a heavy lift both fit today."
-                 : "No recovery score exists yet. Until the baseline fills, keep easy runs conversational and let the gym session follow how you actually feel.")
+            Text(outlookBody)
                 .font(.system(size: 12))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var outlookTitle: String {
+        if demo { return "Green — go hard if you planned it" }
+        guard let score = store.band.recovery.score else {
+            return "Today: train on feel, not on a score"
+        }
+        return "\(store.band.recovery.band.capitalized) · recovery \(Int(score.rounded()))"
+    }
+
+    private var outlookBody: String {
+        if demo {
+            return "Sample outlook: recovery above normal and sleep on target, so a threshold run or a heavy lift both fit today."
+        }
+        guard store.band.recovery.score != nil else {
+            return "No recovery score exists yet. Until the baseline fills, keep easy runs conversational and let the gym session follow how you actually feel."
+        }
+        switch store.band.recovery.band {
+        case "green":
+            return "Local recovery estimate from HRV, resting HR and last night's sleep against your own baseline — a planned hard session fits today."
+        case "yellow":
+            return "Local recovery estimate sits mid-range. Keep the hard work short; the easy day is doing its job."
+        default:
+            return "Local recovery estimate is below your normal. Make today easy — adaptation happens in recovery, not in another hard session."
         }
     }
 
@@ -80,7 +103,7 @@ struct PlanView: View {
                 Rectangle().fill(Color.appLine).frame(width: 26, height: 1)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(demo ? SampleData.planActualSleep : "—")
+                    Text(demo ? SampleData.planActualSleep : store.band.lastNightHours.map(CoachFormat.duration) ?? "—")
                         .font(.system(size: 21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("LAST NIGHT\nACTUAL")
@@ -91,7 +114,7 @@ struct PlanView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            Hint("Sleep need rises with training load. Once activity capture works, heavy days will push this target up automatically.")
+            Hint("The need comes from Settings. Last night's actual is the detector's sleep time from your most recent capture; debt and tomorrow's intent live in Sleep coach.")
         }
     }
 }

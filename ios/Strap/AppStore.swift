@@ -43,7 +43,8 @@ final class AppStore: ObservableObject {
         }
     }
 
-    /// Design preview toggle. OFF (default) == live mode: em dashes only.
+    /// Design preview toggle. OFF (default) == live mode: measured values where
+    /// a capture supports them, an em dash where it does not.
     var isPreview: Bool { settings.designPreview }
 
     var maxHeartRate: Double {
@@ -111,6 +112,42 @@ final class AppStore: ObservableObject {
             JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix)))
                 == dateKey
         }
+    }
+
+    // MARK: - Measured values shared by the health screens
+
+    var lastCapture: CaptureSummary? { band.summary }
+
+    /// Resting HR from the user's override, else the last measured quiet window.
+    var measuredRestingHR: Double? {
+        settings.restingHROverride ?? band.summary?.restingHeartRate
+    }
+
+    var recordedDayCount: Int { band.days.count }
+
+    var hasRecoveryBaseline: Bool {
+        (band.baseline?.days ?? 0) >= Recovery.minBaselineDays
+    }
+
+    /// Uth 2004 (15.3 × HRmax / HRrest). Only when a measured max HR override
+    /// exists — the age formula alone is too weak to publish as a number.
+    var vo2Estimate: Double? {
+        guard let maxHR = settings.maxHROverride, let resting = measuredRestingHR,
+              resting > 0, maxHR > resting else { return nil }
+        return 15.3 * maxHR / resting
+    }
+
+    /// Minutes in Z1–Z3 (low) or Z4–Z5 (high) over the last seven days of
+    /// measured live sessions. nil when no zone-timed session exists.
+    func weeklyZoneMinutes(high: Bool) -> Double? {
+        let cutoff = Int(Date().timeIntervalSince1970) - 7 * 86_400
+        let records = liveActivities.filter { $0.startedUnix >= cutoff && !$0.zoneSeconds.isEmpty }
+        guard !records.isEmpty else { return nil }
+        let seconds = records.reduce(0) { total, record in
+            let slice = high ? record.zoneSeconds.dropFirst(3) : record.zoneSeconds.prefix(3)
+            return total + slice.reduce(0, +)
+        }
+        return Double(seconds) / 60.0
     }
 
     private func persistSettings() {

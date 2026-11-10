@@ -36,7 +36,7 @@ struct TrainView: View {
 
     private func seedIfNeeded() {
         guard !seeded else { return }
-        let rhr = store.settings.restingHROverride ?? 72.0
+        let rhr = store.settings.restingHROverride ?? store.measuredRestingHR ?? 72.0
         let maxHR = store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)
         rhrText = String(format: "%.0f", rhr)
         maxText = String(format: "%.0f", maxHR)
@@ -72,7 +72,7 @@ struct TrainView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
             }
-            Hint("Max HR defaults to the age estimate 208 − 0.7 × age (age \(store.settings.age) → \(String(format: "%.0f", Karvonen.agePredictedMaxHR(age: store.settings.age))) bpm). An age formula is only a population guess — replace it with a max you have actually seen in a hard session. Overrides from Settings apply on first open.")
+            Hint("Resting HR seeds from your Settings override, else the band's last measured quiet window, else 72 bpm. Max HR defaults to the age estimate 208 − 0.7 × age (age \(store.settings.age) → \(String(format: "%.0f", Karvonen.agePredictedMaxHR(age: store.settings.age))) bpm). An age formula is only a population guess — replace it with a max you have actually seen in a hard session. Both fields recompute the zones live.")
         }
     }
 

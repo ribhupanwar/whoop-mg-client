@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 
 /// Health tab landing — an overview hub, matching the approved layout.
@@ -31,13 +32,15 @@ struct HealthHubView: View {
         Panel {
             CardHead(title: "Personal baseline",
                      trailing: demo ? "\(SampleData.baselineDaysDone)/\(SampleData.baselineDaysTarget)"
-                                    : "0/\(SampleData.baselineDaysTarget)")
+                                    : "\(min(store.recordedDayCount, SampleData.baselineDaysTarget))/\(SampleData.baselineDaysTarget)")
             MiniProgress(fraction: demo
                          ? Double(SampleData.baselineDaysDone) / Double(SampleData.baselineDaysTarget)
-                         : nil)
+                         : min(Double(store.recordedDayCount) / Double(SampleData.baselineDaysTarget), 1.0))
             Hint(demo
                  ? "Sample: \(SampleData.baselineDaysTarget - SampleData.baselineDaysDone) more days to unlock your personal baseline and recovery score."
-                 : "Waiting for your first capture. Recovery and range chips unlock after 7 recorded days.")
+                 : store.hasRecoveryBaseline
+                    ? "Baseline ready — recovery and stress compare today against your own \(store.recordedDayCount) recorded days."
+                    : "\(max(0, SampleData.baselineDaysTarget - store.recordedDayCount)) more recorded days unlock recovery and stress. Each history capture adds its days.")
         }
     }
 
@@ -54,13 +57,13 @@ struct HealthHubView: View {
                     Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
                 }
                 HStack(spacing: 6) {
-                    monitorCheck("HRV")
-                    monitorCheck("RHR")
-                    monitorCheck("HR")
-                    monitorCheck("STEPS")
+                    monitorCheck("HRV", present: demo || store.lastCapture?.hrv.rmssdMS != nil)
+                    monitorCheck("RHR", present: demo || store.measuredRestingHR != nil)
+                    monitorCheck("HR", present: demo || store.band.liveHeartRate != nil || store.lastCapture?.lastHeartRate != nil)
+                    monitorCheck("STEPS", present: demo || store.lastCapture?.steps != nil)
                 }
                 Text(demo ? "✓ 4/4 metrics within range · sample"
-                          : "needs a capture — tap to see what is measured")
+                          : monitorSummary)
                     .font(.system(size: 11.5))
                     .foregroundStyle(demo ? Color.appGood : Color.appMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -76,11 +79,24 @@ struct HealthHubView: View {
         .padding(.bottom, 11)
     }
 
-    private func monitorCheck(_ label: String) -> some View {
+    private var monitorSummary: String {
+        guard let summary = store.lastCapture else {
+            return "needs a capture — tap to see what is measured"
+        }
+        let parts = [
+            summary.hrv.rmssdMS.map { _ in "HRV" },
+            store.measuredRestingHR.map { _ in "RHR" },
+            summary.lastHeartRate.map { _ in "HR" },
+            summary.steps.map { _ in "steps" }
+        ].compactMap { $0 }
+        return "\(parts.count)/4 metrics from the last capture (\(summary.sampleCount) s)"
+    }
+
+    private func monitorCheck(_ label: String, present: Bool) -> some View {
         VStack(spacing: 5) {
-            Text(demo ? "✓" : "—")
+            Text(present ? "✓" : "—")
                 .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(demo ? Color.appGood : Color.appMuted)
+                .foregroundStyle(present ? Color.appGood : Color.appMuted)
                 .frame(width: 26, height: 26)
                 .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
             Text(label)
@@ -104,14 +120,15 @@ struct HealthHubView: View {
                 }
                 HStack(alignment: .bottom, spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("TODAY'S HIGH STRESS")
+                        Text("TODAY'S STRESS INDEX")
                             .font(.system(size: 9.5)).tracking(0.6)
                             .foregroundStyle(Color.appMuted)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text(demo ? SampleData.highStressToday : "—")
+                            Text(demo ? SampleData.highStressToday : stressText)
                                 .font(.system(size: 26, weight: .medium))
                                 .foregroundStyle(Color.appFG)
-                            Text("hrs").font(.system(size: 11)).foregroundStyle(Color.appMuted)
+                            Text(demo ? "hrs" : "SD")
+                                .font(.system(size: 11)).foregroundStyle(Color.appMuted)
                         }
                     }
                     Spacer()
@@ -122,7 +139,7 @@ struct HealthHubView: View {
                     }
                 }
                 if !demo {
-                    Text("Unlocks after a 7-day awake baseline.")
+                    Text(stressDetail)
                         .font(.system(size: 11)).foregroundStyle(Color.appMuted)
                 }
             }
@@ -133,6 +150,16 @@ struct HealthHubView: View {
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
+    }
+
+    private var stressText: String {
+        guard let index = store.band.stress.index else { return "—" }
+        return String(format: "%.1f", index)
+    }
+
+    private var stressDetail: String {
+        if let reason = store.band.stress.reason { return reason }
+        return "\(store.band.stress.band) — SD of lnRMSSD below your awake norm."
     }
 
     // MARK: Honest limitations

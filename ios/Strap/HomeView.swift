@@ -83,7 +83,7 @@ struct HomeView: View {
             Spacer()
 
             HStack(spacing: 5) {
-                Text(demo ? "\(SampleData.batteryPercent)%" : "—")
+                Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                 Image(systemName: "battery.100")
@@ -121,8 +121,8 @@ struct HomeView: View {
                 NavigationLink(value: Route.sleepAnalysis) {
                     trioItem(
                         label: "SLEEP ›",
-                        text: demo ? "\(SampleData.sleepRingPercent)%" : "—",
-                        progress: demo ? Double(SampleData.sleepRingPercent) / 100.0 : nil,
+                        text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
+                        progress: demo ? Double(SampleData.sleepRingPercent) / 100.0 : sleepPercent.map { Double($0) / 100.0 },
                         color: .appSleep
                     )
                 }
@@ -130,22 +130,54 @@ struct HomeView: View {
 
                 trioItem(
                     label: "RECOVERY ›",
-                    text: demo ? "\(SampleData.recoveryRingPercent)%" : "—",
-                    progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : nil,
+                    text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
+                    progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
                     color: .appGood
                 )
                 trioItem(
                     label: "STRAIN ›",
-                    text: demo ? String(format: "%.1f", SampleData.strain) : "—",
-                    progress: demo ? SampleData.strain / 21.0 : nil,
+                    text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
+                    progress: demo ? SampleData.strain / 21.0 : strain.map { $0 / 21.0 },
                     color: .appAccent
                 )
             }
             if !demo {
-                Hint("Sleep needs an overnight capture; recovery needs a 7-day baseline; strain needs a measured max HR and a full day of wear.")
+                Hint(trioHint)
             }
         }
         .padding(.bottom, 12)
+    }
+
+    private func percentText(_ value: Int?) -> String {
+        guard let value else { return "—" }
+        return "\(value)%"
+    }
+
+    private var trioHint: String {
+        if sleepPercent == nil && recoveryScore == nil && strain == nil {
+            return "Sleep needs an overnight capture; recovery needs a 7-day baseline; strain needs a measured max HR and a full day of wear."
+        }
+        var parts: [String] = []
+        if sleepPercent == nil { parts.append("sleep needs an overnight capture") }
+        if recoveryScore == nil { parts.append(store.band.recovery.reason ?? "recovery needs a baseline") }
+        if strain == nil { parts.append("strain needs a max HR override") }
+        return parts.joined(separator: " · ")
+    }
+
+    private var sleepPercent: Int? {
+        guard let hours = store.band.lastNightHours else { return nil }
+        let need = store.settings.sleepNeedHours
+        guard need > 0 else { return nil }
+        return Int((min(hours / need, 1.0) * 100).rounded())
+    }
+
+    private var recoveryScore: Double? { store.band.recovery.score }
+
+    private var strain: Double? { store.lastCapture?.strain }
+
+    private var batteryText: String {
+        guard let battery = store.band.batteryPercent else { return "—" }
+        return "\(battery)%"
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
@@ -165,12 +197,12 @@ struct HomeView: View {
         Panel {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(demo ? "Elevated HRV" : "Waiting for first capture")
+                    Text(demo ? "Elevated HRV" : insightTitle)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(demo
                          ? "Sample: your HRV is 6% above your usual, which signals strong recovery. A planned threshold run or heavy lift both fit today."
-                         : "Strap reads your band locally. Sleep, recovery and HRV insights appear once overnight and daytime captures exist — nothing is estimated until then.")
+                         : insightBody)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
                         .lineSpacing(3)
@@ -185,12 +217,37 @@ struct HomeView: View {
                         .frame(width: 26, height: 26)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
-                    Text(demo ? "1" : "0")
+                    Text(demo ? "1" : "\(store.recordedDayCount)")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.appMuted)
                 }
             }
         }
+    }
+
+    private var insightTitle: String {
+        if let score = store.band.recovery.score {
+            return "Recovery \(Int(score.rounded())) · \(store.band.recovery.band)"
+        }
+        if let summary = store.lastCapture {
+            return "Capture stored · \(summary.sampleCount) s"
+        }
+        return "Waiting for first capture"
+    }
+
+    private var insightBody: String {
+        if let reason = store.band.recovery.reason {
+            return "\(reason). Each history capture adds its own days; baselines need a week of them."
+        }
+        if let sleep = store.band.lastSleepAnalysis {
+            return "Last night: \(CoachFormat.duration(sleep.hours)) of sleep, \(Int(sleep.hoursVsNeededPct.rounded()))% of need. \(sleep.wakeEvents) movement bursts ended inside it."
+        }
+        if let summary = store.lastCapture {
+            let hrv = summary.hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "no steady R-R window"
+            let rhr = summary.restingHeartRate.map { String(format: "%.0f bpm", $0) } ?? "RHR unavailable"
+            return "Last capture: \(summary.sampleCount) s · \(rhr) · HRV \(hrv). Long enough for a baseline day."
+        }
+        return "Strap reads your band locally. Sleep, recovery and HRV insights appear once overnight and daytime captures exist — nothing is estimated until then."
     }
 
     // MARK: Monitor duo
@@ -200,11 +257,11 @@ struct HomeView: View {
             NavigationLink(value: Route.health) {
                 tapCard(
                     title: "Health monitor",
-                    pill: demo ? "✓" : "—",
-                    pillColor: demo ? .appGood : .appWarn,
-                    state: demo ? "WITHIN RANGE" : "WAITING",
-                    stateColor: demo ? .appGood : .appWarn,
-                    detail: demo ? "4/4 metrics · sample" : "needs a capture"
+                    pill: demo ? "✓" : healthPill,
+                    pillColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
+                    state: demo ? "WITHIN RANGE" : (healthCount > 0 ? "CAPTURED" : "WAITING"),
+                    stateColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
+                    detail: demo ? "4/4 metrics · sample" : healthDetail
                 )
             }
             .buttonStyle(.plain)
@@ -212,16 +269,43 @@ struct HomeView: View {
             NavigationLink(value: Route.stress) {
                 tapCard(
                     title: "Stress monitor",
-                    pill: demo ? String(format: "%.1f", SampleData.stressHome) : "—",
+                    pill: demo ? String(format: "%.1f", SampleData.stressHome) : stressPill,
                     pillColor: demo ? .appAccent : .appMuted,
-                    state: demo ? "LOW" : "NO BASELINE",
+                    state: demo ? "LOW" : store.band.stress.band.uppercased(),
                     stateColor: demo ? .appAccent : .appWarn,
-                    detail: demo ? "11:49 · sample" : "unlocks day 7"
+                    detail: demo ? "11:49 · sample" : stressDetail
                 )
             }
             .buttonStyle(.plain)
         }
         .padding(.bottom, 14)
+    }
+
+    private var healthCount: Int {
+        guard let summary = store.lastCapture else { return 0 }
+        let flags = [
+            summary.hrv.rmssdMS != nil,
+            store.measuredRestingHR != nil,
+            summary.lastHeartRate != nil,
+            summary.steps != nil
+        ]
+        return flags.filter { $0 }.count
+    }
+
+    private var healthPill: String { "\(healthCount)/4" }
+
+    private var healthDetail: String {
+        guard let summary = store.lastCapture else { return "needs a capture" }
+        return "last capture · \(summary.sampleCount) s"
+    }
+
+    private var stressPill: String {
+        guard let index = store.band.stress.index else { return "—" }
+        return String(format: "%.1f", index)
+    }
+
+    private var stressDetail: String {
+        store.band.stress.reason ?? "awake baseline · \(store.recordedDayCount)/7 days"
     }
 
     private func tapCard(title: String, pill: String, pillColor: Color, state: String, stateColor: Color, detail: String) -> some View {
@@ -300,7 +384,7 @@ struct HomeView: View {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
                         Image(systemName: "moon.fill").font(.system(size: 12))
-                        Text(demo ? SampleData.lastNightSleep : "—")
+                        Text(demo ? SampleData.lastNightSleep : lastNightText)
                             .font(.system(size: 14, weight: .medium))
                     }
                     .foregroundStyle(Color(hex: 0x0D1219))
@@ -313,7 +397,7 @@ struct HomeView: View {
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text(demo ? "00:26\n07:33" : "wear it\ntonight")
+                    Text(demo ? "00:26\n07:33" : sleepTimesText)
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
@@ -481,7 +565,7 @@ struct HomeView: View {
 
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(demo ? SampleData.bedtime : "—")
+                    Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
                         .font(.system(size: 21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("RECOMMENDED\nBEDTIME")
@@ -494,7 +578,7 @@ struct HomeView: View {
                 Rectangle().fill(Color.appLine).frame(width: 26, height: 1)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(demo ? SampleData.latestAlarm : "—")
+                    Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
                         .font(.system(size: 21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("LATEST\nALARM")
@@ -506,8 +590,34 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            Hint("Bedtime is worked back from your wake time, your sleep need and accumulated sleep debt. Open the coach to set a wake time; debt starts counting from tonight's capture.")
+            Hint("Bedtime is worked back from your wake time, sleep need, tomorrow's intent and accumulated sleep debt. Open the coach to change the wake time or intent; debt starts counting from your first recorded night.")
         }
+    }
+
+    private var bedtimeRecommendation: SleepRecommendation {
+        SleepCoach.recommendation(
+            baseNeedHours: store.settings.sleepNeedHours,
+            intent: store.settings.sleepIntent,
+            debtHours: SleepCoach.sleepDebt(nights: store.recordedNights),
+            wakeMinutes: store.settings.wakeTimeMinutes
+        )
+    }
+
+    private var lastNightText: String {
+        guard let hours = store.band.lastNightHours else { return "—" }
+        return CoachFormat.duration(hours)
+    }
+
+    private var sleepTimesText: String {
+        guard let period = store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+        else { return "wear it\ntonight" }
+        return "\(Self.hourMinute(period.startUnix))\n\(Self.hourMinute(period.endUnix))"
+    }
+
+    private static func hourMinute(_ unix: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     // MARK: Journal
@@ -598,10 +708,13 @@ struct HomeView: View {
 
     private var subtitle: String {
         if dayOffset != 0 {
-            return "No capture for this day yet"
+            return "Past day · activities only"
         }
         let date = Self.longDateFormatter.string(from: shiftedDate)
-        return demo ? "\(date) · design preview" : "\(date) · waiting for first capture"
+        if demo { return "\(date) · design preview" }
+        return store.lastCapture == nil
+            ? "\(date) · waiting for first capture"
+            : "\(date) · latest capture loaded"
     }
 
     private static let shortDayFormatter: DateFormatter = {

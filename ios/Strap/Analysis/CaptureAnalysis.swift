@@ -21,6 +21,11 @@ struct CaptureSummary: Codable, Equatable {
     let spo2: Spo2Summary
     let sleepPeriods: [SleepPeriod]
     let activities: [ActivitySession]
+    /// Awake 5-minute stress share against the awake baseline. nil when the
+    /// capture predates the baseline or the field (older persisted summary).
+    let awakeStress: StressSplit?
+    /// Same, with detected workout windows removed.
+    let outsideWorkoutStress: StressSplit?
     let skinTempMean: Double?
     let skinTempMin: Double?
     let skinTempMax: Double?
@@ -36,14 +41,16 @@ struct CaptureSummary: Codable, Equatable {
         hrv: .empty, hrvWindowSeconds: 0,
         respiration: RespRate(breathsPerMinute: nil, reason: nil, beats: 0, windows: 0),
         spo2: Spo2Summary(pct: nil, readings: 0, saturated: 0, diagnostic: 0, reason: nil),
-        sleepPeriods: [], activities: [], skinTempMean: nil, skinTempMin: nil,
+        sleepPeriods: [], activities: [], awakeStress: nil, outsideWorkoutStress: nil,
+        skinTempMean: nil, skinTempMin: nil,
         skinTempMax: nil, motionMeanG: nil, steps: nil, strain: nil
     )
 
     static func make(
         samples: [V18Sample],
         sex: Sex,
-        maxHR: Double?
+        maxHR: Double?,
+        awakeBaseline: Baseline? = nil
     ) -> CaptureSummary {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return .empty }
@@ -74,6 +81,11 @@ struct CaptureSummary: Codable, Equatable {
             steps = (last - first) & 0xFFFF
         }
 
+        let periods = SleepDetect.detect(ordered)
+        let activities = ActivityDetect.detect(ordered)
+        let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
+        let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
+
         return CaptureSummary(
             sampleCount: ordered.count,
             wearingCount: wearing.count,
@@ -90,8 +102,14 @@ struct CaptureSummary: Codable, Equatable {
             hrvWindowSeconds: restingWindow.windowSeconds,
             respiration: Respiration.estimate(ordered),
             spo2: Recovery.spo2Summary(ordered),
-            sleepPeriods: SleepDetect.detect(ordered),
-            activities: ActivityDetect.detect(ordered),
+            sleepPeriods: periods,
+            activities: activities,
+            awakeStress: StressWindows.share(
+                samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
+            ),
+            outsideWorkoutStress: StressWindows.share(
+                samples: ordered, baseline: awakeBaseline, excluded: workoutWindows
+            ),
             skinTempMean: skinTemps.isEmpty ? nil : Stats.mean(skinTemps),
             skinTempMin: skinTemps.min(),
             skinTempMax: skinTemps.max(),

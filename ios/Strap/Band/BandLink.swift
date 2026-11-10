@@ -477,7 +477,9 @@ final class BandLink: NSObject, ObservableObject {
             lastMessage = "No history came back this drain. Wear the strap, keep phone Bluetooth off the band, and retry."
             return
         }
-        let fresh = CaptureSummary.make(samples: samples, sex: sex, maxHR: maxHR)
+        let fresh = CaptureSummary.make(
+            samples: samples, sex: sex, maxHR: maxHR, awakeBaseline: awakeBaseline
+        )
         summary = fresh
         persist(fresh)
         merge(DailyAnalysis.metrics(from: samples, sex: sex, maxHR: maxHR))

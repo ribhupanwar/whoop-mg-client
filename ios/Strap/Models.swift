@@ -19,7 +19,7 @@ enum Sex: String, Codable, CaseIterable, Identifiable {
 }
 
 /// Persisted user settings. Defaults match the spec: age 30, sleep need 8 h,
-/// wake 07:00, design preview OFF (live mode shows em dashes, never guesses).
+/// wake 07:00, design preview OFF (live mode never invents a value).
 struct AppSettings: Codable, Equatable {
     var age: Int = 30
     var sex: Sex = .unspecified
@@ -27,7 +27,29 @@ struct AppSettings: Codable, Equatable {
     var maxHROverride: Double? = nil
     var sleepNeedHours: Double = 8.0
     var wakeTimeMinutes: Int = 7 * 60
+    var sleepIntent: SleepIntent = .easy
     var designPreview: Bool = false
+
+    enum CodingKeys: String, CodingKey {
+        case age, sex, restingHROverride, maxHROverride
+        case sleepNeedHours, wakeTimeMinutes, sleepIntent, designPreview
+    }
+
+    init() {}
+
+    /// Field-by-field so settings saved before a new key existed still load
+    /// instead of falling back to every default.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        age = try container.decodeIfPresent(Int.self, forKey: .age) ?? 30
+        sex = try container.decodeIfPresent(Sex.self, forKey: .sex) ?? .unspecified
+        restingHROverride = try container.decodeIfPresent(Double.self, forKey: .restingHROverride)
+        maxHROverride = try container.decodeIfPresent(Double.self, forKey: .maxHROverride)
+        sleepNeedHours = try container.decodeIfPresent(Double.self, forKey: .sleepNeedHours) ?? 8.0
+        wakeTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .wakeTimeMinutes) ?? 7 * 60
+        sleepIntent = try container.decodeIfPresent(SleepIntent.self, forKey: .sleepIntent) ?? .easy
+        designPreview = try container.decodeIfPresent(Bool.self, forKey: .designPreview) ?? false
+    }
 }
 
 // MARK: - Journal (self-report only; the band sends no journal data)

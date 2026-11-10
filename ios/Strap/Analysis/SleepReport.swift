@@ -67,9 +67,9 @@ enum SleepReport {
         samples: [V18Sample],
         periods: [SleepPeriod],
         baseline: Baseline?
-    ) -> SleepStressSplit {
+    ) -> StressSplit {
         guard let baseline, baseline.days >= Recovery.minBaselineDays else {
-            return SleepStressSplit(
+            return StressSplit(
                 highPct: nil, mediumPct: nil, lowPct: nil, windows: 0,
                 reason: "needs at least \(Recovery.minBaselineDays) sleep nights of baseline"
             )
@@ -107,13 +107,13 @@ enum SleepReport {
             }
         }
         guard scored > 0 else {
-            return SleepStressSplit(
+            return StressSplit(
                 highPct: nil, mediumPct: nil, lowPct: nil, windows: 0,
                 reason: "no R-R beats in the sleep windows"
             )
         }
         let total = Double(scored)
-        return SleepStressSplit(
+        return StressSplit(
             highPct: Stats.rounded(100.0 * Double(high) / total, 1),
             mediumPct: Stats.rounded(100.0 * Double(medium) / total, 1),
             lowPct: Stats.rounded(100.0 * Double(low) / total, 1),

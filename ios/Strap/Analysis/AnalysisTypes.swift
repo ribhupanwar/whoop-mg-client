@@ -88,14 +88,14 @@ struct NightSpan: Codable, Equatable {
     let endUnix: Int
 }
 
-struct SleepStressSplit: Codable, Equatable {
+struct StressSplit: Codable, Equatable {
     let highPct: Double?
     let mediumPct: Double?
     let lowPct: Double?
     let windows: Int
     let reason: String?
 
-    static let unavailable = SleepStressSplit(
+    static let unavailable = StressSplit(
         highPct: nil, mediumPct: nil, lowPct: nil, windows: 0,
         reason: "no sleep-stress windows scored"
     )
@@ -109,7 +109,7 @@ struct SleepAnalysis: Codable, Equatable {
     let wakeEvents: Int
     let consistencyPct: Double?
     let consistencyNights: Int
-    let stress: SleepStressSplit
+    let stress: StressSplit
     let performancePct: Double?
 }
 

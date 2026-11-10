@@ -50,19 +50,24 @@ struct DashboardView: View {
             SectionTitle("Baseline progress")
             HStack(spacing: 5) {
                 ForEach(1...7, id: \.self) { day in
+                    let filled = day <= filledDays
                     Text("\(day)")
                         .font(.system(size: 11))
-                        .foregroundStyle(day == 1 && demo ? Color(hex: 0x08130C) : Color.appMuted)
+                        .foregroundStyle(filled ? Color(hex: 0x08130C) : Color.appMuted)
                         .frame(width: 30, height: 30)
-                        .background(RoundedRectangle(cornerRadius: 9).fill(day == 1 && demo ? Color.appGood : Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(day == 1 && demo ? Color.appGood : Color.appLine, lineWidth: 1))
+                        .background(RoundedRectangle(cornerRadius: 9).fill(filled ? Color.appGood : Color.appRaised))
+                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(filled ? Color.appGood : Color.appLine, lineWidth: 1))
                 }
             }
             .frame(maxWidth: .infinity)
             .padding(.vertical, 8)
 
-            Hint("The small number under each metric is your comparison value. It stays absent until there is history to compare against — that is the whole point of a personal baseline.")
+            Hint("\(filledDays)/7 scored days. The small number under each metric is your comparison value — it stays absent until there is history to compare against, which is the whole point of a personal baseline.")
         }
         .padding(.top, 12)
+    }
+
+    private var filledDays: Int {
+        demo ? 1 : min(store.recordedDayCount, 7)
     }
 }
