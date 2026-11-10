@@ -88,6 +88,69 @@ struct NightSpan: Codable, Equatable {
     let endUnix: Int
 }
 
+/// A four-class estimate. Never a PSG reading and never presented as one.
+enum SleepStage: String, Codable, CaseIterable, Identifiable {
+    case wake, light, deep, rem
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .wake: return "Awake"
+        case .light: return "Light"
+        case .deep: return "Deep"
+        case .rem: return "REM"
+        }
+    }
+}
+
+/// A staged span. The end is EXCLUSIVE, unlike SleepPeriod's inclusive end, so
+/// consecutive segments tile the window without an off-by-one gap.
+struct SleepStageSegment: Codable, Equatable, Identifiable {
+    let startUnix: Int
+    let endUnix: Int
+    let stage: SleepStage
+
+    var id: Int { startUnix }
+    var durationS: Int { endUnix - startUnix }
+    var minutes: Double { Double(durationS) / 60.0 }
+}
+
+/// One window's staged hypnogram plus the per-stage totals the UI shows. A
+/// `reason` with empty segments means the data could not support staging —
+/// that is a refusal, not an all-light night.
+struct SleepStaging: Codable, Equatable {
+    let segments: [SleepStageSegment]
+    let deepMinutes: Double
+    let lightMinutes: Double
+    let remMinutes: Double
+    let wakeMinutes: Double
+    let epochs: Int
+    let hrCoverage: Double
+    let reason: String?
+
+    static let unavailable = SleepStaging(
+        segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
+        wakeMinutes: 0, epochs: 0, hrCoverage: 0,
+        reason: "no sleep window to stage"
+    )
+
+    var asleepMinutes: Double { deepMinutes + lightMinutes + remMinutes }
+    var restorativeMinutes: Double { deepMinutes + remMinutes }
+    var totalMinutes: Double { asleepMinutes + wakeMinutes }
+
+    func minutes(for stage: SleepStage) -> Double {
+        switch stage {
+        case .wake: return wakeMinutes
+        case .light: return lightMinutes
+        case .deep: return deepMinutes
+        case .rem: return remMinutes
+        }
+    }
+
+    var stageable: Bool { reason == nil && !segments.isEmpty }
+}
+
 struct StressSplit: Codable, Equatable {
     let highPct: Double?
     let mediumPct: Double?

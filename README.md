@@ -26,8 +26,10 @@ No capture files, device identifiers or third-party source are committed;
   daytime and sleep stress shares, respiration (RSA), the band's unvalidated
   SpO₂ candidate, skin temperature, steps and detected sleep periods.
 - Sleep analysis (duration, quiet-vs-movement efficiency, consistency,
-  sleep stress) and a bedtime coach built on the Kitamura 2016 sleep-debt
-  model.
+  sleep stress), a four-class hypnogram estimate (awake/light/deep/REM from
+  30 s epochs of HR, its variability, wrist movement and R-R breathing
+  regularity, smoothed with an HMM and refused below 50 % HR coverage), and a
+  bedtime coach built on the Kitamura 2016 sleep-debt model.
 - Manual activity logging (sets × reps × load for lifts, minutes for cardio)
   and measured live sessions with zone-time allocation.
 - Automatic run/walk/workout sessions: gait, step rate or a sustained HR rise
@@ -49,8 +51,9 @@ No capture files, device identifiers or third-party source are committed;
   and nothing is read back; HealthKit needs the capability in the signing
   profile.
 - Honest gaps: anything the data cannot support shows an em dash with the
-  reason, never a guess. Light/deep/REM staging, WHOOP Recovery/Strain/Sleep
-  and a validated SpO₂ are deliberately absent.
+  reason, never a guess. The hypnogram is an approximation, not PSG-validated
+  staging; the band's own sleep-state byte is never named. WHOOP's
+  Recovery/Strain/Sleep scores and a validated SpO₂ remain deliberately absent.
 
 ## Protocol facts used
 

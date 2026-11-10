@@ -2,7 +2,7 @@ import SwiftUI
 
 /// Sleep Analysis — every live value below comes from the last stored capture:
 /// the detector's sleep periods, the capture HR series and the recorded nights.
-/// Quiet-vs-movement only: no light/deep/REM staging.
+/// The hypnogram is a labelled four-class estimate, never a PSG reading.
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
 
@@ -30,7 +30,7 @@ struct SleepAnalysisView: View {
                 performancePanel
                 componentsPanel
                 lastNightPanel
-                stagingNote
+                stagingPanel
                 needPanel
                 consistencyPanel
                 stressDetailPanel
@@ -279,19 +279,100 @@ struct SleepAnalysisView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    // MARK: Staging disclaimer
+    // MARK: Sleep stages
 
-    private var stagingNote: some View {
-        Text("Light/deep/REM staging is not implemented — it needs a validated model; we report quiet-vs-movement only. Restorative sleep (deep + REM) is therefore absent too.")
-            .font(.system(size: 11.5))
-            .foregroundStyle(Color.appFG)
-            .lineSpacing(3)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appWarn.opacity(0.6), lineWidth: 1))
-            .padding(.bottom, 11)
+    private var staging: SleepStaging? {
+        demo ? nil : store.band.summary?.sleepStaging
+    }
+
+    private var demoStageMinutes: [SleepStage: Double] {
+        [.deep: 75, .light: 190, .rem: 84, .wake: 67]
+    }
+
+    private var stagingPanel: some View {
+        Panel {
+            CardHead(title: "Sleep stages", trailing: stagingTrailing)
+            if demo {
+                SplitBar(segments: splitSegments(demoStageMinutes))
+                    .padding(.bottom, 10)
+                stageValues(demoStageMinutes)
+                Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
+            } else if let staging, staging.stageable {
+                SplitBar(segments: segments(for: staging))
+                    .padding(.bottom, 10)
+                stageValues(stagingMinutes(staging))
+                if let first = staging.segments.first, let last = staging.segments.last {
+                    HStack(alignment: .top, spacing: 8) {
+                        StageHypnogram(
+                            segments: staging.segments,
+                            startUnix: first.startUnix,
+                            endUnix: last.endUnix
+                        )
+                    }
+                    .padding(.vertical, 12)
+                }
+                Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
+            } else if let staging, let reason = staging.reason {
+                EmptyState(title: "Stages unavailable", detail: reason)
+            } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
+                EmptyState(
+                    title: "not staged yet",
+                    detail: "This saved capture predates staging. Drain the band again to stage its sleep window."
+                )
+            } else {
+                EmptyState(
+                    title: "needs an overnight capture",
+                    detail: "Stages appear once a capture covers a detected sleep window long enough to score."
+                )
+            }
+        }
+    }
+
+    private var stagingTrailing: String {
+        if demo { return "sample" }
+        guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
+        let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
+        return String(format: "%.0f%% restorative", pct)
+    }
+
+    private func stagingMinutes(_ staging: SleepStaging) -> [SleepStage: Double] {
+        [
+            .deep: staging.deepMinutes,
+            .light: staging.lightMinutes,
+            .rem: staging.remMinutes,
+            .wake: staging.wakeMinutes
+        ]
+    }
+
+    private func segments(for staging: SleepStaging) -> [SplitBar.Segment] {
+        splitSegments(stagingMinutes(staging))
+    }
+
+    private func splitSegments(_ minutes: [SleepStage: Double]) -> [SplitBar.Segment] {
+        let total = max(1, minutes.values.reduce(0, +))
+        return [SleepStage.deep, .light, .rem, .wake].map { stage in
+            SplitBar.Segment(
+                fraction: (minutes[stage] ?? 0) / total,
+                color: stage.color
+            )
+        }
+    }
+
+    private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
+        HStack(spacing: 8) {
+            ForEach([SleepStage.deep, .light, .rem, .wake]) { stage in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(CoachFormat.duration((minutes[stage] ?? 0) / 60.0))
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(stage.color)
+                    Text(stage.title.lowercased())
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(.bottom, 4)
     }
 
     // MARK: Hours vs. needed detail
@@ -503,7 +584,7 @@ struct SleepAnalysisView: View {
                                     labels: SampleData.weekDays, maxValue: 100, height: 110)
                     ChartLegend(items: [("low", .appGood), ("medium", .appWarn), ("high", .appHigh)])
                 }
-                Hint("Restorative sleep (deep + REM) is not charted — staging needs a validated model we don't have. Every series here comes from our own local rules.")
+                Hint("Every series here comes from our own local rules. The stage estimate above is a 30-second approximation, not a PSG reading.")
             } else if nights.count >= 2 {
                 trendBlock("Hours vs. needed", "% of need") {
                     BarChart(
@@ -522,7 +603,7 @@ struct SleepAnalysisView: View {
                         color: .appWarn, height: 100
                     )
                 }
-                Hint("Both charts come from your recorded nights: hours vs. need, and the capped running shortfall our coach uses. Staging stays absent.")
+                Hint("Both charts come from your recorded nights: hours vs. need, and the capped running shortfall our coach uses. The night's stage estimate and hypnogram sit above.")
             } else {
                 EmptyState(title: "needs more nights",
                            detail: "The trends fill in as overnight captures accumulate; nothing is back-filled with guesses.")
@@ -588,5 +669,60 @@ struct SleepAnalysisView: View {
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
         }
         .buttonStyle(.plain)
+    }
+}
+
+private extension SleepStage {
+    var color: Color {
+        switch self {
+        case .wake: return .appWarn
+        case .light: return .appAccent
+        case .deep: return .appSleep
+        case .rem: return .appGood
+        }
+    }
+}
+
+/// A compact four-row hypnogram. Rows are fixed (wake, REM, light, deep) so
+/// the eye reads depth top-to-bottom; every bar is one staged segment.
+private struct StageHypnogram: View {
+    let segments: [SleepStageSegment]
+    let startUnix: Int
+    let endUnix: Int
+
+    private let rows: [SleepStage] = [.wake, .rem, .light, .deep]
+    private let rowHeight: CGFloat = 18
+    private let barHeight: CGFloat = 7
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .trailing, spacing: 0) {
+                ForEach(rows) { stage in
+                    Text(stage.title)
+                        .font(.system(size: 8.5))
+                        .foregroundStyle(Color.appMuted)
+                        .frame(height: rowHeight, alignment: .center)
+                }
+            }
+            GeometryReader { geometry in
+                let span = CGFloat(max(1, endUnix - startUnix))
+                ZStack(alignment: .topLeading) {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.appRaised)
+                    ForEach(segments) { segment in
+                        let x = CGFloat(segment.startUnix - startUnix) / span * geometry.size.width
+                        let width = max(1.5, CGFloat(segment.durationS) / span * geometry.size.width)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(segment.stage.color)
+                            .frame(width: width, height: barHeight)
+                            .offset(
+                                x: x,
+                                y: CGFloat(rows.firstIndex(of: segment.stage) ?? 0) * rowHeight
+                                    + (rowHeight - barHeight) / 2
+                            )
+                    }
+                }
+            }
+            .frame(height: rowHeight * CGFloat(rows.count))
+        }
     }
 }

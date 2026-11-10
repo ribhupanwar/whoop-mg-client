@@ -46,6 +46,7 @@ from whoop.metrics import (
     trimp,
 )
 from whoop.sleep_analysis import SleepAnalysis, analyze_sleep, sleep_consistency
+from whoop.sleep_stage import SleepStaging, stage_sleep
 
 DISCLAIMER = (
     "Local estimates from published physiology (Malik 1996 HRV, Banister TRIMP, "
@@ -76,6 +77,7 @@ class Report:
     coach: SleepCoach
     activities: list[ActivitySession]
     sleep_analysis: SleepAnalysis | None
+    sleep_staging: list[SleepStaging]
     resp_rate: RespRate
     spo2: Spo2Candidate
 
@@ -142,6 +144,7 @@ def build_report(
         analyze_sleep(ordered, periods, coach.need_h, sleep_nights or [], sleep_baseline)
         if periods else None
     )
+    staging = [stage_sleep(ordered, period) for period in periods]
     resp_rate = resp_rate_from_rr(ordered)
     spo2 = spo2_candidate_summary(ordered)
 
@@ -171,6 +174,7 @@ def build_report(
         coach=coach,
         activities=activities,
         sleep_analysis=analysis,
+        sleep_staging=staging,
         resp_rate=resp_rate,
         spo2=spo2,
     )
@@ -386,13 +390,23 @@ def print_report(report: Report) -> None:
         )
     else:
         print("  Sleep      : —  (no sleep period detected; needs an overnight capture)")
-    for period in report.sleep_periods:
+    for period, staging in zip(report.sleep_periods, report.sleep_staging):
         start = datetime.fromtimestamp(period.start_unix, timezone.utc).strftime("%H:%M")
         print(
             f"               {start}  {period.hours:.2f} h"
             f"  continuity {period.quiet_fraction * 100:.0f}%"
             f"  mean HR {_fmt(period.mean_hr, ' bpm')}"
         )
+        if staging.reason:
+            print(f"               stages     : —  ({staging.reason})")
+        else:
+            print(
+                f"               stages(est): deep {staging.deep_min / 60:.1f} h"
+                f" · light {staging.light_min / 60:.1f} h"
+                f" · REM {staging.rem_min / 60:.1f} h"
+                f" · wake {staging.wake_min / 60:.1f} h"
+                f"  ({staging.hr_coverage * 100:.0f}% HR coverage; not PSG-validated)"
+            )
     analysis = report.sleep_analysis
     if analysis is not None:
         print(

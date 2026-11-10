@@ -20,6 +20,10 @@ struct CaptureSummary: Codable, Equatable {
     let respiration: RespRate
     let spo2: Spo2Summary
     let sleepPeriods: [SleepPeriod]
+    /// Four-class estimate for the most recent detected period. Nil on
+    /// captures stored before staging existed; a refusal arrives as a reason,
+    /// not as fabricated light sleep.
+    let sleepStaging: SleepStaging?
     let activities: [ActivitySession]
     /// Awake 5-minute stress share against the awake baseline. nil when the
     /// capture predates the baseline or the field (older persisted summary).
@@ -41,7 +45,7 @@ struct CaptureSummary: Codable, Equatable {
         hrv: .empty, hrvWindowSeconds: 0,
         respiration: RespRate(breathsPerMinute: nil, reason: nil, beats: 0, windows: 0),
         spo2: Spo2Summary(pct: nil, readings: 0, saturated: 0, diagnostic: 0, reason: nil),
-        sleepPeriods: [], activities: [], awakeStress: nil, outsideWorkoutStress: nil,
+        sleepPeriods: [], sleepStaging: nil, activities: [], awakeStress: nil, outsideWorkoutStress: nil,
         skinTempMean: nil, skinTempMin: nil,
         skinTempMax: nil, motionMeanG: nil, steps: nil, strain: nil
     )
@@ -78,6 +82,9 @@ struct CaptureSummary: Codable, Equatable {
         let steps = StepCounter.total(ordered)
 
         let periods = SleepDetect.detect(ordered)
+        let staging = periods.last.map {
+            SleepStager.stage(samples: ordered, period: $0)
+        }
         let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
         let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
@@ -99,6 +106,7 @@ struct CaptureSummary: Codable, Equatable {
             respiration: Respiration.estimate(ordered),
             spo2: Recovery.spo2Summary(ordered),
             sleepPeriods: periods,
+            sleepStaging: staging,
             activities: activities,
             awakeStress: StressWindows.share(
                 samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
