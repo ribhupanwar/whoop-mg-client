@@ -12,6 +12,7 @@ struct SettingsView: View {
                 strapPanel
                 overridesPanel
                 sleepPanel
+                healthPanel
                 previewPanel
                 aboutPanel
             }
@@ -215,6 +216,34 @@ struct SettingsView: View {
         )
     }
 
+    // MARK: Apple Health
+
+    private var healthPanel: some View {
+        Panel {
+            SectionTitle("Apple Health")
+            Toggle("Export measured sessions", isOn: Binding(
+                get: { store.settings.healthKitEnabled },
+                set: { store.setHealthKit($0) }
+            ))
+            .font(.system(size: 12))
+            .tint(.appAccent)
+            Text(store.healthKitStatus)
+                .font(.system(size: 11))
+                .foregroundStyle(healthStatusColor)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 2)
+            Hint("Writes band-detected and live sessions as workouts with their real start, end and step count. No estimate — VO₂ max, SpO₂ candidate or calories — is ever written, and nothing is read back. HealthKit needs the capability in the signing profile; a free Apple ID may not grant it.")
+        }
+    }
+
+    private var healthStatusColor: Color {
+        switch store.health.state {
+        case .ready: return .appGood
+        case .denied, .failed: return .appWarn
+        default: return .appMuted
+        }
+    }
+
     // MARK: Design preview
 
     private var previewPanel: some View {
@@ -241,7 +270,7 @@ struct SettingsView: View {
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 6)
-            Text("Reads stored history and live heart rate directly over Bluetooth. Nothing links back to WHOOP's services; your data stays on this phone.")
+            Text("Reads stored history and live heart rate directly over Bluetooth. Nothing links back to WHOOP's services; your data stays on this phone unless you turn on the optional Apple Health export above.")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)

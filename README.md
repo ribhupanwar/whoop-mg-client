@@ -36,6 +36,11 @@ No capture files, device identifiers or third-party source are committed;
 - A VO₂ max estimate from Uth 2004 (15.3 × HRmax / HRrest): it uses a measured
   max HR when one is set and labels the age-predicted fallback, so the number
   is never passed off as a strap reading.
+- Optional Apple Health export (off by default): band-detected and live
+  sessions become workouts with their real start, end and step count, keyed by
+  an external UUID so a replay cannot duplicate them. No estimate is written
+  and nothing is read back; HealthKit needs the capability in the signing
+  profile.
 - Honest gaps: anything the data cannot support shows an em dash with the
   reason, never a guess. Light/deep/REM staging, WHOOP Recovery/Strain/Sleep
   and a validated SpO₂ are deliberately absent.

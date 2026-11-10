@@ -29,10 +29,14 @@ struct AppSettings: Codable, Equatable {
     var wakeTimeMinutes: Int = 7 * 60
     var sleepIntent: SleepIntent = .easy
     var designPreview: Bool = false
+    /// Optional Apple Health export. OFF by default; the toggle is the only
+    /// path that ever asks HealthKit for permission.
+    var healthKitEnabled: Bool = false
 
     enum CodingKeys: String, CodingKey {
         case age, sex, restingHROverride, maxHROverride
         case sleepNeedHours, wakeTimeMinutes, sleepIntent, designPreview
+        case healthKitEnabled
     }
 
     init() {}
@@ -49,6 +53,7 @@ struct AppSettings: Codable, Equatable {
         wakeTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .wakeTimeMinutes) ?? 7 * 60
         sleepIntent = try container.decodeIfPresent(SleepIntent.self, forKey: .sleepIntent) ?? .easy
         designPreview = try container.decodeIfPresent(Bool.self, forKey: .designPreview) ?? false
+        healthKitEnabled = try container.decodeIfPresent(Bool.self, forKey: .healthKitEnabled) ?? false
     }
 }
 

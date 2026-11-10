@@ -36,11 +36,17 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
+        NSHealthShareUsageDescription: "Strap writes measured sessions to Apple Health. It does not read any health data."
+        NSHealthUpdateUsageDescription: "Optional: writes sessions the band measured to Apple Health as workouts."
         UIBackgroundModes:
           - bluetooth-central
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap
+        # HealthKit is a capability, so the target needs the entitlement file.
+        # CI builds with signing disabled; the signing profile used to install
+        # the IPA must grant HealthKit or the toggle reports a clear failure.
+        CODE_SIGN_ENTITLEMENTS: Strap/Strap.entitlements
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_PREVIEWS: "YES"
 

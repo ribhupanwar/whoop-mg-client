@@ -209,7 +209,7 @@ struct HealthView: View {
 
     private var spo2Chip: String {
         guard let spo2 = summary?.spo2 else { return "sleep capture only" }
-        if let pct = spo2.pct { return "unvalidated · \(spo2.readings) readings" }
+        if spo2.pct != nil { return "unvalidated · \(spo2.readings) readings" }
         return spo2.reason ?? "no in-band candidate"
     }
 

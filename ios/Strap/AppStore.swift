@@ -19,12 +19,15 @@ final class AppStore: ObservableObject {
     @Published private(set) var detectedBandActivities: [ActivitySession] = []
 
     let band = BandLink()
+    /// Optional Apple Health export. OFF until the toggle in Settings asks.
+    let health = HealthKitBridge()
     let journal: JournalStore
     let activities: ActivityStore
     private let defaults: UserDefaults
     private let settingsKey = "strap.settings.v1"
     private var bandCancellable: AnyCancellable?
     private var summaryCancellable: AnyCancellable?
+    private var healthCancellable: AnyCancellable?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -51,6 +54,14 @@ final class AppStore: ObservableObject {
         summaryCancellable = band.$summary.sink { [weak self] fresh in
             self?.syncDetectedActivities(fresh)
         }
+        healthCancellable = health.objectWillChange.sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
+        if settings.healthKitEnabled {
+            Task { [weak self] in
+                await self?.activateHealthKit(exportBacklog: true)
+            }
+        }
     }
 
     /// A drain can report the same session twice; the store merges overlaps,
@@ -61,6 +72,11 @@ final class AppStore: ObservableObject {
         guard sessions.contains(where: { !known.contains($0.startUnix) }) else { return }
         activities.mergeDetected(sessions)
         detectedBandActivities = activities.detectedActivities()
+        if settings.healthKitEnabled, health.state.isOn {
+            Task { [weak self] in
+                await self?.health.export(sessions)
+            }
+        }
     }
 
     /// Design preview toggle. OFF (default) == live mode: measured values where
@@ -116,6 +132,35 @@ final class AppStore: ObservableObject {
     func addLiveSession(_ record: LiveActivityRecord) {
         activities.saveLive(record)
         liveActivities = activities.liveActivities()
+        if settings.healthKitEnabled, health.state.isOn {
+            Task { [weak self] in
+                await self?.health.export(live: record)
+            }
+        }
+    }
+
+    // MARK: - Apple Health
+
+    /// The toggle is the only entry point: it requests permission, then
+    /// exports anything already logged so nothing measured is lost.
+    func setHealthKit(_ enabled: Bool) {
+        settings.healthKitEnabled = enabled
+        if enabled {
+            Task { [weak self] in
+                await self?.activateHealthKit(exportBacklog: true)
+            }
+        } else {
+            health.deactivate()
+        }
+    }
+
+    var healthKitStatus: String { health.state.text }
+
+    private func activateHealthKit(exportBacklog: Bool) async {
+        await health.activate()
+        guard health.state.isOn, exportBacklog else { return }
+        await health.export(detectedBandActivities)
+        await health.export(live: liveActivities)
     }
 
     func manualActivities(on dateKey: String) -> [ManualActivity] {
