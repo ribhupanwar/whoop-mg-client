@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from whoop.console import ConsoleStream, parse_body_transition, parse_wear_detect
-from whoop.records import V26Waveform, decode_record, decode_v26
+from whoop.records import (
+    IMUBuffer,
+    V26Waveform,
+    decode_record,
+    decode_v21,
+    decode_v26,
+)
 
 
 def load_console(path: Path) -> list:
@@ -150,6 +156,42 @@ def report_waveforms(waves: list[V26Waveform], samples: list) -> None:
     print("  during motion, when v18 emits no R-R at all.")
 
 
+def load_imu(path: Path) -> list[IMUBuffer]:
+    """v21 IMU buffers, kept separate from the 1 Hz sample stream."""
+    buffers = []
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if not line:
+                continue
+            frame = json.loads(line).get("frame")
+            if not frame or frame.get("packet_type") not in (0x2B, 0x2F):
+                continue
+            buffer = decode_v21(bytes.fromhex(frame["inner"]))
+            if buffer is not None:
+                buffers.append(buffer)
+    buffers.sort(key=lambda b: (b.unix, b.header.record_index))
+    return buffers
+
+
+def report_imu(buffers: list[IMUBuffer]) -> None:
+    if not buffers:
+        return
+    accel = [sample for b in buffers for sample in b.accel_g]
+    covered_s = sum(b.duration_s for b in buffers)
+    print("\n=== IMU buffer (v21, 100 Hz) ===")
+    print(f"  records: {len(buffers)}  covered: {covered_s:.2f} s"
+          f"  accel samples: {len(accel)}")
+    counts = sorted({(b.accel_count, b.gyro_count) for b in buffers})
+    print(f"  declared (accel, gyro) counts: {counts}")
+    magnitudes = [math.sqrt(sum(v * v for v in sample)) for sample in accel]
+    if magnitudes:
+        print(f"  median |accel|: {statistics.median(magnitudes):.2f} g"
+              "  (a still wrist sits near 1 g)")
+    print("  Axis layout is cross-project reverse engineering, not yet confirmed on")
+    print("  this device: read the numbers above as diagnostics, not as a metric.")
+
+
 def rmssd(rr: list[float]) -> float | None:
     if len(rr) < 2:
         return None
@@ -268,6 +310,7 @@ def main() -> int:
         print("  Reported only. Not yet used to weight RMSSD.")
 
     report_waveforms(load_waveforms(path), samples)
+    report_imu(load_imu(path))
     report_console(console_lines)
 
     out = Path(args.csv)

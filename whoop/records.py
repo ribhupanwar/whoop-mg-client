@@ -3,8 +3,10 @@
 Clean-room implementation from documented byte offsets. v18 is the per-second
 biometric summary and the only gen5 record that becomes a 1 Hz sample. v26 is a
 25 Hz optical waveform, decoded separately because it is not a per-second summary.
-v18's last data byte is a tri-mode SpO2 candidate; it is decoded but never
-treated as a validated percentage.
+v21 is a 100 Hz six-axis IMU buffer; its layout is cross-project reverse
+engineering that no capture from this device has confirmed yet. v18's last data
+byte is a tri-mode SpO2 candidate; it is decoded but never treated as a validated
+percentage.
 
 Shared header, inner-relative:
   [0] packet type 0x2F   [1] hist_version   [2] flags
@@ -30,6 +32,18 @@ V26_DELTA_OFFSET = 19
 V26_ACCEL_OFFSET = 67
 V26_CHANNEL_STATE_OFFSET = 71
 V26_MORPHOLOGY_OFFSET = 74
+
+V21_INNER_LEN = 1232
+V21_MAX_SAMPLES = 100
+V21_SAMPLE_RATE_HZ = 100
+V21_ACCEL_COUNT_OFFSET = 16
+V21_GYRO_COUNT_OFFSET = 622
+V21_ACCEL_OFFSET = 20
+V21_GYRO_OFFSET = 632
+# Each axis owns a 200-byte block of int16 samples, so stride 2 within a block.
+V21_AXIS_STRIDE_BYTES = 200
+V21_ACCEL_G_PER_LSB = 1.0 / 4096.0
+V21_GYRO_DPS_PER_LSB = 2000.0 / 32768.0
 
 # A delta at either int16 rail means the true step overflowed the field.
 DELTA_RAILS = (-32768, 32767)
@@ -94,9 +108,7 @@ class RecordHeader:
         return self.unix + self.subsec_q15 / 32768.0
 
 
-def parse_header(inner: bytes) -> RecordHeader | None:
-    if len(inner) < 13 or inner[0] != 0x2F:
-        return None
+def _header_fields(inner: bytes) -> RecordHeader:
     return RecordHeader(
         version=inner[1],
         flags=inner[2],
@@ -104,6 +116,12 @@ def parse_header(inner: bytes) -> RecordHeader | None:
         unix=_u32(inner, 7) or 0,
         subsec_q15=_u16(inner, 11) or 0,
     )
+
+
+def parse_header(inner: bytes) -> RecordHeader | None:
+    if len(inner) < 13 or inner[0] != 0x2F:
+        return None
+    return _header_fields(inner)
 
 
 @dataclass
@@ -309,4 +327,88 @@ def decode_v26(inner: bytes) -> V26Waveform | None:
         dynamic_accel_g=accel,
         channel_state=struct.unpack_from("<H", inner, V26_CHANNEL_STATE_OFFSET)[0],
         morphology_pass=inner[V26_MORPHOLOGY_OFFSET],
+    )
+
+
+@dataclass
+class IMUBuffer:
+    header: RecordHeader
+    accel_g: list[tuple[float, float, float]]
+    gyro_dps: list[tuple[float, float, float]]
+
+    @property
+    def unix(self) -> int:
+        return self.header.unix
+
+    @property
+    def sample_rate_hz(self) -> int:
+        return V21_SAMPLE_RATE_HZ
+
+    @property
+    def accel_count(self) -> int:
+        return len(self.accel_g)
+
+    @property
+    def gyro_count(self) -> int:
+        return len(self.gyro_dps)
+
+    @property
+    def duration_s(self) -> float:
+        return max(self.accel_count, self.gyro_count) / V21_SAMPLE_RATE_HZ
+
+    def timestamp_at(self, index: int) -> float:
+        return self.header.timestamp + index / V21_SAMPLE_RATE_HZ
+
+
+def decode_v21(inner: bytes) -> IMUBuffer | None:
+    """Decode a v21 six-axis IMU buffer (100 Hz, up to 100 samples per axis).
+
+    Identified by shape, not by hist_version: the buffer is the only 1232-byte
+    record and its two blocks must each declare 1..100 samples. It arrives both
+    as a historical record (0x2F) and as a live realtime frame (0x2B), with an
+    identical header, so this decoder never looks at the packet type.
+
+    Layout, from byte-level cross-project verification: an accelerometer block
+    whose sample count is the u16 at inner[16], then x/y/z int16 blocks of 200
+    bytes each from inner[20]; a gyroscope block whose count is the u16 at
+    inner[622], then x/y/z int16 blocks of 200 bytes each from inner[632]. Each
+    block is prefixed by [u16 capacity][u16 count][u8 sensor][u8 flags], so the
+    count is the second word, not the capacity. Counts are independent: read
+    only what each block declares, because the rest of the capacity holds stale
+    bytes that would otherwise decode as motion.
+
+    No capture from this device has contained a v21 record yet, so this is
+    wired to diagnostics, never to a scored metric.
+    """
+    if len(inner) != V21_INNER_LEN:
+        return None
+    accel_count = struct.unpack_from("<H", inner, V21_ACCEL_COUNT_OFFSET)[0]
+    gyro_count = struct.unpack_from("<H", inner, V21_GYRO_COUNT_OFFSET)[0]
+    if not (1 <= accel_count <= V21_MAX_SAMPLES):
+        return None
+    if not (1 <= gyro_count <= V21_MAX_SAMPLES):
+        return None
+    header = _header_fields(inner)
+
+    def block(
+        start: int, count: int, scale: float, digits: int
+    ) -> list[tuple[float, float, float]]:
+        return [
+            tuple(
+                round(
+                    struct.unpack_from(
+                        "<h", inner, start + axis * V21_AXIS_STRIDE_BYTES + 2 * i
+                    )[0]
+                    * scale,
+                    digits,
+                )
+                for axis in range(3)
+            )
+            for i in range(count)
+        ]
+
+    return IMUBuffer(
+        header=header,
+        accel_g=block(V21_ACCEL_OFFSET, accel_count, V21_ACCEL_G_PER_LSB, 4),
+        gyro_dps=block(V21_GYRO_OFFSET, gyro_count, V21_GYRO_DPS_PER_LSB, 2),
     )

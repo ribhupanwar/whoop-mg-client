@@ -11,6 +11,7 @@ from whoop.records import (
     decode_record,
     decode_spo2_candidate,
     decode_v18,
+    decode_v21,
     decode_v26,
     parse_header,
 )
@@ -285,6 +286,90 @@ class TestV26(unittest.TestCase):
 
     def test_v26_is_not_mixed_into_the_per_second_stream(self):
         self.assertIsNone(decode_record(REAL_V26))
+
+
+def imu_inner(accel_count=3, gyro_count=3, packet_type=0x2F):
+    """Synthetic v21 buffer, written with literal offsets so the test does not
+    echo the decoder's own constants back at it."""
+    inner = bytearray(1232)
+    inner[0] = packet_type
+    inner[1] = 21
+    inner[2] = 0x80
+    struct.pack_into("<I", inner, 3, 4242)
+    struct.pack_into("<I", inner, 7, 1_800_000_000)
+    struct.pack_into("<H", inner, 11, 16384)  # 0.5 s
+    struct.pack_into("<H", inner, 16, accel_count)
+    struct.pack_into("<H", inner, 622, gyro_count)
+    for i in range(100):
+        ax, ay, az = 4096 + i, 2048 + i, -4096 - i  # 1 g, 0.5 g, -1 g at i = 0
+        gx, gy, gz = 16384 + i, -8192 - i, 8192 + i
+        struct.pack_into("<h", inner, 20 + 2 * i, ax)
+        struct.pack_into("<h", inner, 220 + 2 * i, ay)
+        struct.pack_into("<h", inner, 420 + 2 * i, az)
+        struct.pack_into("<h", inner, 632 + 2 * i, gx)
+        struct.pack_into("<h", inner, 832 + 2 * i, gy)
+        struct.pack_into("<h", inner, 1032 + 2 * i, gz)
+    return bytes(inner)
+
+
+class TestV21(unittest.TestCase):
+    def test_counts_and_timing(self):
+        buffer = decode_v21(imu_inner())
+        self.assertIsNotNone(buffer)
+        self.assertEqual(buffer.header.version, 21)
+        self.assertEqual(buffer.header.unix, 1_800_000_000)
+        self.assertEqual(buffer.accel_count, 3)
+        self.assertEqual(buffer.gyro_count, 3)
+        self.assertEqual(buffer.sample_rate_hz, 100)
+        self.assertAlmostEqual(buffer.duration_s, 0.03, places=6)
+        self.assertAlmostEqual(buffer.timestamp_at(0), 1_800_000_000.5, places=6)
+        self.assertAlmostEqual(buffer.timestamp_at(2), 1_800_000_000.52, places=6)
+
+    def test_axis_blocks_and_scales(self):
+        buffer = decode_v21(imu_inner())
+        self.assertAlmostEqual(buffer.accel_g[0][0], 1.0, places=4)
+        self.assertAlmostEqual(buffer.accel_g[0][1], 0.5, places=4)
+        self.assertAlmostEqual(buffer.accel_g[0][2], -1.0, places=4)
+        self.assertAlmostEqual(buffer.gyro_dps[0][0], 1000.0, places=2)
+        self.assertAlmostEqual(buffer.gyro_dps[0][1], -500.0, places=2)
+        self.assertAlmostEqual(buffer.gyro_dps[0][2], 500.0, places=2)
+
+    def test_sample_index_moves_within_each_block(self):
+        buffer = decode_v21(imu_inner())
+        self.assertEqual(buffer.accel_g[1][0], round(4097 / 4096, 4))
+        self.assertEqual(buffer.gyro_dps[1][2], round(8193 * 2000 / 32768, 2))
+
+    def test_blocks_keep_their_own_declared_length(self):
+        # A partly-filled buffer is still a real buffer: the longer block must
+        # not be truncated to the shorter one.
+        buffer = decode_v21(imu_inner(accel_count=5, gyro_count=2))
+        self.assertEqual(buffer.accel_count, 5)
+        self.assertEqual(buffer.gyro_count, 2)
+        self.assertAlmostEqual(buffer.duration_s, 0.05, places=6)
+
+    def test_identified_by_shape_not_by_version(self):
+        other = bytearray(imu_inner())
+        other[1] = 18  # a v21 buffer is not trusted to label itself correctly
+        buffer = decode_v21(bytes(other))
+        self.assertIsNotNone(buffer)
+        self.assertEqual(buffer.header.version, 18)
+
+    def test_realtime_raw_type_is_accepted(self):
+        buffer = decode_v21(imu_inner(packet_type=0x2B))
+        self.assertIsNotNone(buffer)
+        self.assertEqual(buffer.accel_count, 3)
+
+    def test_implausible_counts_rejected(self):
+        for accel, gyro in ((0, 3), (3, 0), (101, 3), (3, 101), (0xFFFF, 3)):
+            with self.subTest(accel=accel, gyro=gyro):
+                self.assertIsNone(decode_v21(imu_inner(accel, gyro)))
+
+    def test_wrong_length_rejected(self):
+        self.assertIsNone(decode_v21(imu_inner()[:1231]))
+        self.assertIsNone(decode_v21(imu_inner() + b"\x00"))
+
+    def test_v21_is_not_mixed_into_the_per_second_stream(self):
+        self.assertIsNone(decode_record(imu_inner()))
 
 
 if __name__ == "__main__":
