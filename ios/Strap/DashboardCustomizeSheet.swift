@@ -14,8 +14,8 @@ struct DashboardCustomizeSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(store.settings.dashboardOrder.enumerated()), id: \.element) { index, row in
-                        rowCard(row, index: index)
+                    ForEach(store.settings.dashboardOrder.indices, id: \.self) { index in
+                        rowCard(store.settings.dashboardOrder[index], index: index)
                     }
                     Hint("Hidden rows keep their position, so switching one back on restores where it was. Order and visibility are saved on this device and apply to both Home and Dashboard.")
                         .padding(.top, 4)
