@@ -200,23 +200,33 @@ struct SleepCoachView: View {
                 coachButton("ALARM SET TO \(alarmOn ? "ON" : "OFF")") {
                     alarmOn.toggle()
                 }
-                coachButton("WAKE TIME SET TO \(CoachFormat.clock(wakeMinutes))") {}
+                coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
             }
 
-            Hint("The alarm is a design intent: no alarm command has been verified on this band, so nothing here is sent to it.")
+            Hint("Your wake time is set by the picker above. The alarm itself is a design intent: no alarm command has been verified on this band, so nothing here is sent to it.")
         }
     }
 
     private func coachButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
-                .font(.system(size: 10.5, weight: .medium))
-                .tracking(0.4)
-                .foregroundStyle(Color.appFG)
-                .frame(maxWidth: .infinity, minHeight: 42)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+            coachLabel(title)
         }
         .buttonStyle(.plain)
+    }
+
+    private func coachTile(_ title: String) -> some View {
+        coachLabel(title)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(title)
+    }
+
+    private func coachLabel(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10.5, weight: .medium))
+            .tracking(0.4)
+            .foregroundStyle(Color.appFG)
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
     }
 }
