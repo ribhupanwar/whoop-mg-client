@@ -287,7 +287,7 @@ struct LineChart: View {
                             }
                         }
                     }
-                    .stroke(color, style: StrokeStyle(lineWidth: 1.7, lineJoin: .round, lineCap: .round))
+                    .stroke(color, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
                 }
                 ForEach(Array(yLabels.enumerated()), id: \.offset) { idx, label in
                     Text(label)
