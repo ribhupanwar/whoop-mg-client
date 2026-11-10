@@ -619,6 +619,57 @@
     </section>
 
     <!-- ============ HEALTH DETAIL ============ -->
+    <!-- ============ HEALTH HUB (tab landing) ============ -->
+    <section class="rm-screen" id="rm-screen-healthhub" hidden>
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Personal baseline</h3>
+          <b><span data-when="live">0/7</span><span data-when="demo">3/7</span></b></div>
+        <div class="rm-comp-track"><i data-when="demo" style="width:43%"></i></div>
+        <p class="rm-hint" style="margin-top:6px"><span data-when="live">Waiting for your first
+          capture. Recovery and range chips unlock after 7 recorded days.</span>
+          <span data-when="demo">Sample: 4 more days to unlock your personal baseline and
+          recovery score.</span></p>
+      </div>
+
+      <button type="button" class="rm-tapcard" data-open="health" style="width:100%;text-align:left">
+        <div class="rm-cardhead"><h3>Health monitor</h3><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-split" style="margin:4px 0 10px">
+          <div style="text-align:center"><b data-when="demo" style="color:var(--app-good)">✓</b><b data-when="live">—</b><span>HRV</span></div>
+          <div style="text-align:center"><b data-when="demo" style="color:var(--app-good)">✓</b><b data-when="live">—</b><span>RHR</span></div>
+          <div style="text-align:center"><b data-when="demo" style="color:var(--app-good)">✓</b><b data-when="live">—</b><span>HR</span></div>
+          <div style="text-align:center"><b data-when="demo" style="color:var(--app-good)">✓</b><b data-when="live">—</b><span>STEPS</span></div>
+        </div>
+        <div class="rm-cta" style="margin:0"><span data-when="demo">✓ 4/4 metrics within range · sample</span>
+          <span data-when="live">needs a capture — tap to see what is measured</span></div>
+      </button>
+
+      <button type="button" class="rm-tapcard" data-open="stress" style="width:100%;text-align:left">
+        <div class="rm-cardhead"><h3>Stress monitor</h3><span class="rm-chev">&#8250;</span></div>
+        <div class="rm-hrhead">
+          <div><div class="rm-sechead">Today's high stress</div>
+            <div class="rm-hrnum"><span data-when="live">—</span><span data-when="demo">0:00</span> <small>hrs</small></div></div>
+          <svg viewBox="0 0 180 60" width="180" height="60" role="img" aria-label="Sample stress through the day">
+            <polyline data-when="demo" fill="none" stroke="var(--app-good)" stroke-width="1.4"
+              points="0,44 12,40 20,12 28,46 40,44 52,45 64,43 76,30 88,44 100,42 112,26 124,40 136,18 148,30 160,22 172,36 180,40"/>
+          </svg>
+        </div>
+        <p class="rm-hint" data-when="live">Unlocks after a 7-day awake baseline.</p>
+      </button>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Not measured by this client</h3></div>
+        <p class="rm-hint" style="margin-top:0">Blood pressure, respiratory rate and validated
+          SpO₂ are not produced here — the strap's raw candidates are unvalidated and this
+          client never guesses medical-looking numbers. Skin temperature is shown only as an
+          absolute reading on the detail screen, never as a diagnosis.</p>
+      </div>
+
+      <p class="rm-hint">Health monitor and stress monitor are local estimates, not medical
+        devices, and cannot diagnose or manage conditions. Consult your doctor for health
+        concerns.</p>
+    </section>
+
+    <!-- ============ HEALTH DETAIL (drill-in) ============ -->
     <section class="rm-screen" id="rm-screen-health" hidden>
       <div class="rm-panel" style="padding:14px">
         <div class="rm-sechead">Heart rate</div>
@@ -1353,7 +1404,7 @@
   <nav class="rm-tabs" aria-label="App sections">
     <button type="button" data-screen="home" aria-pressed="true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11l8-6 8 6v8a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M9 15l2 2 4-4"/></svg>Home</button>
-    <button type="button" data-screen="health" aria-pressed="false">
+    <button type="button" data-screen="healthhub" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.6-7 9-7 9z"/><path d="M8 12h2l1-2 1.5 3 1-1.5H16"/></svg>Health</button>
     <button type="button" data-screen="train" aria-pressed="false">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9v6M7 7v10M17 7v10M20 9v6M7 12h10"/></svg>Train</button>
@@ -1376,6 +1427,7 @@ no WHOOP assets, branding or proprietary scoring.</p>
   var root=document.getElementById('runner-app-mockup');
   var titles={
     home:['Home','Monday 9 November · day 1 of your baseline'],
+    healthhub:['Health','Your monitors and personal baseline'],
     health:['Health monitor','Vitals against your personal range'],
     stress:['Stress monitor','Live index and the day so far'],
     dashboard:['Dashboard','Every metric in one list'],
@@ -1384,21 +1436,24 @@ no WHOOP assets, branding or proprietary scoring.</p>
     sleepanalysis:['Sleep','Last night\'s analysis and weekly trends'],
     train:['Train','Heart-rate zones from your measured resting HR'],
     plan:['Plan','Your week and tonight\'s sleep target']};
-  var ids=['home','health','stress','dashboard','journal','sleepcoach','sleepanalysis','train','plan'];
+  var ids=['home','healthhub','health','stress','dashboard','journal','sleepcoach','sleepanalysis','train','plan'];
   var tabs=root.querySelectorAll('.rm-tabs button');
   var heading=document.getElementById('rm-title');
   var subtitle=document.getElementById('rm-subtitle');
   var back=document.getElementById('rm-back');
 
+  var current='home';
   function show(name){
+    current=name;
     for(var i=0;i<ids.length;i++){
       document.getElementById('rm-screen-'+ids[i]).hidden=(ids[i]!==name);
     }
     for(var j=0;j<tabs.length;j++){
+      var scr=tabs[j].getAttribute('data-screen');
       tabs[j].setAttribute('aria-pressed',
-        tabs[j].getAttribute('data-screen')===name?'true':'false');
+        (scr===name||(scr==='healthhub'&&name==='health'))?'true':'false');
     }
-    back.hidden=(name!=='stress'&&name!=='journal'&&name!=='sleepcoach'&&name!=='sleepanalysis');
+    back.hidden=(name!=='stress'&&name!=='journal'&&name!=='sleepcoach'&&name!=='sleepanalysis'&&name!=='health');
     heading.textContent=titles[name][0];
     subtitle.textContent=titles[name][1];
   }
@@ -1409,7 +1464,7 @@ no WHOOP assets, branding or proprietary scoring.</p>
   for(var m=0;m<openers.length;m++){
     openers[m].addEventListener('click',function(){show(this.getAttribute('data-open'));});
   }
-  back.addEventListener('click',function(){show('home');});
+  back.addEventListener('click',function(){show(current==='health'?'healthhub':'home');});
 
   document.getElementById('rm-preview').addEventListener('change',function(){
     root.setAttribute('data-preview',this.checked?'demo':'live');

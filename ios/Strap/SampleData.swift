@@ -96,6 +96,11 @@ enum SampleData {
         66, 64, 62, 65, 68, 66, 64, 67, 70, 68, 66, 69, 72, 70, 68, 71
     ]
 
+    // Health hub
+    static let baselineDaysDone = 3
+    static let baselineDaysTarget = 7
+    static let highStressToday = "0:00"
+
     // Sleep coach demo: two nights at 7.5 h against an 8 h need → 1.0 h debt.
     // With wake 06:30 and easy intent: need 9.0, in bed 10:15, bedtime 20:15.
     static let nights: [RecordedNight] = [

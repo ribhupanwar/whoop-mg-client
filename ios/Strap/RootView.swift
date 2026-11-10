@@ -45,7 +45,7 @@ struct RootView: View {
             .tag(AppTab.home)
 
             NavigationStack {
-                HealthView()
+                HealthHubView()
                     .strapDestinations()
             }
             .tabItem { Label(AppTab.health.label, systemImage: AppTab.health.icon) }
