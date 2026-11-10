@@ -152,14 +152,18 @@ final class ActivityStoreTests: XCTestCase {
     }
 
     func testDetectedSessionsSurviveARedraw() {
-        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
-        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = Int(now.timeIntervalSince1970) - 3_600
+        store.mergeDetected([session(start: start, end: start + 600)], now: now)
+        store.mergeDetected([session(start: start, end: start + 600)], now: now)
         XCTAssertEqual(store.detectedActivities().count, 1)
     }
 
     func testOverlappingDetectionKeepsTheLongerOne() {
-        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
-        store.mergeDetected([session(start: 1_700_000_010, end: 1_700_001_200)])
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = Int(now.timeIntervalSince1970) - 3_600
+        store.mergeDetected([session(start: start, end: start + 600)], now: now)
+        store.mergeDetected([session(start: start + 10, end: start + 1_200)], now: now)
         XCTAssertEqual(store.detectedActivities().count, 1)
         XCTAssertEqual(store.detectedActivities().first?.durationS, 1_191)
     }
