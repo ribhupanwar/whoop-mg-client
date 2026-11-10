@@ -228,6 +228,22 @@
 #runner-app-mockup .rm-barlabels{display:flex;gap:7px;padding:6px 2px 0;
   border-top:1px solid var(--app-line);margin-top:2px}
 #runner-app-mockup .rm-barlabels span{flex:1;text-align:center;font-size:9.5px;color:var(--app-muted)}
+#runner-app-mockup .rm-needrow{display:flex;justify-content:space-between;align-items:center;
+  font-size:12px;color:var(--app-muted);padding:7px 0;border-top:1px solid var(--app-line)}
+#runner-app-mockup .rm-needrow b{font-size:13px;font-weight:500;color:var(--app-fg)}
+#runner-app-mockup .rm-needrow.rm-needtotal{color:var(--app-fg)}
+#runner-app-mockup .rm-trendblock{margin-top:14px;padding-top:12px;border-top:1px solid var(--app-line)}
+#runner-app-mockup .rm-trendblock:first-of-type{margin-top:0;padding-top:0;border-top:0}
+#runner-app-mockup .rm-trendhead{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:12.5px;color:var(--app-fg);margin-bottom:6px}
+#runner-app-mockup .rm-trendhead span{font-size:10.5px;color:var(--app-muted)}
+#runner-app-mockup .rm-bars.rm-bars-sm{height:70px}
+#runner-app-mockup .rm-stacked i{border-radius:0}
+#runner-app-mockup .rm-stacked>div>i:first-child{border-radius:4px 4px 0 0}
+#runner-app-mockup .rm-legend{display:flex;gap:14px;font-size:10px;color:var(--app-muted);
+  margin-top:6px}
+#runner-app-mockup .rm-legend i{display:inline-block;width:14px;height:3px;border-radius:2px;
+  margin-right:5px;vertical-align:middle}
 
 #runner-app-mockup .rm-field{display:flex;align-items:center;gap:10px;background:var(--app-surface);
   border:1px solid var(--app-line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
@@ -1082,33 +1098,246 @@
         </div>
         <p class="rm-hint">Light/deep/REM staging is not implemented — it needs a validated
           model. We report quiet-vs-movement only; wake events are movement bursts, not
-          verified awakenings.</p>
+          verified awakenings. Restorative sleep (deep + REM) is therefore absent too.</p>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Hours vs. needed</h3>
+          <b><span data-when="live">—</span><span data-when="demo">62%</span></b></div>
+        <div class="rm-sechead">Hours of sleep</div>
+        <div class="rm-stack" role="img" aria-label="Hours of sleep against need">
+          <i data-when="demo" style="width:62%;background:var(--app-sleep)"></i>
+        </div>
+        <div class="rm-split" style="margin-bottom:10px">
+          <div><b><span data-when="live">—</span><span data-when="demo">5:49</span></b><span>asleep</span></div>
+          <div style="text-align:right"><b><span data-when="live">—</span><span data-when="demo">9:20</span></b><span>needed</span></div>
+        </div>
+        <div class="rm-sechead">Where the need comes from</div>
+        <div class="rm-needrow"><span>Base need</span><b data-when="demo">8:00</b><b data-when="live">8:00</b></div>
+        <div class="rm-needrow"><span>Sleep debt</span><b><span data-when="live">—</span><span data-when="demo">+1:20</span></b></div>
+        <div class="rm-needrow"><span>Tomorrow's plan</span><b><span data-when="live">—</span><span data-when="demo">+0:00</span></b></div>
+        <p class="rm-hint">Our local need model: base + running debt (capped at 2 h) +
+          tomorrow's allowance. Debt starts counting from your first recorded night.</p>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Sleep consistency</h3>
+          <b><span data-when="live">—</span><span data-when="demo">55%</span></b></div>
+        <div data-when="demo">
+          <svg viewBox="0 0 340 130" width="100%" height="130" role="img" aria-label="Sample bed and wake times across nights">
+            <line x1="0" y1="30" x2="340" y2="30" class="rm-gridline" stroke-dasharray="4 4"/>
+            <line x1="0" y1="100" x2="340" y2="100" class="rm-gridline" stroke-dasharray="4 4"/>
+            <rect x="30"  y="34" width="26" height="62" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+            <rect x="90"  y="40" width="26" height="58" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+            <rect x="150" y="28" width="26" height="68" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+            <rect x="210" y="44" width="26" height="56" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+            <rect x="270" y="58" width="26" height="42" rx="4" fill="var(--app-sleep)"/>
+            <text x="36"  y="120" class="rm-axis">Fri</text>
+            <text x="96"  y="120" class="rm-axis">Sat</text>
+            <text x="156" y="120" class="rm-axis">Sun</text>
+            <text x="216" y="120" class="rm-axis">Mon</text>
+            <text x="276" y="120" class="rm-axis">Tue</text>
+            <text x="282" y="54" class="rm-axis">1:28</text>
+            <text x="282" y="112" class="rm-axis">8:22</text>
+          </svg>
+          <p class="rm-hint" style="margin-top:4px">Dashed lines: your median bed/wake.
+            A night counts when both ends sit within ±60 min.</p>
+        </div>
+        <div class="rm-empty" data-when="live">
+          <b>Needs 2+ recorded nights</b>
+          <p>Your median bedtime and wake time appear once two nights are stored.</p>
+        </div>
+      </div>
+
+      <div class="rm-panel">
+        <div class="rm-cardhead"><h3>Sleep stress</h3>
+          <b><span data-when="live">—</span><span data-when="demo">0% high</span></b></div>
+        <div data-when="demo">
+          <svg viewBox="0 0 340 100" width="100%" height="100" role="img" aria-label="Sample sleep stress through the night">
+            <line x1="0" y1="15" x2="340" y2="15" class="rm-gridline"/>
+            <line x1="0" y1="45" x2="340" y2="45" class="rm-gridline"/>
+            <line x1="0" y1="75" x2="340" y2="75" class="rm-gridline"/>
+            <text x="2" y="12" class="rm-axis">3.0</text>
+            <text x="2" y="42" class="rm-axis">1.5</text>
+            <text x="2" y="72" class="rm-axis">0.0</text>
+            <polyline fill="none" stroke="var(--app-good)" stroke-width="1.4"
+              points="14,50 26,42 38,58 50,66 62,60 74,70 86,30 98,62 110,70 122,66 134,72 146,68 158,72 170,70 182,72 194,68 206,72 218,64 230,56 242,68 254,72 266,70 278,72 290,58 302,68 314,72 326,70"/>
+            <text x="14" y="94" class="rm-axis">1:28 AM</text>
+            <text x="288" y="94" class="rm-axis">8:22 AM</text>
+          </svg>
+          <div class="rm-split" style="margin-top:8px">
+            <div><b style="color:var(--app-high)">0:00</b><span>high · 0%</span></div>
+            <div><b style="color:var(--app-warn)">0:19</b><span>medium · 5%</span></div>
+            <div><b style="color:var(--app-good)">6:34</b><span>low · 95%</span></div>
+          </div>
+        </div>
+        <div class="rm-empty" data-when="live">
+          <b>Needs 7 sleep nights of baseline</b>
+          <p>Each 5-minute window's lnRMSSD is scored against your own sleep norm —
+            never the awake one.</p>
+        </div>
       </div>
 
       <div class="rm-panel">
         <div class="rm-cardhead"><h3>Weekly trends</h3></div>
-        <div class="rm-sechead">Sleep performance</div>
-        <div class="rm-bars" data-when="demo" role="img" aria-label="Sample weekly sleep performance">
-          <div><i style="height:80%"></i><span>80</span></div>
-          <div><i style="height:80%"></i><span>80</span></div>
-          <div><i style="height:84%"></i><span>84</span></div>
-          <div><i style="height:65%"></i><span>65</span></div>
-          <div><i style="height:84%"></i><span>84</span></div>
-          <div><i style="height:82%"></i><span>82</span></div>
-          <div class="rm-bar-today"><i style="height:66%"></i><span>66</span></div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Sleep performance <span>%</span></div>
+          <div class="rm-bars rm-bars-sm" data-when="demo" role="img" aria-label="Sample weekly sleep performance">
+            <div><i style="height:80%"></i><span>80</span></div>
+            <div><i style="height:80%"></i><span>80</span></div>
+            <div><i style="height:84%"></i><span>84</span></div>
+            <div><i style="height:65%"></i><span>65</span></div>
+            <div><i style="height:84%"></i><span>84</span></div>
+            <div><i style="height:82%"></i><span>82</span></div>
+            <div class="rm-bar-today"><i style="height:66%"></i><span>66</span></div>
+          </div>
+          <p class="rm-hint" data-when="live">One bar per recorded night. Trends fill in as
+            you capture; nothing is back-filled with guesses.</p>
         </div>
-        <div class="rm-bars" data-when="live" role="img" aria-label="No weekly history yet">
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div><i style="height:2%"></i><span>—</span></div>
-          <div class="rm-bar-today"><i style="height:2%"></i><span>—</span></div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Hours vs. needed <span>hours</span></div>
+          <div data-when="demo">
+            <svg viewBox="0 0 340 96" width="100%" height="96" role="img" aria-label="Sample hours of sleep against hours needed">
+              <line x1="0" y1="10" x2="340" y2="10" class="rm-gridline"/>
+              <line x1="0" y1="33" x2="340" y2="33" class="rm-gridline"/>
+              <line x1="0" y1="55" x2="340" y2="55" class="rm-gridline"/>
+              <text x="2" y="8" class="rm-axis">12h</text>
+              <text x="2" y="31" class="rm-axis">8h</text>
+              <text x="2" y="53" class="rm-axis">4h</text>
+              <polyline fill="none" stroke="var(--app-muted)" stroke-width="1.4" stroke-dasharray="4 3"
+                points="20,29 70,24 120,21 170,20 220,23 270,24 320,25"/>
+              <polyline fill="none" stroke="var(--app-sleep)" stroke-width="1.6"
+                points="20,42 70,42 120,38 170,47 220,40 270,39 320,45"/>
+              <text x="14" y="90" class="rm-axis">Wed</text><text x="64" y="90" class="rm-axis">Thu</text>
+              <text x="114" y="90" class="rm-axis">Fri</text><text x="164" y="90" class="rm-axis">Sat</text>
+              <text x="214" y="90" class="rm-axis">Sun</text><text x="264" y="90" class="rm-axis">Mon</text>
+              <text x="314" y="90" class="rm-axis">Tue</text>
+            </svg>
+            <div class="rm-legend">
+              <span><i style="background:var(--app-sleep)"></i>asleep</span>
+              <span><i style="background:var(--app-muted)"></i>needed</span>
+            </div>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
         </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Hours vs. needed <span>%</span></div>
+          <div class="rm-bars rm-bars-sm" data-when="demo" role="img" aria-label="Sample weekly hours versus needed percentage">
+            <div><i style="height:72%"></i><span>72</span></div>
+            <div><i style="height:67%"></i><span>67</span></div>
+            <div><i style="height:70%"></i><span>70</span></div>
+            <div><i style="height:53%"></i><span>53</span></div>
+            <div><i style="height:69%"></i><span>69</span></div>
+            <div><i style="height:71%"></i><span>71</span></div>
+            <div class="rm-bar-today"><i style="height:62%"></i><span>62</span></div>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
+        </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Consistency <span>% of nights within ±60 min</span></div>
+          <div class="rm-bars rm-bars-sm" data-when="demo" role="img" aria-label="Sample weekly sleep consistency">
+            <div><i style="height:70%"></i><span>70</span></div>
+            <div><i style="height:79%"></i><span>79</span></div>
+            <div><i style="height:87%"></i><span>87</span></div>
+            <div><i style="height:81%"></i><span>81</span></div>
+            <div><i style="height:87%"></i><span>87</span></div>
+            <div><i style="height:83%"></i><span>83</span></div>
+            <div class="rm-bar-today"><i style="height:55%"></i><span>55</span></div>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
+        </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Time in bed <span>bed &#8594; wake</span></div>
+          <div data-when="demo">
+            <svg viewBox="0 0 340 140" width="100%" height="140" role="img" aria-label="Sample bed and wake times across the week">
+              <line x1="28" y1="35" x2="340" y2="35" class="rm-gridline"/>
+              <line x1="28" y1="61" x2="340" y2="61" class="rm-gridline"/>
+              <line x1="28" y1="86" x2="340" y2="86" class="rm-gridline"/>
+              <line x1="28" y1="112" x2="340" y2="112" class="rm-gridline"/>
+              <text x="2" y="13" class="rm-axis">9P</text>
+              <text x="2" y="38" class="rm-axis">12A</text>
+              <text x="2" y="64" class="rm-axis">3A</text>
+              <text x="2" y="89" class="rm-axis">6A</text>
+              <text x="2" y="115" class="rm-axis">9A</text>
+              <rect x="36"  y="27" width="26" height="58" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="78"  y="30" width="26" height="57" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="120" y="23" width="26" height="65" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="162" y="37" width="26" height="52" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="204" y="23" width="26" height="63" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="246" y="29" width="26" height="63" rx="4" fill="var(--app-raised)" stroke="var(--app-line)"/>
+              <rect x="288" y="48" width="26" height="58" rx="4" fill="var(--app-sleep)"/>
+              <text x="40"  y="132" class="rm-axis">Wed</text><text x="82"  y="132" class="rm-axis">Thu</text>
+              <text x="124" y="132" class="rm-axis">Fri</text><text x="166" y="132" class="rm-axis">Sat</text>
+              <text x="208" y="132" class="rm-axis">Sun</text><text x="250" y="132" class="rm-axis">Mon</text>
+              <text x="292" y="132" class="rm-axis">Tue</text>
+            </svg>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
+        </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Efficiency <span>% quiet while in bed</span></div>
+          <div data-when="demo">
+            <svg viewBox="0 0 340 96" width="100%" height="96" role="img" aria-label="Sample weekly sleep efficiency">
+              <line x1="0" y1="10" x2="340" y2="10" class="rm-gridline"/>
+              <line x1="0" y1="40" x2="340" y2="40" class="rm-gridline"/>
+              <line x1="0" y1="70" x2="340" y2="70" class="rm-gridline"/>
+              <text x="2" y="8" class="rm-axis">100%</text>
+              <text x="2" y="38" class="rm-axis">90%</text>
+              <text x="2" y="68" class="rm-axis">80%</text>
+              <polyline fill="none" stroke="var(--app-sleep)" stroke-width="1.6"
+                points="20,34 70,28 120,31 170,46 220,40 270,31 320,58"/>
+              <text x="14" y="90" class="rm-axis">Wed</text><text x="64" y="90" class="rm-axis">Thu</text>
+              <text x="114" y="90" class="rm-axis">Fri</text><text x="164" y="90" class="rm-axis">Sat</text>
+              <text x="214" y="90" class="rm-axis">Sun</text><text x="264" y="90" class="rm-axis">Mon</text>
+              <text x="314" y="90" class="rm-axis">Tue</text>
+            </svg>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
+        </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Sleep debt <span>running shortfall, capped at 2 h</span></div>
+          <div class="rm-bars rm-bars-sm" data-when="demo" role="img" aria-label="Sample weekly sleep debt">
+            <div><i style="height:63%;background:var(--app-warn)"></i><span>1:34</span></div>
+            <div><i style="height:63%;background:var(--app-warn)"></i><span>1:34</span></div>
+            <div><i style="height:60%;background:var(--app-warn)"></i><span>1:30</span></div>
+            <div><i style="height:85%;background:var(--app-warn)"></i><span>2:08</span></div>
+            <div><i style="height:61%;background:var(--app-warn)"></i><span>1:31</span></div>
+            <div><i style="height:55%;background:var(--app-warn)"></i><span>1:22</span></div>
+            <div class="rm-bar-today"><i style="height:70%"></i><span>1:45</span></div>
+          </div>
+          <p class="rm-hint" data-when="live">Fills in as nights are recorded.</p>
+        </div>
+
+        <div class="rm-trendblock">
+          <div class="rm-trendhead">Sleep stress <span>share of the night</span></div>
+          <div class="rm-bars rm-bars-sm rm-stacked" data-when="demo" role="img" aria-label="Sample weekly sleep stress split">
+            <div><i style="height:79%;background:var(--app-good)"></i></div>
+            <div><i style="height:4%;background:var(--app-warn)"></i><i style="height:75%;background:var(--app-good)"></i></div>
+            <div><i style="height:7%;background:var(--app-warn)"></i><i style="height:81%;background:var(--app-good)"></i></div>
+            <div><i style="height:10%;background:var(--app-warn)"></i><i style="height:58%;background:var(--app-good)"></i></div>
+            <div><i style="height:4%;background:var(--app-warn)"></i><i style="height:79%;background:var(--app-good)"></i></div>
+            <div><i style="height:3%;background:var(--app-high)"></i><i style="height:14%;background:var(--app-warn)"></i><i style="height:68%;background:var(--app-good)"></i></div>
+            <div class="rm-bar-today"><i style="height:4%;background:var(--app-warn)"></i><i style="height:69%;background:var(--app-good)"></i></div>
+          </div>
+          <div class="rm-legend" data-when="demo">
+            <span><i style="background:var(--app-good)"></i>low</span>
+            <span><i style="background:var(--app-warn)"></i>medium</span>
+            <span><i style="background:var(--app-high)"></i>high</span>
+          </div>
+          <p class="rm-hint" data-when="live">Needs 7 sleep nights of baseline, then fills in
+            as nights are recorded.</p>
+        </div>
+
         <div class="rm-barlabels"><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span><span>Mon</span><span>Tue</span></div>
-        <p class="rm-hint" data-when="live">One bar per recorded night. Trends fill in as
-          you capture; nothing is back-filled with guesses.</p>
+        <p class="rm-hint">Restorative sleep (deep + REM) is not charted — staging needs a
+          validated model we don't have. Every series here comes from our own local rules.</p>
       </div>
 
       <button type="button" class="rm-outlook" data-open="sleepcoach">

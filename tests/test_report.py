@@ -17,10 +17,12 @@ from report import (
     sleep_baseline_from_file,
     sleep_history_from_file,
     sleep_nights_from_file,
+    sleep_trends_from_file,
     stress_baseline_from_file,
 )
 from whoop.health import Baseline
 from whoop.records import RecordHeader, V18Sample
+from whoop.sleep_analysis import SleepAnalysis, SleepStressSplit, analyze_sleep
 
 
 def sample(unix, hr, accel=0.0, rr=(), steps=None, gait=None) -> V18Sample:
@@ -309,6 +311,110 @@ class TestBaselineStore(unittest.TestCase):
         baseline = sleep_baseline_from_file(self.path)
         self.assertEqual(baseline.days, 7)
         self.assertGreater(baseline.ln_rmssd_mean, 4.0)
+
+    def test_analysis_snapshot_round_trips_on_sleep_rows(self):
+        analysis = SleepAnalysis(
+            hours=7.0, need_h=8.0, hours_vs_needed_pct=87.5, efficiency_pct=90.0,
+            wake_events=3, consistency_pct=None, consistency_nights=1,
+            stress=SleepStressSplit(10.0, 20.0, 70.0, 50, None),
+            performance_pct=85.0,
+        )
+        record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep", sleep_h=7.0,
+                   sleep_start=100, sleep_end=25300, analysis=analysis, debt_h=1.25)
+        row = load_daily(self.path)["2026-11-09|sleep"]
+        self.assertEqual(row["need_h"], 8.0)
+        self.assertEqual(row["efficiency_pct"], 90.0)
+        self.assertEqual(row["wake_events"], 3)
+        self.assertEqual(row["stress_high_pct"], 10.0)
+        self.assertEqual(row["debt_h"], 1.25)
+        self.assertNotIn("performance_pct", row)  # recomputed by the trends helper
+
+    def test_awake_rows_carry_no_sleep_snapshot(self):
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        row = load_daily(self.path)["2026-11-09|awake"]
+        self.assertNotIn("need_h", row)
+        self.assertNotIn("efficiency_pct", row)
+
+
+class TestSleepTrends(unittest.TestCase):
+    def setUp(self):
+        self._dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self._dir.cleanup)
+        self.path = Path(self._dir.name) / "baseline.json"
+
+    def _night(self, date, bed, wake, sleep_h, need_h=8.0, efficiency=90.0,
+               high=None, debt=None):
+        analysis = SleepAnalysis(
+            hours=sleep_h, need_h=need_h,
+            hours_vs_needed_pct=round(min(100.0, 100.0 * sleep_h / need_h), 1),
+            efficiency_pct=efficiency, wake_events=2,
+            consistency_pct=None, consistency_nights=0,
+            stress=SleepStressSplit(high, None if high is None else 5.0,
+                                    None if high is None else 95.0 - high, 40, None),
+            performance_pct=None,
+        )
+        record_day(self.path, date, 4.6, 55.0, "sleep", sleep_h=sleep_h,
+                   sleep_start=bed, sleep_end=wake, analysis=analysis, debt_h=debt)
+
+    def test_empty_history_has_no_trends(self):
+        self.assertEqual(sleep_trends_from_file(self.path), [])
+
+    def test_awake_days_are_excluded(self):
+        record_day(self.path, "2026-11-09", 3.8, 71.0, "awake")
+        self.assertEqual(sleep_trends_from_file(self.path), [])
+
+    def test_single_night_has_no_consistency_but_has_performance(self):
+        self._night("2026-11-09", 100, 28900, 8.0)
+        trends = sleep_trends_from_file(self.path)
+        self.assertEqual(len(trends), 1)
+        night = trends[0]
+        self.assertIsNone(night["consistency_pct"])
+        self.assertEqual(night["hours_vs_needed_pct"], 100.0)
+        self.assertEqual(night["time_in_bed_h"], 8.0)
+        # components: hours 100 + efficiency 90 -> mean 95
+        self.assertEqual(night["performance_pct"], 95.0)
+
+    def test_trends_are_date_ordered(self):
+        self._night("2026-11-11", 100, 28900, 7.0)
+        self._night("2026-11-09", 100, 28900, 8.0)
+        self._night("2026-11-10", 100, 28900, 7.5)
+        self.assertEqual(
+            [t["date"] for t in sleep_trends_from_file(self.path)],
+            ["2026-11-09", "2026-11-10", "2026-11-11"],
+        )
+
+    def test_consistency_rolls_over_recorded_nights(self):
+        # Two regular nights then one very late night: 2 of 3 within tolerance.
+        self._night("2026-11-09", 100, 28900, 8.0)
+        self._night("2026-11-10", 200, 29000, 8.0)
+        self._night("2026-11-11", 20000, 48800, 8.0)
+        trends = sleep_trends_from_file(self.path)
+        self.assertIsNone(trends[0]["consistency_pct"])
+        self.assertEqual(trends[1]["consistency_pct"], 100.0)
+        self.assertEqual(trends[2]["consistency_pct"], 66.7)
+
+    def test_stress_component_joins_performance_when_present(self):
+        self._night("2026-11-09", 100, 28900, 8.0, high=10.0)
+        night = sleep_trends_from_file(self.path)[0]
+        self.assertEqual(night["stress_high_pct"], 10.0)
+        # hours 100 + efficiency 90 + (100 - 10) -> mean 93.3
+        self.assertEqual(night["performance_pct"], 93.3)
+
+    def test_missing_components_stay_none(self):
+        record_day(self.path, "2026-11-09", 4.6, 55.0, "sleep", sleep_h=7.0)
+        night = sleep_trends_from_file(self.path)[0]
+        self.assertIsNone(night["need_h"])
+        self.assertIsNone(night["hours_vs_needed_pct"])
+        self.assertIsNone(night["efficiency_pct"])
+        self.assertIsNone(night["bed_unix"])
+        self.assertIsNone(night["performance_pct"])
+        self.assertEqual(night["sleep_h"], 7.0)
+
+    def test_debt_round_trips_per_night(self):
+        self._night("2026-11-09", 100, 28900, 6.0, debt=2.0)
+        self._night("2026-11-10", 100, 28900, 7.0, debt=3.0)
+        trends = sleep_trends_from_file(self.path)
+        self.assertEqual([t["debt_h"] for t in trends], [2.0, 3.0])
 
 
 class TestRenderHtml(unittest.TestCase):

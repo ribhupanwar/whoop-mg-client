@@ -12,6 +12,7 @@ import argparse
 import html
 import json
 import math
+import statistics
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -40,7 +41,7 @@ from whoop.metrics import (
     resting_hrv,
     trimp,
 )
-from whoop.sleep_analysis import SleepAnalysis, analyze_sleep
+from whoop.sleep_analysis import SleepAnalysis, analyze_sleep, sleep_consistency
 
 DISCLAIMER = (
     "Local estimates from published physiology (Malik 1996 HRV, Banister TRIMP, "
@@ -194,8 +195,16 @@ def record_day(
     sleep_h: float | None = None,
     sleep_start: int | None = None,
     sleep_end: int | None = None,
+    analysis: SleepAnalysis | None = None,
+    debt_h: float | None = None,
 ) -> int:
-    """Store one capture state's reading and return how many days that state has."""
+    """Store one capture state's reading and return how many days that state has.
+
+    For a sleep night, `analysis` and `debt_h` persist the per-night components
+    so weekly trends can be rebuilt later without the original capture. The
+    composite (performance, rolling consistency) is recomputed by
+    sleep_trends_from_file, not stored, so there is one source of truth.
+    """
     if state not in CAPTURE_STATES:
         raise ValueError(f"state must be one of {sorted(CAPTURE_STATES)}")
     days = load_daily(path)
@@ -206,6 +215,16 @@ def record_day(
         row["sleep_start"] = sleep_start
     if sleep_end is not None:
         row["sleep_end"] = sleep_end
+    if analysis is not None:
+        row["need_h"] = round(analysis.need_h, 3)
+        row["efficiency_pct"] = analysis.efficiency_pct
+        row["wake_events"] = analysis.wake_events
+        if analysis.stress.high_pct is not None:
+            row["stress_high_pct"] = analysis.stress.high_pct
+            row["stress_medium_pct"] = analysis.stress.medium_pct
+            row["stress_low_pct"] = analysis.stress.low_pct
+    if debt_h is not None:
+        row["debt_h"] = round(debt_h, 3)
     days[f"{date}|{state}"] = row
     ordered = [days[key] for key in sorted(days)]
     path.write_text(json.dumps({"days": ordered}, indent=2) + "\n", encoding="utf-8")
@@ -258,6 +277,56 @@ def sleep_baseline_from_file(path: Path) -> Baseline | None:
     return Baseline.from_daily(
         [r["ln_rmssd"] for r in rows], [r["rhr"] for r in rows]
     )
+
+
+def sleep_trends_from_file(path: Path) -> list[dict]:
+    """Per-night rows for the weekly sleep charts, in date order.
+
+    Performance and consistency are recomputed here (consistency rolls over
+    the nights recorded up to each date) so the charts reuse the exact rules
+    in analyze_sleep / sleep_consistency rather than a stored guess. Any
+    component a night lacks stays None and renders as a gap.
+    """
+    days = load_daily(path)
+    rows = [days[key] for key in sorted(days) if days[key]["state"] == "sleep"]
+    nights: list[tuple[int, int]] = []
+    trends: list[dict] = []
+    for row in rows:
+        bed, wake = row.get("sleep_start"), row.get("sleep_end")
+        has_span = bed is not None and wake is not None and wake > bed
+        if has_span:
+            nights.append((bed, wake))
+        consistency_pct, _ = sleep_consistency(nights)
+        sleep_h, need_h = row.get("sleep_h"), row.get("need_h")
+        hours_pct = (
+            round(min(100.0, 100.0 * sleep_h / need_h), 1)
+            if sleep_h is not None and need_h else None
+        )
+        high = row.get("stress_high_pct")
+        components = [
+            c for c in (
+                hours_pct, row.get("efficiency_pct"), consistency_pct,
+                None if high is None else 100.0 - high,
+            ) if c is not None
+        ]
+        trends.append({
+            "date": row["date"],
+            "sleep_h": sleep_h,
+            "need_h": need_h,
+            "hours_vs_needed_pct": hours_pct,
+            "efficiency_pct": row.get("efficiency_pct"),
+            "wake_events": row.get("wake_events"),
+            "bed_unix": bed,
+            "wake_unix": wake,
+            "time_in_bed_h": round((wake - bed) / 3600.0, 3) if has_span else None,
+            "consistency_pct": consistency_pct,
+            "debt_h": row.get("debt_h"),
+            "stress_high_pct": high,
+            "stress_medium_pct": row.get("stress_medium_pct"),
+            "stress_low_pct": row.get("stress_low_pct"),
+            "performance_pct": round(statistics.mean(components), 1) if components else None,
+        })
+    return trends
 
 
 def print_report(report: Report) -> None:
@@ -669,10 +738,26 @@ def main() -> int:
             periods = detect_sleep(samples)
             state = "sleep" if periods else "awake"
             sleep_h = total_sleep_hours(periods) if periods else None
+            analysis = None
+            debt_h = None
+            if periods:
+                bed = min(p.start_unix for p in periods)
+                wake = max(p.end_unix for p in periods)
+                coach = sleep_coach(
+                    sleep_history_from_file(history), args.wake,
+                    base_need_h=args.sleep_need, tomorrow=args.tomorrow,
+                )
+                debt_h = coach.debt_h
+                analysis = analyze_sleep(
+                    sorted(samples, key=lambda s: s.unix), periods, coach.need_h,
+                    sleep_nights_from_file(history) + [(bed, wake)],
+                    sleep_baseline_from_file(history),
+                )
             count = record_day(
                 history, date, result.ln_rmssd, measured, state, sleep_h=sleep_h,
                 sleep_start=min(p.start_unix for p in periods) if periods else None,
                 sleep_end=max(p.end_unix for p in periods) if periods else None,
+                analysis=analysis, debt_h=debt_h,
             )
             print(
                 f"  Recorded {date} [{state}]: lnRMSSD {result.ln_rmssd:.3f},"
