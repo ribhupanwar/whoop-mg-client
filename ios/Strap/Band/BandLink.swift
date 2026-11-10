@@ -612,7 +612,7 @@ extension BandLink: CBCentralManagerDelegate {
         peripheral.delegate = self
         self.peripheral = peripheral
         status = .connecting(bandName ?? "WHOOP")
-        peripheral.connect()
+        central.connect(peripheral, options: nil)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
