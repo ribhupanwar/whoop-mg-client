@@ -231,6 +231,13 @@ enum Hrv {
         return strainMax * (1.0 - exp(-trimp / strainScaleTrimp))
     }
 
+    /// Uth 2004 non-exercise estimate: 15.3 × HRmax / HRrest (ml/kg/min).
+    /// Needs a max HR strictly above a positive resting HR.
+    static func vo2Max(maxHR: Double, restingHR: Double) -> Double? {
+        guard maxHR > restingHR, restingHR > 0 else { return nil }
+        return 15.3 * maxHR / restingHR
+    }
+
     static func strainLabel(_ score: Double?) -> String {
         guard let score else { return "unknown" }
         if score < 10 { return "light" }

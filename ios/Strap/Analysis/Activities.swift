@@ -3,20 +3,20 @@ import Foundation
 /// Automatic run/walk/workout detection ported from `whoop/activity.py`.
 ///
 /// Session start/stop uses the HR-only detector (baseline = median HR 5-15 min
-/// old, start at max(100, baseline+20) sustained 5 min, stop below that
-/// baseline+10 for 8 min, minimum 10 min). The gait byte reads 0 still /
-/// 1 walk / 2 run, but the enum is not vendor-verified, so a label always
-/// combines gait, steps and HR rather than trusting the byte alone. Steps/min
-/// comes from the step counter, never the cadence byte, which reads 97-108
-/// even while sitting still.
+/// old, start at max(100, baseline+20) sustained 4 min, minimum 5 min). Gait
+/// or a sustained step rate also opens a session, so a walk counts without a
+/// start tap. The gait byte reads 0 still / 1 walk / 2 run, but the enum is
+/// not vendor-verified, so a label always combines gait, steps and HR rather
+/// than trusting the byte alone. Steps/min comes from the step counter, never
+/// the cadence byte, which reads 97-108 even while sitting still.
 enum ActivityDetect {
     static let baselineMinAgeS = 300
     static let baselineMaxAgeS = 900
     static let baselineMinSamples = 5
     static let hrStartAbsolute = 100.0
     static let hrStartDelta = 20.0
-    static let startSustainS = 300
-    static let minSessionS = 600
+    static let startSustainS = 240
+    static let minSessionS = 300
     static let gapToleranceS = 180
     static let stepWindowS = 60
     static let walkSPM = 60.0
@@ -26,11 +26,21 @@ enum ActivityDetect {
     static let gaitWalk = 1
     static let gaitRun = 2
 
-    static func detect(_ samples: [V18Sample]) -> [ActivitySession] {
-        let ordered = samples.filter { $0.wearing }.sorted { $0.unix < $1.unix }
+    static func detect(
+        _ samples: [V18Sample],
+        sleepPeriods: [SleepPeriod] = []
+    ) -> [ActivitySession] {
+        let ordered = samples
+            .filter { $0.wearing }
+            .filter { sample in
+                !sleepPeriods.contains {
+                    $0.startUnix <= sample.unix && sample.unix <= $0.endUnix
+                }
+            }
+            .sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
 
-        let rates = (0..<ordered.count).map { stepRate(ordered, at: $0) }
+        let rates = (0..<ordered.count).map { StepCounter.rate(ordered, at: $0) }
         let baselines = baselineHRs(ordered)
 
         var flags: [Bool] = []
@@ -78,13 +88,8 @@ enum ActivityDetect {
             let walkTicks = run.filter { $0.activityClass == gaitWalk }.count
             let runTicks = run.filter { $0.activityClass == gaitRun }.count
             let spm = rates[start..<end].compactMap { $0 }.filter { $0 > 0 }
+            let steps = StepCounter.total(run) ?? 0
             let hasSteps = run.contains { $0.stepCounter != nil }
-            let first = run.first?.stepCounter
-            let last = run.last?.stepCounter
-            var steps = 0
-            if let first, let last, last >= first {
-                steps = (last - first) & 0xFFFF
-            }
 
             sessions.append(
                 ActivitySession(
@@ -101,31 +106,11 @@ enum ActivityDetect {
         return sessions
     }
 
-    /// Steps per minute over the trailing minute, from counter deltas. A
-    /// single-second delta above 5 steps is impossible even at sprint cadence,
-    /// so it is a counter jump and is dropped rather than smeared into the
-    /// window as a fake minute of walking.
+    /// Steps per minute over the trailing minute, from counter deltas. The
+    /// shared accumulator handles wrap and restarts; leaps above the sprint
+    /// ceiling are dropped rather than smeared into a fake minute of walking.
     static func stepRate(_ samples: [V18Sample], at index: Int) -> Double? {
-        guard samples[index].stepCounter != nil else { return nil }
-        let lower = max(0, index - stepWindowS - 1)
-        var window: [V18Sample] = []
-        for candidate in samples[lower...index] {
-            guard candidate.stepCounter != nil else { continue }
-            if samples[index].unix - candidate.unix <= stepWindowS {
-                window.append(candidate)
-            }
-        }
-        guard window.count >= 2 else { return nil }
-        var total = 0
-        for position in 1..<window.count {
-            guard let before = window[position - 1].stepCounter,
-                  let after = window[position].stepCounter else { continue }
-            let delta = (after - before) & 0xFFFF
-            if delta <= 5 { total += delta }
-        }
-        let span = samples[index].unix - window[0].unix
-        guard span > 0 else { return nil }
-        return Double(total) * 60.0 / Double(span)
+        StepCounter.rate(samples, at: index, windowSeconds: stepWindowS)
     }
 
     /// Median HR of the 5-15 min old window, one value per sample.

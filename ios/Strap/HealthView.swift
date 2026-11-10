@@ -106,7 +106,14 @@ struct HealthView: View {
             MetricTile(
                 label: "Steps",
                 value: demo ? SampleData.steps.formatted() : stepsText,
-                chip: demo ? "today · sample" : "band step counter",
+                chip: demo ? "today · sample" : "band counter · this capture",
+                chipGood: false
+            )
+            MetricTile(
+                label: "VO₂ max",
+                value: demo ? String(format: "%.1f", SampleData.vo2) : vo2Text,
+                unit: (demo || store.vo2Estimate != nil) ? "ml/kg/min" : nil,
+                chip: demo ? "Uth 2004 · sample" : store.vo2Basis ?? "needs a resting HR",
                 chipGood: false
             )
             MetricTile(
@@ -164,6 +171,10 @@ struct HealthView: View {
     private var stepsText: String {
         guard let steps = summary?.steps else { return "—" }
         return steps.formatted()
+    }
+
+    private var vo2Text: String {
+        store.vo2Estimate.map { String(format: "%.1f", $0) } ?? "—"
     }
 
     private var zoneText: String {

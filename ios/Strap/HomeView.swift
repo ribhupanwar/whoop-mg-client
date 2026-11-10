@@ -437,7 +437,7 @@ struct HomeView: View {
             .padding(.bottom, 10)
 
             if !demo {
-                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 10+ minutes appears here after each capture. Lifting load has to be entered by hand; the band never sees it.")
+                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 5+ minutes appears here after each capture and stays in the log. Lifting load has to be entered by hand; the band never sees it.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .lineSpacing(3)
@@ -469,11 +469,12 @@ struct HomeView: View {
         store.detectedActivities(on: selectedDayKey).map { session in
             let minutes = Int(session.minutes.rounded())
             let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
+            let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
             return ActivityRowModel(
                 id: "band-\(session.startUnix)",
                 icon: Self.icon(forDetected: session.kind),
                 name: "\(session.kind.capitalized) · band",
-                detail: "\(minutes) min\(heart)"
+                detail: "\(minutes) min\(steps)\(heart)"
             )
         }
     }

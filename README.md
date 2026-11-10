@@ -30,6 +30,12 @@ No capture files, device identifiers or third-party source are committed;
   model.
 - Manual activity logging (sets × reps × load for lifts, minutes for cardio)
   and measured live sessions with zone-time allocation.
+- Automatic run/walk/workout sessions: gait, step rate or a sustained HR rise
+  open a session, 5 minutes is the floor, and detected sessions persist in the
+  log so a walk from yesterday still shows on yesterday's screen.
+- A VO₂ max estimate from Uth 2004 (15.3 × HRmax / HRrest): it uses a measured
+  max HR when one is set and labels the age-predicted fallback, so the number
+  is never passed off as a strap reading.
 - Honest gaps: anything the data cannot support shows an em dash with the
   reason, never a guess. Light/deep/REM staging, WHOOP Recovery/Strain/Sleep
   and a validated SpO₂ are deliberately absent.
@@ -50,6 +56,10 @@ No capture files, device identifiers or third-party source are committed;
   candidate byte and signal quality.
 - Metadata `0x31` sub-opcode 2 signals history end; its token is echoed in
   `HISTORICAL_DATA_RESULT` (0x17, body `0x01 + token`).
+- The step counter (u16 at record offset 49) is accumulated from its deltas,
+  not read as an absolute total: it restarts at 0 on a re-sync, wraps at
+  65,536 and sometimes catches up in one leap. Capture steps are labelled as
+  the capture's steps, because a fresh session can start at 0 mid-day.
 
 Implementations that follow the same published BLE behaviour are useful POC
 references, but the code here is original; only interoperability facts were

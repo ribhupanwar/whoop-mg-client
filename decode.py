@@ -22,6 +22,7 @@ from whoop.records import (
     decode_v21,
     decode_v26,
 )
+from whoop.steps import step_total
 
 
 def load_console(path: Path) -> list:
@@ -269,9 +270,9 @@ def main() -> int:
     if motion:
         print(f"\n=== Motion ===")
         print(f"  dynamic accel: mean={statistics.mean(motion):.3f} g  max={max(motion):.3f} g")
-    steps = [s.step_motion_counter for s in samples if s.step_motion_counter is not None]
-    if steps:
-        print(f"  step counter: {min(steps)} -> {max(steps)} (delta {max(steps)-min(steps)})")
+    steps = step_total(samples)
+    if steps is not None:
+        print(f"  step counter: {steps} steps in this capture (delta sum, restart-aware)")
 
     sleep_states = Counter(s.sleep_state for s in samples if s.sleep_state is not None)
     if sleep_states:

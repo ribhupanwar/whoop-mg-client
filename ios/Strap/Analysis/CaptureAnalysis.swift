@@ -75,14 +75,10 @@ struct CaptureSummary: Codable, Equatable {
             )
         }
 
-        let counters = ordered.compactMap { $0.stepCounter }
-        var steps: Int?
-        if let first = counters.first, let last = counters.last, last >= first {
-            steps = (last - first) & 0xFFFF
-        }
+        let steps = StepCounter.total(ordered)
 
         let periods = SleepDetect.detect(ordered)
-        let activities = ActivityDetect.detect(ordered)
+        let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
         let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
 
@@ -154,11 +150,7 @@ enum DailyAnalysis {
                     Hrv.trimp(daySamples, maxHR: maxHR, restingHR: resting, sex: sex)
                 )
             }
-            let counters = daySamples.compactMap { $0.stepCounter }
-            var steps: Int?
-            if let first = counters.first, let last = counters.last, last >= first {
-                steps = (last - first) & 0xFFFF
-            }
+            let steps = StepCounter.total(daySamples)
             result.append(
                 DayMetrics(
                     dateKey: key,

@@ -14,6 +14,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var journalEntries: [String: JournalEntry] = [:]
     @Published private(set) var manualActivities: [ManualActivity] = []
     @Published private(set) var liveActivities: [LiveActivityRecord] = []
+    /// Band-detected sessions, kept across syncs so a walk logged yesterday
+    /// still shows on yesterday's screen.
+    @Published private(set) var detectedBandActivities: [ActivitySession] = []
 
     let band = BandLink()
     let journal: JournalStore
@@ -21,6 +24,7 @@ final class AppStore: ObservableObject {
     private let defaults: UserDefaults
     private let settingsKey = "strap.settings.v1"
     private var bandCancellable: AnyCancellable?
+    private var summaryCancellable: AnyCancellable?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -37,10 +41,26 @@ final class AppStore: ObservableObject {
         )
         self.manualActivities = activities.manualActivities()
         self.liveActivities = activities.liveActivities()
+        self.detectedBandActivities = activities.detectedActivities()
         band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
         bandCancellable = band.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+        // @Published fires in willSet, so listen to the projected value to see
+        // the new summary rather than the previous one.
+        summaryCancellable = band.$summary.sink { [weak self] fresh in
+            self?.syncDetectedActivities(fresh)
+        }
+    }
+
+    /// A drain can report the same session twice; the store merges overlaps,
+    /// and the published list only changes when something new arrived.
+    private func syncDetectedActivities(_ fresh: CaptureSummary?) {
+        guard let sessions = fresh?.activities, !sessions.isEmpty else { return }
+        let known = Set(detectedBandActivities.map { $0.startUnix })
+        guard sessions.contains(where: { !known.contains($0.startUnix) }) else { return }
+        activities.mergeDetected(sessions)
+        detectedBandActivities = activities.detectedActivities()
     }
 
     /// Design preview toggle. OFF (default) == live mode: measured values where
@@ -106,12 +126,15 @@ final class AppStore: ObservableObject {
         liveActivities.filter { $0.dateKey == dateKey }
     }
 
-    /// Band-detected sessions for a local day, from the most recent capture.
+    /// Band-detected sessions for a local day. Merges the persisted log with
+    /// the latest capture so a session appears the moment a drain lands.
     func detectedActivities(on dateKey: String) -> [ActivitySession] {
-        (band.summary?.activities ?? []).filter {
-            JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix)))
-                == dateKey
-        }
+        var seen = Set<Int>()
+        let merged = (band.summary?.activities ?? []) + detectedBandActivities
+        return merged
+            .filter { JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix))) == dateKey }
+            .filter { seen.insert($0.startUnix).inserted }
+            .sorted { $0.startUnix < $1.startUnix }
     }
 
     // MARK: - Measured values shared by the health screens
@@ -129,12 +152,21 @@ final class AppStore: ObservableObject {
         (band.baseline?.days ?? 0) >= Recovery.minBaselineDays
     }
 
-    /// Uth 2004 (15.3 × HRmax / HRrest). Only when a measured max HR override
-    /// exists — the age formula alone is too weak to publish as a number.
+    /// Uth 2004 (15.3 × HRmax / HRrest). Uses a measured max HR when one is
+    /// set; otherwise the documented 208 − 0.7 × age estimate, labelled as
+    /// such. Needs a measured resting HR — the ratio means nothing without it.
     var vo2Estimate: Double? {
-        guard let maxHR = settings.maxHROverride, let resting = measuredRestingHR,
-              resting > 0, maxHR > resting else { return nil }
-        return 15.3 * maxHR / resting
+        guard let resting = measuredRestingHR else { return nil }
+        let maxHR = settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: settings.age)
+        return Hrv.vo2Max(maxHR: maxHR, restingHR: resting)
+    }
+
+    /// Where the max HR in the VO₂ estimate came from, for the caption.
+    var vo2Basis: String? {
+        guard vo2Estimate != nil else { return nil }
+        return settings.maxHROverride == nil
+            ? "Uth 2004 · age-predicted max HR"
+            : "Uth 2004 · your measured max HR"
     }
 
     /// Minutes in Z1–Z3 (low) or Z4–Z5 (high) over the last seven days of

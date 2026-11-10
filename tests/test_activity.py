@@ -65,9 +65,9 @@ class TestDetectActivities(unittest.TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].kind, "workout")
 
-    def test_short_burst_is_not_a_session(self):
-        rows = rest() + stream(900, 300, 150, accel=0.4, spm=160, gait=2, step0=100)
-        rows += cool(1200)
+    def test_four_minute_burst_is_not_a_session(self):
+        rows = rest() + stream(900, 240, 150, accel=0.4, spm=160, gait=2, step0=100)
+        rows += cool(1140)
         self.assertEqual(detect_activities(rows), [])
 
     def test_brief_stop_inside_a_session_is_closed(self):

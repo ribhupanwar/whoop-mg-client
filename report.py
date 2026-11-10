@@ -137,7 +137,7 @@ def build_report(
         base_need_h=sleep_need if sleep_need else 8.0,
         tomorrow=tomorrow,
     )
-    activities = detect_activities(ordered)
+    activities = detect_activities(ordered, sleep_periods=periods)
     analysis = (
         analyze_sleep(ordered, periods, coach.need_h, sleep_nights or [], sleep_baseline)
         if periods else None

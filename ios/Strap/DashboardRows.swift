@@ -114,6 +114,13 @@ struct DashboardRows: View {
         store.vo2Estimate.map { String(format: "%.1f", $0) } ?? "—"
     }
 
+    private var vo2Detail: String {
+        if store.settings.maxHROverride == nil {
+            return "Max HR comes from 208 − 0.7 × age, so this carries the formula's wide error. Set a max HR you actually reached in a hard session (Settings) for a sharper estimate. A population formula, not a lab test and never a strap reading."
+        }
+        return "Max HR comes from the override you entered; resting HR is your measured quiet value. A population formula with wide error — not a lab test, and never a strap reading."
+    }
+
     private var stressValue: String {
         guard let index = store.band.stress.index else { return "—" }
         return "\(store.band.stress.band.uppercased()) \(String(format: "%.1f", index))"
@@ -140,7 +147,7 @@ struct DashboardRows: View {
                         .tracking(0.7)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text(demo ? "—" : vo2Text)
+                    Text(demo ? String(format: "%.1f", SampleData.vo2) : vo2Text)
                         .font(.system(size: 20, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("›")
@@ -154,7 +161,7 @@ struct DashboardRows: View {
             }
             .buttonStyle(.plain)
 
-            Text("estimate via Uth 2004 (15.3 × HRmax/HRrest) — needs measured max HR")
+            Text(demo ? "Uth 2004 · sample" : (store.vo2Basis ?? "needs a measured resting HR — Uth 2004 (15.3 × HRmax/HRrest)"))
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -162,7 +169,7 @@ struct DashboardRows: View {
                 .padding(.top, 4)
 
             if showVO2Detail {
-                Text("A population formula with wide error — not a lab test, and never a strap reading. Enter a max HR you have actually measured in a hard session.")
+                Text(vo2Detail)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .fixedSize(horizontal: false, vertical: true)

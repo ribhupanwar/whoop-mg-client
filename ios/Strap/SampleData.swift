@@ -17,6 +17,7 @@ enum SampleData {
     static let rhrCompare = 56
     static let steps = 8430
     static let stepsCompare = 8929
+    static let vo2 = 48.2
     static let zones13 = "1:02"
     static let zones13Compare = "0:46"
     static let zones45 = "0:08"

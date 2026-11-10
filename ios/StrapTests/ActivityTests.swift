@@ -141,4 +141,96 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(store.liveActivities(), [record])
         XCTAssertTrue(store.manualActivities().isEmpty, "a measured session must not look self-reported")
     }
+
+    // MARK: Band-detected sessions
+
+    private func session(start: Int, end: Int, steps: Int = 500) -> ActivitySession {
+        ActivitySession(
+            startUnix: start, endUnix: end, kind: "walk", steps: steps,
+            meanHR: 110, walkTicks: 0, runTicks: 0
+        )
+    }
+
+    func testDetectedSessionsSurviveARedraw() {
+        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
+        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
+        XCTAssertEqual(store.detectedActivities().count, 1)
+    }
+
+    func testOverlappingDetectionKeepsTheLongerOne() {
+        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)])
+        store.mergeDetected([session(start: 1_700_000_010, end: 1_700_001_200)])
+        XCTAssertEqual(store.detectedActivities().count, 1)
+        XCTAssertEqual(store.detectedActivities().first?.durationS, 1_191)
+    }
+
+    func testSessionsOlderThanSixtyDaysArePruned() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)], now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+    }
+}
+
+final class ActivityDetectTests: XCTestCase {
+    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int = 0) -> V18Sample {
+        V18Sample(
+            header: BandRecordHeader(
+                version: 18, flags: 0x80, recordIndex: UInt32(unix),
+                unix: UInt32(unix), subsecQ15: 0
+            ),
+            heartRate: hr,
+            rrIntervalsMS: [],
+            dynamicAccelG: 0.05,
+            gravityXG: nil,
+            gravityYG: nil,
+            gravityZG: nil,
+            stepCounter: steps,
+            stepCadence: nil,
+            activityClass: gait,
+            skinTempC: nil,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil
+        )
+    }
+
+    /// A six-minute walk at 120 steps/min with resting HR and a still gait
+    /// byte — the walk must come from the step counter alone.
+    private func walk(seconds: Int = 360) -> [V18Sample] {
+        (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2) }
+    }
+
+    func testFiveMinuteWalkIsDetectedWithoutAGaitByte() {
+        let sessions = ActivityDetect.detect(walk())
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.kind, "walk")
+        XCTAssertEqual(sessions.first?.startUnix, 0)
+        XCTAssertEqual(sessions.first?.steps, 718)
+    }
+
+    func testFastSteppingIsLabelledARun() {
+        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3) }
+        XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
+    }
+
+    func testSleepWindowsAreNotWorkouts() {
+        let periods = [
+            SleepPeriod(
+                startUnix: -60, endUnix: 400, quietFraction: 0.9,
+                meanHR: 55, wakeEvents: 0
+            )
+        ]
+        XCTAssertTrue(ActivityDetect.detect(walk(), sleepPeriods: periods).isEmpty)
+    }
+
+    func testFourMinuteWalkIsBelowTheFloor() {
+        XCTAssertTrue(ActivityDetect.detect(walk(seconds: 240)).isEmpty)
+    }
 }

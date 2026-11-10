@@ -143,12 +143,14 @@ enum ActivityFormat {
 
 // MARK: - Persistence
 
-/// UserDefaults-backed activity log. Manual entries and measured live
-/// sessions are stored separately so neither can be mistaken for the other.
+/// UserDefaults-backed activity log. Manual entries, measured live sessions
+/// and band-detected sessions are stored separately so none can be mistaken
+/// for another.
 final class ActivityStore {
     private let defaults: UserDefaults
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
+    private let detectedKey = "strap.detected.activities.v1"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -195,5 +197,44 @@ final class ActivityStore {
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: liveKey)
         }
+    }
+
+    // MARK: - Band-detected sessions
+
+    func detectedActivities() -> [ActivitySession] {
+        guard let data = defaults.data(forKey: detectedKey),
+              let saved = try? JSONDecoder().decode([ActivitySession].self, from: data) else {
+            return []
+        }
+        return saved.sorted { $0.startUnix < $1.startUnix }
+    }
+
+    /// Keeps one row per real session. The band replays overlapping history,
+    /// so a session that overlaps an already-stored one is merged rather than
+    /// appended, and the longer measurement wins.
+    func mergeDetected(_ sessions: [ActivitySession], now: Date = Date()) {
+        guard !sessions.isEmpty else { return }
+        var items = detectedActivities()
+        for session in sessions {
+            if let index = items.firstIndex(where: { Self.overlaps($0, session) }) {
+                if session.durationS > items[index].durationS {
+                    items[index] = session
+                }
+            } else {
+                items.append(session)
+            }
+        }
+        let cutoff = Int(now.timeIntervalSince1970) - 60 * 86_400
+        items = items.filter { $0.endUnix >= cutoff }.sorted { $0.startUnix < $1.startUnix }
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: detectedKey)
+        }
+    }
+
+    static func overlaps(_ a: ActivitySession, _ b: ActivitySession) -> Bool {
+        let shared = min(a.endUnix, b.endUnix) - max(a.startUnix, b.startUnix) + 1
+        guard shared > 0 else { return false }
+        let shorter = min(a.durationS, b.durationS)
+        return Double(shared) >= Double(shorter) * 0.5
     }
 }
