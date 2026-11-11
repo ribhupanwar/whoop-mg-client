@@ -375,6 +375,17 @@ final class ActivityDetectTests: XCTestCase {
 // MARK: - Sleep detection
 
 final class SleepDetectTests: XCTestCase {
+    func testOvernightFiftyMinuteStillnessIsNotSleep() {
+        let night = Calendar.current.date(
+            bySettingHour: 23, minute: 0, second: 0, of: Date()
+        )!
+        let start = Int(night.timeIntervalSince1970)
+        var rows = stretch(start, 600, hr: 100, accel: 0.5)
+        rows += stretch(start + 600, 3000, hr: 60, accel: 0.02)
+        rows += stretch(start + 3600, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
     func testEveningLyingStillForFortyFiveMinutesIsNotSleep() {
         let evening = Calendar.current.date(
             bySettingHour: 19, minute: 0, second: 0, of: Date()
@@ -417,7 +428,7 @@ final class SleepDetectTests: XCTestCase {
         rows += stretch(1800, 120, hr: 70, accel: 0.5)
         rows += stretch(1920, 1200, hr: 60, accel: 0.02)
         rows += stretch(3120, 600, hr: 100, accel: 0.5)
-        let periods = SleepDetect.detect(rows)
+        let periods = SleepDetect.detect(rows, minSleepS: 1800)
         XCTAssertEqual(periods.count, 1)
         XCTAssertEqual(periods[0].durationS, 2520)
         XCTAssertEqual(periods[0].quietFraction, 2400.0 / 2520.0, accuracy: 1e-6)
