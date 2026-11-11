@@ -1,7 +1,9 @@
 import SwiftUI
+import MapKit
 
 struct GPSRunView: View {
     @StateObject private var gps = GPSRunRecorder()
+    @State private var selectedRun: GPSRunRecord?
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
@@ -13,6 +15,12 @@ struct GPSRunView: View {
                         .font(.system(size: 40, weight: .bold))
                         .foregroundStyle(Color.appFG)
                     Text("Elapsed: \(gps.elapsedSeconds / 60)m \(gps.elapsedSeconds % 60)s")
+                        .foregroundStyle(Color.appMuted)
+                    if gps.distanceMeters >= 100 && gps.elapsedSeconds > 0 {
+                        let pace = Double(gps.elapsedSeconds) / (gps.distanceMeters / 1000)
+                        Text(String(format: "Average pace %d:%02d /km", Int(pace) / 60, Int(pace) % 60))
+                            .foregroundStyle(Color.appFG)
+                    }
                         .foregroundStyle(Color.appMuted)
                     Text(gps.status)
                         .font(.system(size: 12))
@@ -64,6 +72,10 @@ struct GPSRunView: View {
                                         .foregroundStyle(Color.appMuted)
                                 }
                                 Spacer()
+                                if run.route.count >= 2 {
+                                    Button("Map") { selectedRun = run }
+                                        .font(.system(size: 12))
+                                }
                                 Button(role: .destructive) {
                                     gps.deleteRun(id: run.id)
                                 } label: {
@@ -80,6 +92,22 @@ struct GPSRunView: View {
             }
         }
         .navigationTitle("GPS Run")
+        .sheet(item: $selectedRun) { run in
+            NavigationStack {
+                Map {
+                    MapPolyline(coordinates: run.route.map {
+                        CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                    })
+                    .stroke(.cyan, lineWidth: 4)
+                }
+                .navigationTitle("Recorded route")
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { selectedRun = nil }
+                    }
+                }
+            }
+        }
         .onReceive(ticker) { _ in gps.refreshElapsed() }
         .onDisappear { if gps.recording { gps.stop() } }
     }
