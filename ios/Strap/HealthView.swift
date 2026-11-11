@@ -103,6 +103,9 @@ struct HealthView: View {
                 Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)\n                History frames undecodable: \(store.band.historyUndecodableFrames) · versions: \(store.band.historyVersionCounts.sorted { $0.key < $1.key }.map { "v\($0.key):\($0.value)" }.joined(separator: ", "))")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
+                Text(store.band.liveRRQualityDiagnostic)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
                 Text("Live R–R beats buffered: \(store.band.liveRRIntervalsMS.count)")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
@@ -121,6 +124,12 @@ struct HealthView: View {
                     Hint("R–R data exists but a continuous 5-minute quiet window is not yet available for the overnight metric.")
                 }
             } else {
+                Text(store.band.liveRRQualityDiagnostic)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
+                Text(store.band.historicalRestQualityReason)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
                 Hint("Read stored history to inspect R–R coverage.")
             }
         }

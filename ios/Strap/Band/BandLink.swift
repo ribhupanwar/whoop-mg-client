@@ -171,6 +171,28 @@ final class BandLink: NSObject, ObservableObject {
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
+    /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
+    /// Never mix it into overnight recovery or bridge missing seconds.
+    var liveRRQualityDiagnostic: String {
+        let records = archivedLiveRRSamples.sorted { $0.unix < $1.unix }
+        guard !records.isEmpty else { return "No archived live R-R packets yet" }
+        let beats = records.reduce(0) { $0 + $1.rrIntervalsMS.count }
+        var longest = 0
+        var current = 0
+        var previous: Int?
+        for sample in records {
+            if let last = previous {
+                if sample.unix == last { continue }
+                current = sample.unix == last + 1 ? current + 1 : 1
+            } else {
+                current = 1
+            }
+            longest = max(longest, current)
+            previous = sample.unix
+        }
+        return "Live R-R archive: \\(beats) beats / \\(records.count) seconds; longest contiguous: \\(longest)s (not overnight HRV)"
+    }
+
     var historicalRestQualityReason: String {
         guard !retainedHistoricalSamples.isEmpty else { return "No retained historical records" }
         let periods = SleepDetect.detect(retainedHistoricalSamples)
