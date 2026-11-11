@@ -29,6 +29,13 @@ struct HomeView: View {
                 dashboardSection
             }
         }
+        .refreshable {
+            if store.band.isConnected {
+                store.band.readHistory()
+            } else {
+                store.connectBand()
+            }
+        }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
