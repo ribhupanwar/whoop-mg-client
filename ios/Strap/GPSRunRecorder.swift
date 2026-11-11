@@ -12,6 +12,8 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
     @Published private(set) var status = "Ready · iPhone GPS"
     @Published private(set) var route: [CLLocation] = []
 
+    @Published private(set) var savedRuns: [GPSRunRecord] = []
+    private let history = GPSRunHistory()
     private let manager = CLLocationManager()
     private var startTime: Date?
     private var activeSince: Date?
@@ -22,6 +24,7 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
 
     override init() {
         super.init()
+        savedRuns = history.all()
         manager.delegate = self
         manager.activityType = .fitness
         manager.desiredAccuracy = kCLLocationAccuracyBest
@@ -86,7 +89,27 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
         activeSince = nil
         lastFix = nil
         manager.stopUpdatingLocation()
+        if let startedAt = startTime, distanceMeters >= 100, elapsedSeconds > 0 {
+            let record = GPSRunRecord(
+                id: UUID(), startedAt: startedAt, endedAt: Date(),
+                movingSeconds: elapsedSeconds, distanceMeters: distanceMeters,
+                splitSeconds: splitSeconds,
+                route: route.map {
+                    GPSRunPoint(latitude: $0.coordinate.latitude,
+                                longitude: $0.coordinate.longitude,
+                                unix: $0.timestamp.timeIntervalSince1970,
+                                accuracyMeters: $0.horizontalAccuracy)
+                }
+            )
+            history.save(record)
+            savedRuns = history.all()
+        }
         status = String(format: "Finished · %.2f km · %d seconds", distanceMeters / 1000, elapsedSeconds)
+    }
+
+    func deleteRun(id: UUID) {
+        history.delete(id: id)
+        savedRuns = history.all()
     }
 
     func refreshElapsed() {
