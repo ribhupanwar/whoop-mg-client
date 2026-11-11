@@ -15,6 +15,7 @@ struct HealthView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 hrPanel
+                if !demo { rrDiagnosticPanel }
                 metricGrid
                 Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Respiratory rate is an RSA estimate from R-R; SpO₂ is the band's unvalidated candidate, not a clinical reading.")
             }
@@ -89,6 +90,27 @@ struct HealthView: View {
                  : series.isEmpty
                     ? "No HR series yet — wear the band and run a capture."
                     : "Per-minute means from the last capture, newest at the right.")
+        }
+    }
+
+    private var rrDiagnosticPanel: some View {
+        Panel {
+            SectionTitle("R–R signal diagnostics")
+            if let capture = summary {
+                Text("Historical samples: \(capture.sampleCount) · HRV quiet window: \(capture.hrvWindowSeconds)s")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appFG)
+                Text("Clean R–R beats: \(capture.hrv.nnBeats) / \(capture.hrv.beats) · respiratory beats: \(capture.respiration.beats)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
+                if capture.hrv.nnBeats == 0 {
+                    Hint("No decoded R–R beats in the qualifying quiet window. Check historical offload, v18 R–R offset and signal quality; live BPM alone does not provide beat intervals.")
+                } else if capture.hrvWindowSeconds < 300 {
+                    Hint("R–R data exists but a continuous 5-minute quiet window is not yet available for the overnight metric.")
+                }
+            } else {
+                Hint("Read stored history to inspect R–R coverage.")
+            }
         }
     }
 
