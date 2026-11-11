@@ -301,6 +301,18 @@ final class BandLink: NSObject, ObservableObject {
             maybeBeginHandshake()
             return
         }
+        // A saved CoreBluetooth peripheral can remain in .connecting forever
+        // without didConnect/didFailToConnect (e.g. the band stopped advertising).
+        // A deliberate Connect tap must recover instead of silently returning.
+        if let peripheral, peripheral.state == .connecting {
+            lastMessage = "Retrying saved strap connection and discovery…"
+            central.cancelPeripheralConnection(peripheral)
+            self.peripheral = nil
+            reconnectWork?.cancel()
+            reconnectWork = nil
+            if central.state == .poweredOn { beginScan() }
+            return
+        }
         if central.state == .poweredOn {
             reconnectSavedPeripheralOrScan()
         } else {
