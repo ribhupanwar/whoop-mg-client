@@ -141,6 +141,52 @@ enum ActivityFormat {
     }
 }
 
+
+struct WhoopWorkout: Codable, Equatable, Identifiable {
+    let id: String
+    let sportName: String
+    let startUnix: Int
+    let endUnix: Int
+    let strain: Double?
+    let averageHeartRate: Int?
+}
+
+enum WhoopWorkoutImport {
+    private struct Page: Decodable {
+        let records: [Record]
+        let next_token: String?
+    }
+    private struct Record: Decodable {
+        let id: String
+        let sport_name: String
+        let start: Date
+        let end: Date
+        let score: Score?
+    }
+    private struct Score: Decodable {
+        let strain: Double?
+        let average_heart_rate: Int?
+    }
+
+    /// One authorized WHOOP API v2 workout page; paginate using next_token.
+    static func decodePage(_ data: Data) throws -> (workouts: [WhoopWorkout], nextToken: String?) {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let page = try decoder.decode(Page.self, from: data)
+        let workouts = page.records.compactMap { item -> WhoopWorkout? in
+            guard item.end > item.start, !item.id.isEmpty else { return nil }
+            return WhoopWorkout(
+                id: item.id, sportName: item.sport_name,
+                startUnix: Int(item.start.timeIntervalSince1970),
+                endUnix: Int(item.end.timeIntervalSince1970),
+                strain: item.score?.strain,
+                averageHeartRate: item.score?.average_heart_rate
+            )
+        }
+        return (workouts, page.next_token)
+    }
+}
+
 // MARK: - Persistence
 
 /// UserDefaults-backed activity log. Manual entries, measured live sessions
@@ -151,6 +197,7 @@ final class ActivityStore {
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
     private let detectedKey = "strap.detected.activities.v1"
+    private let whoopKey = "strap.whoop.official.workouts.v1"
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -196,6 +243,22 @@ final class ActivityStore {
         items.append(record)
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: liveKey)
+        }
+    }
+
+    func whoopWorkouts() -> [WhoopWorkout] {
+        guard let data = defaults.data(forKey: whoopKey),
+              let saved = try? JSONDecoder().decode([WhoopWorkout].self, from: data) else {
+            return []
+        }
+        return saved.sorted { $0.startUnix < $1.startUnix }
+    }
+
+    func mergeWhoopWorkouts(_ incoming: [WhoopWorkout]) {
+        var byID = Dictionary(uniqueKeysWithValues: whoopWorkouts().map { ($0.id, $0) })
+        for item in incoming { byID[item.id] = item }
+        if let data = try? JSONEncoder().encode(Array(byID.values)) {
+            defaults.set(data, forKey: whoopKey)
         }
     }
 
