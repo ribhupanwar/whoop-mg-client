@@ -131,18 +131,24 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
 
-                trioItem(
+                NavigationLink(value: Route.recovery) {
+                    trioItem(
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
                     color: .appGood
-                )
-                trioItem(
+                    )
+                }
+                .buttonStyle(.plain)
+                NavigationLink(value: Route.strain) {
+                    trioItem(
                     label: "STRAIN ›",
                     text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
                     progress: demo ? SampleData.strain / 21.0 : strain.map { $0 / 21.0 },
                     color: .appAccent
-                )
+                    )
+                }
+                .buttonStyle(.plain)
             }
             if !demo {
                 Hint(trioHint)
