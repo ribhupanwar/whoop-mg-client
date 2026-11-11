@@ -230,6 +230,43 @@ final class BandLink: NSObject, ObservableObject {
         )
     }
 
+    /// Import dated WHOOP recovery inputs without overwriting band-captured
+    /// values. The imported days are persisted and can contribute to baselines.
+    @discardableResult
+    func importWhoopHistory(_ rows: [WhoopCSVImport.Row]) -> Int {
+        var byDate = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
+        var inserted = 0
+        for row in rows {
+            if let old = byDate[row.dateKey] {
+                // Prefer locally measured values when present; fill only gaps.
+                guard old.lnRMSSD == nil || old.restingHR == nil else { continue }
+                byDate[row.dateKey] = DayMetrics(
+                    dateKey: old.dateKey, state: old.state,
+                    restingHR: old.restingHR ?? row.restingHR,
+                    lnRMSSD: old.lnRMSSD ?? log(row.hrvMS),
+                    hrvWindowSeconds: old.hrvWindowSeconds,
+                    sleepHours: old.sleepHours, sleepStartUnix: old.sleepStartUnix,
+                    sleepEndUnix: old.sleepEndUnix, strain: old.strain, steps: old.steps
+                )
+            } else {
+                byDate[row.dateKey] = DayMetrics(
+                    dateKey: row.dateKey, state: "imported",
+                    restingHR: row.restingHR, lnRMSSD: log(row.hrvMS),
+                    hrvWindowSeconds: 0, sleepHours: 0,
+                    sleepStartUnix: nil, sleepEndUnix: nil, strain: nil, steps: nil
+                )
+            }
+            inserted += 1
+        }
+        if inserted > 0 {
+            days = byDate.values.sorted { $0.dateKey < $1.dateKey }
+            if let encoded = try? JSONEncoder().encode(days) {
+                UserDefaults.standard.set(encoded, forKey: Keys.days)
+            }
+        }
+        return inserted
+    }
+
     // MARK: - Connection
 
     func connect(sex: Sex, maxHR: Double?, needHours: Double) {
