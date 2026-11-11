@@ -5,7 +5,7 @@ import Foundation
 /// is a separate pass over that window in `SleepStager`.
 enum SleepDetect {
     static let quietAccelG = 0.08
-    static let minSleepS = 1800
+    static let minSleepS = 3600
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
 
@@ -59,9 +59,8 @@ enum SleepDetect {
             let startHour = Calendar.current.component(
                 .hour, from: Date(timeIntervalSince1970: TimeInterval(run[0].unix))
             )
-            if (8..<22).contains(startHour) && duration < max(minSleepS, 90 * 60) {
-                continue
-            }
+            let daytime = (8..<22).contains(startHour)
+            if daytime && duration < max(minSleepS, 90 * 60) { continue }
 
             let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
             let wornSeconds = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
@@ -71,6 +70,13 @@ enum SleepDetect {
                   wornSeconds * 5 >= observedSeconds * 4,
                   !runHRs.isEmpty,
                   Stats.median(runHRs) <= activeMedian - hrDropBPM else { continue }
+            // A waking HR spike can make sedentary rest appear to have a
+            // large HR drop. Require the candidate's lowest sustained HR
+            // to be below the waking reference as an independent check.
+            if daytime {
+                guard let resting = Hrv.minimumRollingMean(runHRs, window: 300),
+                      resting <= activeMedian * 0.95 else { continue }
+            }
 
             let quietSeconds = quiet[start..<end].filter { $0 }.count
             var wakeEvents = 0
