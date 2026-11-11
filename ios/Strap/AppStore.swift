@@ -239,9 +239,21 @@ final class AppStore: ObservableObject {
     /// set; otherwise the documented 208 − 0.7 × age estimate, labelled as
     /// such. Needs a measured resting HR — the ratio means nothing without it.
     var vo2Estimate: Double? {
-        guard let resting = measuredRestingHR else { return nil }
+        // Never turn an unconfirmed default age or a short daytime capture
+        // into an apparently precise fitness estimate.
+        guard settings.ageConfirmed,
+              let resting = settings.restingHROverride ?? latestOvernightRestingHR else { return nil }
         let maxHR = settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: settings.age)
         return Hrv.vo2Max(maxHR: maxHR, restingHR: resting)
+    }
+
+    /// Use a dated night-associated resting measurement for fitness trends.
+    /// A transient quiet daytime window is not an overnight resting HR.
+    private var latestOvernightRestingHR: Double? {
+        band.days
+            .filter { $0.sleepHours > 0 && $0.restingHR != nil }
+            .sorted { $0.dateKey > $1.dateKey }
+            .first?.restingHR
     }
 
     /// Where the max HR in the VO₂ estimate came from, for the caption.
