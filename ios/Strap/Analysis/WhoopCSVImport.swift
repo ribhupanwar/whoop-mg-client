@@ -70,9 +70,8 @@ enum WhoopCSVImport {
             throw ImportError.unsupportedColumns
         }
         let rows = records.dropFirst().filter { !$0.isEmpty }.map { values in
-            SupplementalRecord(source: category, fields: Dictionary(
-                uniqueKeysWithValues: zip(headers, values).map { ($0.0, $0.1) }
-            ))
+            SupplementalRecord(source: category, fields: Dictionary(zip(headers, values).map { ($0.0, $0.1) },
+                uniquingKeysWith: { _, latest in latest }))
         }
         guard !rows.isEmpty else { throw ImportError.noValidRows }
         let key = "strap.whoop.import." + category + ".v1"
