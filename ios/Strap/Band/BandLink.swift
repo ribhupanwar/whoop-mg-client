@@ -576,12 +576,16 @@ final class BandLink: NSObject, ObservableObject {
             // only once after a sustained 90s silent stretch; don't hammer
             // its CCCD every 15 seconds. A pre-bond subscription is renewed
             // immediately after hello acknowledgement below.
-            guard self.hrBondConfirmed, self.hrRecoveryAttempts == 0,
+            // An absent first packet needs recovery too: waiting for an
+            // existing packet timestamp alone can leave the UI stuck forever.
+            guard self.hrBondConfirmed, self.hrRecoveryAttempts < 4,
                   let confirmed = self.hrSubscriptionConfirmedAt,
-                  now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 90
+                  now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 30,
+                  self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 45 }) ?? true,
+                  !self.hrResubscribePending
             else { return }
             self.lastHRRecoveryAt = now
-            self.hrRecoveryAttempts = 1
+            self.hrRecoveryAttempts += 1
 
             if let hr = self.hrCharacteristic {
                 // The CCCD can remain enabled even when 0x2A37 stops sending.
