@@ -172,6 +172,7 @@ final class BandLink: NSObject, ObservableObject {
     private var hrConnectedAt: Date?
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
+    private static let restoreIdentifier = "com.strap.band.central.v1"
     private var hrCharacteristic: CBCharacteristic?
     private var hrProfileEnabled = false
     private var hrEnableQueued = false
@@ -197,7 +198,8 @@ final class BandLink: NSObject, ObservableObject {
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
-        central = CBCentralManager(delegate: self, queue: nil)
+        central = CBCentralManager(delegate: self, queue: nil,
+            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
     }
 
     // MARK: - Settings
@@ -295,7 +297,7 @@ final class BandLink: NSObject, ObservableObject {
             return
         }
         if central.state == .poweredOn {
-            beginScan()
+            reconnectSavedPeripheralOrScan()
         } else {
             lastMessage = status.title
         }
@@ -499,14 +501,39 @@ final class BandLink: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
     }
 
+    /// A pending CoreBluetooth connect survives iOS suspension, unlike a
+    /// DispatchQueue retry timer. Prefer the saved device before scanning.
+    private func reconnectSavedPeripheralOrScan() {
+        guard wantsConnection, central.state == .poweredOn else { return }
+        if let peripheral, peripheral.state == .connected || peripheral.state == .connecting {
+            return
+        }
+        if let id = preferredBandID, let uuid = UUID(uuidString: id),
+           let saved = central.retrievePeripherals(withIdentifiers: [uuid]).first {
+            saved.delegate = self
+            peripheral = saved
+            status = .connecting(preferredBandName ?? saved.name ?? "Saved strap")
+            central.connect(saved, options: nil)
+            return
+        }
+        beginScan()
+    }
+
     private func scheduleReconnect() {
         guard wantsConnection, central.state == .poweredOn else { return }
         reconnectWork?.cancel()
         reconnectAttempt = min(reconnectAttempt + 1, 6)
+        if reconnectAttempt >= 3, let peripheral, peripheral.state == .disconnected {
+            // Leave an outstanding connection for iOS to complete on re-advertisement.
+            peripheral.delegate = self
+            status = .connecting(preferredBandName ?? peripheral.name ?? "Saved strap")
+            central.connect(peripheral, options: nil)
+            return
+        }
         let delay = min(30.0, Double(1 << reconnectAttempt))
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.wantsConnection, self.central.state == .poweredOn else { return }
-            self.beginScan()
+            self.reconnectSavedPeripheralOrScan()
         }
         reconnectWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
@@ -950,11 +977,23 @@ final class BandLink: NSObject, ObservableObject {
 // MARK: - CBCentralManagerDelegate
 
 extension BandLink: CBCentralManagerDelegate {
+    func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
+        guard let restored = (dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral])?.first(where: {
+            preferredBandID == nil || $0.identifier.uuidString == preferredBandID
+        }) else { return }
+        wantsConnection = true
+        peripheral = restored
+        restored.delegate = self
+        bandName = restored.name ?? preferredBandName
+        status = .connecting(bandName ?? "Restored strap")
+    }
+
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            if wantsConnection {
-                beginScan()
+            if wantsConnection || preferredBandID != nil {
+                wantsConnection = true
+                reconnectSavedPeripheralOrScan()
             } else {
                 status = .idle
             }
