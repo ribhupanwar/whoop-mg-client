@@ -120,7 +120,7 @@ struct HealthView: View {
             MetricTile(
                 label: "Steps",
                 value: demo ? SampleData.steps.formatted() : stepsText,
-                chip: demo ? "today · sample" : "band counter · this capture",
+                chip: demo ? "today · sample" : "today · recorded minimum",
                 chipGood: false
             )
             MetricTile(
@@ -200,7 +200,14 @@ struct HealthView: View {
     }
 
     private var stepsText: String {
-        guard let steps = summary?.steps else { return "—" }
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        guard let steps = store.band.days.first(where: { $0.dateKey == today })?.steps else {
+            return "—"
+        }
         return steps.formatted()
     }
 
