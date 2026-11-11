@@ -834,15 +834,15 @@ final class BandLink: NSObject, ObservableObject {
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
         if drainFrames > 0 && idle >= Self.drainIdleSeconds {
-            finishDrain()
+            finishDrain(reason: "idle timeout after \(Int(idle))s")
         } else if drainFrames == 0 && elapsed >= Self.drainEmptySeconds {
-            finishDrain()
+            finishDrain(reason: "no history frames after \(Int(elapsed))s")
         } else if elapsed >= Self.drainMaxSeconds {
-            finishDrain()
+            finishDrain(reason: "maximum sync duration")
         }
     }
 
-    private func finishDrain() {
+    private func finishDrain(reason: String = "interrupted") {
         drainTimer?.invalidate()
         drainTimer = nil
         drainStartedAt = nil
@@ -909,7 +909,7 @@ final class BandLink: NSObject, ObservableObject {
                 UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
             }
         }
-        lastMessage = "Captured \(samples.count) history records (\(drainAcks) ACKs). \(historyQuality)."
+        lastMessage = "History sync: \(reason). Captured \(samples.count) records, \(drainAcks) ACKs. \(historyQuality). \(reason == "explicit completion" ? "" : "History may be incomplete; retry sync.")"
     }
 
     private func persist(_ summary: CaptureSummary) {
@@ -1044,7 +1044,7 @@ final class BandLink: NSObject, ObservableObject {
                 lastFrameAt = Date()
             } else if inner[2] == 3, status == .draining {
                 // HISTORY_COMPLETE: stop only on the explicit completion marker.
-                finishDrain()
+                finishDrain(reason: "explicit completion")
             }
         }
     }
