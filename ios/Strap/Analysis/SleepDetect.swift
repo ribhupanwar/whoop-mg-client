@@ -78,6 +78,27 @@ enum SleepDetect {
                       resting <= activeMedian * 0.95 else { continue }
             }
 
+            // WHOOP v18 inner[73] bits 4–5 encode a coarse band
+            // wake(0)/still(1)/sleep(2)/up(3) state. It is NOT a sleep
+            // stage or a definitive physiological measurement. Only use
+            // sustained, positively identified "up" to veto a candidate;
+            // do not require state=2, because the band's state lags onset
+            // and may be absent/overridden on some firmware.
+            let stateRows = run.filter { $0.sleepState != nil }
+            let upRows = stateRows.filter { $0.sleepState == 3 }.count
+            let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
+            let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
+            // If the signal is a constant zero/default, abstain entirely.
+            // A reliable veto needs at least five minutes of actual state
+            // observations, with "up" occupying most of the period and no
+            // positive sleep declaration.
+            if stateRows.count >= 300,
+               upRows * 10 >= stateRows.count * 7,
+               declaredSleepRows == 0,
+               declaredStillRows * 10 < stateRows.count {
+                continue
+            }
+
             let quietSeconds = quiet[start..<end].filter { $0 }.count
             var wakeEvents = 0
             if end > start + 1 {
