@@ -209,12 +209,15 @@ struct SleepCoachView: View {
                 coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
             }
 
-            Button("OK · Confirm alarm settings") {
+            Button("OK") {
                 WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
                 alarmConfirmation = true
             }
             .buttonStyle(.borderedProminent)
             .tint(.appAccent)
+            .font(.system(size: 12, weight: .semibold))
+            .controlSize(.small)
+            .frame(maxWidth: .infinity, alignment: .trailing)
             if alarmConfirmation {
                 Text("Alarm preference saved for \(CoachFormat.clock(wakeMinutes)).")
                     .font(.footnote)
