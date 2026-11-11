@@ -126,16 +126,39 @@ enum Hrv {
         var rawBeats = 0
 
         for run in runs {
-            let raw = run.flatMap { $0.rrIntervalsMS.map(Double.init) }
-            rawBeats += raw.count
-            let nn = nnIntervals(raw)
-            allNN.append(contentsOf: nn)
-            guard nn.count >= 2 else { continue }
-            for index in 1..<nn.count {
-                let delta = nn[index] - nn[index - 1]
-                squaredDifferences += delta * delta
-                successivePairs += 1
-                if abs(delta) > 50 { over50 += 1 }
+            // A missing R-R field or rejected ectopic beat is a hard boundary.
+            // Never calculate RMSSD across those boundaries: doing so can
+            // produce artificially high overnight HRV.
+            var previous: Double?
+            var recent: [Double] = []
+            for sample in run {
+                let rr = sample.rrIntervalsMS.map(Double.init)
+                rawBeats += rr.count
+                if rr.isEmpty { previous = nil; recent.removeAll(); continue }
+                for value in rr {
+                    guard value >= Double(V18Decoder.minRRMS),
+                          value <= Double(V18Decoder.maxRRMS) else {
+                        previous = nil; recent.removeAll(); continue
+                    }
+                    if !recent.isEmpty {
+                        let reference = Stats.median(recent)
+                        if abs(value - reference) > nnMaxDeviation * reference {
+                            previous = nil
+                            recent.removeAll()
+                            continue
+                        }
+                    }
+                    if let previous {
+                        let delta = value - previous
+                        squaredDifferences += delta * delta
+                        successivePairs += 1
+                        if abs(delta) > 50 { over50 += 1 }
+                    }
+                    allNN.append(value)
+                    recent.append(value)
+                    if recent.count > nnReferenceBeats { recent.removeFirst() }
+                    previous = value
+                }
             }
         }
         // The 20-clean-beat gate is a quality floor, not clinical validation.
