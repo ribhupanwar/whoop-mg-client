@@ -97,6 +97,12 @@ struct HealthView: View {
         Panel {
             SectionTitle("R–R signal diagnostics")
             if let capture = summary {
+                Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
+                Text("Live R–R beats buffered: \(store.band.liveRRIntervalsMS.count)")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.appMuted)
                 Text("Historical samples: \(capture.sampleCount) · HRV quiet window: \(capture.hrvWindowSeconds)s")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appFG)
