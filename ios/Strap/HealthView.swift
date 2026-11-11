@@ -97,8 +97,8 @@ struct HealthView: View {
             MetricTile(
                 label: "HRV · RMSSD",
                 value: demo ? String(format: "%.0f", SampleData.hrvMS)
-                             : ActivityFormat.whole(summary?.hrv.rmssdMS) ?? "—",
-                unit: (demo || summary?.hrv.rmssdMS != nil) ? "ms" : nil,
+                             : ActivityFormat.whole(latestNightHRV) ?? "—",
+                unit: (demo || latestNightHRV != nil) ? "ms" : nil,
                 chip: demo ? "↑ favourable · sample" : hrvTrendChip,
                 chipGood: demo || hrvFavourable
             )
@@ -160,6 +160,19 @@ struct HealthView: View {
 
     private var summary: CaptureSummary? { store.band.summary }
 
+    // Use the same validated overnight HRV source as the Home dashboard.
+    // A daytime capture must not overwrite the night's recovery metric.
+    private var latestNightHRV: Double? {
+        guard let day = store.band.days
+            .filter({ $0.sleepHours > 0 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
+            .sorted(by: { $0.dateKey > $1.dateKey })
+            .first,
+              let ln = day.lnRMSSD else { return nil }
+        let rmssd = exp(ln)
+        return rmssd.isFinite && (5...300).contains(rmssd) ? rmssd : nil
+    }
+
+
     private var freshLiveHR: Int? {
         guard store.band.isConnected,
               let last = store.band.lastLiveHRAt,
@@ -192,7 +205,7 @@ struct HealthView: View {
     private var hrvFavourable: Bool {
         guard store.hasRecoveryBaseline,
               let baseline = store.band.baseline,
-              let current = summary?.hrv.lnRMSSD,
+              let current = latestNightHRV.map({ log($0) }),
               current.isFinite else { return false }
         return current > baseline.lnRMSSDMean
     }
@@ -208,7 +221,7 @@ struct HealthView: View {
     private var hrvTrendChip: String {
         guard store.hasRecoveryBaseline,
               let baseline = store.band.baseline,
-              let current = summary?.hrv.lnRMSSD,
+              let current = latestNightHRV.map({ log($0) }),
               current.isFinite else { return baselineChip }
         let difference = (exp(current) / exp(baseline.lnRMSSDMean) - 1) * 100
         guard difference.isFinite else { return baselineChip }
