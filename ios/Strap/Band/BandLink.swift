@@ -613,6 +613,11 @@ final class BandLink: NSObject, ObservableObject {
             // An ATT write ack is not evidence of ongoing notifications.
             self.hrProfileEnabled = false
             self.ensureHeartRateStream()
+            // WHOOP Gen5's vendor Type-40 stream is controlled independently
+            // of the standard 2A37 CCCD. Re-arm both paths on silence.
+            if self.commandCharacteristic != nil, self.handshakeStarted {
+                self.enqueue(BandCommand.realtimeHROn.rawValue, body: [0x01])
+            }
             self.lastMessage = "No fresh HR packets · recovery attempt \(self.hrRecoveryAttempts). Check live packet count."
         }
     }
