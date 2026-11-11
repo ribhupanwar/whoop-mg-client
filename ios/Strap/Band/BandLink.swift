@@ -847,6 +847,16 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
+        if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
+            let candidates = samples.filter { $0.spo2CandidatePct != nil }
+            let values = candidates.compactMap(\.spo2CandidatePct)
+            let sentinelCount = samples.filter { $0.spo2CandidateKind == .saturated }.count
+            let diagnosticCount = samples.filter { $0.spo2CandidateKind == .diagnostic }.count
+            let average = values.isEmpty ? "none" :
+                String(format: "%.1f", Double(values.reduce(0, +)) / Double(values.count))
+            let report = "Research only · \\(samples.count) v18 records · \\(values.count) candidate readings · mean \\(average) · \\(sentinelCount) sentinels · \\(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
+            UserDefaults.standard.set(report, forKey: "strap.spo2ResearchReport")
+        }
         let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
         let rrBeats = samples.reduce(0) { $0 + $1.rrIntervalsMS.count }
         let uniqueSeconds = Set(samples.map(\.unix)).sorted()
