@@ -529,6 +529,10 @@ final class BandLink: NSObject, ObservableObject {
         // 0x0E enables the standard HR profile so 0x180D broadcasts. It is a
         // documented band setting, not a destructive command.
         ensureHeartRateStream()
+        // PulseForge's captured Gen5 protocol uses a separate vendor
+        // REALTIME_HR_ON (0x03, body 0x01). Standard 2A37 alone can be
+        // subscribed yet never deliver a packet on these straps.
+        enqueue(BandCommand.realtimeHROn.rawValue, body: [0x01])
         enqueue(BandCommand.getDataRange.rawValue)
         enqueue(BandCommand.sendHistoricalData.rawValue)
         status = .draining
@@ -798,7 +802,26 @@ final class BandLink: NSObject, ObservableObject {
             drainFrames += 1
             lastFrameAt = Date()
         }
-        if type == BandPacket.historicalData {
+        if type == BandPacket.realtimeData {
+            // Gen5 frame header is stripped by FrameReassembler. PulseForge
+            // observed HR at absolute frame byte 16 => inner byte 8.
+            guard inner.count > 8 else { return }
+            let bpm = Int(inner[8])
+            guard (25...230).contains(bpm) else { return }
+            liveHeartRate = bpm
+            lastLiveHRAt = Date()
+            liveHRNotificationCount += 1
+            hrRecoveryAttempts = 0
+            if isLiveSession {
+                let unix = Int(Date().timeIntervalSince1970)
+                let sample = LiveSample(unix: unix, heartRate: bpm, rrIntervalsMS: [])
+                if liveSamples.last?.unix == unix {
+                    liveSamples[liveSamples.count - 1] = sample
+                } else {
+                    liveSamples.append(sample)
+                }
+            }
+        } else if type == BandPacket.historicalData {
             guard let sample = V18Decoder.decode(inner) else { return }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
                 capturedSamples.append(sample)
