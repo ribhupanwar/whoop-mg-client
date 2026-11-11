@@ -85,6 +85,9 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastLiveHRAt: Date?
     @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
+    @Published private(set) var type40RRPackets = 0
+    @Published private(set) var standardRRPackets = 0
+    @Published private(set) var historyRRRecords = 0
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
     @Published private(set) var lastLiveSession: LiveSessionSummary?
@@ -995,6 +998,7 @@ final class BandLink: NSObject, ObservableObject {
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
+                type40RRPackets += 1
                 liveRRIntervalsMS = Array((liveRRIntervalsMS + rrMS).suffix(120))
             }
             if isLiveSession {
@@ -1012,6 +1016,7 @@ final class BandLink: NSObject, ObservableObject {
         } else if type == BandPacket.historicalData {
             guard let sample = V18Decoder.decode(inner) else { return }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
+                if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
                 capturedSamples.append(sample)
             }
         } else if type == BandPacket.metadata,
@@ -1032,6 +1037,7 @@ final class BandLink: NSObject, ObservableObject {
         hrRecoveryAttempts = 0
         lastMessage = nil
         if !reading.rrMS.isEmpty {
+            standardRRPackets += 1
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
         guard isLiveSession else { return }
