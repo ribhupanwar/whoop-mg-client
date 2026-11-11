@@ -91,6 +91,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRDeclared = 0
     @Published private(set) var historyRRAccepted = 0
     @Published private(set) var historyRRRejected = 0
+    @Published private(set) var historyUndecodableFrames = 0
+    @Published private(set) var historyVersionCounts: [Int: Int] = [:]
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
     @Published private(set) var lastLiveSession: LiveSessionSummary?
@@ -817,6 +819,8 @@ final class BandLink: NSObject, ObservableObject {
         historyRRDeclared = 0
         historyRRAccepted = 0
         historyRRRejected = 0
+        historyUndecodableFrames = 0
+        historyVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -1020,7 +1024,13 @@ final class BandLink: NSObject, ObservableObject {
                 }
             }
         } else if type == BandPacket.historicalData {
-            guard let sample = V18Decoder.decode(inner) else { return }
+            if inner.count > 1 {
+                historyVersionCounts[Int(inner[1]), default: 0] += 1
+            }
+            guard let sample = V18Decoder.decode(inner) else {
+                historyUndecodableFrames += 1
+                return
+            }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
                 if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
                 let declared = Int(inner[15])
