@@ -1061,6 +1061,10 @@ extension BandLink: CBCentralManagerDelegate {
         if pickerMode { return }
         // With a saved band, ignore the other strap even if it advertises first.
         if let preferredBandID, identifier != preferredBandID { return }
+        // A duplicate advertisement can arrive after connect was requested.
+        // Never replace a connecting/connected peripheral with another callback.
+        if let current = self.peripheral,
+           current.state == .connecting || current.state == .connected { return }
 
         central.stopScan()
         scanTimeout?.cancel()
@@ -1073,6 +1077,13 @@ extension BandLink: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        guard wantsConnection, peripheral === self.peripheral else {
+            central.cancelPeripheralConnection(peripheral)
+            return
+        }
+        scanTimeout?.cancel()
+        scanTimeout = nil
+        central.stopScan()
         reconnectWork?.cancel()
         reconnectWork = nil
         reconnectAttempt = 0
