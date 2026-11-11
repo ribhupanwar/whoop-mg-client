@@ -79,6 +79,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var bandName: String?
     @Published private(set) var batteryPercent: Int?
     @Published private(set) var liveHeartRate: Int?
+    @Published private(set) var lastLiveHRAt: Date?
+    @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
@@ -143,6 +145,11 @@ final class BandLink: NSObject, ObservableObject {
     private var drainStartedAt: Date?
     private var lastFrameAt: Date?
     private var drainTimer: Timer?
+    private var liveHRWatchdog: Timer?
+    private var lastHRRecoveryAt: Date?
+    private var hrCharacteristic: CBCharacteristic?
+    private var hrProfileEnabled = false
+    private var hrEnableQueued = false
 
     private var sex: Sex = .unspecified
     private var maxHR: Double?
@@ -357,6 +364,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         liveSamples = []
         liveRRIntervalsMS = []
+        ensureHeartRateStream()
         sessionStartedUnix = Int(Date().timeIntervalSince1970)
         isLiveSession = true
     }
@@ -423,6 +431,16 @@ final class BandLink: NSObject, ObservableObject {
     private func resetLink() {
         drainTimer?.invalidate()
         drainTimer = nil
+        liveHRWatchdog?.invalidate()
+        liveHRWatchdog = nil
+        lastHRRecoveryAt = nil
+        lastLiveHRAt = nil
+        liveHeartRate = nil
+        liveRRIntervalsMS = []
+        liveHRNotificationCount = 0
+        hrCharacteristic = nil
+        hrProfileEnabled = false
+        hrEnableQueued = false
         drainStartedAt = nil
         lastFrameAt = nil
         peripheral = nil
@@ -474,7 +492,7 @@ final class BandLink: NSObject, ObservableObject {
         startCaptureFile()
         // 0x0E enables the standard HR profile so 0x180D broadcasts. It is a
         // documented band setting, not a destructive command.
-        enqueue(BandCommand.setGenericHRProfile.rawValue)
+        ensureHeartRateStream()
         enqueue(BandCommand.getDataRange.rawValue)
         enqueue(BandCommand.sendHistoricalData.rawValue)
         status = .draining
@@ -490,6 +508,39 @@ final class BandLink: NSObject, ObservableObject {
         guard let peripheral else { return }
         for characteristic in notifyCharacteristics where !characteristic.isNotifying {
             peripheral.setNotifyValue(true, for: characteristic)
+        }
+        if let hrCharacteristic, !hrCharacteristic.isNotifying {
+            peripheral.setNotifyValue(true, for: hrCharacteristic)
+        }
+    }
+
+    /// Re-arm both parts of the live path: the standard GATT subscription and
+    /// the band's generic HR output mode. Do not flood the command queue on each
+    /// watchdog tick, and never interfere with a pending CLIENT_HELLO.
+    private func ensureHeartRateStream() {
+        guard let peripheral, peripheral.state == .connected else { return }
+        if let hrCharacteristic, !hrCharacteristic.isNotifying {
+            peripheral.setNotifyValue(true, for: hrCharacteristic)
+        }
+        guard handshakeStarted, commandCharacteristic != nil,
+              !hrProfileEnabled, !hrEnableQueued else { return }
+        hrEnableQueued = true
+        enqueue(BandCommand.setGenericHRProfile.rawValue)
+    }
+
+    private func startHRWatchdog() {
+        liveHRWatchdog?.invalidate()
+        liveHRWatchdog = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            guard let self, self.isConnected else { return }
+            if let last = self.lastLiveHRAt, Date().timeIntervalSince(last) < 12 { return }
+            // A missing HR notification must not remain displayed as live data.
+            self.liveHeartRate = nil
+            let now = Date()
+            guard self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
+            self.lastHRRecoveryAt = now
+            self.hrProfileEnabled = false
+            self.ensureHeartRateStream()
+            self.lastMessage = "Live HR paused; refreshing the band stream."
         }
     }
 
@@ -586,6 +637,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         status = .ready
+        ensureHeartRateStream()
 
         guard !samples.isEmpty else {
             lastMessage = "No history came back this drain. Wear the strap, keep phone Bluetooth off the band, and retry."
@@ -673,6 +725,8 @@ final class BandLink: NSObject, ObservableObject {
         guard let value = characteristic.value,
               let reading = StandardHeartRate.parse(value) else { return }
         liveHeartRate = reading.heartRate
+        lastLiveHRAt = Date()
+        liveHRNotificationCount += 1
         if !reading.rrMS.isEmpty {
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
@@ -757,6 +811,7 @@ extension BandLink: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        startHRWatchdog()
         peripheral.discoverServices([
             BandUUID.service,
             BandUUID.heartRateService,
@@ -832,8 +887,13 @@ extension BandLink: CBPeripheralDelegate {
             case BandUUID.commandTo:
                 commandCharacteristic = characteristic
             case BandUUID.heartRateMeasurement:
+                hrCharacteristic = characteristic
                 subscriptionAttempts += 1
-                peripheral.setNotifyValue(true, for: characteristic)
+                if characteristic.properties.contains(.notify) {
+                    peripheral.setNotifyValue(true, for: characteristic)
+                } else {
+                    lastMessage = "The band did not expose HR notifications on 0x2A37."
+                }
             case BandUUID.batteryLevel:
                 batteryCharacteristic = characteristic
                 peripheral.readValue(for: characteristic)
@@ -869,6 +929,9 @@ extension BandLink: CBPeripheralDelegate {
             subscribed.insert(characteristic.uuid)
         }
         maybeBeginHandshake()
+        if characteristic.uuid == BandUUID.heartRateMeasurement && !characteristic.isNotifying {
+            liveHeartRate = nil
+        }
     }
 
     func peripheral(
@@ -902,6 +965,7 @@ extension BandLink: CBPeripheralDelegate {
             commandInFlight = false
             if isAuthenticationError(error), helloAttempts < 2 {
                 helloAttempts += 1
+                commandInFlight = false
                 lastMessage = "Waiting for the pairing prompt — accept it to authenticate the strap."
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                     self?.pump()
@@ -910,15 +974,25 @@ extension BandLink: CBPeripheralDelegate {
             }
             drainTimer?.invalidate()
             drainTimer = nil
+            // Drop the failed command so later retries cannot deadlock behind it.
+            if !commandQueue.isEmpty {
+                if commandQueue[0].opcode == BandCommand.setGenericHRProfile.rawValue { hrEnableQueued = false }
+                commandQueue.removeFirst()
+            }
             status = .failed("The strap rejected a command: \(error.localizedDescription)")
             return
         }
         let finished = commandQueue.first?.opcode
+        if finished == BandCommand.setGenericHRProfile.rawValue {
+            hrEnableQueued = false
+            hrProfileEnabled = true
+        }
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {
             status = .authenticating
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.beginDrainRequests()
+                self?.ensureHeartRateStream()
             }
         }
     }
