@@ -226,7 +226,8 @@ final class AppStore: ObservableObject {
 
     /// Resting HR from the user's override, else the last measured quiet window.
     var measuredRestingHR: Double? {
-        settings.restingHROverride ?? band.summary?.restingHeartRate
+        // Daytime capture lows are not interchangeable with overnight RHR.
+        settings.restingHROverride ?? latestOvernightRestingHR
     }
 
     var recordedDayCount: Int { band.days.count }
