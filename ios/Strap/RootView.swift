@@ -24,6 +24,7 @@ enum AppTab: String, CaseIterable, Hashable {
 /// reached from Home (and Dashboard for Stress); Settings from the Home gear.
 enum Route: Hashable {
     case health
+    case gpsRun
     case recovery
     case strain
     case stress
@@ -86,6 +87,7 @@ extension View {
         navigationDestination(for: Route.self) { route in
             switch route {
             case .health: HealthView()
+            case .gpsRun: GPSRunView()
             case .recovery: DashboardView(focusedMetric: "recovery")
             case .strain: DashboardView(focusedMetric: "strain")
             case .stress: StressView()
