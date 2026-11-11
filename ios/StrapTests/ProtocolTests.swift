@@ -202,6 +202,17 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [820])
     }
 
+    func testV18OpticalPSNRDecodesSignedValuesWithoutQualityAssumptions() {
+        var inner = bytes(realV18Hex)
+        inner[100] = 0x80 // -128 is the unavailable sentinel.
+        inner[101] = 0xF6 // -10 dB, signed Int8.
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.psnrB, -128)
+        XCTAssertEqual(sample?.psnrA, -10)
+        // Optical diagnostics must not silently suppress a valid HR reading.
+        XCTAssertEqual(sample?.heartRate, 94)
+    }
+
     func testRRCountAboveFourIsIgnored() {
         var inner = bytes(realV18Hex)
         inner[15] = 9
