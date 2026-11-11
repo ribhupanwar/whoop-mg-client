@@ -24,6 +24,7 @@ enum BandUUID {
 /// Command opcodes observed on gen5 hardware. 0x0F (FORGET_BONDS) is
 /// destructive and is deliberately absent: nothing here can send it.
 enum BandCommand: UInt8 {
+    case realtimeHROn = 0x03
     case setGenericHRProfile = 0x0E
     case abortHistoricalTransmits = 0x14
     case sendHistoricalData = 0x16
@@ -34,6 +35,7 @@ enum BandCommand: UInt8 {
 
 enum BandPacket {
     static let command: UInt8 = 0x23
+    static let realtimeData: UInt8 = 0x28
     static let historicalData: UInt8 = 0x2F
     static let metadata: UInt8 = 0x31
     /// HISTORY_END sub-opcode inside a METADATA frame.
