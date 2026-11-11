@@ -178,7 +178,17 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
-        var bySecond = Dictionary(uniqueKeysWithValues: retainedHistoricalSamples.map { ($0.unix, $0) })
+        // Older archives may contain duplicate timestamps. Never crash during reload.
+        var bySecond: [Int: V18Sample] = [:]
+        for sample in retainedHistoricalSamples {
+            if let old = bySecond[sample.unix] {
+                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
+                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
+                if newScore > oldScore { bySecond[sample.unix] = sample }
+            } else {
+                bySecond[sample.unix] = sample
+            }
+        }
         for sample in incoming {
             if let old = bySecond[sample.unix] {
                 let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
