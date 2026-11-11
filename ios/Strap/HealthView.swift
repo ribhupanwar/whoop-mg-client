@@ -99,16 +99,16 @@ struct HealthView: View {
                 value: demo ? String(format: "%.0f", SampleData.hrvMS)
                              : ActivityFormat.whole(summary?.hrv.rmssdMS) ?? "—",
                 unit: (demo || summary?.hrv.rmssdMS != nil) ? "ms" : nil,
-                chip: demo ? "within 41–48 · sample" : baselineChip,
-                chipGood: demo || store.hasRecoveryBaseline
+                chip: demo ? "↑ favourable · sample" : hrvTrendChip,
+                chipGood: demo || hrvFavourable
             )
             MetricTile(
                 label: "Resting HR",
                 value: demo ? String(format: "%.0f", SampleData.rhr)
                              : ActivityFormat.whole(store.measuredRestingHR) ?? "—",
                 unit: (demo || store.measuredRestingHR != nil) ? "bpm" : nil,
-                chip: demo ? "within 56–60 · sample" : baselineChip,
-                chipGood: demo || store.hasRecoveryBaseline
+                chip: demo ? "↓ favourable · sample" : rhrTrendChip,
+                chipGood: demo || rhrFavourable
             )
             MetricTile(
                 label: "HR range",
@@ -185,6 +185,49 @@ struct HealthView: View {
         store.hasRecoveryBaseline
             ? "vs personal norm"
             : "baseline \(store.recordedDayCount)/7 days"
+    }
+
+    // A favourable trend means better than the person's own baseline, not
+    // that the reading is clinically normal. No arrows without evidence.
+    private var hrvFavourable: Bool {
+        guard store.hasRecoveryBaseline,
+              let baseline = store.band.baseline,
+              let current = summary?.hrv.lnRMSSD,
+              current.isFinite else { return false }
+        return current > baseline.lnRMSSDMean
+    }
+
+    private var rhrFavourable: Bool {
+        guard store.hasRecoveryBaseline,
+              let baseline = store.band.baseline,
+              let current = store.measuredRestingHR,
+              current.isFinite else { return false }
+        return current < baseline.rhrMean
+    }
+
+    private var hrvTrendChip: String {
+        guard store.hasRecoveryBaseline,
+              let baseline = store.band.baseline,
+              let current = summary?.hrv.lnRMSSD,
+              current.isFinite else { return baselineChip }
+        let difference = (exp(current) / exp(baseline.lnRMSSDMean) - 1) * 100
+        guard difference.isFinite else { return baselineChip }
+        if abs(difference) < 1 { return "→ near personal norm" }
+        return String(format: "%@ %.0f%% vs baseline%@",
+                      difference > 0 ? "↑" : "↓", abs(difference),
+                      difference > 0 ? " · favourable" : "")
+    }
+
+    private var rhrTrendChip: String {
+        guard store.hasRecoveryBaseline,
+              let baseline = store.band.baseline,
+              let current = store.measuredRestingHR,
+              current.isFinite else { return baselineChip }
+        let difference = current - baseline.rhrMean
+        if abs(difference) < 0.5 { return "→ near personal norm" }
+        return String(format: "%@ %.0f bpm vs baseline%@",
+                      difference < 0 ? "↓" : "↑", abs(difference),
+                      difference < 0 ? " · favourable" : "")
     }
 
     private var captureChip: String {
