@@ -91,24 +91,106 @@ struct DashboardView: View {
                 color: .appAccent,
                 upper: 21
             )
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("Recovery")
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Text(store.band.recovery.score.map { String(format: "%.0f%%", $0) } ?? "—")
-                        .foregroundStyle(Color.appGood)
-                }
-                .font(.system(size: 13, weight: .medium))
-                if let reason = store.band.recovery.reason {
-                    Hint(reason)
-                } else {
-                    Hint("Latest baseline-relative recovery only. Historical recovery is not stored per day, so no fabricated trend is drawn.")
-                }
-            }
-            .padding(.top, 8)
+            recoveryTrend
+
         }
         .padding(.top, 12)
+    }
+
+    /// A point is scored against only the PRECEDING 30 days, never the
+    /// future/current day. This avoids leaking today's HRV into its baseline.
+    /// A missing seven-day personal baseline is a gap, not a zero bar.
+    private var recoveryHistory: [(date: Date, score: Double?)] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateFormat = "yyyy-MM-dd"
+        let daysByKey = Dictionary(uniqueKeysWithValues: store.band.days.map { ($0.dateKey, $0) })
+        let end = calendar.startOfDay(for: Date())
+        return (0..<trendWindow).compactMap { offset in
+            guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }
+            let key = formatter.string(from: date)
+            guard let day = daysByKey[key] else { return (date: date, score: nil) }
+            let earlier = store.band.days
+                .filter { $0.dateKey < key && $0.lnRMSSD != nil && $0.restingHR != nil }
+                .sorted { $0.dateKey < $1.dateKey }
+            let baseline = DailyAnalysis.baseline(from: Array(earlier.suffix(30)))
+            let result = Recovery.score(
+                lnRMSSD: day.lnRMSSD,
+                rhr: day.restingHR,
+                sleepHours: day.sleepHours > 0 ? day.sleepHours : nil,
+                sleepNeedHours: store.settings.sleepNeedHours,
+                baseline: baseline
+            )
+            return (date: date, score: result.score)
+        }
+    }
+
+    private var recoveryTrend: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("RECOVERY")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(Color.appFG)
+                Spacer()
+                Text("0–100%")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+            }
+            let history = recoveryHistory
+            if history.contains(where: { $0.score != nil }) {
+                GeometryReader { geometry in
+                    let slot = geometry.size.width / CGFloat(max(history.count, 1))
+                    ZStack(alignment: .topLeading) {
+                        ForEach(0..<4, id: \.self) { grid in
+                            Path { path in
+                                let y = CGFloat(grid) * 52 + 12
+                                path.move(to: CGPoint(x: 0, y: y))
+                                path.addLine(to: CGPoint(x: geometry.size.width, y: y))
+                            }
+                            .stroke(Color.appLine, lineWidth: 1)
+                        }
+                        ForEach(Array(history.enumerated()), id: \.offset) { index, item in
+                            let width = min(27.0, slot * 0.47)
+                            let x = slot * (CGFloat(index) + 0.5)
+                            let value = min(max(item.score ?? 0, 0), 100)
+                            let barHeight = CGFloat(value / 100) * 154
+                            let color: Color = value >= 67 ? Color(hex: 0x16E000) :
+                                value >= 34 ? Color(hex: 0xFFDA00) : Color(hex: 0xFF1744)
+                            if index == history.count - 1 {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.white.opacity(0.09))
+                                    .frame(width: slot * 0.82, height: 198)
+                                    .position(x: x, y: 99)
+                            }
+                            if item.score != nil {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(color)
+                                    .frame(width: width, height: max(2, barHeight))
+                                    .position(x: x, y: 166 - barHeight / 2)
+                                Text(String(format: "%.0f%%", value))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(color)
+                                    .position(x: x, y: max(10, 154 - barHeight))
+                            }
+                            VStack(spacing: 2) {
+                                Text(item.date.formatted(.dateTime.weekday(.abbreviated)))
+                                Text(item.date.formatted(.dateTime.day()))
+                            }
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.appMuted)
+                            .position(x: x, y: 184)
+                        }
+                    }
+                }
+                .frame(height: 198)
+            } else {
+                Hint("Recovery history needs 7 earlier measured days with HRV and resting HR. Missing days are not invented.")
+            }
+            Hint("Green ≥67% · Yellow 34–66% · Red <34%. Estimates from your recorded data, not WHOOP's proprietary score.")
+        }
+        .padding(.top, 10)
     }
 
     private func trendChart(title: String, unit: String, values: [Double?],
