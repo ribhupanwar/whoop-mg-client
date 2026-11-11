@@ -150,6 +150,9 @@ final class BandLink: NSObject, ObservableObject {
     private var hrRecoveryAttempts = 0
     private var hrDiscoveryRequestedAt: Date?
     private var hrResubscribePending = false
+    private var hrSubscribedBeforeBond = false
+    private var hrBondConfirmed = false
+    private var hrSubscriptionConfirmedAt: Date?
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
     private var hrCharacteristic: CBCharacteristic?
@@ -464,6 +467,9 @@ final class BandLink: NSObject, ObservableObject {
         hrRecoveryAttempts = 0
         hrDiscoveryRequestedAt = nil
         hrResubscribePending = false
+        hrSubscribedBeforeBond = false
+        hrBondConfirmed = false
+        hrSubscriptionConfirmedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
         liveRRIntervalsMS = []
@@ -566,11 +572,16 @@ final class BandLink: NSObject, ObservableObject {
             if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
             // Never present an old sample as today's live pulse.
             self.liveHeartRate = nil
-            guard self.handshakeStarted,
-                  self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 15 }) ?? true
+            // An off-wrist band can legitimately pause streaming. Renew
+            // only once after a sustained 90s silent stretch; don't hammer
+            // its CCCD every 15 seconds. A pre-bond subscription is renewed
+            // immediately after hello acknowledgement below.
+            guard self.hrBondConfirmed, self.hrRecoveryAttempts == 0,
+                  let confirmed = self.hrSubscriptionConfirmedAt,
+                  now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 90
             else { return }
             self.lastHRRecoveryAt = now
-            self.hrRecoveryAttempts += 1
+            self.hrRecoveryAttempts = 1
 
             if let hr = self.hrCharacteristic {
                 // The CCCD can remain enabled even when 0x2A37 stops sending.
@@ -782,6 +793,7 @@ final class BandLink: NSObject, ObservableObject {
         lastLiveHRAt = Date()
         liveHRNotificationCount += 1
         hrRecoveryAttempts = 0
+        lastMessage = nil
         if !reading.rrMS.isEmpty {
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
@@ -1001,6 +1013,12 @@ extension BandLink: CBPeripheralDelegate {
         if characteristic.isNotifying {
             subscribed.insert(characteristic.uuid)
         }
+        if characteristic.uuid == BandUUID.heartRateMeasurement {
+            if characteristic.isNotifying {
+                hrSubscriptionConfirmedAt = Date()
+                if !hrBondConfirmed { hrSubscribedBeforeBond = true }
+            }
+        }
         maybeBeginHandshake()
         if characteristic.uuid == BandUUID.heartRateMeasurement {
             if !characteristic.isNotifying {
@@ -1071,6 +1089,15 @@ extension BandLink: CBPeripheralDelegate {
         }
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {
+            hrBondConfirmed = true
+            // Field captures show an enabled 0x2A37 subscription BEFORE
+            // Gen5 encryption can remain silent forever. The bonded link
+            // must renew its CCCD regardless of isNotifying=true.
+            if hrSubscribedBeforeBond, let hr = hrCharacteristic, hr.isNotifying {
+                hrResubscribePending = true
+                peripheral.setNotifyValue(false, for: hr)
+            }
+            hrSubscribedBeforeBond = false
             status = .authenticating
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.beginDrainRequests()
