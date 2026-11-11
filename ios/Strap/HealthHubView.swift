@@ -80,7 +80,7 @@ struct HealthHubView: View {
                         .foregroundStyle(Color.appMuted)
                 }
                 Hint("7-day median resting HR: \(String(format: "%.0f", estimate.restingHeartRate)) bpm · \(estimate.restingNights) nights")
-                let ageGap = estimate.chronologicalYears - estimate.years
+                let ageGap = Double(estimate.chronologicalYears) - estimate.years
                 HStack(spacing: 6) {
                     Image(systemName: ageGap >= 0 ? "arrow.down.right" : "arrow.up.right")
                         .foregroundStyle(ageGap >= 0 ? Color.appGood : Color.appMuted)
