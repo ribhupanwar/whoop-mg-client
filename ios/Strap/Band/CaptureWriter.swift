@@ -48,6 +48,20 @@ final class CaptureWriter {
         record(["frame": frame])
     }
 
+    /// Drain queued writes and sync the raw capture before acknowledging a
+    /// HISTORY_END trim cursor. A failed sync must not release strap history.
+    func flushToDisk() -> Bool {
+        queue.sync {
+            guard !isClosed else { return false }
+            do {
+                try handle.synchronize()
+                return true
+            } catch {
+                return false
+            }
+        }
+    }
+
     func close() {
         queue.sync {
             guard !isClosed else { return }
