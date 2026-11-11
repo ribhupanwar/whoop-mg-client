@@ -80,7 +80,9 @@ enum Respiration {
     /// Stitching across a dropout puts a step into the tachogram that the peak
     /// picker would read as a breath, so only short gaps are tolerated.
     static func beatSegments(_ samples: [V18Sample]) -> [[(unix: Int, rr: Int)]] {
-        let ordered = samples.sorted { $0.unix < $1.unix }
+        let ordered = samples
+            .filter { $0.wearing && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= 0.10 }
+            .sorted { $0.unix < $1.unix }
         var segments: [[(unix: Int, rr: Int)]] = []
         var current: [(unix: Int, rr: Int)] = []
         var lastUnix: Int?
@@ -89,8 +91,16 @@ enum Respiration {
             let rr = sample.rrIntervalsMS.filter {
                 $0 >= V18Decoder.minRRMS && $0 <= V18Decoder.maxRRMS
             }
-            guard !rr.isEmpty else { continue }
-            if let lastUnix, Double(sample.unix - lastUnix) - lastSpanS > gapToleranceS {
+            // A missing RR second must break the train: otherwise a dropout
+            // can be mistaken for an uninterrupted breathing modulation.
+            guard !rr.isEmpty else {
+                if !current.isEmpty { segments.append(current); current = [] }
+                lastUnix = nil
+                lastSpanS = 0
+                continue
+            }
+            if let lastUnix, (sample.unix <= lastUnix ||
+                Double(sample.unix - lastUnix) - lastSpanS > gapToleranceS) {
                 if !current.isEmpty { segments.append(current) }
                 current = []
             }
