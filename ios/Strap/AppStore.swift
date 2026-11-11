@@ -270,6 +270,7 @@ final class AppStore: ObservableObject {
     var captureActiveKcal: Double? {
         guard let summary = band.summary, !summary.heartRateSeries.isEmpty,
               let weight = settings.weightKG, let height = settings.heightCM,
+              settings.sex != .unspecified,
               let resting = measuredRestingHR else { return nil }
         return Calories.activeKcal(
             hrPerMinute: summary.heartRateSeries,
@@ -287,11 +288,14 @@ final class AppStore: ObservableObject {
         if settings.weightKG == nil || settings.heightCM == nil {
             return "needs weight + height (Settings)"
         }
+        if settings.sex == .unspecified {
+            return "needs sex selection (Settings) for Keytel estimate"
+        }
         guard let summary = band.summary, !summary.heartRateSeries.isEmpty else {
             return "needs a capture"
         }
         guard measuredRestingHR != nil else { return "needs a measured resting HR" }
-        return "active over \(summary.heartRateSeries.count) min · Keytel 2005 estimate"
+        return "last capture only · active kcal estimate (\(summary.heartRateSeries.count) HR bins); not daily total"
     }
 
     /// ACTIVE kcal of a detected session. Nil without body data; zero when the
