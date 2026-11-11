@@ -51,7 +51,9 @@ private func makeNight(
                 spo2CandidateRaw: nil,
                 spo2CandidatePct: nil,
                 spo2CandidateKind: .absent,
-                signalQualityLogVariance: nil
+                signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
             )
         )
     }
