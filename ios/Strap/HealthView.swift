@@ -107,6 +107,7 @@ struct HealthView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
                 Text("Historical samples: \(capture.sampleCount) · HRV quiet window: \(capture.hrvWindowSeconds)s")
+                Text(store.band.historicalRestQualityReason)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appFG)
                 Text("Clean R–R beats: \(capture.hrv.nnBeats) / \(capture.hrv.beats) · respiratory beats: \(capture.respiration.beats)")

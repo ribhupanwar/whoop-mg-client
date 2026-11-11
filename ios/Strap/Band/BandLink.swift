@@ -171,6 +171,7 @@ final class BandLink: NSObject, ObservableObject {
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
+    var historicalRestQualityReason: String { Hrv.restingQualityReason(retainedHistoricalSamples) }
 
     private var historicalArchiveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]

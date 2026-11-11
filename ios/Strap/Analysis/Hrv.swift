@@ -196,6 +196,26 @@ enum Hrv {
         return runs
     }
 
+    /// Diagnostics only: do not weaken the resting or R-R quality gates.
+    static func restingQualityReason(_ samples: [V18Sample]) -> String {
+        let worn = samples.filter { $0.wearing && (35...220).contains($0.heartRate) }
+        guard !worn.isEmpty else { return "No valid on-wrist heart-rate seconds" }
+        let motion = worn.filter { $0.dynamicAccelG != nil }
+        guard !motion.isEmpty else { return "Motion data missing; cannot verify rest" }
+        let quiet = motion.filter { $0.dynamicAccelG! <= restingQuietAccelG }
+        guard !quiet.isEmpty else { return "No motion-verified quiet seconds" }
+        let longest = contiguousRuns(quiet.sorted { $0.unix < $1.unix })
+            .map(\.count).max() ?? 0
+        guard longest >= restingMinWindowS else {
+            return "Longest continuous quiet run: \\(longest)s; need \\(restingMinWindowS)s"
+        }
+        let result = restingHRV(samples)
+        guard result.result.rmssdMS != nil else {
+            return "Quiet run found; insufficient clean consecutive R-R beats"
+        }
+        return "Validated quiet HRV available"
+    }
+
     /// HRV from the longest verified-quiet contiguous run, and its length.
     ///
     /// RMSSD is only interpretable at rest. Pooling a capture lets motion
