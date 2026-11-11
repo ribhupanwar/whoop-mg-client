@@ -45,6 +45,9 @@ struct V18Sample: Equatable {
     let spo2CandidatePct: Int?
     let spo2CandidateKind: Spo2CandidateKind
     let signalQualityLogVariance: Double?
+    /// Signed optical pSNR (dB); -128 means unavailable, not low quality.
+    let psnrB: Int?
+    let psnrA: Int?
 
     var unix: Int { Int(header.unix) }
     var wearing: Bool { heartRate > 0 }
@@ -133,7 +136,9 @@ enum V18Decoder {
             spo2CandidateRaw: spo2Raw,
             spo2CandidatePct: spo2.pct,
             spo2CandidateKind: spo2.kind,
-            signalQualityLogVariance: f32(inner, 105).map { round($0, 4) }
+            signalQualityLogVariance: f32(inner, 105).map { round($0, 4) },
+            psnrB: signedByte(inner, 100),
+            psnrA: signedByte(inner, 101)
         )
     }
 
@@ -148,6 +153,12 @@ enum V18Decoder {
             unix: unix,
             subsecQ15: subsec
         )
+    }
+
+    private static func signedByte(_ bytes: [UInt8], _ offset: Int) -> Int? {
+        guard bytes.indices.contains(offset) else { return nil }
+        let raw = Int(bytes[offset])
+        return raw >= 128 ? raw - 256 : raw
     }
 
     // MARK: - Little-endian readers
