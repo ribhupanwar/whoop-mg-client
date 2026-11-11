@@ -1048,6 +1048,13 @@ final class BandLink: NSObject, ObservableObject {
                 // WHOOP 5: eight-byte end_data token at absolute frame[21:29].
                 // Keep the complete token: a truncated ACK can stall backfill.
                 let token = Array(inner[13..<21])
+                // NOOP's safe-trim invariant: never ACK a section until its
+                // raw frames are durably saved. Otherwise the strap may trim
+                // records that the app has not actually preserved.
+                guard let writer = captureWriter, writer.flushToDisk() else {
+                    lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
+                    return
+                }
                 enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
                 drainAcks += 1
                 lastFrameAt = Date()
