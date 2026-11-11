@@ -8,6 +8,16 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
     case walk
     case cardio
     case other
+    case cycling, swimming, yoga, pilates, dance, hiking, rowing, elliptical
+    case treadmill, stairClimber, hiit, functionalFitness, crossTraining
+    case basketball, football, cricket, badminton, tennis, tableTennis
+    case boxing, martialArts, climbing, skiing, skating, golf
+    case meditation, stretching, mobility, spin, indoorWalk
+    case outdoorRun, trailRun, intervalRun, strengthTraining, weightlifting
+    case jumpRope, pickleball, volleyball, rugby, soccer, surfing
+    case paddleboarding, kayaking, canoeing, aerobics, barre, gymnastics
+    case wrestling, fencing, squash, racquetball, handball, baseball
+    case softball, hockey, lacrosse, horsebackRiding, gardening
 
     var id: String { rawValue }
 
@@ -18,6 +28,64 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
         case .walk: return "Walk"
         case .cardio: return "Cardio"
         case .other: return "Other"
+        case .cycling: return "Cycling"
+        case .swimming: return "Swimming"
+        case .yoga: return "Yoga"
+        case .pilates: return "Pilates"
+        case .dance: return "Dance"
+        case .hiking: return "Hiking"
+        case .rowing: return "Rowing"
+        case .elliptical: return "Elliptical"
+        case .treadmill: return "Treadmill Running"
+        case .stairClimber: return "Stair Climber"
+        case .hiit: return "HIIT"
+        case .functionalFitness: return "Functional Fitness"
+        case .crossTraining: return "Cross Training"
+        case .basketball: return "Basketball"
+        case .football: return "American Football"
+        case .cricket: return "Cricket"
+        case .badminton: return "Badminton"
+        case .tennis: return "Tennis"
+        case .tableTennis: return "Table Tennis"
+        case .boxing: return "Boxing"
+        case .martialArts: return "Martial Arts"
+        case .climbing: return "Climbing"
+        case .skiing: return "Skiing"
+        case .skating: return "Skating"
+        case .golf: return "Golf"
+        case .meditation: return "Meditation"
+        case .stretching: return "Stretching"
+        case .mobility: return "Mobility"
+        case .spin: return "Spin"
+        case .indoorWalk: return "Indoor Walking"
+        case .outdoorRun: return "Outdoor Running"
+        case .trailRun: return "Trail Running"
+        case .intervalRun: return "Interval Running"
+        case .strengthTraining: return "Strength Training"
+        case .weightlifting: return "Weightlifting"
+        case .jumpRope: return "Jump Rope"
+        case .pickleball: return "Pickleball"
+        case .volleyball: return "Volleyball"
+        case .rugby: return "Rugby"
+        case .soccer: return "Soccer"
+        case .surfing: return "Surfing"
+        case .paddleboarding: return "Paddleboarding"
+        case .kayaking: return "Kayaking"
+        case .canoeing: return "Canoeing"
+        case .aerobics: return "Aerobics"
+        case .barre: return "Barre"
+        case .gymnastics: return "Gymnastics"
+        case .wrestling: return "Wrestling"
+        case .fencing: return "Fencing"
+        case .squash: return "Squash"
+        case .racquetball: return "Racquetball"
+        case .handball: return "Handball"
+        case .baseball: return "Baseball"
+        case .softball: return "Softball"
+        case .hockey: return "Hockey"
+        case .lacrosse: return "Lacrosse"
+        case .horsebackRiding: return "Horseback Riding"
+        case .gardening: return "Gardening"
         }
     }
 
@@ -28,11 +96,26 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
         case .walk: return "figure.walk"
         case .cardio: return "heart.fill"
         case .other: return "figure.mixed.cardio"
+        case .cycling, .spin: return "bicycle"
+        case .swimming, .surfing, .paddleboarding, .kayaking, .canoeing: return "figure.pool.swim"
+        case .yoga, .pilates, .stretching, .mobility, .meditation, .barre: return "figure.cooldown"
+        case .dance, .aerobics, .gymnastics: return "figure.dance"
+        case .hiking, .climbing: return "figure.hiking"
+        case .rowing: return "figure.rower"
+        case .elliptical, .stairClimber, .hiit, .functionalFitness, .crossTraining, .jumpRope: return "figure.highintensity.intervaltraining"
+        case .treadmill, .outdoorRun, .trailRun, .intervalRun: return "figure.run"
+        case .indoorWalk, .golf, .gardening: return "figure.walk"
+        case .strengthTraining, .weightlifting: return "dumbbell.fill"
+        case .boxing, .martialArts, .wrestling, .fencing: return "figure.boxing"
+        case .tennis, .badminton, .tableTennis, .pickleball, .squash, .racquetball: return "figure.tennis"
+        case .basketball, .football, .cricket, .volleyball, .rugby, .soccer, .handball, .baseball, .softball, .hockey, .lacrosse: return "sportscourt"
+        case .skiing, .skating: return "figure.skiing.downhill"
+        case .horsebackRiding: return "figure.equestrian.sports"
         }
     }
 
     /// Lifting is entered as sets; everything else by minutes.
-    var usesSets: Bool { self == .lift }
+    var usesSets: Bool { self == .lift || self == .strengthTraining || self == .weightlifting }
 }
 
 /// One set of a lift: reps at a load. The band sends no load, so this is
