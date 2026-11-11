@@ -60,7 +60,12 @@ struct HealthHubView: View {
 
     private var fitnessAgePanel: some View {
         Panel {
-            SectionTitle("Fitness age · experimental")
+            HStack(spacing: 8) {
+                Image(systemName: "heart.text.square")
+                    .foregroundStyle(Color.appAccent)
+                SectionTitle("Healthspan · fitness age")
+            }
+            Hint("Your fitness-age comparison uses measured resting HR and recent exercise. Inspired by Aura's body-age presentation, but independently calculated.")
             if let estimate = fitnessSnapshot {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Text(String(format: "%.0f", estimate.years))
@@ -75,13 +80,23 @@ struct HealthHubView: View {
                         .foregroundStyle(Color.appMuted)
                 }
                 Hint("7-day median resting HR: \(String(format: "%.0f", estimate.restingHeartRate)) bpm · \(estimate.restingNights) nights")
+                let ageGap = estimate.chronologicalYears - estimate.years
+                HStack(spacing: 6) {
+                    Image(systemName: ageGap >= 0 ? "arrow.down.right" : "arrow.up.right")
+                        .foregroundStyle(ageGap >= 0 ? Color.appGood : Color.appMuted)
+                    Text(String(format: "%.1f years %@", abs(ageGap),
+                                ageGap >= 0 ? "below actual age" : "above actual age"))
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                }
                 Hint("Activity: \(estimate.exerciseDays) recorded days · estimated HUNT-like index \(String(format: "%.1f", estimate.physicalActivityIndex))")
+                Hint("Evidence: \(estimate.restingNights) resting nights · \(estimate.capturedDays) capture days · \(estimate.exerciseDays) exercise days")
                 Hint(estimate.confidenceNote)
             } else {
                 Text("—")
                     .font(.system(size: 30, weight: .medium))
                     .foregroundStyle(Color.appMuted)
-                Hint("To unlock: confirm your age and sex in Settings; capture at least 4 resting-HR nights, 4 days with measured steps, and a recorded workout within 7 days.")
+                Hint("Healthspan needs sufficient measured data: confirm age and sex, capture 4 resting-HR nights, 4 days of recorded steps and one workout within 7 days.")
             }
             Hint("This is an independent fitness comparison inspired by the published Nes/HUNT model, not Aura's private model, WHOOP Age, biological age or a medical measurement. Activity-index inputs are estimates.")
         }
