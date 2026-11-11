@@ -124,6 +124,22 @@ final class BandLink: NSObject, ObservableObject {
     private var subscribed: Set<CBUUID> = []
     private var subscriptionAttempts = 0
 
+    /// Public read-only stage helps distinguish GATT connection from an
+    /// authenticated Gen5 stream when the live packet counter stays at zero.
+    var hrConnectionDiagnostic: String {
+        guard isConnected else { return "Bluetooth disconnected" }
+        guard commandCharacteristic != nil else { return "Waiting for WHOOP command characteristic" }
+        guard handshakeStarted else { return "WHOOP handshake has not started" }
+        guard hrBondConfirmed else { return "WHOOP hello/bond acknowledgement pending" }
+        if hrCharacteristic == nil {
+            return "WHOOP authenticated · standard HR characteristic unavailable · checking vendor stream"
+        }
+        if hrCharacteristic?.isNotifying != true {
+            return "WHOOP authenticated · HR notifications not enabled"
+        }
+        return "WHOOP authenticated · HR subscribed · awaiting first data packet"
+    }
+
     private var wantsConnection = false
     private var handshakeStarted = false
     private var helloAttempts = 0
