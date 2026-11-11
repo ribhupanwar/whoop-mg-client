@@ -4,6 +4,7 @@ import Foundation
 /// Independent iPhone GPS workout recorder. Only accepted GPS fixes contribute
 /// to distance; it does not infer GPS coordinates from WHOOP motion records.
 final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegate {
+    static let shared = GPSRunRecorder()
     @Published private(set) var recording = false
     @Published private(set) var paused = false
     @Published private(set) var distanceMeters = 0.0
@@ -30,6 +31,8 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
         manager.desiredAccuracy = kCLLocationAccuracyBest
         manager.distanceFilter = 3
         manager.pausesLocationUpdatesAutomatically = false
+        manager.allowsBackgroundLocationUpdates = true
+        manager.showsBackgroundLocationIndicator = true
     }
 
     func start() {
