@@ -92,7 +92,6 @@ struct DashboardView: View {
                 upper: 21
             )
             recoveryTrend
-
         }
         .padding(.top, 12)
     }
@@ -107,7 +106,7 @@ struct DashboardView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         let daysByKey = Dictionary(uniqueKeysWithValues: store.band.days.map { ($0.dateKey, $0) })
         let end = calendar.startOfDay(for: Date())
-        return (0..<trendWindow).compactMap { offset in
+        return (0..<trendWindow).compactMap { offset -> (date: Date, score: Double?)? in
             guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }
             let key = formatter.string(from: date)
             guard let day = daysByKey[key] else { return (date: date, score: nil) }
