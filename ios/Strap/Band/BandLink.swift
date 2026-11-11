@@ -985,16 +985,15 @@ final class BandLink: NSObject, ObservableObject {
             let bpm = Int(inner[8])
             guard (25...230).contains(bpm) else { return }
             // NOOP's verified Type-40 map: absolute frame byte 17 is the
-            // count; RR words start at byte 18 in 1/1024-second ticks.
+            // count; RR words start at byte 18 and are milliseconds on WHOOP 5.
             // FrameReassembler removes the 8-byte envelope and CRC trailer.
             let rrCount = inner.count > 9 ? Int(inner[9]) : 0
             var rrMS: [Int] = []
             if rrCount > 0 && rrCount <= 32 && inner.count >= 10 + rrCount * 2 {
                 for i in 0..<rrCount {
                     let offset = 10 + 2 * i
-                    let ticks = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
-                    if ticks == 0 { continue }
-                    let ms = ticks // NOOP Whoop5RR: WHOOP 5 Type-40 interval words are already milliseconds.
+                    let ms = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
+                    if ms == 0 { continue } // NOOP Whoop5RR: words are already milliseconds.
                     if (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(ms) {
                         rrMS.append(ms)
                     }
