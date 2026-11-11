@@ -100,7 +100,7 @@ struct HealthView: View {
                 Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
-                Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)")
+                Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)\n                History frames undecodable: \(store.band.historyUndecodableFrames) · versions: \(store.band.historyVersionCounts.sorted { $0.key < $1.key }.map { "v\($0.key):\($0.value)" }.joined(separator: ", "))")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
                 Text("Live R–R beats buffered: \(store.band.liveRRIntervalsMS.count)")
