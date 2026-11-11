@@ -845,6 +845,15 @@ final class BandLink: NSObject, ObservableObject {
                 : $0.header.recordIndex < $1.header.recordIndex
         }
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
+        // Diagnostic only: never infer missing R-R from a zero count and
+        // never silently treat a partial history offload as a full night.
+        let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
+        let rrBeats = samples.reduce(0) { $0 + $1.rrIntervalsMS.count }
+        let uniqueSeconds = Set(samples.map(\.unix)).sorted()
+        let missingSeconds = zip(uniqueSeconds, uniqueSeconds.dropFirst()).reduce(0) {
+            $0 + max(0, $1.1 - $1.0 - 1)
+        }
+        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
         lastHistoryRecordCount = historicalRecordFrames
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
@@ -880,7 +889,7 @@ final class BandLink: NSObject, ObservableObject {
                 UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
             }
         }
-        lastMessage = "Captured \(samples.count) seconds of history (\(drainAcks) offload ACKs)."
+        lastMessage = "Captured \(samples.count) history records (\(drainAcks) ACKs). \(historyQuality)."
     }
 
     private func persist(_ summary: CaptureSummary) {
