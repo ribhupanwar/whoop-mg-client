@@ -52,6 +52,16 @@ enum SleepDetect {
             let run = Array(ordered[start..<end])
             let duration = run[run.count - 1].unix - run[0].unix + 1
             guard duration >= minSleepS else { continue }
+            // A short evening rest or lying still is easily mistaken for
+            // sleep by actigraphy plus HR drop. Require substantially longer
+            // evidence for daytime/evening sleep candidates. Overnight
+            // sessions retain the original minimum for fragmented sleep.
+            let startHour = Calendar.current.component(
+                .hour, from: Date(timeIntervalSince1970: TimeInterval(run[0].unix))
+            )
+            if (8..<22).contains(startHour) && duration < max(minSleepS, 90 * 60) {
+                continue
+            }
 
             let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
             let wornSeconds = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
