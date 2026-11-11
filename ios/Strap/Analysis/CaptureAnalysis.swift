@@ -161,12 +161,19 @@ enum DailyAnalysis {
 
         var result: [DayMetrics] = []
         for (key, daySamples) in byDay {
-            let resting = Hrv.restingHeartRate(daySamples)
-            let restingHrv = Hrv.restingHRV(daySamples)
             let dayPeriods = periods.filter {
                 let end = Date(timeIntervalSince1970: TimeInterval($0.endUnix))
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
             }
+            // Physiological daily RHR/HRV must come from the preceding night,
+            // not an arbitrary daytime quiet window or a day split at midnight.
+            let overnight = ordered.filter { sample in
+                dayPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+            }
+            let resting: Double? = overnight.count >= 300
+                ? Hrv.restingHeartRate(overnight) : nil
+            let restingHrv = overnight.count >= 300
+                ? Hrv.restingHRV(overnight) : (.empty, 0)
             let sleepHours = dayPeriods.reduce(0.0) { $0 + $1.hours }
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
