@@ -693,6 +693,12 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    private func isPairingInformationLost(_ error: Error) -> Bool {
+        let message = (error as NSError).localizedDescription.lowercased()
+        return message.contains("removed pairing information")
+            || message.contains("peer removed pairing")
+    }
+
     private func isAuthenticationError(_ error: Error) -> Bool {
         let ns = error as NSError
         if ns.domain == CBATTErrorDomain {
@@ -1002,7 +1008,18 @@ extension BandLink: CBCentralManagerDelegate {
         // Switching bands cancels the old link; its callback must not wipe the
         // new one.
         guard peripheral === self.peripheral else { return }
+        let pairingLost = error.map { isPairingInformationLost($0) } ?? false
         resetLink()
+        if pairingLost {
+            // A stale iOS/strap bond cannot be repaired by repeatedly
+            // reconnecting to the same remembered peripheral identifier.
+            wantsConnection = false
+            reconnectWork?.cancel()
+            reconnectWork = nil
+            forgetPreferredBand()
+            status = .failed("Bluetooth pairing was removed. In iPhone Settings → Bluetooth, forget the WHOOP strap if listed; restart Bluetooth, put the strap in pairing mode, then search for it again in Strap.")
+            return
+        }
         status = .failed(error.map { "Could not connect: \($0.localizedDescription)" } ?? "Could not connect")
         scheduleReconnect()
     }
