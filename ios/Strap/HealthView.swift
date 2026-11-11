@@ -173,7 +173,7 @@ struct HealthView: View {
         guard store.band.isConnected else { return "Strap disconnected · connect to stream live HR" }
         let count = store.band.liveHRNotificationCount
         guard let last = store.band.lastLiveHRAt else {
-            return "Waiting for first HR packet · received 0"
+            return "HR packets: 0 · \(store.band.hrConnectionDiagnostic)"
         }
         let seconds = max(0, Int(clock.timeIntervalSince(last)))
         return "HR packets: \(count) · last packet \(seconds)s ago"
