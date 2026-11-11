@@ -70,4 +70,32 @@ enum StressWindows {
     static func scoredSeconds(_ split: StressSplit) -> Double {
         Double(split.windows) * Double(windowSeconds)
     }
+
+    /// The same scored windows as `share`, but kept as an ordered per-window
+    /// series for the through-the-day chart. Empty until the baseline unlocks.
+    static func series(
+        samples: [V18Sample],
+        baseline: Baseline?,
+        excluded: [(start: Int, end: Int)] = []
+    ) -> [StressPoint] {
+        guard let baseline, baseline.days >= Recovery.minBaselineDays else { return [] }
+        var buckets: [Int: [Double]] = [:]
+        for sample in samples {
+            guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
+            if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
+                continue
+            }
+            buckets[sample.unix / windowSeconds, default: []]
+                .append(contentsOf: sample.rrIntervalsMS.map(Double.init))
+        }
+        var points: [StressPoint] = []
+        for bucket in buckets.keys.sorted() {
+            let rr = buckets[bucket]!
+            guard let index = Recovery.stressIndex(
+                lnRMSSD: Hrv.fromRR(rr).lnRMSSD, baseline: baseline
+            ).index else { continue }
+            points.append(StressPoint(unix: bucket * windowSeconds, index: index))
+        }
+        return points
+    }
 }

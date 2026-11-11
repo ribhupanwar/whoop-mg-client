@@ -87,13 +87,32 @@ struct StressView: View {
                     yLabels: ["3.0", "1.5", "0.0"],
                     xLabels: ["00:00", "12:00", "24:00"]
                 )
+            } else if let series = store.band.summary?.stressSeries, !series.isEmpty {
+                LineChart(
+                    values: series.map(\.index),
+                    color: .appGood,
+                    minY: 0,
+                    maxY: 3,
+                    height: 130,
+                    yLabels: ["3.0", "1.5", "0.0"],
+                    xLabels: stressTimeLabels(series)
+                )
+                Hint("Awake 5-minute windows scored against your baseline; sleep is excluded, so the line skips the night. Local estimate, not WHOOP's algorithm.")
             } else {
                 EmptyState(
                     title: "No stress series yet",
-                    detail: "Needs 7 days of awake-quiet baseline plus a full day of wear."
+                    detail: store.band.summary?.awakeStress?.reason
+                        ?? "Needs 7 days of awake-quiet baseline plus R-R beats outside sleep in the last capture."
                 )
             }
         }
+    }
+
+    private func stressTimeLabels(_ series: [StressPoint]) -> [String] {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        let stamps = [series.first!.unix, series[series.count / 2].unix, series.last!.unix]
+        return stamps.map { formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0))) }
     }
 
     private var totalDayPanel: some View {

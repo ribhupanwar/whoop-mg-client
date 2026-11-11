@@ -30,6 +30,9 @@ struct CaptureSummary: Codable, Equatable {
     let awakeStress: StressSplit?
     /// Same, with detected workout windows removed.
     let outsideWorkoutStress: StressSplit?
+    /// Per-window awake stress series for the through-the-day chart. nil until
+    /// the awake baseline unlocks or on summaries stored before this field.
+    let stressSeries: [StressPoint]?
     let skinTempMean: Double?
     let skinTempMin: Double?
     let skinTempMax: Double?
@@ -46,6 +49,7 @@ struct CaptureSummary: Codable, Equatable {
         respiration: RespRate(breathsPerMinute: nil, reason: nil, beats: 0, windows: 0),
         spo2: Spo2Summary(pct: nil, readings: 0, saturated: 0, diagnostic: 0, reason: nil),
         sleepPeriods: [], sleepStaging: nil, activities: [], awakeStress: nil, outsideWorkoutStress: nil,
+        stressSeries: nil,
         skinTempMean: nil, skinTempMin: nil,
         skinTempMax: nil, motionMeanG: nil, steps: nil, strain: nil
     )
@@ -97,6 +101,9 @@ struct CaptureSummary: Codable, Equatable {
         let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
         let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
+        let stressSeries = StressWindows.series(
+            samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
+        )
 
         return CaptureSummary(
             sampleCount: ordered.count,
@@ -123,6 +130,7 @@ struct CaptureSummary: Codable, Equatable {
             outsideWorkoutStress: StressWindows.share(
                 samples: ordered, baseline: awakeBaseline, excluded: workoutWindows
             ),
+            stressSeries: stressSeries.isEmpty ? nil : stressSeries,
             skinTempMean: skinTemps.isEmpty ? nil : Stats.mean(skinTemps),
             skinTempMin: skinTemps.min(),
             skinTempMax: skinTemps.max(),

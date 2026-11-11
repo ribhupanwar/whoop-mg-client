@@ -165,6 +165,13 @@ struct StressSplit: Codable, Equatable {
     )
 }
 
+/// One scored 5-minute window's stress index, plotted by the through-the-day
+/// chart. Local 0-3 estimate, never a proprietary reading.
+struct StressPoint: Codable, Equatable {
+    let unix: Int
+    let index: Double
+}
+
 struct SleepAnalysis: Codable, Equatable {
     let hours: Double
     let needHours: Double

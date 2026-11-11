@@ -107,4 +107,32 @@ final class StressWindowsTests: XCTestCase {
         let split = StressWindows.share(samples: samples, baseline: baseline(mean: 4.605))
         XCTAssertEqual(split.windows, 1)
     }
+
+    func testSeriesEmptyWithoutBaseline() {
+        XCTAssertTrue(StressWindows.series(samples: window(0), baseline: nil).isEmpty)
+    }
+
+    func testSeriesOnePointPerScoredWindowInOrder() {
+        let points = StressWindows.series(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
+        XCTAssertEqual(points.count, 2)
+        XCTAssertEqual(points.map(\.unix), [0, 300])
+        for point in points {
+            XCTAssertEqual(point.index, 0.0, accuracy: 0.01, "at the norm the index is 0")
+        }
+    }
+
+    func testSeriesReflectsHighStressWindow() {
+        let points = StressWindows.series(samples: window(0), baseline: baseline(mean: 5.7))
+        XCTAssertEqual(points.count, 1)
+        XCTAssertEqual(points.first?.index ?? 0, 2.0, accuracy: 0.01)
+    }
+
+    func testSeriesRespectsExclusions() {
+        let points = StressWindows.series(
+            samples: window(0) + window(300),
+            baseline: baseline(mean: 4.605),
+            excluded: [(start: 0, end: 299)]
+        )
+        XCTAssertEqual(points.map(\.unix), [300])
+    }
 }

@@ -48,6 +48,7 @@ final class CaptureCompatibilityTests: XCTestCase {
         XCTAssertNotNil(object["awakeStress"], "new summaries should carry the daytime split")
         object.removeValue(forKey: "awakeStress")
         object.removeValue(forKey: "outsideWorkoutStress")
+        object.removeValue(forKey: "stressSeries")
         let old = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(CaptureSummary.self, from: old)
@@ -61,5 +62,6 @@ final class CaptureCompatibilityTests: XCTestCase {
         }
         XCTAssertNil(decoded.awakeStress)
         XCTAssertNil(decoded.outsideWorkoutStress)
+        XCTAssertNil(decoded.stressSeries)
     }
 }
