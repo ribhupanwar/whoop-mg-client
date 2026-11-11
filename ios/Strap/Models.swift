@@ -73,6 +73,8 @@ enum DashboardRow: String, Codable, CaseIterable, Identifiable {
 /// wake 07:00, design preview OFF (live mode never invents a value).
 struct AppSettings: Codable, Equatable {
     var age: Int = 30
+    /// Default age is only a placeholder until the wearer confirms it.
+    var ageConfirmed: Bool = false
     var sex: Sex = .unspecified
     /// Body mass and height only price the calorie estimate (Mifflin–St Jeor
     /// basal + Keytel active). Nil means the app shows "—" and names the gap.
@@ -93,7 +95,7 @@ struct AppSettings: Codable, Equatable {
     var hiddenDashboardRows: [DashboardRow] = []
 
     enum CodingKeys: String, CodingKey {
-        case age, sex, restingHROverride, maxHROverride
+        case age, ageConfirmed, sex, restingHROverride, maxHROverride
         case weightKG, heightCM
         case sleepNeedHours, wakeTimeMinutes, sleepIntent, designPreview
         case healthKitEnabled
@@ -107,6 +109,7 @@ struct AppSettings: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         age = try container.decodeIfPresent(Int.self, forKey: .age) ?? 30
+        ageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .ageConfirmed) ?? false
         sex = try container.decodeIfPresent(Sex.self, forKey: .sex) ?? .unspecified
         weightKG = try container.decodeIfPresent(Double.self, forKey: .weightKG)
         heightCM = try container.decodeIfPresent(Double.self, forKey: .heightCM)
