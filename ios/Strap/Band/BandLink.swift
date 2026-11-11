@@ -147,6 +147,9 @@ final class BandLink: NSObject, ObservableObject {
     private var drainTimer: Timer?
     private var liveHRWatchdog: Timer?
     private var lastHRRecoveryAt: Date?
+    private var hrRecoveryAttempts = 0
+    private var hrDiscoveryRequestedAt: Date?
+    private var hrResubscribePending = false
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
     private var hrCharacteristic: CBCharacteristic?
@@ -458,6 +461,9 @@ final class BandLink: NSObject, ObservableObject {
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = nil
         lastHRRecoveryAt = nil
+        hrRecoveryAttempts = 0
+        hrDiscoveryRequestedAt = nil
+        hrResubscribePending = false
         lastLiveHRAt = nil
         liveHeartRate = nil
         liveRRIntervalsMS = []
@@ -543,7 +549,7 @@ final class BandLink: NSObject, ObservableObject {
     /// watchdog tick, and never interfere with a pending CLIENT_HELLO.
     private func ensureHeartRateStream() {
         guard let peripheral, peripheral.state == .connected else { return }
-        if let hrCharacteristic, !hrCharacteristic.isNotifying {
+        if let hrCharacteristic, !hrCharacteristic.isNotifying, !hrResubscribePending {
             peripheral.setNotifyValue(true, for: hrCharacteristic)
         }
         guard handshakeStarted, commandCharacteristic != nil,
@@ -556,15 +562,39 @@ final class BandLink: NSObject, ObservableObject {
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             guard let self, self.isConnected else { return }
-            if let last = self.lastLiveHRAt, Date().timeIntervalSince(last) < 12 { return }
-            // A missing HR notification must not remain displayed as live data.
-            self.liveHeartRate = nil
             let now = Date()
-            guard self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 15 }) ?? true else { return }
+            if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
+            // Never present an old sample as today's live pulse.
+            self.liveHeartRate = nil
+            guard self.handshakeStarted,
+                  self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 15 }) ?? true
+            else { return }
             self.lastHRRecoveryAt = now
+            self.hrRecoveryAttempts += 1
+
+            if let hr = self.hrCharacteristic {
+                // The CCCD can remain enabled even when 0x2A37 stops sending.
+                // Re-enable through the notification-state callback.
+                if hr.isNotifying && !self.hrResubscribePending {
+                    self.hrResubscribePending = true
+                    self.peripheral?.setNotifyValue(false, for: hr)
+                } else if !hr.isNotifying && !self.hrResubscribePending {
+                    self.peripheral?.setNotifyValue(true, for: hr)
+                }
+                if hr.properties.contains(.read) {
+                    self.peripheral?.readValue(for: hr)
+                }
+            } else if self.hrDiscoveryRequestedAt.map({
+                now.timeIntervalSince($0) >= 20
+            }) ?? true {
+                // Some firmware exposes 180D after output mode is enabled.
+                self.hrDiscoveryRequestedAt = now
+                self.peripheral?.discoverServices([BandUUID.heartRateService])
+            }
+            // An ATT write ack is not evidence of ongoing notifications.
             self.hrProfileEnabled = false
             self.ensureHeartRateStream()
-            self.lastMessage = "Live HR paused; refreshing the band stream."
+            self.lastMessage = "No fresh HR packets · recovery attempt \\(self.hrRecoveryAttempts). Check live packet count."
         }
     }
 
@@ -751,6 +781,7 @@ final class BandLink: NSObject, ObservableObject {
         liveHeartRate = reading.heartRate
         lastLiveHRAt = Date()
         liveHRNotificationCount += 1
+        hrRecoveryAttempts = 0
         if !reading.rrMS.isEmpty {
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
@@ -957,10 +988,13 @@ extension BandLink: CBPeripheralDelegate {
         error: Error?
     ) {
         if let error {
+            if characteristic.uuid == BandUUID.heartRateMeasurement {
+                hrResubscribePending = false
+            }
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
             } else {
-                lastMessage = "Subscribe failed: \(error.localizedDescription)"
+                lastMessage = "Subscribe failed: \\(error.localizedDescription)"
             }
             return
         }
@@ -968,8 +1002,16 @@ extension BandLink: CBPeripheralDelegate {
             subscribed.insert(characteristic.uuid)
         }
         maybeBeginHandshake()
-        if characteristic.uuid == BandUUID.heartRateMeasurement && !characteristic.isNotifying {
-            liveHeartRate = nil
+        if characteristic.uuid == BandUUID.heartRateMeasurement {
+            if !characteristic.isNotifying {
+                liveHeartRate = nil
+                if hrResubscribePending {
+                    hrResubscribePending = false
+                    peripheral.setNotifyValue(true, for: characteristic)
+                }
+            } else {
+                hrResubscribePending = false
+            }
         }
     }
 
