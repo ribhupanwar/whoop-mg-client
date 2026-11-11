@@ -165,29 +165,36 @@ enum DailyAnalysis {
                 let end = Date(timeIntervalSince1970: TimeInterval($0.endUnix))
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
             }
-            // Physiological daily RHR/HRV must come from the preceding night,
-            // not an arbitrary daytime quiet window or a day split at midnight.
-            let overnight = ordered.filter { sample in
-                dayPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
-            }
-            // Prefer the longest primary sleep session: a short nap must not
-            // displace the night's RHR or HRV. Require real temporal coverage,
-            // not merely a count of duplicated or densely sampled records.
-            let primary = dayPeriods.max { $0.durationS < $1.durationS }
-            let primarySamples = ordered.filter { sample in
-                guard let primary else { return false }
-                return sample.unix >= primary.startUnix && sample.unix <= primary.endUnix
-            }
-            let validSeconds = Set(primarySamples.filter {
-                $0.wearing && (35...220).contains($0.heartRate)
-            }.map(\.unix)).count
-            let enoughCoverage = validSeconds >= 300
-            // NOOP-compatible five-minute sustained floor, instead of the
-            // former one-minute minimum. Keep missing data as nil.
-            let resting: Double? = enoughCoverage
-                ? Hrv.restingHeartRate(primarySamples, windowS: 300) : nil
-            let restingHrv = enoughCoverage
-                ? Hrv.restingHRV(primarySamples) : (.empty, 0)
+            // NOOP-style per-sleep-session aggregation: derive each validated
+            // session independently, then weight HRV by session duration.
+            // Never join R-R beats across gaps or unrelated sleep sessions.
+            let sessions: [(period: SleepPeriod, hrv: HrvResult, window: Int, rhr: Double?)] =
+                dayPeriods.compactMap { period in
+                    let segment = ordered.filter {
+                        $0.unix >= period.startUnix && $0.unix <= period.endUnix
+                    }
+                    let validSeconds = Set(segment.filter {
+                        $0.wearing && (35...220).contains($0.heartRate)
+                    }.map(\.unix)).count
+                    guard validSeconds >= 300 else { return nil }
+                    let result = Hrv.restingHRV(segment)
+                    let rhr = Hrv.restingHeartRate(segment, windowS: 300)
+                    return (period: period, hrv: result.result,
+                            window: result.windowSeconds, rhr: rhr)
+                }
+            let resting = sessions.compactMap(\.rhr).min()
+            let weightedHRV: Double? = {
+                let values = sessions.compactMap { session -> (Double, Double)? in
+                    guard let rmssd = session.hrv.rmssdMS,
+                          rmssd.isFinite, rmssd > 0 else { return nil }
+                    return (rmssd, Double(session.period.durationS))
+                }
+                let weight = values.reduce(0.0) { $0 + $1.1 }
+                guard weight > 0 else { return nil }
+                return values.reduce(0.0) { $0 + $1.0 * $1.1 } / weight
+            }()
+            let nightlyLnRMSSD = weightedHRV.map { log($0) }
+            let nightlyWindowSeconds = sessions.reduce(0) { $0 + $1.window }
             let sleepHours = dayPeriods.reduce(0.0) { $0 + $1.hours }
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
@@ -202,8 +209,8 @@ enum DailyAnalysis {
                     dateKey: key,
                     state: sleepHours >= 3 ? "sleep" : "awake",
                     restingHR: resting,
-                    lnRMSSD: restingHrv.result.lnRMSSD,
-                    hrvWindowSeconds: restingHrv.windowSeconds,
+                    lnRMSSD: nightlyLnRMSSD,
+                    hrvWindowSeconds: nightlyWindowSeconds,
                     sleepHours: sleepHours,
                     sleepStartUnix: longest?.startUnix,
                     sleepEndUnix: longest?.endUnix,
