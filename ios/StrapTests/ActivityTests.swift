@@ -201,7 +201,9 @@ final class StepDrivenDetectTests: XCTestCase {
             spo2CandidateRaw: nil,
             spo2CandidatePct: nil,
             spo2CandidateKind: .absent,
-            signalQualityLogVariance: nil
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
         )
     }
 
