@@ -9,6 +9,7 @@ struct HealthView: View {
     @EnvironmentObject private var store: AppStore
 
     private var demo: Bool { store.isPreview }
+    @State private var clock = Date()
 
     var body: some View {
         Screen {
@@ -20,6 +21,13 @@ struct HealthView: View {
         }
         .navigationTitle("Health monitor")
         .navigationBarTitleDisplayMode(.inline)
+        .task {
+            // Force freshness evaluation even when no new BLE packet arrives.
+            while !Task.isCancelled {
+                clock = Date()
+                try? await Task.sleep(for: .seconds(1))
+            }
+        }
     }
 
     private var hrPanel: some View {
@@ -30,7 +38,7 @@ struct HealthView: View {
                     .font(.system(size: 36, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(store.band.liveHeartRate != nil ? "bpm · live" : "bpm · last capture")
+                    Text(freshLiveHR != nil ? "bpm · live" : "bpm · waiting for live")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.appMuted)
                     Text(zoneText)
@@ -41,6 +49,12 @@ struct HealthView: View {
                 Spacer()
             }
             .padding(.bottom, 6)
+            if !demo {
+                Text(liveHRDiagnostic)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.bottom, 8)
+            }
 
             if demo {
                 LineChart(
@@ -146,7 +160,24 @@ struct HealthView: View {
 
     private var summary: CaptureSummary? { store.band.summary }
 
-    private var lastHR: Int? { store.band.liveHeartRate ?? summary?.lastHeartRate }
+    private var freshLiveHR: Int? {
+        guard store.band.isConnected,
+              let last = store.band.lastLiveHRAt,
+              clock.timeIntervalSince(last) <= 8 else { return nil }
+        return store.band.liveHeartRate
+    }
+
+    private var lastHR: Int? { freshLiveHR }
+
+    private var liveHRDiagnostic: String {
+        guard store.band.isConnected else { return "Strap disconnected · connect to stream live HR" }
+        let count = store.band.liveHRNotificationCount
+        guard let last = store.band.lastLiveHRAt else {
+            return "Waiting for first HR packet · received 0"
+        }
+        let seconds = max(0, Int(clock.timeIntervalSince(last)))
+        return "HR packets: \\(count) · last packet \\(seconds)s ago"
+    }
 
     private var series: [Double] { summary?.heartRateSeries ?? [] }
 
