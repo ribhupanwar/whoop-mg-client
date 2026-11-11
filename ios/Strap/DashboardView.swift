@@ -6,12 +6,14 @@ struct DashboardView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showCustomize = false
     @State private var trendWindow = 7
+    var focusedMetric: String? = nil
 
     private var demo: Bool { store.isPreview }
 
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                if focusedMetric == nil {
                 HStack {
                     Text("My Dashboard")
                         .font(.system(size: 19, weight: .medium))
@@ -34,11 +36,12 @@ struct DashboardView: View {
                 .padding(.bottom, 10)
 
                 DashboardRows()
+                }
                 trendsPanel
-                baselinePanel
+                if focusedMetric == nil { baselinePanel }
             }
         }
-        .navigationTitle("Dashboard")
+        .navigationTitle(focusedMetric == "recovery" ? "Recovery" : focusedMetric == "strain" ? "Strain" : "Dashboard")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showCustomize) {
             DashboardCustomizeSheet()
@@ -66,7 +69,7 @@ struct DashboardView: View {
 
     private var trendsPanel: some View {
         Panel {
-            SectionTitle("Sleep · Recovery · Strain")
+            SectionTitle(focusedMetric == "recovery" ? "Recovery history" : focusedMetric == "strain" ? "Strain history" : "Sleep · Recovery · Strain")
             Picker("Chart period", selection: $trendWindow) {
                 Text("7D").tag(7)
                 Text("30D").tag(30)
@@ -77,8 +80,9 @@ struct DashboardView: View {
             Text("Last \(trendWindow) calendar days · \(recentDays.count) recorded days")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
-            recoveryTrend
-            strainTrend
+            if focusedMetric != "strain" { recoveryTrend }
+            if focusedMetric != "recovery" { strainTrend }
+            if focusedMetric == nil {
             trendChart(
                 title: "SLEEP",
                 unit: "hours",
@@ -86,6 +90,7 @@ struct DashboardView: View {
                 color: .appSleep,
                 upper: max(10, store.settings.sleepNeedHours + 2)
             )
+            }
         }
         .padding(.top, 12)
     }
