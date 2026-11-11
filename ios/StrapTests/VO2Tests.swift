@@ -13,6 +13,31 @@ final class VO2Tests: XCTestCase {
         XCTAssertEqual(Hrv.vo2Max(maxHR: maxHR, restingHR: 55) ?? 0, 52.02, accuracy: 0.001)
     }
 
+    func testSteadyLevelRunningEstimate() {
+        // 3 m/s = 180 m/min; ACSM running net cost = 36 ml/kg/min.
+        // HR reserve fraction = (150-50)/(190-50) = 5/7.
+        let value = Hrv.runningVO2Estimate(
+            speedMetersPerSecond: 3, meanHR: 150,
+            restingHR: 50, maxHR: 190, durationSeconds: 600
+        )
+        XCTAssertEqual(value ?? 0, 53.9, accuracy: 0.001)
+    }
+
+    func testRunningEstimateRejectsUnreliableSegments() {
+        XCTAssertNil(Hrv.runningVO2Estimate(
+            speedMetersPerSecond: 3, meanHR: 150,
+            restingHR: 50, maxHR: 190, durationSeconds: 120))
+        XCTAssertNil(Hrv.runningVO2Estimate(
+            speedMetersPerSecond: 3, meanHR: 150,
+            restingHR: 50, maxHR: 190, durationSeconds: 600, grade: 0.08))
+        XCTAssertNil(Hrv.runningVO2Estimate(
+            speedMetersPerSecond: 3, meanHR: 85,
+            restingHR: 50, maxHR: 190, durationSeconds: 600))
+        XCTAssertNil(Hrv.runningVO2Estimate(
+            speedMetersPerSecond: .nan, meanHR: 150,
+            restingHR: 50, maxHR: 190, durationSeconds: 600))
+    }
+
     func testImpossibleInputsGiveNil() {
         XCTAssertNil(Hrv.vo2Max(maxHR: 50, restingHR: 60))
         XCTAssertNil(Hrv.vo2Max(maxHR: 190, restingHR: 0))
