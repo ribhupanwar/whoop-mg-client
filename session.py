@@ -17,6 +17,7 @@ import argparse
 import asyncio
 import json
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from bleak import BleakClient, BleakScanner
@@ -25,8 +26,38 @@ from bleak.exc import BleakError
 from whoop.constants import Command, PacketType, build_command
 from whoop.framing import GEN5_PROFILE, FrameReassembler, build_frame
 from whoop.gatt import GEN5
+from whoop.records import MAX_RR_MS, MIN_RR_MS
 
 COMMAND_SPACING_S = 0.12
+HR_MEASUREMENT_UUID = "00002a37-0000-1000-8000-00805f9b34fb"
+
+
+def parse_standard_hr(data: bytes) -> tuple[int, list[int]] | None:
+    """SIG heart-rate measurement (0x2A37): flags, uint8/uint16 HR, optional
+    energy expended, then R-R in 1/1024 s. Mirrors StandardHeartRate.swift."""
+    if len(data) < 2:
+        return None
+    flags = data[0]
+    index = 1
+    if flags & 0x01 == 0:
+        bpm = data[index]
+        index += 1
+    else:
+        if len(data) < 3:
+            return None
+        bpm = data[1] | (data[2] << 8)
+        index = 3
+    if flags & 0x08:
+        index += 2
+    rr: list[int] = []
+    if flags & 0x10:
+        while index + 1 < len(data):
+            raw = data[index] | (data[index + 1] << 8)
+            index += 2
+            ms = round(raw * 1000.0 / 1024.0)
+            if MIN_RR_MS <= ms <= MAX_RR_MS:
+                rr.append(ms)
+    return bpm, rr
 
 
 class AuthRequired(RuntimeError):
@@ -45,6 +76,37 @@ async def find_band(timeout: float, address: str | None) -> str:
     raise RuntimeError("No WHOOP band found. Turn Bluetooth OFF on your phone and retry.")
 
 
+@asynccontextmanager
+async def connect_band(address: str, attempts: int = 3, timeout: float = 45.0):
+    """Connect with a bounded retry. WinRT needs the strap actively advertising
+    at connect time, and a stale address cache raises DeviceNotFoundError, so
+    each attempt resolves a fresh BLEDevice first. Yields a connected client."""
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        device = await BleakScanner.find_device_by_address(address, timeout=20.0)
+        target = device if device is not None else address
+        client = BleakClient(target, timeout=timeout)
+        try:
+            await client.connect()
+        except (TimeoutError, BleakError) as exc:
+            last_exc = exc
+            print(f"  connect attempt {attempt}/{attempts} failed: {type(exc).__name__}")
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+            await asyncio.sleep(2.0)
+            continue
+        try:
+            yield client
+        finally:
+            await client.disconnect()
+        return
+    raise RuntimeError(
+        f"could not connect to {address} after {attempts} attempts"
+    ) from last_exc
+
+
 class Session:
     def __init__(self, client: BleakClient, log_path: Path) -> None:
         self.client = client
@@ -55,6 +117,7 @@ class Session:
         self.frames: list[dict] = []
         self.seq = 1
         self.acks_sent = 0
+        self.live_hr: list[dict] = []
         self._ack_queue: asyncio.Queue[bytes] = asyncio.Queue()
         self._t0 = time.monotonic()
         self._log = log_path.open("w", encoding="utf-8")
@@ -86,6 +149,12 @@ class Session:
                 except ValueError:
                     label = f"0x{ptype:02X}" if ptype is not None else "?"
                 print(f"  <- {label:<24} opcode={record['opcode']} len={len(inner)}")
+                if (
+                    inner[0] == PacketType.REALTIME_DATA
+                    and len(inner) > 8
+                    and 25 <= inner[8] <= 230
+                ):
+                    self._record_live_hr(inner[8], "vendor", [])
                 if (
                     inner[0] == PacketType.METADATA
                     and len(inner) >= 21
@@ -137,6 +206,27 @@ class Session:
                 print(f"  subscribe {uuid[:8]} failed: {exc}")
         return subscribed
 
+    def _record_live_hr(self, bpm: int, source: str, rr: list[int]) -> None:
+        elapsed = round(time.monotonic() - self._t0, 4)
+        self.live_hr.append({"t": elapsed, "bpm": bpm, "source": source, "rr": rr})
+        rr_text = f" rr={rr}" if rr else ""
+        print(f"  LIVE HR {bpm} bpm ({source}){rr_text}")
+
+    async def subscribe_standard_hr(self) -> bool:
+        def handler(_char, data: bytearray) -> None:
+            reading = parse_standard_hr(bytes(data))
+            if reading is None:
+                return
+            bpm, rr = reading
+            self._record_live_hr(bpm, "2a37", rr)
+
+        try:
+            await self.client.start_notify(HR_MEASUREMENT_UUID, handler)
+            return True
+        except BleakError as exc:
+            print(f"  standard HR subscribe failed: {exc}")
+            return False
+
     async def unsubscribe_all(self) -> None:
         for uuid in GEN5.notifiable:
             try:
@@ -159,12 +249,17 @@ async def main() -> int:
         action="store_true",
         help="just write CLIENT_HELLO to trigger the bond, then exit",
     )
+    parser.add_argument(
+        "--realtime",
+        action="store_true",
+        help="enable the live HR stream (0x0E + 0x03 + 2A37) and collect live beats; no history drain",
+    )
     args = parser.parse_args()
 
     address = await find_band(args.scan_timeout, args.address)
     print(f"\nConnecting to {address} ...")
 
-    async with BleakClient(address, timeout=30.0) as client:
+    async with connect_band(address) as client:
         print(f"Connected. MTU={client.mtu_size}\n")
         session = Session(client, Path(args.out))
         ack_task: asyncio.Task | None = None
@@ -189,6 +284,28 @@ async def main() -> int:
 
             if args.hello_only:
                 print("--hello-only: stopping after the handshake.")
+                return 0
+
+            if args.realtime:
+                print("\n=== Step 3 (realtime): enable the live HR stream ===")
+                await session.send(Command.SET_GENERIC_HR_PROFILE, b"")
+                await session.send(Command.TOGGLE_REALTIME_HR, b"\x01")
+                std = await session.subscribe_standard_hr()
+                print(f"  standard 2A37 subscribed: {std}")
+                print(f"\nCollecting live HR for {args.seconds:.0f}s ...")
+                await asyncio.sleep(args.seconds)
+                print("\n=== Live HR summary ===")
+                print(f"  live samples: {len(session.live_hr)}")
+                if session.live_hr:
+                    bpms = [s["bpm"] for s in session.live_hr]
+                    print(f"  bpm min={min(bpms)} max={max(bpms)} mean={sum(bpms) / len(bpms):.1f}")
+                    sources: dict[str, int] = {}
+                    for s in session.live_hr:
+                        sources[s["source"]] = sources.get(s["source"], 0) + 1
+                    print(f"  by source: {sources}")
+                    print(f"  R-R beats carried: {sum(len(s['rr']) for s in session.live_hr)}")
+                else:
+                    print("  NO live HR packets received.")
                 return 0
 
             print("\n=== Step 3: request data range, then drain history ===")
