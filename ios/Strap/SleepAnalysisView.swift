@@ -5,6 +5,9 @@ import SwiftUI
 /// The hypnogram is a labelled four-class estimate, never a PSG reading.
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var showSleepEditor = false
+    @State private var correctedSleepStart = Date()
+    @State private var correctedSleepEnd = Date()
 
     private var demo: Bool { store.isPreview }
 
@@ -36,6 +39,36 @@ struct SleepAnalysisView: View {
                 stressDetailPanel
                 weeklyPanel
                 coachButton
+            }
+        }
+        .sheet(isPresented: $showSleepEditor) {
+            NavigationStack {
+                Form {
+                    DatePicker("Bed Time", selection: $correctedSleepStart)
+                    DatePicker("Wake Time", selection: $correctedSleepEnd)
+                    Text("Sleep duration and its Recovery input update; HRV/RHR require overnight sensor data.")
+                        .font(.footnote)
+                }
+                .navigationTitle("Edit time in bed")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showSleepEditor = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            guard let period = editablePeriod else { return }
+                            var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+                            corrections[String(period.startUnix)] = [
+                                Int(correctedSleepStart.timeIntervalSince1970),
+                                Int(correctedSleepEnd.timeIntervalSince1970)
+                            ]
+                            UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
+                            store.band.notifySleepCorrectionChanged()
+                            showSleepEditor = false
+                        }
+                        .disabled(correctedSleepEnd <= correctedSleepStart)
+                    }
+                }
             }
         }
         .navigationTitle("Sleep analysis")
@@ -146,9 +179,34 @@ struct SleepAnalysisView: View {
         return max(0, analysis.hours - asleepHours)
     }
 
+    private var editablePeriod: SleepPeriod? {
+        periods.max(by: { $0.durationS < $1.durationS })
+    }
+
+    private func openSleepEditor() {
+        guard let period = editablePeriod else { return }
+        let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        let times = corrections[String(period.startUnix)]
+        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
+        showSleepEditor = true
+    }
+
     private var lastNightPanel: some View {
         Panel {
-            CardHead(title: "Last night's sleep")
+            HStack {
+                Text("Last night's sleep")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Color.appFG)
+                Spacer()
+                if !demo, editablePeriod != nil {
+                    Button(action: openSleepEditor) {
+                        Label("EDIT", systemImage: "pencil")
+                            .font(.system(size: 12, weight: .semibold))
+                    }
+                    .foregroundStyle(Color.appAccent)
+                }
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(demo ? SampleData.sleepHours : lastNightHours.map(CoachFormat.duration) ?? "—")
