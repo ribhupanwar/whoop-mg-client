@@ -11,6 +11,7 @@ struct ActivityLoggerView: View {
     @State private var minutes = 45
     @State private var sets: [WorkSet] = [WorkSet(reps: 8, loadKG: 60.0)]
     @State private var notes = ""
+    @State private var activitySearch = ""
 
     private let today = JournalStore.dayKey(for: Date())
 
@@ -47,12 +48,52 @@ struct ActivityLoggerView: View {
     private var kindPanel: some View {
         Panel {
             SectionTitle("Type")
-            Picker("Type", selection: $kind) {
-                ForEach(ActivityKind.allCases) { option in
-                    Text(option.label).tag(option)
+            HStack(spacing: 10) {
+                Image(systemName: kind.icon)
+                    .foregroundStyle(Color.appAccent)
+                Text(kind.label)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.appFG)
+                Spacer()
+                Image(systemName: "chevron.down")
+                    .foregroundStyle(Color.appMuted)
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+            TextField("Search 60+ activities", text: $activitySearch)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .font(.system(size: 13))
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+            ScrollView {
+                LazyVStack(spacing: 2) {
+                    ForEach(ActivityKind.allCases.filter {
+                        activitySearch.isEmpty || $0.label.localizedCaseInsensitiveContains(activitySearch)
+                    }) { option in
+                        Button {
+                            kind = option
+                            activitySearch = ""
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: option.icon)
+                                    .frame(width: 22)
+                                Text(option.label)
+                                Spacer()
+                                if kind == option {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                            .font(.system(size: 13))
+                            .foregroundStyle(kind == option ? Color.appAccent : Color.appFG)
+                            .padding(.vertical, 9)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
             }
-            .pickerStyle(.segmented)
+            .frame(maxHeight: 225)
         }
     }
 
