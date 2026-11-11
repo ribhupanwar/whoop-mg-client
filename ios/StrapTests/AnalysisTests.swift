@@ -10,7 +10,8 @@ private func makeSample(
     rr: [Int] = [],
     steps: Int? = nil,
     gait: Int? = 0,
-    spo2: Int? = nil
+    spo2: Int? = nil,
+    sleepState: Int? = nil
 ) -> V18Sample {
     let candidate = V18Decoder.spo2Candidate(raw: spo2)
     return V18Sample(
@@ -30,8 +31,8 @@ private func makeSample(
         skinTempC: nil,
         tempAux1C: nil,
         tempAux2C: nil,
-        sleepStateByte: nil,
-        sleepState: nil,
+        sleepStateByte: sleepState.map { $0 << 4 },
+        sleepState: sleepState,
         cardiacFlags: nil,
         hrQualityFlags: nil,
         spo2CandidateRaw: spo2,
@@ -406,6 +407,33 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertEqual(periods[0].startUnix, 600)
         XCTAssertEqual(periods[0].durationS, 3600)
         XCTAssertEqual(periods[0].meanHR, 60.0, accuracy: 1e-6)
+    }
+
+    func testSustainedBandUpVetoesFalseSleep() {
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 3)
+        }
+        rows += stretch(4200, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
+    func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 100, accel: 0.02, sleepState: 1)
+        }
+        rows += stretch(4200, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
+    func testBandSleepSupportsExistingActigraphyEvidence() {
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += stretch(4200, 600, hr: 100, accel: 0.5)
+        XCTAssertEqual(SleepDetect.detect(rows).count, 1)
     }
 
     func testSittingStillWithoutHrDropIsNotSleep() {
