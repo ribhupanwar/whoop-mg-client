@@ -124,7 +124,12 @@ final class StressWindowsTests: XCTestCase {
     func testSeriesReflectsHighStressWindow() {
         let points = StressWindows.series(samples: window(0), baseline: baseline(mean: 5.7))
         XCTAssertEqual(points.count, 1)
-        XCTAssertEqual(points.first?.index ?? 0, 2.0, accuracy: 0.01)
+        // Stress is measured in baseline SDs, not snapped to the high-band threshold.
+        // The synthetic alternating RR sequence is filtered before lnRMSSD is scored.
+        let lnRMSSD = Hrv.fromRR(window(0).flatMap { $0.rrIntervalsMS.map(Double.init) }).lnRMSSD
+        let expected = Recovery.stressIndex(lnRMSSD: lnRMSSD, baseline: baseline(mean: 5.7)).index
+        XCTAssertNotNil(expected)
+        XCTAssertEqual(points.first?.index, expected)
     }
 
     func testSeriesRespectsExclusions() {
