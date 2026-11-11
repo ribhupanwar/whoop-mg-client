@@ -14,6 +14,11 @@ struct HomeView: View {
     @State private var correctedKind: ActivityKind = .other
     @State private var correctedLabels: [String: String] = UserDefaults.standard.dictionary(forKey: "strap.detected.activity.labels.v1") as? [String: String] ?? [:]
     @State private var showDashboardCustomize = false
+    @State private var showSleepEditor = false
+    @State private var correctedSleepStart = Date()
+    @State private var correctedSleepEnd = Date()
+    @State private var sleepCorrections: [String: [Int]] =
+        UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
 
     private var demo: Bool { store.isPreview }
 
@@ -65,6 +70,36 @@ struct HomeView: View {
                             }
                             editingDetectedID = nil
                         }
+                    }
+                }
+            }
+        }
+        .sheet(isPresented: $showSleepEditor) {
+            NavigationStack {
+                Form {
+                    DatePicker("Sleep started", selection: $correctedSleepStart)
+                    DatePicker("Woke up", selection: $correctedSleepEnd)
+                    Text("Corrects the displayed sleep time only. Physiological sleep, HRV, RHR and recovery are not recalculated from this edit.")
+                        .font(.footnote)
+                }
+                .navigationTitle("Edit sleep")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { showSleepEditor = false }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            if correctedSleepEnd > correctedSleepStart,
+                               let period = latestSleepPeriod {
+                                sleepCorrections[String(period.startUnix)] = [
+                                    Int(correctedSleepStart.timeIntervalSince1970),
+                                    Int(correctedSleepEnd.timeIntervalSince1970)
+                                ]
+                                UserDefaults.standard.set(sleepCorrections, forKey: "strap.sleep.time.corrections.v1")
+                            }
+                            showSleepEditor = false
+                        }
+                        .disabled(correctedSleepEnd <= correctedSleepStart)
                     }
                 }
             }
@@ -452,7 +487,22 @@ struct HomeView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 10)
+            .padding(.bottom, 4)
+            if !demo, latestSleepPeriod != nil {
+                HStack {
+                    Spacer()
+                    Button("Edit sleep time") {
+                        guard let period = latestSleepPeriod else { return }
+                        let times = sleepCorrections[String(period.startUnix)]
+                        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
+                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
+                        showSleepEditor = true
+                    }
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appAccent)
+                }
+                .padding(.bottom, 8)
+            }
 
             VStack(spacing: 8) {
                 if demo {
@@ -688,10 +738,14 @@ struct HomeView: View {
         return CoachFormat.duration(hours)
     }
 
+    private var latestSleepPeriod: SleepPeriod? {
+        store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+    }
+
     private var sleepTimesText: String {
-        guard let period = store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
-        else { return "wear it\ntonight" }
-        return "\(Self.hourMinute(period.startUnix))\n\(Self.hourMinute(period.endUnix))"
+        guard let period = latestSleepPeriod else { return "wear it\ntonight" }
+        let times = sleepCorrections[String(period.startUnix)]
+        return "\(Self.hourMinute(times?.first ?? period.startUnix))\n\(Self.hourMinute(times?.last ?? period.endUnix))"
     }
 
     private static func hourMinute(_ unix: Int) -> String {
