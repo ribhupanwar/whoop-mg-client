@@ -51,6 +51,36 @@ enum WhoopCSVImport {
         return rows.values.sorted { $0.dateKey < $1.dateKey }
     }
 
+    /// Preserves the complete exported sleep, workout and journal rows locally.
+    /// These are source records, not band-measured sessions or Recovery inputs.
+    struct SupplementalRecord: Codable {
+        let source: String
+        let fields: [String: String]
+    }
+
+    static func importSupplemental(_ data: Data, source: String) throws -> Int {
+        let category = source.lowercased()
+        guard ["sleeps", "workouts", "journal_entries"].contains(category) else {
+            throw ImportError.unsupportedColumns
+        }
+        let string = String(data: data, encoding: .utf8)
+            ?? String(data: data, encoding: .utf16) ?? ""
+        let records = csvRecords(string)
+        guard let headers = records.first, !headers.isEmpty else {
+            throw ImportError.unsupportedColumns
+        }
+        let rows = records.dropFirst().filter { !$0.isEmpty }.map { values in
+            SupplementalRecord(source: category, fields: Dictionary(
+                uniqueKeysWithValues: zip(headers, values).map { ($0.0, $0.1) }
+            ))
+        }
+        guard !rows.isEmpty else { throw ImportError.noValidRows }
+        let key = "strap.whoop.import." + category + ".v1"
+        let encoded = try JSONEncoder().encode(rows)
+        UserDefaults.standard.set(encoded, forKey: key)
+        return rows.count
+    }
+
     private static func dateKey(_ raw: String) -> String? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         let prefix = String(value.prefix(10))
