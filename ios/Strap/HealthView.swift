@@ -164,7 +164,7 @@ struct HealthView: View {
     // A daytime capture must not overwrite the night's recovery metric.
     private var latestNightHRV: Double? {
         guard let day = store.band.days
-            .filter({ $0.sleepHours > 0 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
+            .filter({ $0.sleepHours >= 3 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
             .sorted(by: { $0.dateKey > $1.dateKey })
             .first,
               let ln = day.lnRMSSD else { return nil }
