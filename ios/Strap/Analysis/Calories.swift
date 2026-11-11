@@ -129,6 +129,41 @@ enum Calories {
         return active
     }
 
+    /// OpenStrap analytics-inspired elapsed-time weighting for irregular HR samples.
+    /// Samples must be timestamped in seconds. Never bill more than 150 seconds
+    /// across a missing-data gap; duplicate timestamps carry no extra energy.
+    /// Reference: OpenStrap/analytics lib/src/onehz/workout/calories.dart
+    /// (AGPL-3.0; independently adapted for this Swift API).
+    static func activeKcalTimestamped(
+        heartRates: [(unix: Int, bpm: Double)],
+        restingHR: Double,
+        maxHR: Double,
+        weightKg: Double,
+        heightCm: Double,
+        age: Double,
+        sex: Sex,
+        maxGapSeconds: Double = 150
+    ) -> Double? {
+        guard let bmr = bmrKcalPerDay(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex),
+              let gate = gateHR(restingHR: restingHR, maxHR: maxHR),
+              maxGapSeconds.isFinite, maxGapSeconds > 0 else { return nil }
+        let points = heartRates.filter { $0.bpm.isFinite && $0.bpm > 0 }
+            .sorted { $0.unix < $1.unix }
+        guard points.count >= 2 else { return 0 }
+        let basalPerSecond = bmr / 86400
+        var active = 0.0
+        for index in 0..<(points.count - 1) {
+            let point = points[index]
+            let elapsed = Double(points[index + 1].unix - point.unix)
+            guard elapsed > 0, point.bpm >= gate else { continue }
+            let rate = keytelKcalPerS(
+                hr: point.bpm, maxHR: maxHR, weightKg: weightKg, age: age, sex: sex
+            )
+            active += max(0, rate - basalPerSecond) * min(elapsed, maxGapSeconds)
+        }
+        return active
+    }
+
     /// ACTIVE energy of one measured session. Above the gate the session is
     /// priced at its mean heart rate for its whole duration; below it a
     /// measured walking cadence prices it instead; otherwise the session spent
