@@ -32,9 +32,21 @@ enum StepCounter {
         for sample in samples.sorted(by: { $0.unix < $1.unix }) {
             guard let value = sample.stepCounter else { continue }
             sawCounter = true
-            defer { previous = (sample.unix, value) }
-            guard let before = previous else { continue }
-            total += delta(from: before.value, to: value, seconds: sample.unix - before.unix)
+            guard let before = previous else {
+                previous = (sample.unix, value)
+                continue
+            }
+            // Replayed historical records can share a timestamp. Counting
+            // either delta would manufacture steps and distort activity gait.
+            guard sample.unix > before.unix else { continue }
+            let seconds = sample.unix - before.unix
+            let change = delta(from: before.value, to: value, seconds: seconds)
+            // A counter reset or a gap cannot prove steps happened in the
+            // missing interval. Keep only plausible continuous deltas.
+            if seconds <= 10 && change <= maxStepsPerSecond * seconds {
+                total += change
+            }
+            previous = (sample.unix, value)
         }
         return sawCounter ? total : nil
     }
