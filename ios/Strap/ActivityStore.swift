@@ -171,7 +171,18 @@ enum WhoopWorkoutImport {
     /// One authorized WHOOP API v2 workout page; paginate using next_token.
     static func decodePage(_ data: Data) throws -> (workouts: [WhoopWorkout], nextToken: String?) {
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let container = try decoder.singleValueContainer()
+            let value = try container.decode(String.self)
+            let fractional = ISO8601DateFormatter()
+            fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            let plain = ISO8601DateFormatter()
+            plain.formatOptions = [.withInternetDateTime]
+            guard let date = fractional.date(from: value) ?? plain.date(from: value) else {
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Invalid ISO-8601 workout timestamp")
+            }
+            return date
+        }
         let page = try decoder.decode(Page.self, from: data)
         let workouts = page.records.compactMap { item -> WhoopWorkout? in
             guard item.end > item.start, !item.id.isEmpty else { return nil }
