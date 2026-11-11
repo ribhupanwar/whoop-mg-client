@@ -9,6 +9,7 @@ struct SettingsView: View {
     /// Text state so a half-typed decimal ("70.") is not rewritten mid-entry.
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet. Sync band history to collect candidates."
+    @FocusState private var profileEditing: Bool
     @State private var weightText = ""
     @State private var heightText = ""
     @State private var showWhoopImporter = false
@@ -108,8 +109,10 @@ struct SettingsView: View {
         Panel {
             SectionTitle("Profile")
             fieldRow(label: "Age") {
+                HStack(spacing: 6) {
                 TextField("30", value: $store.settings.age, format: .number)
                     .keyboardType(.numberPad)
+                    .focused($profileEditing)
                     .onChange(of: store.settings.age) { _, _ in
                         store.settings.ageConfirmed = true
                     }
@@ -122,6 +125,8 @@ struct SettingsView: View {
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                profileOK { store.settings.ageConfirmed = true }
+                }
             }
             if !store.settings.ageConfirmed {
                 Button("Confirm age for Fitness Age") {
@@ -137,9 +142,15 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
+            HStack {
+                Spacer()
+                profileOK { }
+            }
             fieldRow(label: "Weight · kg") {
+                HStack(spacing: 6) {
                 TextField("70", text: $weightText)
                     .keyboardType(.decimalPad)
+                    .focused($profileEditing)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
                     .font(.system(size: 15))
@@ -152,10 +163,14 @@ struct SettingsView: View {
                     .onChange(of: weightText) { _, text in
                         store.settings.weightKG = Self.parsedNumber(text)
                     }
+                profileOK { }
+                }
             }
             fieldRow(label: "Height · cm") {
+                HStack(spacing: 6) {
                 TextField("175", text: $heightText)
                     .keyboardType(.decimalPad)
+                    .focused($profileEditing)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
                     .font(.system(size: 15))
@@ -168,9 +183,25 @@ struct SettingsView: View {
                     .onChange(of: heightText) { _, text in
                         store.settings.heightCM = Self.parsedNumber(text)
                     }
+                profileOK { }
+                }
             }
             Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex selects the Banister TRIMP coefficients, which drive strain, and the Keytel calorie coefficients. Weight and height only price the calorie estimate — leave them blank and the app shows an em dash rather than a number built on a guess.")
         }
+    }
+
+    private func profileOK(_ save: @escaping () -> Void) -> some View {
+        Button("OK") {
+            save()
+            profileEditing = false
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(Color.appAccent)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine, lineWidth: 1))
+        .accessibilityLabel("Confirm profile value")
     }
 
     /// Blank means "not measured": the fields show placeholders but the stored
