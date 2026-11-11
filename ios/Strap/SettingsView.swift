@@ -215,6 +215,17 @@ struct SettingsView: View {
                 Hint("Strongest signal first — the strap on your wrist is usually the top row. Names match because both bands are the same model.")
             }
 
+            if let firmware = store.band.firmwareRevision {
+                Text("Firmware \(firmware)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 8)
+                if firmware.hasPrefix("50.43.") {
+                    Hint("Community reports: some WHOOP 5/MG firmware 50.43 builds connect over Bluetooth but restrict history or live data. A successful connection does not guarantee data access.")
+                }
+            } else {
+                Hint("Firmware revision unavailable until the band exposes its Device Information characteristic.")
+            }
             if let battery = store.band.batteryPercent {
                 Text("Battery \(battery)%")
                     .font(.system(size: 11))
