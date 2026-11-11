@@ -2,7 +2,7 @@ import SwiftUI
 import MapKit
 
 struct GPSRunView: View {
-    @StateObject private var gps = GPSRunRecorder()
+    @ObservedObject private var gps = GPSRunRecorder.shared
     @State private var selectedRun: GPSRunRecord?
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
@@ -37,7 +37,7 @@ struct GPSRunView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .padding(.top, 8)
-                    Hint("Uses iPhone GPS while this screen is active. Accurate fixes only; location permissions required. Background GPS and map display are not yet supported; completed routes are stored locally.")
+                    Hint("Uses iPhone GPS while this screen is active. Accurate fixes only; location permissions required. Background recording uses iOS location updates; verify on your iPhone. Completed routes are stored locally.")
                 }
                 Panel {
                     SectionTitle("Kilometre splits")
@@ -109,6 +109,6 @@ struct GPSRunView: View {
             }
         }
         .onReceive(ticker) { _ in gps.refreshElapsed() }
-        .onDisappear { if gps.recording { gps.stop() } }
+
     }
 }
