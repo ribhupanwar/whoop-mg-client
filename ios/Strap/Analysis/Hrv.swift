@@ -144,7 +144,10 @@ enum Hrv {
         minWindowS: Int = restingMinWindowS
     ) -> (result: HrvResult, windowSeconds: Int) {
         let eligible = samples
-            .filter { $0.wearing && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG }
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+            }
             .sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
         guard let longest = runs.max(by: { $0.count < $1.count }) else {
@@ -164,7 +167,10 @@ enum Hrv {
         quietAccelG: Double = restingQuietAccelG
     ) -> Double? {
         let eligible = samples
-            .filter { $0.wearing && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG }
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+            }
             .sorted { $0.unix < $1.unix }
         var best: Double?
         for run in contiguousRuns(eligible) {
