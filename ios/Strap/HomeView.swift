@@ -425,12 +425,11 @@ struct HomeView: View {
                     activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push")
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
-                    ForEach(detectedRows, id: \.id) { row in
+                    ForEach(timedRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
                     }
-                    ForEach(liveRows, id: \.id) { row in
-                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
-                    }
+                    // Manual entries have a date but no recorded start time.
+                    // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
                     }
@@ -468,6 +467,20 @@ struct HomeView: View {
         let icon: String
         let name: String
         let detail: String
+        let startUnix: Int?
+    }
+
+    private var timedRows: [ActivityRowModel] {
+        (detectedRows + liveRows).sorted {
+            ($0.startUnix ?? Int.max) < ($1.startUnix ?? Int.max)
+        }
+    }
+
+    private static func clockRange(_ start: Int, _ end: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))–\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
     }
 
     private var selectedDayKey: String {
@@ -484,7 +497,8 @@ struct HomeView: View {
                 id: "band-\(session.startUnix)",
                 icon: Self.icon(forDetected: session.kind),
                 name: "\(session.kind.capitalized) · band",
-                detail: "\(minutes) min\(steps)\(heart)\(kcal)"
+                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(steps)\(heart)\(kcal)",
+                startUnix: session.startUnix
             )
         }
     }
@@ -498,7 +512,8 @@ struct HomeView: View {
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(minutes) min\(heart)\(kcal)"
+                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
+                startUnix: record.startedUnix
             )
         }
     }
@@ -509,7 +524,8 @@ struct HomeView: View {
                 id: "manual-\(activity.id)",
                 icon: activity.kind.icon,
                 name: "\(activity.name) · logged",
-                detail: activity.summary
+                detail: activity.summary,
+                startUnix: nil
             )
         }
     }
