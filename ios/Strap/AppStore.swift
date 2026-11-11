@@ -252,7 +252,7 @@ final class AppStore: ObservableObject {
     /// A transient quiet daytime window is not an overnight resting HR.
     private var latestOvernightRestingHR: Double? {
         band.days
-            .filter { $0.sleepHours > 0 && $0.restingHR != nil }
+            .filter { $0.sleepHours >= 3 && $0.restingHR != nil && $0.hrvWindowSeconds >= 300 }
             .sorted { $0.dateKey > $1.dateKey }
             .first?.restingHR
     }
