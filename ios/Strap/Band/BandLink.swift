@@ -637,7 +637,9 @@ final class BandLink: NSObject, ObservableObject {
             // immediately after hello acknowledgement below.
             // An absent first packet needs recovery too: waiting for an
             // existing packet timestamp alone can leave the UI stuck forever.
-            guard self.hrBondConfirmed, self.hrRecoveryAttempts < 4,
+            // NOOP confirms standard 0x2A37 can stream before the vendor
+            // handshake/bond. Do not gate its recovery on CLIENT_HELLO.
+            guard self.hrRecoveryAttempts < 4,
                   let confirmed = self.hrSubscriptionConfirmedAt ?? self.hrConnectedAt,
                   now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 30,
                   self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 45 }) ?? true,
