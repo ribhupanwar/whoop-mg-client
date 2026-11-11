@@ -60,7 +60,9 @@ enum StepCounter {
         if before >= wrapFloor && after <= wrapCeiling {
             return modulus - before + after
         }
-        return after
+        // A reset is a new counter epoch. The first reading after reset
+        // has no known starting point, so it must not count as new steps.
+        return 0
     }
 
     /// Trailing-minute steps per minute. Leaps above the sprint ceiling are
