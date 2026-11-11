@@ -52,7 +52,7 @@ enum LiveGaitPedometer {
         }
         let short = movingMean(max(1, Int(0.1 * fs)))
         let long = movingMean(max(1, Int(fs)))
-        let filtered = zip(short, long).map(-)
+        let filtered = zip(short, long).map { $0 - $1 }
         let window = Int(4 * fs)
         let hop = max(1, Int(fs))
         guard filtered.count >= window else {
