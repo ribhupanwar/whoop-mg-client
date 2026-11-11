@@ -455,6 +455,8 @@ struct MetricRow: View {
     var unit: String? = nil
     var detail: String? = nil
     var detailColor: Color = .appMuted
+    var trendUp: Bool? = nil
+    var trendFavourable: Bool? = nil
 
     var body: some View {
         HStack(spacing: 11) {
@@ -476,6 +478,13 @@ struct MetricRow: View {
                         Text(unit)
                             .font(.system(size: 11))
                             .foregroundStyle(Color.appMuted)
+                    }
+                    if let trendUp, let trendFavourable {
+                        Image(systemName: trendUp ? "triangle.fill" : "triangle.fill")
+                            .font(.system(size: 7, weight: .bold))
+                            .rotationEffect(.degrees(trendUp ? 0 : 180))
+                            .foregroundStyle(trendFavourable ? Color.appGood : Color.appWarn)
+                            .accessibilityLabel(trendFavourable ? "Favourable trend" : "Unfavourable trend")
                     }
                 }
                 if let detail {
