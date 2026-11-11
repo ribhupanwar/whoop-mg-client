@@ -68,13 +68,14 @@ final class AppStore: ObservableObject {
     /// and the published list only changes when something new arrived.
     private func syncDetectedActivities(_ fresh: CaptureSummary?) {
         guard let sessions = fresh?.activities, !sessions.isEmpty else { return }
-        let known = Set(detectedBandActivities.map { $0.startUnix })
-        guard sessions.contains(where: { !known.contains($0.startUnix) }) else { return }
+        // The same workout may be re-detected with a slightly shifted start
+        // or a longer duration. Always merge overlaps, not just start seconds.
         activities.mergeDetected(sessions)
         detectedBandActivities = activities.detectedActivities()
         if settings.healthKitEnabled, health.state.isOn {
+            let merged = detectedBandActivities
             Task { [weak self] in
-                await self?.health.export(sessions)
+                await self?.health.export(merged)
             }
         }
     }
