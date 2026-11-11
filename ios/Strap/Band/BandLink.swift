@@ -240,8 +240,23 @@ final class BandLink: NSObject, ObservableObject {
         Recovery.stressIndex(lnRMSSD: summary?.hrv.lnRMSSD, baseline: awakeBaseline)
     }
 
+    /// Corrected sleep durations affect Recovery immediately; original
+    /// physiological samples remain unchanged for HRV/RHR provenance.
     var lastNightHours: Double? {
-        summary.map { SleepDetect.totalHours($0.sleepPeriods) }
+        guard let periods = summary?.sleepPeriods else { return nil }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        let seconds = periods.reduce(0) { total, period in
+            let corrected = overrides[String(period.startUnix)]
+            if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
+                return total + corrected[1] - corrected[0]
+            }
+            return total + period.durationS
+        }
+        return Double(seconds) / 3600
+    }
+
+    func notifySleepCorrectionChanged() {
+        objectWillChange.send()
     }
 
     var recovery: RecoveryResult {
