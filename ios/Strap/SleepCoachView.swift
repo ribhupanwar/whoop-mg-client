@@ -13,6 +13,7 @@ struct SleepCoachView: View {
     @State private var wakeMinutes = 7 * 60
     @State private var intent: SleepIntent = .easy
     @State private var alarmOn = false
+    @State private var alarmConfirmation = false
     @State private var seeded = false
 
     private var demo: Bool { store.isPreview }
@@ -208,6 +209,17 @@ struct SleepCoachView: View {
                 coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
             }
 
+            Button("OK · Confirm alarm settings") {
+                WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
+                alarmConfirmation = true
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.appAccent)
+            if alarmConfirmation {
+                Text("Alarm preference saved for \(CoachFormat.clock(wakeMinutes)).")
+                    .font(.footnote)
+                    .foregroundStyle(Color.appGood)
+            }
             Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")
         }
     }
