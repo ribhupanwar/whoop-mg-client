@@ -1211,6 +1211,9 @@ extension BandLink: CBPeripheralDelegate {
     ) {
         if let error {
             lastMessage = "Characteristics unavailable: \(error.localizedDescription)"
+            if service.uuid == BandUUID.service {
+                status = .failed("WHOOP GATT characteristic discovery failed: \(error.localizedDescription)")
+            }
             return
         }
         for characteristic in service.characteristics ?? [] {
@@ -1255,6 +1258,9 @@ extension BandLink: CBPeripheralDelegate {
         if let error {
             if characteristic.uuid == BandUUID.heartRateMeasurement {
                 hrResubscribePending = false
+            }
+            if BandUUID.notifiable.contains(characteristic.uuid) {
+                status = .failed("WHOOP notification subscription failed: \(error.localizedDescription)")
             }
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
