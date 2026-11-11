@@ -232,6 +232,17 @@ struct SettingsView: View {
                     .foregroundStyle(Color.appMuted)
                     .padding(.top, 8)
             }
+            if store.band.lastHistoryRecordCount > 0 {
+                Text("Last history transfer: \(store.band.lastHistoryRecordCount) record frames")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 6)
+            }
+            if let lastSync = store.band.lastHistorySyncAt {
+                Text("Last successful history decode: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let message = store.band.lastMessage {
                 Hint(message)
             }
