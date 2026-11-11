@@ -1,0 +1,66 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+# A release is tied to a specific tag; never cancel one mid-publish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-ipa:
+    runs-on: macos-15
+    timeout-minutes: 25
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ANALYTICS: 1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Archive and package unsigned device IPA
+        run: |
+          set -uo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          xcodebuild archive -project ios/Strap.xcodeproj -scheme Strap \
+            -configuration Release -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/Strap.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO 2>&1 | tee archive.log
+          code=${PIPESTATUS[0]}
+          if [ "$code" -ne 0 ]; then exit "$code"; fi
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          ditto "$RUNNER_TEMP/Strap.xcarchive/Products/Applications/Strap.app" "$RUNNER_TEMP/ipa/Payload/Strap.app"
+          cd "$RUNNER_TEMP/ipa"
+          /usr/bin/zip -qry "Strap-${version}-unsigned.ipa" Payload
+          shasum -a 256 "Strap-${version}-unsigned.ipa"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          gh release create "$GITHUB_REF_NAME" \
+            "$RUNNER_TEMP/ipa/Strap-${version}-unsigned.ipa" \
+            --title "Strap $GITHUB_REF_NAME (unsigned)" \
+            --notes "Unsigned device IPA — sideload with your own signing tool (AltStore / Sideloadly). Metrics are local published-science estimates, not WHOOP scores."
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-build-logs
+          path: archive.log
+          if-no-files-found: ignore
