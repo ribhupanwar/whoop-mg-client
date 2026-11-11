@@ -33,10 +33,11 @@ final class StepCounterTests: XCTestCase {
 
     func testTotalSumsDeltasNotEndpoints() {
         // A counter that restarts in the middle: 100 → 130, then a new epoch
-        // 0 → 20. The honest total is 50, not 0xFFFF & (20 - 100).
+        // 0 → 20. Deltas occur over plausible five-second windows, so the
+        // honest total is 50 rather than treating the reset as a 16-bit wrap.
         let samples = [
-            sample(0, steps: 100), sample(1, steps: 130),
-            sample(2, steps: 0), sample(3, steps: 20)
+            sample(0, steps: 100), sample(5, steps: 130),
+            sample(6, steps: 0), sample(11, steps: 20)
         ]
         XCTAssertEqual(StepCounter.total(samples), 50)
     }
