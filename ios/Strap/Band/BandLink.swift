@@ -605,7 +605,7 @@ final class BandLink: NSObject, ObservableObject {
             // An ATT write ack is not evidence of ongoing notifications.
             self.hrProfileEnabled = false
             self.ensureHeartRateStream()
-            self.lastMessage = "No fresh HR packets · recovery attempt \\(self.hrRecoveryAttempts). Check live packet count."
+            self.lastMessage = "No fresh HR packets · recovery attempt \(self.hrRecoveryAttempts). Check live packet count."
         }
     }
 
@@ -1006,7 +1006,7 @@ extension BandLink: CBPeripheralDelegate {
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
             } else {
-                lastMessage = "Subscribe failed: \\(error.localizedDescription)"
+                lastMessage = "Subscribe failed: \(error.localizedDescription)"
             }
             return
         }
