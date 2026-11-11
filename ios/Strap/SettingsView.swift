@@ -1,5 +1,6 @@
 import SwiftUI
 import UniformTypeIdentifiers
+import ZIPFoundation
 
 /// Settings — everything persists to UserDefaults through AppStore.
 /// The design-preview toggle defaults OFF: live mode never invents a value.
@@ -26,7 +27,7 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
+        .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.zip, .commaSeparatedText, .plainText]) { result in
             do {
                 let url = try result.get()
                 guard url.startAccessingSecurityScopedResource() else {
@@ -34,9 +35,31 @@ struct SettingsView: View {
                     return
                 }
                 defer { url.stopAccessingSecurityScopedResource() }
-                let rows = try WhoopCSVImport.parse(Data(contentsOf: url))
-                let added = store.band.importWhoopHistory(rows)
-                whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                if url.pathExtension.lowercased() == "zip" {
+                    let archive = try Archive(url: url, accessMode: .read)
+                    var importedDays = 0
+                    var recognizedFiles: [String] = []
+                    for entry in archive where entry.type == .file {
+                        let name = (entry.path as NSString).lastPathComponent.lowercased()
+                        guard name.hasSuffix(".csv") else { continue }
+                        // ZIPFoundation extracts to memory: no cloud upload or
+                        // unsafe archive paths are written to the filesystem.
+                        guard entry.uncompressedSize <= 50_000_000 else { continue }
+                        var data = Data()
+                        _ = try archive.extract(entry) { chunk in data.append(chunk) }
+                        recognizedFiles.append(name)
+                        if name.contains("physiological") || name.contains("cycle") {
+                            if let rows = try? WhoopCSVImport.parse(data) {
+                                importedDays += store.band.importWhoopHistory(rows)
+                            }
+                        }
+                    }
+                    whoopImportStatus = "ZIP read: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days imported. Sleep, workout and journal rows are not yet mapped."
+                } else {
+                    let rows = try WhoopCSVImport.parse(Data(contentsOf: url))
+                    let added = store.band.importWhoopHistory(rows)
+                    whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                }
             } catch {
                 whoopImportStatus = "Import failed: \(error.localizedDescription)"
             }
@@ -422,7 +445,7 @@ struct SettingsView: View {
     private var whoopImportPanel: some View {
         Panel {
             SectionTitle("Import WHOOP history")
-            Button("Choose WHOOP CSV file") {
+            Button("Import WHOOP data ZIP or CSV") {
                 showWhoopImporter = true
             }
             .font(.system(size: 12, weight: .semibold))
@@ -432,7 +455,7 @@ struct SettingsView: View {
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
-            Hint("Import a CSV containing Date, HRV (RMSSD ms), and Resting Heart Rate. This fills missing baseline days without replacing measured band values. Recovery needs 7 valid days; imported data is historical, not a live sensor reading. Other WHOOP export formats may require conversion.")
+            Hint("Select the original WHOOP export ZIP directly. The importer reads CSVs locally and currently imports physiological-cycle HRV/RHR values; sleep, workout and journal rows are recognized but not yet mapped. Existing measured band values are preserved.")
         }
     }
 
