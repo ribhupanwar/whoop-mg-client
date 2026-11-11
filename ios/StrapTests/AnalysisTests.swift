@@ -38,7 +38,9 @@ private func makeSample(
         spo2CandidateRaw: spo2,
         spo2CandidatePct: candidate.pct,
         spo2CandidateKind: candidate.kind,
-        signalQualityLogVariance: nil
+        signalQualityLogVariance: nil,
+        psnrB: nil,
+        psnrA: nil
     )
 }
 
