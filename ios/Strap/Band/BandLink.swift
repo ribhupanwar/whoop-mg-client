@@ -153,6 +153,7 @@ final class BandLink: NSObject, ObservableObject {
     private var hrSubscribedBeforeBond = false
     private var hrBondConfirmed = false
     private var hrSubscriptionConfirmedAt: Date?
+    private var hrConnectedAt: Date?
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
     private var hrCharacteristic: CBCharacteristic?
@@ -507,6 +508,7 @@ final class BandLink: NSObject, ObservableObject {
         hrSubscribedBeforeBond = false
         hrBondConfirmed = false
         hrSubscriptionConfirmedAt = nil
+        hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
         liveRRIntervalsMS = []
@@ -620,7 +622,7 @@ final class BandLink: NSObject, ObservableObject {
             // An absent first packet needs recovery too: waiting for an
             // existing packet timestamp alone can leave the UI stuck forever.
             guard self.hrBondConfirmed, self.hrRecoveryAttempts < 4,
-                  let confirmed = self.hrSubscriptionConfirmedAt,
+                  let confirmed = self.hrSubscriptionConfirmedAt ?? self.hrConnectedAt,
                   now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 30,
                   self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 45 }) ?? true,
                   !self.hrResubscribePending
@@ -991,6 +993,7 @@ extension BandLink: CBCentralManagerDelegate {
         reconnectWork?.cancel()
         reconnectWork = nil
         reconnectAttempt = 0
+        hrConnectedAt = Date()
         startHRWatchdog()
         peripheral.discoverServices([
             BandUUID.service,
