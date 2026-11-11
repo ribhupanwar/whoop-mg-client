@@ -80,7 +80,7 @@ struct HealthView: View {
             } else {
                 EmptyState(
                     title: "needs a capture",
-                    detail: "The heart-rate series appears here after the band streams HR into a capture."
+                    detail: "Waiting for live heart-rate readings from the band."
                 )
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
             }
@@ -88,8 +88,8 @@ struct HealthView: View {
             Hint(demo
                  ? "Sample series — not measured data."
                  : series.isEmpty
-                    ? "No HR series yet — wear the band and run a capture."
-                    : "Per-minute means from the last capture, newest at the right.")
+                    ? "No HR series yet — connect the band to stream live readings."
+                    : "Heart-rate graph — live while connected, otherwise last capture.")
         }
     }
 
@@ -225,7 +225,16 @@ struct HealthView: View {
         return "HR packets: \(count) · last packet \(seconds)s ago"
     }
 
-    private var series: [Double] { summary?.heartRateSeries ?? [] }
+    private var usingLiveSeries: Bool {
+        guard let last = store.band.recentLiveHR.last else { return false }
+        return store.band.isConnected && clock.timeIntervalSince1970 - Double(last.unix) <= 15
+            && store.band.recentLiveHR.count >= 2
+    }
+
+    private var series: [Double] {
+        if usingLiveSeries { return store.band.recentLiveHR.map { Double($0.heartRate) } }
+        return summary?.heartRateSeries ?? []
+    }
 
     private var baselineChip: String {
         store.hasRecoveryBaseline
@@ -322,6 +331,10 @@ struct HealthView: View {
     }
 
     private var xLabels: [String] {
+        if usingLiveSeries, let first = store.band.recentLiveHR.first,
+           let last = store.band.recentLiveHR.last {
+            return [Self.clock(first.unix), Self.clock(last.unix)]
+        }
         guard let summary, let first = summary.firstUnix, let last = summary.lastUnix else {
             return []
         }
