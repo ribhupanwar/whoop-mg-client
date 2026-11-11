@@ -740,7 +740,29 @@ final class BandLink: NSObject, ObservableObject {
     private func merge(_ fresh: [DayMetrics]) {
         guard !fresh.isEmpty else { return }
         var map = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
-        for day in fresh { map[day.dateKey] = day }
+        // A short subsequent capture must not erase a fuller day's steps.
+        // This is a conservative lower bound, NOT an additive daily total:
+        // overlapping capture windows must never be double-counted.
+        for day in fresh {
+            guard let previous = map[day.dateKey] else {
+                map[day.dateKey] = day
+                continue
+            }
+            map[day.dateKey] = DayMetrics(
+                dateKey: day.dateKey,
+                state: day.state == "sleep" ? day.state : previous.state,
+                restingHR: day.restingHR ?? previous.restingHR,
+                lnRMSSD: day.lnRMSSD ?? previous.lnRMSSD,
+                hrvWindowSeconds: max(day.hrvWindowSeconds, previous.hrvWindowSeconds),
+                sleepHours: max(day.sleepHours, previous.sleepHours),
+                sleepStartUnix: day.sleepStartUnix ?? previous.sleepStartUnix,
+                sleepEndUnix: day.sleepEndUnix ?? previous.sleepEndUnix,
+                strain: max(day.strain ?? 0, previous.strain ?? 0) > 0
+                    ? max(day.strain ?? 0, previous.strain ?? 0) : nil,
+                steps: day.steps == nil && previous.steps == nil ? nil :
+                    max(day.steps ?? 0, previous.steps ?? 0)
+            )
+        }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
         if let data = try? JSONEncoder().encode(days) {
             UserDefaults.standard.set(data, forKey: Keys.days)
