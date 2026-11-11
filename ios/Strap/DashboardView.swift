@@ -33,6 +33,7 @@ struct DashboardView: View {
                 .padding(.bottom, 10)
 
                 DashboardRows()
+                trendsPanel
                 baselinePanel
             }
         }
@@ -42,6 +43,72 @@ struct DashboardView: View {
             DashboardCustomizeSheet()
                 .environmentObject(store)
         }
+    }
+
+    /// Charts use recorded day metrics only; missing days remain missing rather
+    /// than silently substituting preview numbers or a zero measurement.
+    private var recentDays: [DayMetrics] {
+        Array(store.band.days.sorted { $0.dateKey < $1.dateKey }.suffix(7))
+    }
+
+    private var trendsPanel: some View {
+        Panel {
+            SectionTitle("Sleep · Recovery · Strain")
+            Text("Last 7 recorded days · band measurements")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.appMuted)
+            trendChart(
+                title: "Sleep",
+                unit: "hours",
+                values: recentDays.map { $0.sleepHours > 0 ? $0.sleepHours : nil },
+                color: .appSleep,
+                upper: max(10, store.settings.sleepNeedHours + 2)
+            )
+            trendChart(
+                title: "Strain",
+                unit: "0–21",
+                values: recentDays.map { $0.strain },
+                color: .appAccent,
+                upper: 21
+            )
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Recovery")
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Text(store.band.recovery.score.map { String(format: "%.0f%%", $0) } ?? "—")
+                        .foregroundStyle(Color.appGood)
+                }
+                .font(.system(size: 13, weight: .medium))
+                if let reason = store.band.recovery.reason {
+                    Hint(reason)
+                } else {
+                    Hint("Latest baseline-relative recovery only. Historical recovery is not stored per day, so no fabricated trend is drawn.")
+                }
+            }
+            .padding(.top, 8)
+        }
+        .padding(.top, 12)
+    }
+
+    private func trendChart(title: String, unit: String, values: [Double?],
+                            color: Color, upper: Double) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(title).foregroundStyle(Color.appFG)
+                Spacer()
+                Text(unit).foregroundStyle(Color.appMuted)
+            }
+            .font(.system(size: 12))
+            if values.count >= 2 && values.allSatisfy({ $0 != nil }) {
+                LineChart(values: values.compactMap { $0 },
+                          color: color, minY: 0, maxY: upper, height: 105,
+                          xLabels: [recentDays.first?.dateKey ?? "", recentDays.last?.dateKey ?? ""])
+            } else {
+                Hint("Not enough continuous recorded data to draw this trend.")
+            }
+        }
+        .padding(.top, 10)
     }
 
     private var baselinePanel: some View {
