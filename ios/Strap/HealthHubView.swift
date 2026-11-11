@@ -16,6 +16,7 @@ struct HealthHubView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 baselinePanel
+                fitnessAgePanel
                 healthMonitorCard
                 stressMonitorCard
                 notMeasuredPanel
@@ -42,6 +43,49 @@ struct HealthHubView: View {
                     ? "Baseline ready — recovery and stress compare today against your own \(store.recordedDayCount) recorded days."
                     : "\(max(0, SampleData.baselineDaysTarget - store.recordedDayCount)) more recorded days unlock recovery and stress. Each history capture adds its days.")
         }
+    }
+
+    // MARK: Independent fitness-age comparison
+
+    private var fitnessSnapshot: FitnessAgeSnapshot? {
+        FitnessAgeModel.snapshot(
+            age: store.settings.age,
+            sex: store.settings.sex,
+            ageConfirmed: store.settings.ageConfirmed,
+            days: store.band.days,
+            detected: store.detectedBandActivities,
+            live: store.liveActivities
+        )
+    }
+
+    private var fitnessAgePanel: some View {
+        Panel {
+            SectionTitle("Fitness age · experimental")
+            if let estimate = fitnessSnapshot {
+                HStack(alignment: .firstTextBaseline, spacing: 7) {
+                    Text(String(format: "%.0f", estimate.years))
+                        .font(.system(size: 31, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                    Text("years")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.appMuted)
+                    Spacer()
+                    Text("Actual age: \\(estimate.chronologicalYears)")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Hint("7-day median resting HR: \\(String(format: "%.0f", estimate.restingHeartRate)) bpm · \\(estimate.restingNights) nights")
+                Hint("Activity: \\(estimate.exerciseDays) recorded days · estimated HUNT-like index \\(String(format: "%.1f", estimate.physicalActivityIndex))")
+                Hint(estimate.confidenceNote)
+            } else {
+                Text("—")
+                    .font(.system(size: 30, weight: .medium))
+                    .foregroundStyle(Color.appMuted)
+                Hint("To unlock: confirm your age and sex in Settings; capture at least 4 resting-HR nights, 4 days with measured steps, and a recorded workout within 7 days.")
+            }
+            Hint("This is an independent fitness comparison inspired by the published Nes/HUNT model, not Aura's private model, WHOOP Age, biological age or a medical measurement. Activity-index inputs are estimates.")
+        }
+        .padding(.bottom, 11)
     }
 
     // MARK: Health Monitor card (drill-in)
