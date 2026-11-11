@@ -117,9 +117,14 @@ enum LiveGaitPedometer {
 
     static func estimate(x: [Double], y: [Double], z: [Double],
                          sampleRateHz: Double) -> Result {
-        let count = min(x.count, y.count, z.count)
-        let magnitude = (0..<count).map { i in
-            sqrt(x[i] * x[i] + y[i] * y[i] + z[i] * z[i])
+        let count = min(x.count, min(y.count, z.count))
+        var magnitude = [Double]()
+        magnitude.reserveCapacity(count)
+        for i in 0..<count {
+            let xx = x[i] * x[i]
+            let yy = y[i] * y[i]
+            let zz = z[i] * z[i]
+            magnitude.append(sqrt(xx + yy + zz))
         }
         return estimate(magnitude: magnitude, sampleRateHz: sampleRateHz)
     }
