@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Settings — everything persists to UserDefaults through AppStore.
 /// The design-preview toggle defaults OFF: live mode never invents a value.
@@ -7,6 +8,8 @@ struct SettingsView: View {
     /// Text state so a half-typed decimal ("70.") is not rewritten mid-entry.
     @State private var weightText = ""
     @State private var heightText = ""
+    @State private var showWhoopImporter = false
+    @State private var whoopImportStatus = "No WHOOP file imported"
 
     var body: some View {
         Screen {
@@ -16,12 +19,28 @@ struct SettingsView: View {
                 overridesPanel
                 sleepPanel
                 healthPanel
+                whoopImportPanel
                 previewPanel
                 aboutPanel
             }
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.commaSeparatedText, .plainText]) { result in
+            do {
+                let url = try result.get()
+                guard url.startAccessingSecurityScopedResource() else {
+                    whoopImportStatus = "File permission denied — choose the CSV again."
+                    return
+                }
+                defer { url.stopAccessingSecurityScopedResource() }
+                let rows = try WhoopCSVImport.parse(Data(contentsOf: url))
+                let added = store.band.importWhoopHistory(rows)
+                whoopImportStatus = "Imported or completed \\(added) days · \\(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+            } catch {
+                whoopImportStatus = "Import failed: \\(error.localizedDescription)"
+            }
+        }
         .onAppear {
             weightText = store.settings.weightKG.map { String(format: "%g", $0) } ?? ""
             heightText = store.settings.heightCM.map { String(format: "%g", $0) } ?? ""
@@ -358,6 +377,25 @@ struct SettingsView: View {
         case .ready: return .appGood
         case .denied, .failed: return .appWarn
         default: return .appMuted
+        }
+    }
+
+    // MARK: WHOOP historical import
+
+    private var whoopImportPanel: some View {
+        Panel {
+            SectionTitle("Import WHOOP history")
+            Button("Choose WHOOP CSV file") {
+                showWhoopImporter = true
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.appAccent)
+            Text(whoopImportStatus)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.appMuted)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+            Hint("Import a CSV containing Date, HRV (RMSSD ms), and Resting Heart Rate. This fills missing baseline days without replacing measured band values. Recovery needs 7 valid days; imported data is historical, not a live sensor reading. Other WHOOP export formats may require conversion.")
         }
     }
 
