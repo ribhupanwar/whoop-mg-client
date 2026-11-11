@@ -993,7 +993,7 @@ final class BandLink: NSObject, ObservableObject {
             // FrameReassembler removes the 8-byte envelope and CRC trailer.
             let rrCount = inner.count > 9 ? Int(inner[9]) : 0
             var rrMS: [Int] = []
-            if rrCount > 0 && rrCount <= 32 && inner.count >= 10 + rrCount * 2 {
+            if rrCount > 0 && rrCount <= 4 && inner.count >= 10 + rrCount * 2 {
                 for i in 0..<rrCount {
                     let offset = 10 + 2 * i
                     let ms = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
