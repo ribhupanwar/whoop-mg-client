@@ -1019,7 +1019,13 @@ final class BandLink: NSObject, ObservableObject {
         let unix = Int(Date().timeIntervalSince1970)
         let sample = LiveSample(unix: unix, heartRate: reading.heartRate, rrIntervalsMS: reading.rrMS)
         if liveSamples.last?.unix == unix {
-            liveSamples[liveSamples.count - 1] = sample
+            // Type-40 and standard 2A37 can arrive in the same second.
+            // An HR-only notification must never erase previously received
+            // R-R beats. Prefer the standard 2A37 R-R source when available.
+            let previous = liveSamples[liveSamples.count - 1]
+            if !reading.rrMS.isEmpty || previous.rrIntervalsMS.isEmpty {
+                liveSamples[liveSamples.count - 1] = sample
+            }
         } else {
             liveSamples.append(sample)
         }
