@@ -120,6 +120,7 @@ final class BandLink: NSObject, ObservableObject {
         static let preferredBandID = "strap.band.preferred.id.v1"
         static let preferredBandName = "strap.band.preferred.name.v1"
         static let liveRRArchive = "strap.live.rr.samples.v1"
+        static let retainedHistoryCount = "strap.history.retained.count.v1"
     }
 
     private struct PendingCommand {
@@ -214,6 +215,7 @@ final class BandLink: NSObject, ObservableObject {
            let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
             archivedLiveRRSamples = saved
         }
+        lastHistoryRecordCount = UserDefaults.standard.integer(forKey: Keys.retainedHistoryCount)
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
@@ -904,7 +906,7 @@ final class BandLink: NSObject, ObservableObject {
             $0 + max(0, $1.1 - $1.0 - 1)
         }
         let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
-        lastHistoryRecordCount = historicalRecordFrames
+        let previousHistoryCount = lastHistoryRecordCount
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
@@ -922,11 +924,22 @@ final class BandLink: NSObject, ObservableObject {
         let fresh = CaptureSummary.make(
             samples: samples, sex: sex, maxHR: maxHR, awakeBaseline: awakeBaseline
         )
-        summary = fresh
-        persist(fresh)
+        // A short follow-up sync is incremental, not a replacement for the
+        // previous full capture. Preserve previously measured HRV/RHR and
+        // sleep rather than clearing the dashboard with a 25-second slice.
+        let previousHasRestMetrics = summary?.hrv.rmssdMS != nil || summary?.restingHeartRate != nil
+        let freshHasRestMetrics = fresh.hrv.rmssdMS != nil || fresh.restingHeartRate != nil
+        let preservePrevious = previousHasRestMetrics && !freshHasRestMetrics
+            && samples.count < previousHistoryCount
+        if !preservePrevious {
+            summary = fresh
+            persist(fresh)
+            lastHistoryRecordCount = samples.count
+            UserDefaults.standard.set(samples.count, forKey: Keys.retainedHistoryCount)
+        }
         merge(DailyAnalysis.metrics(from: samples, sex: sex, maxHR: maxHR))
 
-        if !fresh.sleepPeriods.isEmpty {
+        if !preservePrevious && !fresh.sleepPeriods.isEmpty {
             let analysis = SleepReport.analyze(
                 samples: samples,
                 periods: fresh.sleepPeriods,
