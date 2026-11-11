@@ -876,17 +876,35 @@ final class BandLink: NSObject, ObservableObject {
             guard inner.count > 8 else { return }
             let bpm = Int(inner[8])
             guard (25...230).contains(bpm) else { return }
+            // NOOP's verified Type-40 map: absolute frame byte 17 is the
+            // count; RR words start at byte 18 in 1/1024-second ticks.
+            // FrameReassembler removes the 8-byte envelope and CRC trailer.
+            let rrCount = inner.count > 9 ? Int(inner[9]) : 0
+            var rrMS: [Int] = []
+            if rrCount > 0 && rrCount <= 32 && inner.count >= 10 + rrCount * 2 {
+                for i in 0..<rrCount {
+                    let offset = 10 + 2 * i
+                    let ticks = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
+                    if ticks == 0 { continue }
+                    let ms = (ticks * 1000 + 512) / 1024
+                    if (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(ms) {
+                        rrMS.append(ms)
+                    }
+                }
+            }
             liveHeartRate = bpm
             lastLiveHRAt = Date()
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
+            if !rrMS.isEmpty {
+                liveRRIntervalsMS = Array((liveRRIntervalsMS + rrMS).suffix(120))
+            }
             if isLiveSession {
                 let unix = Int(Date().timeIntervalSince1970)
-                let sample = LiveSample(unix: unix, heartRate: bpm, rrIntervalsMS: [])
+                let sample = LiveSample(unix: unix, heartRate: bpm, rrIntervalsMS: rrMS)
                 if liveSamples.last?.unix == unix {
-                    // Prefer the packet carrying actual RR intervals if the
-                    // standard and proprietary transports overlap this second.
-                    if liveSamples[liveSamples.count - 1].rrIntervalsMS.isEmpty {
+                    // Prefer RR-bearing packets over HR-only packets.
+                    if !rrMS.isEmpty || liveSamples[liveSamples.count - 1].rrIntervalsMS.isEmpty {
                         liveSamples[liveSamples.count - 1] = sample
                     }
                 } else {
