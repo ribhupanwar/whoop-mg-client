@@ -77,21 +77,15 @@ struct DashboardView: View {
             Text("Last \(trendWindow) calendar days · \(recentDays.count) recorded days")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
+            recoveryTrend
+            strainTrend
             trendChart(
-                title: "Sleep",
+                title: "SLEEP",
                 unit: "hours",
                 values: recentDays.map { $0.sleepHours > 0 ? $0.sleepHours : nil },
                 color: .appSleep,
                 upper: max(10, store.settings.sleepNeedHours + 2)
             )
-            trendChart(
-                title: "Strain",
-                unit: "0–21",
-                values: recentDays.map { $0.strain },
-                color: .appAccent,
-                upper: 21
-            )
-            recoveryTrend
         }
         .padding(.top, 12)
     }
@@ -190,6 +184,84 @@ struct DashboardView: View {
             Hint("Green ≥67% · Yellow 34–66% · Red <34%. Estimates from your recorded data, not WHOOP's proprietary score.")
         }
         .padding(.top, 10)
+    }
+
+    private var strainTrend: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("STRAIN")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(Color.appFG)
+                Spacer()
+                Text("0–21")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.appMuted)
+            }
+            let history = strainHistory
+            if history.contains(where: { $0.strain != nil }) {
+                GeometryReader { geometry in
+                    let slot = geometry.size.width / CGFloat(max(history.count, 1))
+                    ZStack(alignment: .topLeading) {
+                        ForEach(0..<4, id: \.self) { grid in
+                            Path { path in
+                                let y = CGFloat(grid) * 52 + 12
+                                path.move(to: CGPoint(x: 0, y: y))
+                                path.addLine(to: CGPoint(x: geometry.size.width, y: y))
+                            }
+                            .stroke(Color.appLine, lineWidth: 1)
+                        }
+                        ForEach(Array(history.enumerated()), id: \.offset) { index, item in
+                            let width = min(27.0, slot * 0.47)
+                            let x = slot * (CGFloat(index) + 0.5)
+                            let value = min(max(item.strain ?? 0, 0), 21)
+                            let barHeight = CGFloat(value / 21) * 154
+                            if index == history.count - 1 {
+                                RoundedRectangle(cornerRadius: 6)
+                                    .fill(Color.white.opacity(0.09))
+                                    .frame(width: slot * 0.82, height: 198)
+                                    .position(x: x, y: 99)
+                            }
+                            if item.strain != nil {
+                                RoundedRectangle(cornerRadius: 3)
+                                    .fill(Color(hex: 0x009FEE))
+                                    .frame(width: width, height: max(2, barHeight))
+                                    .position(x: x, y: 166 - barHeight / 2)
+                                Text(String(format: "%.1f", value))
+                                    .font(.system(size: 10, weight: .semibold))
+                                    .foregroundStyle(Color(hex: 0x009FEE))
+                                    .position(x: x, y: max(10, 154 - barHeight))
+                            }
+                            VStack(spacing: 2) {
+                                Text(item.date.formatted(.dateTime.weekday(.abbreviated)))
+                                Text(item.date.formatted(.dateTime.day()))
+                            }
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.appMuted)
+                            .position(x: x, y: 184)
+                        }
+                    }
+                }
+                .frame(height: 198)
+            } else {
+                Hint("No measured daily strain available in this period.")
+            }
+            Hint("Daily strain from recorded band samples. Missing days are left blank.")
+        }
+        .padding(.top, 12)
+    }
+
+    private var strainHistory: [(date: Date, strain: Double?)] {
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateFormat = "yyyy-MM-dd"
+        let values = Dictionary(uniqueKeysWithValues: store.band.days.map { ($0.dateKey, $0.strain) })
+        let end = calendar.startOfDay(for: Date())
+        return (0..<trendWindow).compactMap { offset -> (date: Date, strain: Double?)? in
+            guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }
+            return (date: date, strain: values[formatter.string(from: date)] ?? nil)
+        }
     }
 
     private func trendChart(title: String, unit: String, values: [Double?],
