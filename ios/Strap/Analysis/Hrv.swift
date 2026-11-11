@@ -244,6 +244,38 @@ enum Hrv {
         return 15.3 * maxHR / restingHR
     }
 
+    /// Exploratory running-derived VO2max estimate (ml/kg/min).
+    ///
+    /// ACSM level-ground running oxygen cost: 0.2 × speed(m/min) + 3.5.
+    /// Extrapolation uses heart-rate reserve as a *proxy* for fractional
+    /// aerobic effort, not a directly measured VO2 fraction. This is not a
+    /// laboratory VO2max measurement and must be labelled an estimate.
+    /// Call only with a time-aligned, steady, level-ground GPS/HR segment.
+    static func runningVO2Estimate(
+        speedMetersPerSecond: Double,
+        meanHR: Double,
+        restingHR: Double,
+        maxHR: Double,
+        durationSeconds: Double,
+        grade: Double = 0
+    ) -> Double? {
+        guard speedMetersPerSecond.isFinite, (2.0...5.5).contains(speedMetersPerSecond),
+              meanHR.isFinite, restingHR.isFinite, maxHR.isFinite,
+              durationSeconds.isFinite, durationSeconds >= 360,
+              grade.isFinite, abs(grade) <= 0.02,
+              (35...100).contains(restingHR),
+              (140...220).contains(maxHR), maxHR > restingHR + 40,
+              meanHR > restingHR, meanHR < maxHR else { return nil }
+        let reserveFraction = (meanHR - restingHR) / (maxHR - restingHR)
+        // Avoid low-intensity HR noise and near-maximal nonlinearity.
+        guard (0.65...0.90).contains(reserveFraction) else { return nil }
+        let speedMPerMin = speedMetersPerSecond * 60
+        let oxygenCost = 0.2 * speedMPerMin + 0.9 * speedMPerMin * grade + 3.5
+        let estimated = (oxygenCost - 3.5) / reserveFraction + 3.5
+        guard estimated.isFinite, (20...85).contains(estimated) else { return nil }
+        return estimated
+    }
+
     static func strainLabel(_ score: Double?) -> String {
         guard let score else { return "unknown" }
         if score < 10 { return "light" }
