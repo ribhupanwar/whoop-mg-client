@@ -41,16 +41,20 @@ struct DashboardRows: View {
                 title: "Heart rate variability",
                 value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
                 unit: (demo || store.lastCapture?.hrv.rmssdMS != nil) ? "ms" : nil,
-                detail: demo ? "▲ \(SampleData.hrvCompare) · sample" : hrvDetail,
-                detailColor: demo ? .appGood : .appMuted
+                detail: demo ? "\(SampleData.hrvCompare) · sample" : hrvDetail,
+                detailColor: .appMuted,
+                trendUp: demo ? true : hrvTrendUp,
+                trendFavourable: demo ? true : hrvTrendUp
             )
         case .restingHR:
             MetricRow(
                 icon: "heart.fill",
                 title: "Resting heart rate",
                 value: demo ? String(format: "%.0f", SampleData.rhr) : rhrText,
-                detail: demo ? "▲ \(SampleData.rhrCompare) · sample" : rhrDetail,
-                detailColor: demo ? .appWarn : .appMuted
+                detail: demo ? "\(SampleData.rhrCompare) · sample" : rhrDetail,
+                detailColor: .appMuted,
+                trendUp: demo ? true : rhrTrendUp,
+                trendFavourable: demo ? false : rhrTrendUp.map { !$0 }
             )
         case .steps:
             MetricRow(
@@ -104,9 +108,25 @@ struct DashboardRows: View {
         guard let summary, summary.hrv.rmssdMS != nil else { return "needs a capture" }
         if let baseline = store.band.baseline {
             let norm = Int(exp(baseline.lnRMSSDMean).rounded())
-            return "norm \(norm) ms · \(baseline.days) days"
+            return "\(norm)"
         }
         return "resting window \(summary.hrvWindowSeconds) s"
+    }
+
+    private var hrvTrendUp: Bool? {
+        guard store.hasRecoveryBaseline,
+              let value = summary?.hrv.lnRMSSD,
+              let baseline = store.band.baseline,
+              value.isFinite, abs(value - baseline.lnRMSSDMean) >= 0.01 else { return nil }
+        return value > baseline.lnRMSSDMean
+    }
+
+    private var rhrTrendUp: Bool? {
+        guard store.hasRecoveryBaseline,
+              let value = store.measuredRestingHR,
+              let baseline = store.band.baseline,
+              value.isFinite, abs(value - baseline.rhrMean) >= 0.5 else { return nil }
+        return value > baseline.rhrMean
     }
 
     private var rhrText: String { ActivityFormat.whole(store.measuredRestingHR) ?? "—" }
@@ -114,7 +134,7 @@ struct DashboardRows: View {
     private var rhrDetail: String {
         guard store.measuredRestingHR != nil else { return "needs a capture" }
         if let baseline = store.band.baseline {
-            return String(format: "norm %.0f · %d days", baseline.rhrMean, baseline.days)
+            return String(format: "%.0f", baseline.rhrMean)
         }
         return "resting window"
     }
