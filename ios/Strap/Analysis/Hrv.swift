@@ -111,8 +111,49 @@ enum Hrv {
         )
     }
 
+    /// Compute RMSSD only across consecutive beats inside contiguous records.
+    /// Never bridge a missing second or an artefact-rejected beat: doing so
+    /// creates an artificial successive-NN difference and biases recovery.
+    /// Each contiguous run is cleaned independently, preventing a stale
+    /// rolling-median reference from leaking across a recording gap.
     static func fromSamples(_ samples: [V18Sample]) -> HrvResult {
-        fromRR(samples.flatMap { $0.rrIntervalsMS.map(Double.init) })
+        let ordered = samples.sorted { $0.unix < $1.unix }
+        let runs = contiguousRuns(ordered)
+        var allNN: [Double] = []
+        var squaredDifferences = 0.0
+        var successivePairs = 0
+        var over50 = 0
+        var rawBeats = 0
+
+        for run in runs {
+            let raw = run.flatMap { $0.rrIntervalsMS.map(Double.init) }
+            rawBeats += raw.count
+            let nn = nnIntervals(raw)
+            allNN.append(contentsOf: nn)
+            guard nn.count >= 2 else { continue }
+            for index in 1..<nn.count {
+                let delta = nn[index] - nn[index - 1]
+                squaredDifferences += delta * delta
+                successivePairs += 1
+                if abs(delta) > 50 { over50 += 1 }
+            }
+        }
+        // The 20-clean-beat gate is a quality floor, not clinical validation.
+        guard allNN.count >= 20, successivePairs > 0 else {
+            return HrvResult(beats: rawBeats, nnBeats: allNN.count,
+                             rmssdMS: nil, sdnnMS: nil, pnn50Pct: nil,
+                             lnRMSSD: nil, meanRRMS: nil)
+        }
+        let rmssd = sqrt(squaredDifferences / Double(successivePairs))
+        return HrvResult(
+            beats: rawBeats,
+            nnBeats: allNN.count,
+            rmssdMS: rmssd,
+            sdnnMS: sdnn(allNN),
+            pnn50Pct: 100 * Double(over50) / Double(successivePairs),
+            lnRMSSD: rmssd > 0 ? log(rmssd) : nil,
+            meanRRMS: Stats.mean(allNN)
+        )
     }
 
     // MARK: - Resting windows
