@@ -147,6 +147,8 @@ final class BandLink: NSObject, ObservableObject {
     private var drainTimer: Timer?
     private var liveHRWatchdog: Timer?
     private var lastHRRecoveryAt: Date?
+    private var reconnectWork: DispatchWorkItem?
+    private var reconnectAttempt = 0
     private var hrCharacteristic: CBCharacteristic?
     private var hrProfileEnabled = false
     private var hrEnableQueued = false
@@ -306,6 +308,9 @@ final class BandLink: NSObject, ObservableObject {
            current.identifier != target.identifier {
             central.cancelPeripheralConnection(current)
         }
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        reconnectAttempt = 0
         resetLink()
         bandName = band.name
         target.delegate = self
@@ -337,6 +342,9 @@ final class BandLink: NSObject, ObservableObject {
 
     func disconnect() {
         wantsConnection = false
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        reconnectAttempt = 0
         if status == .draining { finishDrain() }
         scanTimeout?.cancel()
         scanTimeout = nil
@@ -426,6 +434,19 @@ final class BandLink: NSObject, ObservableObject {
         }
         scanTimeout = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+    }
+
+    private func scheduleReconnect() {
+        guard wantsConnection, central.state == .poweredOn else { return }
+        reconnectWork?.cancel()
+        reconnectAttempt = min(reconnectAttempt + 1, 6)
+        let delay = min(30.0, Double(1 << reconnectAttempt))
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.wantsConnection, self.central.state == .poweredOn else { return }
+            self.beginScan()
+        }
+        reconnectWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
     private func resetLink() {
@@ -811,6 +832,9 @@ extension BandLink: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        reconnectAttempt = 0
         startHRWatchdog()
         peripheral.discoverServices([
             BandUUID.service,
@@ -830,6 +854,7 @@ extension BandLink: CBCentralManagerDelegate {
         guard peripheral === self.peripheral else { return }
         resetLink()
         status = .failed(error.map { "Could not connect: \($0.localizedDescription)" } ?? "Could not connect")
+        scheduleReconnect()
     }
 
     func centralManager(
@@ -846,6 +871,7 @@ extension BandLink: CBCentralManagerDelegate {
         status = .failed(
             error.map { "Disconnected: \($0.localizedDescription)" } ?? "Strap disconnected"
         )
+        scheduleReconnect()
     }
 }
 
@@ -980,6 +1006,7 @@ extension BandLink: CBPeripheralDelegate {
                 commandQueue.removeFirst()
             }
             status = .failed("The strap rejected a command: \(error.localizedDescription)")
+            if !isAuthenticationError(error) { scheduleReconnect() }
             return
         }
         let finished = commandQueue.first?.opcode
