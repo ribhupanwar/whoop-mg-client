@@ -77,6 +77,7 @@ final class BandLink: NSObject, ObservableObject {
 
     @Published private(set) var status: BandStatus = .idle
     @Published private(set) var bandName: String?
+    @Published private(set) var firmwareRevision: String?
     @Published private(set) var batteryPercent: Int?
     @Published private(set) var liveHeartRate: Int?
     @Published private(set) var lastLiveHRAt: Date?
@@ -173,6 +174,7 @@ final class BandLink: NSObject, ObservableObject {
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
     private static let restoreIdentifier = "com.strap.band.central.v1"
+    private static let firmwareRevisionUUID = CBUUID(string: "2A26")
     private var hrCharacteristic: CBCharacteristic?
     private var hrProfileEnabled = false
     private var hrEnableQueued = false
@@ -1189,6 +1191,10 @@ extension BandLink: CBPeripheralDelegate {
                 } else {
                     lastMessage = "The band did not expose HR notifications on 0x2A37."
                 }
+            case Self.firmwareRevisionUUID:
+                if characteristic.properties.contains(.read) {
+                    peripheral.readValue(for: characteristic)
+                }
             case BandUUID.batteryLevel:
                 batteryCharacteristic = characteristic
                 peripheral.readValue(for: characteristic)
@@ -1255,6 +1261,12 @@ extension BandLink: CBPeripheralDelegate {
         switch characteristic.uuid {
         case BandUUID.heartRateMeasurement:
             handleHeartRate(characteristic)
+        case Self.firmwareRevisionUUID:
+            if let data = characteristic.value,
+               let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !version.isEmpty {
+                firmwareRevision = version
+            }
         case BandUUID.batteryLevel:
             if let value = characteristic.value, let level = value.first {
                 batteryPercent = Int(level)
