@@ -800,13 +800,22 @@ extension BandLink: CBCentralManagerDelegate {
         rssi RSSI: NSNumber
     ) {
         let services = (advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID]) ?? []
+        let overflowServices = (advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID]) ?? []
+        let serviceData = (advertisementData[CBAdvertisementDataServiceDataKey] as? [CBUUID: Data]) ?? [:]
+        // WHOOP 5.0 and MG use the same fd4b Gen5 transport. Some
+        // advertisements omit a local name or put fd4b in overflow/service
+        // data, so accepting only the visible UUID or "WHOOP" name misses them.
+        let hasGen5Service = services.contains(BandUUID.service)
+            || overflowServices.contains(BandUUID.service)
+            || serviceData.keys.contains(BandUUID.service)
         let advertisedName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? ""
         let named = (peripheral.name ?? "").lowercased().contains("whoop")
             || advertisedName.lowercased().contains("whoop")
-        guard services.contains(BandUUID.service) || named else { return }
+        guard hasGen5Service || named else { return }
 
         let identifier = peripheral.identifier.uuidString
-        let name = peripheral.name ?? (advertisedName.isEmpty ? "WHOOP" : advertisedName)
+        let name = !advertisedName.isEmpty ? advertisedName
+            : (peripheral.name ?? "WHOOP 5.0 / MG")
         discoveredPeripherals[identifier] = peripheral
         discoveredBands = BandDiscovery.merge(
             discoveredBands,
