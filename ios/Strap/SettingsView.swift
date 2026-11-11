@@ -36,6 +36,9 @@ struct SettingsView: View {
             fieldRow(label: "Age") {
                 TextField("30", value: $store.settings.age, format: .number)
                     .keyboardType(.numberPad)
+                    .onChange(of: store.settings.age) { _, _ in
+                        store.settings.ageConfirmed = true
+                    }
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
                     .font(.system(size: 15))
@@ -45,6 +48,14 @@ struct SettingsView: View {
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+            }
+            if !store.settings.ageConfirmed {
+                Button("Confirm age for Fitness Age") {
+                    store.settings.ageConfirmed = true
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Color.appAccent)
+                Hint("30 is only a placeholder until you confirm your actual age.")
             }
             Picker("Sex", selection: $store.settings.sex) {
                 ForEach(Sex.allCases) { sex in
