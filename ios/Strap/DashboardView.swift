@@ -14,6 +14,7 @@ struct DashboardView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 if focusedMetric == nil { analyticsOverview }
+                if focusedMetric == nil { insightPanel }
                 trendsPanel
                 if focusedMetric == nil { baselinePanel }
             }
@@ -39,6 +40,87 @@ struct DashboardView: View {
                 Hint("Recovery comparison needs 7 measured baseline days. Missing values stay blank.")
             }
         }
+    }
+
+    // Analytics-first dashboard: quick insights rather than repeating Home's
+    // live metric rows. Each insight is calculated from recorded history only.
+    private var insightPanel: some View {
+        Panel {
+            SectionTitle("Your training insights")
+            Text("Recorded trends · no duplicated live tiles")
+                .font(.system(size: 11))
+                .foregroundStyle(Color.appMuted)
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 9) {
+                insightTile("AVG SLEEP", value: averageSleepText,
+                            note: "recorded nights", icon: "moon.zzz")
+                insightTile("WEEKLY STEPS", value: weeklyStepsText,
+                            note: "sum of recorded days", icon: "figure.walk")
+                insightTile("RESTING HR", value: averageRHRText,
+                            note: "recorded days · bpm", icon: "heart")
+                insightTile("HRV", value: averageHRVText,
+                            note: "recorded days · ms", icon: "waveform.path.ecg")
+            }
+            Hint("These summaries use available records from the last 7 days. Missing days are excluded, not counted as zero. Steps may be incomplete until history sync finishes.")
+        }
+        .padding(.top, 10)
+    }
+
+    private var lastSevenDays: [DayMetrics] {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        guard let from = calendar.date(byAdding: .day, value: -6, to: start) else { return [] }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let first = formatter.string(from: from)
+        let last = formatter.string(from: start)
+        return store.band.days.filter { $0.dateKey >= first && $0.dateKey <= last }
+    }
+
+    private var averageSleepText: String {
+        let values = lastSevenDays.compactMap { $0.sleepHours > 0 ? $0.sleepHours : nil }
+        guard !values.isEmpty else { return "—" }
+        return String(format: "%.1f h", values.reduce(0, +) / Double(values.count))
+    }
+
+    private var weeklyStepsText: String {
+        let values = lastSevenDays.compactMap { $0.steps }
+        guard !values.isEmpty else { return "—" }
+        return values.reduce(0, +).formatted()
+    }
+
+    private var averageRHRText: String {
+        let values = lastSevenDays.compactMap { $0.restingHR }
+        guard !values.isEmpty else { return "—" }
+        return String(format: "%.0f", values.reduce(0, +) / Double(values.count))
+    }
+
+    private var averageHRVText: String {
+        let values = lastSevenDays.compactMap { $0.lnRMSSD.map { exp($0) } }
+            .filter { $0.isFinite }
+        guard !values.isEmpty else { return "—" }
+        return String(format: "%.0f", values.reduce(0, +) / Double(values.count))
+    }
+
+    private func insightTile(_ label: String, value: String,
+                             note: String, icon: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: icon).foregroundStyle(Color.appAccent)
+                Text(label).foregroundStyle(Color.appMuted)
+            }
+            .font(.system(size: 10, weight: .medium))
+            Text(value)
+                .font(.system(size: 23, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(note)
+                .font(.system(size: 10))
+                .foregroundStyle(Color.appMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
     private func analyticsStat(_ title: String, _ value: String) -> some View {
