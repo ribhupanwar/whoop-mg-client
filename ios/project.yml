@@ -16,10 +16,17 @@ settings:
     # also auto-generate one — that produces a "multiple commands" conflict.
     GENERATE_INFOPLIST_FILE: "NO"
 
+packages:
+  ZIPFoundation:
+    url: https://github.com/weichsel/ZIPFoundation.git
+    from: 0.9.19
+
 targets:
   Strap:
     type: application
     platform: iOS
+    dependencies:
+      - package: ZIPFoundation
     sources:
       - path: Strap
         excludes:
