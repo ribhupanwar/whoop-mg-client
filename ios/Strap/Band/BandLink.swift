@@ -88,6 +88,9 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var type40RRPackets = 0
     @Published private(set) var standardRRPackets = 0
     @Published private(set) var historyRRRecords = 0
+    @Published private(set) var historyRRDeclared = 0
+    @Published private(set) var historyRRAccepted = 0
+    @Published private(set) var historyRRRejected = 0
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
     @Published private(set) var lastLiveSession: LiveSessionSummary?
@@ -810,6 +813,10 @@ final class BandLink: NSObject, ObservableObject {
         drainFrames = 0
         drainAcks = 0
         drainStats = DrainStats()
+        historyRRRecords = 0
+        historyRRDeclared = 0
+        historyRRAccepted = 0
+        historyRRRejected = 0
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -1017,6 +1024,14 @@ final class BandLink: NSObject, ObservableObject {
             guard let sample = V18Decoder.decode(inner) else { return }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
                 if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
+                let declared = Int(inner[15])
+                if declared <= 4 {
+                    historyRRDeclared += declared
+                    historyRRAccepted += sample.rrIntervalsMS.count
+                    historyRRRejected += declared - sample.rrIntervalsMS.count
+                } else {
+                    historyRRRejected += 1 // malformed count byte
+                }
                 capturedSamples.append(sample)
             }
         } else if type == BandPacket.metadata, inner.count >= 3 {
