@@ -40,7 +40,7 @@ struct DashboardRows: View {
                 icon: "waveform.path.ecg",
                 title: "Heart rate variability",
                 value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
-                unit: (demo || store.lastCapture?.hrv.rmssdMS != nil) ? "ms" : nil,
+                unit: (demo || hrvReady) ? "ms" : nil,
                 detail: demo ? "\(SampleData.hrvCompare) · sample" : hrvDetail,
                 detailColor: .appMuted,
                 trendUp: demo ? true : hrvTrendUp,
@@ -102,10 +102,21 @@ struct DashboardRows: View {
 
     private var summary: CaptureSummary? { store.lastCapture }
 
-    private var hrvText: String { ActivityFormat.whole(summary?.hrv.rmssdMS) ?? "—" }
+    // A small/fragmented capture can produce a plausible but misleading RMSSD.
+    // Never display it as a validated dashboard HRV.
+    private var hrvReady: Bool {
+        guard let summary else { return false }
+        return summary.hrvWindowSeconds >= 300
+            && summary.hrv.nnBeats >= 200
+            && summary.hrv.rmssdMS.map { $0.isFinite && (5...300).contains($0) } == true
+    }
+
+    private var hrvText: String {
+        hrvReady ? (ActivityFormat.whole(summary?.hrv.rmssdMS) ?? "—") : "—"
+    }
 
     private var hrvDetail: String {
-        guard let summary, summary.hrv.rmssdMS != nil else { return "needs a capture" }
+        guard hrvReady, let summary else { return "needs ≥5 min quiet RR capture" }
         if let baseline = store.band.baseline {
             let norm = Int(exp(baseline.lnRMSSDMean).rounded())
             return "\(norm)"
@@ -114,7 +125,7 @@ struct DashboardRows: View {
     }
 
     private var hrvTrendUp: Bool? {
-        guard store.hasRecoveryBaseline,
+        guard hrvReady, store.hasRecoveryBaseline,
               let value = summary?.hrv.lnRMSSD,
               let baseline = store.band.baseline,
               value.isFinite, abs(value - baseline.lnRMSSDMean) >= 0.01 else { return nil }
