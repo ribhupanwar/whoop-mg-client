@@ -40,7 +40,7 @@ struct DashboardRows: View {
                 icon: "waveform.path.ecg",
                 title: "Heart rate variability",
                 value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
-                unit: (demo || hrvReady) ? "ms" : nil,
+                unit: (demo || latestNightHRV != nil) ? "ms" : nil,
                 detail: demo ? "\(SampleData.hrvCompare) · sample" : hrvDetail,
                 detailColor: .appMuted,
                 trendUp: demo ? true : hrvTrendUp,
@@ -111,22 +111,31 @@ struct DashboardRows: View {
             && summary.hrv.rmssdMS.map { $0.isFinite && (5...300).contains($0) } == true
     }
 
+    private var latestNightHRV: Double? {
+        guard let day = store.band.days
+            .filter({ $0.sleepHours > 0 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
+            .sorted(by: { $0.dateKey > $1.dateKey }).first,
+              let ln = day.lnRMSSD else { return nil }
+        let value = exp(ln)
+        return value.isFinite && (5...300).contains(value) ? value : nil
+    }
+
     private var hrvText: String {
-        hrvReady ? (ActivityFormat.whole(summary?.hrv.rmssdMS) ?? "—") : "—"
+        ActivityFormat.whole(latestNightHRV) ?? "—"
     }
 
     private var hrvDetail: String {
-        guard hrvReady, let summary else { return "needs ≥5 min quiet RR capture" }
+        guard latestNightHRV != nil else { return "needs a validated overnight RR window" }
         if let baseline = store.band.baseline {
             let norm = Int(exp(baseline.lnRMSSDMean).rounded())
             return "\(norm)"
         }
-        return "resting window \(summary.hrvWindowSeconds) s"
+        return "overnight reading"
     }
 
     private var hrvTrendUp: Bool? {
-        guard hrvReady, store.hasRecoveryBaseline,
-              let value = summary?.hrv.lnRMSSD,
+        guard latestNightHRV != nil, store.hasRecoveryBaseline,
+              let value = latestNightHRV.map({ log($0) }),
               let baseline = store.band.baseline,
               value.isFinite, abs(value - baseline.lnRMSSDMean) >= 0.01 else { return nil }
         return value > baseline.lnRMSSDMean
