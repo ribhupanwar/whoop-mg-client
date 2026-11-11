@@ -353,6 +353,9 @@ final class BandLink: NSObject, ObservableObject {
             central.cancelPeripheralConnection(peripheral)
         }
         resetLink()
+        isLiveSession = false
+        sessionStartedUnix = nil
+        liveSamples = []
         status = .idle
     }
 
@@ -864,10 +867,11 @@ extension BandLink: CBCentralManagerDelegate {
     ) {
         guard peripheral === self.peripheral else { return }
         let wasDraining = status == .draining
+        if wasDraining { finishDrain() }
         resetLink()
-        if wasDraining {
-            finishDrain()
-        }
+        isLiveSession = false
+        sessionStartedUnix = nil
+        liveSamples = []
         status = .failed(
             error.map { "Disconnected: \($0.localizedDescription)" } ?? "Strap disconnected"
         )
