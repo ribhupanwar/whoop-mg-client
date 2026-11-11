@@ -78,6 +78,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var status: BandStatus = .idle
     @Published private(set) var bandName: String?
     @Published private(set) var firmwareRevision: String?
+    @Published private(set) var lastHistoryRecordCount = 0
+    @Published private(set) var lastHistorySyncAt: Date?
     @Published private(set) var batteryPercent: Int?
     @Published private(set) var liveHeartRate: Int?
     @Published private(set) var lastLiveHRAt: Date?
@@ -158,6 +160,7 @@ final class BandLink: NSObject, ObservableObject {
     private var capturedSamples: [V18Sample] = []
     private var seenRecordIndices: Set<UInt32> = []
     private var drainFrames = 0
+    private var historicalRecordFrames = 0
     private var drainAcks = 0
     private var drainStartedAt: Date?
     private var lastFrameAt: Date?
@@ -629,6 +632,7 @@ final class BandLink: NSObject, ObservableObject {
         enqueue(BandCommand.sendHistoricalData.rawValue)
         status = .draining
         drainStartedAt = Date()
+        historicalRecordFrames = 0
         lastFrameAt = Date()
         drainTimer?.invalidate()
         drainTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -814,11 +818,19 @@ final class BandLink: NSObject, ObservableObject {
                 : $0.header.recordIndex < $1.header.recordIndex
         }
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
+        lastHistoryRecordCount = historicalRecordFrames
+        if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
 
         guard !samples.isEmpty else {
-            lastMessage = "No history came back this drain. Wear the strap, keep phone Bluetooth off the band, and retry."
+            if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
+                lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
+            } else if historicalRecordFrames > 0 {
+                lastMessage = "Received \(historicalRecordFrames) history frames but decoded no samples. Check record version and decoder compatibility; do not discard the raw capture."
+            } else {
+                lastMessage = "No historical records arrived (\(drainFrames) history/metadata frames, \(drainAcks) ACKs). Check sync, clock, firmware access and retry."
+            }
             return
         }
         let fresh = CaptureSummary.make(
@@ -903,6 +915,9 @@ final class BandLink: NSObject, ObservableObject {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
 
+        if type == BandPacket.historicalData {
+            historicalRecordFrames += 1
+        }
         if type == BandPacket.historicalData || type == BandPacket.metadata {
             drainFrames += 1
             lastFrameAt = Date()
