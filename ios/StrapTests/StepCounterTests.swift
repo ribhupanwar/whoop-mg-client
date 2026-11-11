@@ -42,6 +42,17 @@ final class StepCounterTests: XCTestCase {
         XCTAssertEqual(StepCounter.total(samples), 50)
     }
 
+    func testResetFirstValueIsNotInventedSteps() {
+        let samples = [
+            sample(0, steps: 500), sample(1, steps: 503),
+            sample(2, steps: 4), sample(3, steps: 6)
+        ]
+        // Three before reset, two after. The reset reading of four
+        // is an unknown baseline, not four measured new steps.
+        XCTAssertEqual(StepCounter.total(samples), 5)
+        XCTAssertEqual(StepCounter.delta(from: 503, to: 4, seconds: 1), 0)
+    }
+
     func testWrapAtSixteenBits() {
         let samples = [
             sample(0, steps: 65_530), sample(1, steps: 65_535), sample(2, steps: 3)
