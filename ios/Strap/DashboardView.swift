@@ -5,6 +5,7 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showCustomize = false
+    @State private var trendWindow = 7
 
     private var demo: Bool { store.isPreview }
 
@@ -48,13 +49,32 @@ struct DashboardView: View {
     /// Charts use recorded day metrics only; missing days remain missing rather
     /// than silently substituting preview numbers or a zero measurement.
     private var recentDays: [DayMetrics] {
-        Array(store.band.days.sorted { $0.dateKey < $1.dateKey }.suffix(7))
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        guard let start = calendar.date(byAdding: .day, value: -(trendWindow - 1), to: today) else {
+            return []
+        }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateFormat = "yyyy-MM-dd"
+        let startKey = formatter.string(from: start)
+        let endKey = formatter.string(from: today)
+        return store.band.days
+            .filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
+            .sorted { $0.dateKey < $1.dateKey }
     }
 
     private var trendsPanel: some View {
         Panel {
             SectionTitle("Sleep · Recovery · Strain")
-            Text("Last 7 recorded days · band measurements")
+            Picker("Chart period", selection: $trendWindow) {
+                Text("7D").tag(7)
+                Text("30D").tag(30)
+                Text("90D").tag(90)
+            }
+            .pickerStyle(.segmented)
+            .accessibilityLabel("Chart period")
+            Text("Last \\(trendWindow) calendar days · \\(recentDays.count) recorded days")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
             trendChart(
