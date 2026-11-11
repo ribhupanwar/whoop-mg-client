@@ -276,6 +276,31 @@ enum Hrv {
         return estimated
     }
 
+    /// Robust 30-day running fitness trend. Each input is a *quality-gated*
+    /// steady-state running estimate with its timestamp. Do not feed the
+    /// HR-only Uth estimate here: that would mix incompatible methods.
+    /// Median resists a single anomalous GPS/HR session. At least three
+    /// distinct days are required before showing a running-derived trend.
+    static func runningVO2Trend(
+        _ observations: [(unix: Int, value: Double)],
+        nowUnix: Int,
+        windowDays: Int = 30
+    ) -> Double? {
+        guard windowDays > 0 else { return nil }
+        let cutoff = nowUnix - windowDays * 86_400
+        let valid = observations.filter {
+            $0.unix >= cutoff && $0.unix <= nowUnix &&
+            $0.value.isFinite && (20...85).contains($0.value)
+        }
+        let days = Set(valid.map { $0.unix / 86_400 })
+        guard days.count >= 3 else { return nil }
+        let sorted = valid.map(\.value).sorted()
+        let middle = sorted.count / 2
+        return sorted.count.isMultiple(of: 2)
+            ? (sorted[middle - 1] + sorted[middle]) / 2
+            : sorted[middle]
+    }
+
     static func strainLabel(_ score: Double?) -> String {
         guard let score else { return "unknown" }
         if score < 10 { return "light" }
