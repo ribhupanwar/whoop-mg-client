@@ -13,40 +13,46 @@ struct DashboardView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                if focusedMetric == nil {
-                HStack {
-                    Text("My Dashboard")
-                        .font(.system(size: 19, weight: .medium))
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Button {
-                        showCustomize = true
-                    } label: {
-                        Text("CUSTOMIZE ✎")
-                            .font(.system(size: 10, weight: .medium))
-                            .tracking(0.7)
-                            .foregroundStyle(Color.appAccent)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
-                            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine, lineWidth: 1))
-                    }
-                    .buttonStyle(.plain)
-                }
-                .padding(.bottom, 10)
-
-                DashboardRows()
-                }
+                if focusedMetric == nil { analyticsOverview }
                 trendsPanel
                 if focusedMetric == nil { baselinePanel }
             }
         }
         .navigationTitle(focusedMetric == "recovery" ? "Recovery" : focusedMetric == "strain" ? "Strain" : "Dashboard")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showCustomize) {
-            DashboardCustomizeSheet()
-                .environmentObject(store)
+
+    }
+
+    private var analyticsOverview: some View {
+        Panel {
+            SectionTitle("Your trends")
+            Text("Historical analysis · Home keeps your live metrics")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.appMuted)
+            HStack(spacing: 10) {
+                analyticsStat("RECORDED DAYS", "\(recentDays.count)/\(trendWindow)")
+                analyticsStat("HRV + RHR", "\(recentDays.filter { $0.lnRMSSD != nil && $0.restingHR != nil }.count) days")
+                analyticsStat("SLEEP", "\(recentDays.filter { $0.sleepHours > 0 }.count) nights")
+            }
+            .padding(.top, 10)
+            if !store.hasRecoveryBaseline {
+                Hint("Recovery comparison needs 7 measured baseline days. Missing values stay blank.")
+            }
         }
+    }
+
+    private func analyticsStat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(value)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(title)
+                .font(.system(size: 9))
+                .foregroundStyle(Color.appMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Charts use recorded day metrics only; missing days remain missing rather
@@ -83,6 +89,27 @@ struct DashboardView: View {
             if focusedMetric != "strain" { recoveryTrend }
             if focusedMetric != "recovery" { strainTrend }
             if focusedMetric == nil {
+            trendChart(
+                title: "STEPS · RECORDED MINIMUM",
+                unit: "steps",
+                values: recentDays.map { $0.steps.map(Double.init) },
+                color: .appAccent,
+                upper: max(1000, Double(recentDays.compactMap { $0.steps }.max() ?? 1000))
+            )
+            trendChart(
+                title: "RESTING HEART RATE",
+                unit: "bpm",
+                values: recentDays.map { $0.restingHR },
+                color: .appWarn,
+                upper: max(100, (recentDays.compactMap { $0.restingHR }.max() ?? 80) + 10)
+            )
+            trendChart(
+                title: "HRV · RMSSD",
+                unit: "ms",
+                values: recentDays.map { $0.lnRMSSD.map { exp($0) } },
+                color: .appGood,
+                upper: max(100, (recentDays.compactMap { $0.lnRMSSD }.map { exp($0) }.max() ?? 70) + 10)
+            )
             trendChart(
                 title: "SLEEP",
                 unit: "hours",
