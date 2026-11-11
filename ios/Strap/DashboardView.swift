@@ -169,6 +169,7 @@ struct DashboardView: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
             if focusedMetric != "strain" { recoveryTrend }
+            if focusedMetric == "recovery" { recoveryVitalsTrends }
             if focusedMetric != "recovery" { strainTrend }
             if focusedMetric == nil {
             trendChart(
@@ -298,6 +299,92 @@ struct DashboardView: View {
             Hint("Green ≥67% · Yellow 34–66% · Red <34%. Estimates from your recorded data, not WHOOP's proprietary score.")
         }
         .padding(.top, 10)
+    }
+
+    // Recovery drill-in mirrors the weekly WHOOP trends without fabricating
+    // physiological values that the Gen5 daily archive does not contain.
+    private var recoveryVitalsTrends: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            weeklyRecoveryCard(
+                title: "HEART RATE VARIABILITY",
+                values: recentDays.map { $0.lnRMSSD.map { exp($0) } },
+                unit: "ms",
+                color: .appAccent,
+                maximum: 110
+            )
+            weeklyRecoveryCard(
+                title: "RESTING HEART RATE",
+                values: recentDays.map { $0.restingHR },
+                unit: "bpm",
+                color: .appAccent,
+                maximum: 110
+            )
+            weeklyRecoveryCard(
+                title: "SLEEP PERFORMANCE",
+                values: recentDays.map {
+                    $0.sleepHours > 0
+                        ? min(100, $0.sleepHours / max(1, store.settings.sleepNeedHours) * 100)
+                        : nil
+                },
+                unit: "%",
+                color: .appSleep,
+                maximum: 100
+            )
+            VStack(alignment: .leading, spacing: 6) {
+                Text("RESPIRATORY RATE")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.appFG)
+                Hint("Weekly respiratory rate is not present in the stored daily records yet. A validated dated source is needed before plotting this chart.")
+            }
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+            Hint("Sleep performance is estimated as recorded sleep divided by your configured sleep need, capped at 100%; it is not WHOOP's proprietary sleep score.")
+        }
+        .padding(.top, 12)
+    }
+
+    private func weeklyRecoveryCard(title: String, values: [Double?],
+                                    unit: String, color: Color,
+                                    maximum: Double) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(0.7)
+                .foregroundStyle(Color.appFG)
+            HStack(alignment: .bottom, spacing: 4) {
+                ForEach(Array(recentDays.enumerated()), id: \.offset) { index, day in
+                    VStack(spacing: 4) {
+                        if index < values.count, let value = values[index], value.isFinite {
+                            Text(String(format: unit == "%" ? "%.0f%%" : "%.0f", value))
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(color)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(color)
+                                .frame(height: max(3, CGFloat(min(max(value, 0), maximum) / maximum) * 115))
+                        } else {
+                            Text("—")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.appMuted)
+                            RoundedRectangle(cornerRadius: 3)
+                                .fill(Color.appLine)
+                                .frame(height: 3)
+                        }
+                        Text(String(day.dateKey.suffix(2)))
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 150, alignment: .bottom)
+            Text("Last \(trendWindow) days · \(unit) · missing days stay blank")
+                .font(.system(size: 10))
+                .foregroundStyle(Color.appMuted)
+        }
+        .padding(12)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
     private var strainTrend: some View {
