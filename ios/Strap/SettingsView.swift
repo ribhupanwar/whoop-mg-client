@@ -224,6 +224,21 @@ struct SettingsView: View {
             if let message = store.band.lastMessage {
                 Hint(message)
             }
+            Button {
+                if store.band.isConnected {
+                    store.band.readHistory()
+                } else {
+                    store.connectBand()
+                }
+            } label: {
+                Label(store.band.isConnected ? "Sync band now" : "Connect & sync band",
+                      systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.appAccent)
+            }
+            .padding(.top, 10)
+            Hint("Reads stored history when connected; otherwise starts Bluetooth connection.")
+
             if let summary = store.band.summary {
                 let stats = store.band.drainStats
                 Text("Last capture \(summary.sampleCount) samples · \(stats.acks) offload ACKs · \(store.band.days.count) day(s) scored")
