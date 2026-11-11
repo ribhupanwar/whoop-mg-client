@@ -25,6 +25,18 @@ struct TrainView: View {
             VStack(alignment: .leading, spacing: 0) {
                 inputsPanel
                 zonesPanel
+                NavigationLink(value: Route.gpsRun) {
+                    HStack {
+                        Image(systemName: "location.fill")
+                        Text("Start outdoor GPS run")
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Color.appAccent)
+                    .padding(16)
+                }
+                .buttonStyle(.plain)
                 ctaBox
                 gymPanel
             }
