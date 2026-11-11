@@ -816,7 +816,11 @@ final class BandLink: NSObject, ObservableObject {
                 let unix = Int(Date().timeIntervalSince1970)
                 let sample = LiveSample(unix: unix, heartRate: bpm, rrIntervalsMS: [])
                 if liveSamples.last?.unix == unix {
-                    liveSamples[liveSamples.count - 1] = sample
+                    // Prefer the packet carrying actual RR intervals if the
+                    // standard and proprietary transports overlap this second.
+                    if liveSamples[liveSamples.count - 1].rrIntervalsMS.isEmpty {
+                        liveSamples[liveSamples.count - 1] = sample
+                    }
                 } else {
                     liveSamples.append(sample)
                 }
