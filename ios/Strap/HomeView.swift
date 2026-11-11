@@ -79,7 +79,7 @@ struct HomeView: View {
                 Form {
                     DatePicker("Sleep started", selection: $correctedSleepStart)
                     DatePicker("Woke up", selection: $correctedSleepEnd)
-                    Text("Corrects the displayed sleep time only. Physiological sleep, HRV, RHR and recovery are not recalculated from this edit.")
+                    Text("Updates the displayed sleep time and Recovery sleep-duration input. HRV and RHR remain measured values until corrected-window sensor reanalysis is available.")
                         .font(.footnote)
                 }
                 .navigationTitle("Edit sleep")
@@ -96,6 +96,7 @@ struct HomeView: View {
                                     Int(correctedSleepEnd.timeIntervalSince1970)
                                 ]
                                 UserDefaults.standard.set(sleepCorrections, forKey: "strap.sleep.time.corrections.v1")
+                                store.band.notifySleepCorrectionChanged()
                             }
                             showSleepEditor = false
                         }
