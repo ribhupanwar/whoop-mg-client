@@ -211,7 +211,9 @@ enum Hrv {
         }
         let result = restingHRV(samples)
         guard result.result.rmssdMS != nil else {
-            return "Quiet run found; insufficient clean consecutive R-R beats"
+            let rrSeconds = quiet.filter { !$0.rrIntervalsMS.isEmpty }.count
+            let rrBeats = quiet.reduce(0) { $0 + $1.rrIntervalsMS.count }
+            return "Quiet run found; R-R: \\(rrBeats) beats in \\(rrSeconds)s, but insufficient clean consecutive pairs"
         }
         return "Validated quiet HRV available"
     }

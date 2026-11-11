@@ -171,7 +171,17 @@ final class BandLink: NSObject, ObservableObject {
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
-    var historicalRestQualityReason: String { Hrv.restingQualityReason(retainedHistoricalSamples) }
+    var historicalRestQualityReason: String {
+        guard !retainedHistoricalSamples.isEmpty else { return "No retained historical records" }
+        let periods = SleepDetect.detect(retainedHistoricalSamples)
+        guard !periods.isEmpty else {
+            return "Sleep session not detected; " + Hrv.restingQualityReason(retainedHistoricalSamples)
+        }
+        let overnight = retainedHistoricalSamples.filter { sample in
+            periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+        }
+        return Hrv.restingQualityReason(overnight)
+    }
 
     private var historicalArchiveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
