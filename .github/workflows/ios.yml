@@ -11,10 +11,23 @@ on:
 permissions:
   contents: read
 
+# Rapid pushes to main each spawn an ~8-min macOS job (billed 10x on a private
+# repo). Cancel the superseded run so only the newest commit builds an IPA.
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-test-ipa:
     # Default runner Xcode — no setup-xcode action, no secrets, no HealthKit.
     runs-on: macos-15
+    # Normal compute is ~8 min; cap a hung simulator/test so it cannot burn
+    # hours of 10x-billed macOS minutes (the default is 360).
+    timeout-minutes: 25
+    env:
+      HOMEBREW_NO_AUTO_UPDATE: 1
+      HOMEBREW_NO_INSTALL_CLEANUP: 1
+      HOMEBREW_NO_ANALYTICS: 1
     steps:
       - uses: actions/checkout@v4
 
@@ -30,6 +43,7 @@ jobs:
           set -uo pipefail
           xcodebuild -project ios/Strap.xcodeproj -scheme Strap \
             -destination "generic/platform=iOS Simulator" \
+            -configuration Debug -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
 

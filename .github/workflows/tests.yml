@@ -6,9 +6,16 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Cancel superseded runs on the same branch/PR so a burst of pushes does not
+# fan out into stale 6-job matrices.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   protocol-tests:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
