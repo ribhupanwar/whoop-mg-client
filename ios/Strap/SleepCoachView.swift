@@ -49,6 +49,7 @@ struct SleepCoachView: View {
             if !seeded {
                 wakeMinutes = demo ? SampleData.demoWakeMinutes : store.settings.wakeTimeMinutes
                 intent = store.settings.sleepIntent
+                alarmOn = WakeAlarm.isEnabled
                 seeded = true
             }
         }
@@ -56,6 +57,10 @@ struct SleepCoachView: View {
             if store.settings.wakeTimeMinutes != newValue {
                 store.settings.wakeTimeMinutes = newValue
             }
+            if alarmOn { WakeAlarm.setEnabled(true, wakeMinutes: newValue) }
+        }
+        .onChange(of: alarmOn) { _, newValue in
+            WakeAlarm.setEnabled(newValue, wakeMinutes: wakeMinutes)
         }
         .onChange(of: intent) { _, newValue in
             if store.settings.sleepIntent != newValue {
@@ -180,7 +185,7 @@ struct SleepCoachView: View {
         return "debt unknown — starts counting tonight"
     }
 
-    // MARK: Alarm (design intent only)
+    // MARK: Alarm (local phone notification)
 
     private var alarmPanel: some View {
         Panel {
@@ -203,7 +208,7 @@ struct SleepCoachView: View {
                 coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
             }
 
-            Hint("Your wake time is set by the picker above. The alarm itself is a design intent: no alarm command has been verified on this band, so nothing here is sent to it.")
+            Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")
         }
     }
 
