@@ -170,10 +170,24 @@ enum DailyAnalysis {
             let overnight = ordered.filter { sample in
                 dayPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
             }
-            let resting: Double? = overnight.count >= 300
-                ? Hrv.restingHeartRate(overnight) : nil
-            let restingHrv = overnight.count >= 300
-                ? Hrv.restingHRV(overnight) : (.empty, 0)
+            // Prefer the longest primary sleep session: a short nap must not
+            // displace the night's RHR or HRV. Require real temporal coverage,
+            // not merely a count of duplicated or densely sampled records.
+            let primary = dayPeriods.max { $0.durationS < $1.durationS }
+            let primarySamples = ordered.filter { sample in
+                guard let primary else { return false }
+                return sample.unix >= primary.startUnix && sample.unix <= primary.endUnix
+            }
+            let validSeconds = Set(primarySamples.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+            }.map(\.unix)).count
+            let enoughCoverage = validSeconds >= 300
+            // NOOP-compatible five-minute sustained floor, instead of the
+            // former one-minute minimum. Keep missing data as nil.
+            let resting: Double? = enoughCoverage
+                ? Hrv.restingHeartRate(primarySamples, windowS: 300) : nil
+            let restingHrv = enoughCoverage
+                ? Hrv.restingHRV(primarySamples) : (.empty, 0)
             let sleepHours = dayPeriods.reduce(0.0) { $0 + $1.hours }
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
