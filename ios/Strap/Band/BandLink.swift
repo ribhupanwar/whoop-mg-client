@@ -1125,6 +1125,9 @@ final class BandLink: NSObject, ObservableObject {
             if inner.count > 1 {
                 historyVersionCounts[Int(inner[1]), default: 0] += 1
             }
+            // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
+            // biometric record. Recognize it without inventing heartbeats.
+            if Gen5V26Record.decode(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
                 return
