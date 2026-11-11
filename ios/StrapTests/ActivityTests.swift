@@ -225,6 +225,19 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
     }
 
+    func testStaleStillGaitDoesNotHideMeasuredRunning() {
+        // Some firmware reports gait=0 even while the step counter rises.
+        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3, gait: 0) }
+        let sessions = ActivityDetect.detect(samples)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.kind, "run")
+    }
+
+    func testStillGaitWithoutStepsDoesNotCreateActivity() {
+        let samples = (0..<360).map { sample($0, hr: 75, steps: 0, gait: 0) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+    }
+
     func testSleepWindowsAreNotWorkouts() {
         let periods = [
             SleepPeriod(
