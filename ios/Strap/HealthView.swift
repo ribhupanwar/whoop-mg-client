@@ -147,7 +147,7 @@ struct HealthView: View {
                 chipGood: false
             )
             MetricTile(
-                label: "Skin temperature",
+                label: "Band skin temperature",
                 value: demo ? "33.4" : ActivityFormat.whole(summary?.skinTempMean) ?? "—",
                 unit: (demo || summary?.skinTempMean != nil) ? "°C" : nil,
                 chip: demo ? "absolute · sample" : skinChip,
