@@ -5,7 +5,7 @@ enum AppTab: String, CaseIterable, Hashable {
     case health
     case train
     case plan
-    case dashboard
+    case more
 
     var label: String { rawValue.capitalized }
 
@@ -15,7 +15,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .health: return "heart"
         case .train: return "dumbbell"
         case .plan: return "calendar"
-        case .dashboard: return "list.bullet"
+        case .more: return "ellipsis.circle"
         }
     }
 }
@@ -69,11 +69,11 @@ struct RootView: View {
             .tag(AppTab.plan)
 
             NavigationStack {
-                DashboardView()
+                MoreView()
                     .strapDestinations()
             }
-            .tabItem { Label(AppTab.dashboard.label, systemImage: AppTab.dashboard.icon) }
-            .tag(AppTab.dashboard)
+            .tabItem { Label(AppTab.more.label, systemImage: AppTab.more.icon) }
+            .tag(AppTab.more)
         }
         .tint(.appAccent)
         .environmentObject(store)
