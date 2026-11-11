@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Live session: measured heart rate from the standard 0x2A37 profile, Karvonen
+/// Live session: measured heart rate from standard 0x2A37 or WHOOP Gen5 realtime, Karvonen
 /// zone time and R-R-derived HRV, saved as a measured record on stop.
 struct LiveSessionView: View {
     @EnvironmentObject private var store: AppStore
@@ -91,7 +91,7 @@ struct LiveSessionView: View {
                     .monospacedDigit()
                     .foregroundStyle(Color.appMuted)
             }
-            Text("LIVE HEART RATE · STANDARD 0x2A37")
+            Text("LIVE HEART RATE · WHOOP BAND")
                 .font(.system(size: 10, weight: .medium))
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
@@ -163,7 +163,7 @@ struct LiveSessionView: View {
                 stat(label: "RMSSD", value: hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "—")
                 stat(label: "MEAN R-R", value: hrv.meanRRMS.map { String(format: "%.0f ms", $0) } ?? "—")
             }
-            Hint("R-R beats arrive inside the standard heart-rate notification. HRV needs a steady 30+ seconds to mean anything.")
+            Hint("R-R beats require a supported beat-to-beat stream; live BPM alone cannot produce HRV. A steady 30+ seconds of valid R-R data is needed.")
         }
     }
 
