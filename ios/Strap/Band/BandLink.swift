@@ -994,7 +994,7 @@ final class BandLink: NSObject, ObservableObject {
                     let offset = 10 + 2 * i
                     let ticks = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
                     if ticks == 0 { continue }
-                    let ms = (ticks * 1000 + 512) / 1024
+                    let ms = ticks // NOOP Whoop5RR: WHOOP 5 Type-40 interval words are already milliseconds.
                     if (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(ms) {
                         rrMS.append(ms)
                     }
