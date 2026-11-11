@@ -7,6 +7,8 @@ import ZIPFoundation
 struct SettingsView: View {
     @EnvironmentObject private var store: AppStore
     /// Text state so a half-typed decimal ("70.") is not rewritten mid-entry.
+    @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
+    @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet. Sync band history to collect candidates."
     @State private var weightText = ""
     @State private var heightText = ""
     @State private var showWhoopImporter = false
@@ -20,6 +22,7 @@ struct SettingsView: View {
                 overridesPanel
                 sleepPanel
                 healthPanel
+                spo2ResearchPanel
                 whoopImportPanel
                 previewPanel
                 aboutPanel
@@ -437,6 +440,22 @@ struct SettingsView: View {
         case .ready: return .appGood
         case .denied, .failed: return .appWarn
         default: return .appMuted
+        }
+    }
+
+    // MARK: Opt-in optical research (never a clinical reading)
+
+    private var spo2ResearchPanel: some View {
+        Panel {
+            SectionTitle("SpO₂ Research")
+            Toggle("Collect candidate diagnostics", isOn: $spo2ResearchEnabled)
+                .font(.system(size: 12))
+                .tint(.appAccent)
+            Text(spo2ResearchReport)
+                .font(.system(size: 11))
+                .foregroundStyle(Color.appMuted)
+                .fixedSize(horizontal: false, vertical: true)
+            Hint("Experimental: summarizes uncalibrated v18 historical candidate bytes after the next band sync. It does not measure blood oxygen, infer desaturation, or affect Recovery. Disable to stop future research summaries.")
         }
     }
 
