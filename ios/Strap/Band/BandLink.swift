@@ -85,6 +85,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastLiveHRAt: Date?
     @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
+    @Published private(set) var archivedLiveRRSamples: [LiveSample] = []
     @Published private(set) var type40RRPackets = 0
     @Published private(set) var standardRRPackets = 0
     @Published private(set) var historyRRRecords = 0
@@ -118,6 +119,7 @@ final class BandLink: NSObject, ObservableObject {
         static let capturePath = "strap.capture.path.v1"
         static let preferredBandID = "strap.band.preferred.id.v1"
         static let preferredBandName = "strap.band.preferred.name.v1"
+        static let liveRRArchive = "strap.live.rr.samples.v1"
     }
 
     private struct PendingCommand {
@@ -207,6 +209,10 @@ final class BandLink: NSObject, ObservableObject {
         if let data = UserDefaults.standard.data(forKey: Keys.sleepAnalysis),
            let saved = try? JSONDecoder().decode(SleepAnalysis.self, from: data) {
             lastSleepAnalysis = saved
+        }
+        if let data = UserDefaults.standard.data(forKey: Keys.liveRRArchive),
+           let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
+            archivedLiveRRSamples = saved
         }
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
@@ -464,6 +470,26 @@ final class BandLink: NSObject, ObservableObject {
     func refreshBattery() {
         guard let peripheral, let batteryCharacteristic else { return }
         peripheral.readValue(for: batteryCharacteristic)
+    }
+
+    // Preserve actual beat intervals outside manual live sessions. Keep one
+    // timestamped record per second and bound disk use to the latest hour.
+    // Gaps must not be treated as consecutive beats for RMSSD.
+    private func archiveLiveRR(unix: Int, heartRate: Int, intervals: [Int]) {
+        guard !intervals.isEmpty else { return }
+        let entry = LiveSample(unix: unix, heartRate: heartRate, rrIntervalsMS: intervals)
+        if archivedLiveRRSamples.last?.unix == unix {
+            // Prefer the richer packet, not the last HR-only notification.
+            if intervals.count > archivedLiveRRSamples[archivedLiveRRSamples.count - 1].rrIntervalsMS.count {
+                archivedLiveRRSamples[archivedLiveRRSamples.count - 1] = entry
+            }
+        } else {
+            archivedLiveRRSamples.append(entry)
+        }
+        archivedLiveRRSamples = Array(archivedLiveRRSamples.suffix(3600))
+        if let data = try? JSONEncoder().encode(archivedLiveRRSamples) {
+            UserDefaults.standard.set(data, forKey: Keys.liveRRArchive)
+        }
     }
 
     // MARK: - Live session
@@ -1009,6 +1035,7 @@ final class BandLink: NSObject, ObservableObject {
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
                 type40RRPackets += 1
+                archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: bpm, intervals: rrMS)
                 liveRRIntervalsMS = Array((liveRRIntervalsMS + rrMS).suffix(120))
             }
             if isLiveSession {
@@ -1075,6 +1102,7 @@ final class BandLink: NSObject, ObservableObject {
         lastMessage = nil
         if !reading.rrMS.isEmpty {
             standardRRPackets += 1
+            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS)
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
         guard isLiveSession else { return }
