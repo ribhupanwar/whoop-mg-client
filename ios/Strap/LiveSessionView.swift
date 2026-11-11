@@ -79,7 +79,7 @@ struct LiveSessionView: View {
     private func heartPanel(now: Date) -> some View {
         Panel {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(store.band.liveHeartRate.map { "\($0)" } ?? "—")
+                Text(freshHeartRate(now: now).map { "\($0)" } ?? "—")
                     .font(.system(size: 52, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text("bpm")
@@ -96,6 +96,9 @@ struct LiveSessionView: View {
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 2)
+            if store.band.liveHeartRate != nil && freshHeartRate(now: now) == nil {
+                Hint("Waiting for a fresh HR notification — reconnecting stream.")
+            }
             if let message = store.band.lastMessage {
                 Hint(message)
             }
@@ -177,6 +180,12 @@ struct LiveSessionView: View {
     }
 
     // MARK: Helpers
+
+    private func freshHeartRate(now: Date) -> Int? {
+        guard let last = store.band.lastLiveHRAt,
+              now.timeIntervalSince(last) <= 8 else { return nil }
+        return store.band.liveHeartRate
+    }
 
     private func elapsedSeconds(now: Date) -> Int {
         guard let start = store.band.sessionStartedUnix else { return 0 }
