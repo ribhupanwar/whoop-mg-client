@@ -38,6 +38,26 @@ final class VO2Tests: XCTestCase {
             restingHR: 50, maxHR: 190, durationSeconds: 600))
     }
 
+    func testRunningTrendNeedsThreeDistinctDaysAndRejectsOutliers() {
+        let day = 86_400
+        let now = 100 * day
+        XCTAssertNil(Hrv.runningVO2Trend([
+            (unix: now - day, value: 50),
+            (unix: now - day + 60, value: 51),
+            (unix: now - 2 * day, value: 52)
+        ], nowUnix: now))
+        let observations: [(unix: Int, value: Double)] = [
+            (unix: now - day, value: 50),
+            (unix: now - 2 * day, value: 51),
+            (unix: now - 3 * day, value: 52),
+            (unix: now - 4 * day, value: 84),
+            (unix: now - 40 * day, value: 20),
+            (unix: now - 5 * day, value: .nan)
+        ]
+        XCTAssertEqual(Hrv.runningVO2Trend(observations, nowUnix: now) ?? 0,
+                       51.5, accuracy: 0.001)
+    }
+
     func testImpossibleInputsGiveNil() {
         XCTAssertNil(Hrv.vo2Max(maxHR: 50, restingHR: 60))
         XCTAssertNil(Hrv.vo2Max(maxHR: 190, restingHR: 0))
