@@ -71,9 +71,9 @@ struct LiveSessionSummary: Codable, Equatable {
 /// BLE is one-central: turn the phone's own Bluetooth pairing to the band off.
 final class BandLink: NSObject, ObservableObject {
     static let commandSpacing: TimeInterval = 0.12
-    static let drainIdleSeconds: TimeInterval = 6
+    static let drainIdleSeconds: TimeInterval = 30
     static let drainEmptySeconds: TimeInterval = 25
-    static let drainMaxSeconds: TimeInterval = 120
+    static let drainMaxSeconds: TimeInterval = 3600
 
     @Published private(set) var status: BandStatus = .idle
     @Published private(set) var bandName: String?
@@ -1019,12 +1019,18 @@ final class BandLink: NSObject, ObservableObject {
                 if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
                 capturedSamples.append(sample)
             }
-        } else if type == BandPacket.metadata,
-                  inner.count >= 21,
-                  inner[2] == BandPacket.historyEnd {
-            let token = Array(inner[13..<21])
-            enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
-            drainAcks += 1
+        } else if type == BandPacket.metadata, inner.count >= 3 {
+            if inner[2] == BandPacket.historyEnd, inner.count >= 21 {
+                // WHOOP 5: eight-byte end_data token at absolute frame[21:29].
+                // Keep the complete token: a truncated ACK can stall backfill.
+                let token = Array(inner[13..<21])
+                enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
+                drainAcks += 1
+                lastFrameAt = Date()
+            } else if inner[2] == 3, status == .draining {
+                // HISTORY_COMPLETE: stop only on the explicit completion marker.
+                finishDrain()
+            }
         }
     }
 
