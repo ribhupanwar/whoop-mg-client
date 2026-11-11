@@ -48,16 +48,10 @@ enum ActivityDetect {
         for (index, sample) in ordered.enumerated() {
             let gait = sample.activityClass
             let locomotion: Bool
-            if gait == gaitWalk || gait == gaitRun {
-                locomotion = true
-            } else if gait == nil || gait == 0xFF {
-                // No gait readout: fall back to the step counter. The trailing
-                // minute lags a real stop, so it is only used when the band
-                // gives no per-tick answer of its own.
-                locomotion = (rates[index] ?? 0) >= walkSPM
-            } else {
-                locomotion = false
-            }
+            // The gait byte is not vendor-verified. A still/unknown gait
+            // must not suppress a sustained, measured step rate.
+            let measuredSteps = (rates[index] ?? 0) >= walkSPM
+            locomotion = gait == gaitWalk || gait == gaitRun || measuredSteps
             let elevated: Bool
             if let baseline = baselines[index] {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
