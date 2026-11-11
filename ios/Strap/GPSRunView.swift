@@ -21,7 +21,6 @@ struct GPSRunView: View {
                         Text(String(format: "Average pace %d:%02d /km", Int(pace) / 60, Int(pace) % 60))
                             .foregroundStyle(Color.appFG)
                     }
-                        .foregroundStyle(Color.appMuted)
                     Text(gps.status)
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
