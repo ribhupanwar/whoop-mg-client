@@ -1119,6 +1119,13 @@ extension BandLink: CBCentralManagerDelegate {
         // A restored/standing connection is a fresh GATT session. Rebuild
         // subscriptions and protocol state instead of reusing stale handles.
         resetLink()
+        // resetLink clears the stored peripheral reference. Restore it before
+        // GATT discovery: all subsequent characteristic callbacks and handshake
+        // guards require self.peripheral to be the connected device.
+        self.peripheral = peripheral
+        bandName = peripheral.name ?? preferredBandName ?? bandName
+        status = .authenticating
+        lastMessage = "Bluetooth connected; discovering WHOOP services…"
         peripheral.delegate = self
         hrConnectedAt = Date()
         startHRWatchdog()
