@@ -34,8 +34,8 @@ enum WhoopCSVImport {
             names.firstIndex(where: { candidates.contains($0) })
         }
         guard let date = column(["date", "cycledate", "start", "cyclestart", "cycle start", "starttime", "createdat"].map(normalized)),
-              let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms"].map(normalized)),
-              let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm"].map(normalized))
+              let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms", "heartratevariabilityrmssd", "heartratevariabilityrmssdms"].map(normalized)),
+              let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm", "restingheartratebeatsperminute"].map(normalized))
         else { throw ImportError.unsupportedColumns }
         let required = max(date, max(hrv, rhr))
         var rows: [String: Row] = [:]
