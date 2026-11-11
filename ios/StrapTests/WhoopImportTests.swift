@@ -24,6 +24,17 @@ final class WhoopImportTests: XCTestCase {
         XCTAssertEqual(baseline?.days, 7)
     }
 
+    func testWhoopCycleStartTimeColumn() throws {
+        let csv = """
+        Cycle start time,Heart rate variability (ms),Resting heart rate (bpm)
+        2026-11-01T04:00:00Z,64,52
+        """
+        let rows = try WhoopCSVImport.parse(Data(csv.utf8))
+        XCTAssertEqual(rows.count, 1)
+        XCTAssertEqual(rows[0].dateKey, "2026-11-01")
+        XCTAssertEqual(rows[0].hrvMS, 64)
+    }
+
     func testRejectsInvalidOrMissingMetrics() throws {
         let csv = """
         Date,HRV,RHR
