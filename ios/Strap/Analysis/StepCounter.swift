@@ -80,7 +80,10 @@ enum StepCounter {
         }
         var total = 0
         for (before, after) in zip(window, window.dropFirst()) {
-            let gap = max(after.unix - before.unix, 1)
+            let gap = after.unix - before.unix
+            // Do not turn duplicate timestamps or long sync gaps into cadence.
+            // Match total() semantics: only adjacent, continuous counter epochs.
+            guard gap > 0 && gap <= 10 else { continue }
             let steps = delta(from: before.stepCounter!, to: after.stepCounter!, seconds: gap)
             if steps <= maxStepsPerSecond * gap {
                 total += steps
