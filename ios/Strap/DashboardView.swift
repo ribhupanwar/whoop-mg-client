@@ -42,27 +42,64 @@ struct DashboardView: View {
         }
     }
 
-    // Analytics-first dashboard: quick insights rather than repeating Home's
-    // live metric rows. Each insight is calculated from recorded history only.
+    // Analytics tab is intentionally different from Home: show changes over
+    // time and data coverage, not a second copy of today's metric tiles.
     private var insightPanel: some View {
         Panel {
-            SectionTitle("Your training insights")
-            Text("Recorded trends · no duplicated live tiles")
+            SectionTitle("What changed this week")
+            Text("Personal trends · comparing recent and preceding recorded days")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 9) {
-                insightTile("AVG SLEEP", value: averageSleepText,
-                            note: "recorded nights", icon: "moon.zzz")
-                insightTile("WEEKLY STEPS", value: weeklyStepsText,
-                            note: "sum of recorded days", icon: "figure.walk")
-                insightTile("RESTING HR", value: averageRHRText,
-                            note: "recorded days · bpm", icon: "heart")
-                insightTile("HRV", value: averageHRVText,
-                            note: "recorded days · ms", icon: "waveform.path.ecg")
+                insightTile("HRV CHANGE", value: hrvChangeText,
+                            note: "recent 7 vs previous 7 days", icon: "waveform.path.ecg")
+                insightTile("RHR CHANGE", value: rhrChangeText,
+                            note: "recent 7 vs previous 7 days", icon: "heart")
+                insightTile("SLEEP SHORTFALL", value: sleepShortfallText,
+                            note: "recorded nights · vs sleep need", icon: "moon.zzz")
+                insightTile("DATA COVERAGE", value: "\(lastSevenDays.count)/7",
+                            note: "days with any band record", icon: "checkmark.shield")
             }
-            Hint("These summaries use available records from the last 7 days. Missing days are excluded, not counted as zero. Steps may be incomplete until history sync finishes.")
+            Hint("Changes require measured days in both weeks. No missing value is replaced by zero. Sleep shortfall covers recorded nights only.")
         }
         .padding(.top, 10)
+    }
+
+    private var previousSevenDays: [DayMetrics] {
+        let calendar = Calendar.current
+        let start = calendar.startOfDay(for: Date())
+        guard let from = calendar.date(byAdding: .day, value: -13, to: start),
+              let through = calendar.date(byAdding: .day, value: -7, to: start) else { return [] }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let first = formatter.string(from: from)
+        let last = formatter.string(from: through)
+        return store.band.days.filter { $0.dateKey >= first && $0.dateKey <= last }
+    }
+
+    private func mean(_ values: [Double]) -> Double? {
+        guard !values.isEmpty else { return nil }
+        return values.reduce(0, +) / Double(values.count)
+    }
+
+    private var hrvChangeText: String {
+        let recent = lastSevenDays.compactMap { $0.lnRMSSD.map(exp) }.filter { $0.isFinite }
+        let previous = previousSevenDays.compactMap { $0.lnRMSSD.map(exp) }.filter { $0.isFinite }
+        guard let a = mean(recent), let b = mean(previous), b > 0 else { return "—" }
+        return String(format: "%+.0f%%", (a / b - 1) * 100)
+    }
+
+    private var rhrChangeText: String {
+        guard let a = mean(lastSevenDays.compactMap { $0.restingHR }),
+              let b = mean(previousSevenDays.compactMap { $0.restingHR }) else { return "—" }
+        return String(format: "%+.1f bpm", a - b)
+    }
+
+    private var sleepShortfallText: String {
+        let nights = lastSevenDays.compactMap { $0.sleepHours > 0 ? $0.sleepHours : nil }
+        guard !nights.isEmpty else { return "—" }
+        let missing = nights.reduce(0) { $0 + max(0, store.settings.sleepNeedHours - $1) }
+        return String(format: "%.1f h", missing)
     }
 
     private var lastSevenDays: [DayMetrics] {
