@@ -36,9 +36,9 @@ struct SettingsView: View {
                 defer { url.stopAccessingSecurityScopedResource() }
                 let rows = try WhoopCSVImport.parse(Data(contentsOf: url))
                 let added = store.band.importWhoopHistory(rows)
-                whoopImportStatus = "Imported or completed \\(added) days · \\(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
             } catch {
-                whoopImportStatus = "Import failed: \\(error.localizedDescription)"
+                whoopImportStatus = "Import failed: \(error.localizedDescription)"
             }
         }
         .onAppear {
