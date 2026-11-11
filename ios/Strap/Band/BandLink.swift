@@ -491,11 +491,19 @@ final class BandLink: NSObject, ObservableObject {
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.status == .scanning else { return }
             self.central.stopScan()
-            self.status = .failed(
-                self.preferredBandName.map {
-                    "\($0) is not answering. Use Find another band to pick the one on your wrist."
-                } ?? "No strap found. If the phone is paired to the band in Settings, forget it there — the app needs sole access."
-            )
+            // NOOP-style persistent desired connection: an iOS background
+            // scan timeout must not silently abandon the remembered band.
+            if self.wantsConnection, let id = self.preferredBandID,
+               let uuid = UUID(uuidString: id),
+               let saved = self.central.retrievePeripherals(withIdentifiers: [uuid]).first {
+                saved.delegate = self
+                self.peripheral = saved
+                self.status = .connecting(self.preferredBandName ?? saved.name ?? "Saved strap")
+                self.central.connect(saved, options: nil)
+            } else {
+                self.status = .failed("No strap found. Keep Bluetooth enabled and use Find another band if needed.")
+                self.scheduleReconnect()
+            }
         }
         scanTimeout = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
@@ -1068,6 +1076,10 @@ extension BandLink: CBCentralManagerDelegate {
         reconnectWork?.cancel()
         reconnectWork = nil
         reconnectAttempt = 0
+        // A restored/standing connection is a fresh GATT session. Rebuild
+        // subscriptions and protocol state instead of reusing stale handles.
+        resetLink()
+        peripheral.delegate = self
         hrConnectedAt = Date()
         startHRWatchdog()
         peripheral.discoverServices([
