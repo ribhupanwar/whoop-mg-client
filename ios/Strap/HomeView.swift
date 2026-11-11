@@ -10,6 +10,9 @@ struct HomeView: View {
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var showLiveSession = false
+    @State private var editingDetectedID: String?
+    @State private var correctedKind: ActivityKind = .other
+    @State private var correctedLabels: [String: String] = UserDefaults.standard.dictionary(forKey: "strap.detected.activity.labels.v1") as? [String: String] ?? [:]
     @State private var showDashboardCustomize = false
 
     private var demo: Bool { store.isPreview }
@@ -39,6 +42,32 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
+        }
+        .sheet(isPresented: Binding(get: { editingDetectedID != nil }, set: { if !$0 { editingDetectedID = nil } })) {
+            NavigationStack {
+                Form {
+                    Picker("Correct activity", selection: $correctedKind) {
+                        ForEach(ActivityKind.allCases) { option in
+                            Text(option.label).tag(option)
+                        }
+                    }
+                    Text("Only the activity label changes. Recorded HR, duration and steps stay untouched.")
+                        .font(.footnote)
+                }
+                .navigationTitle("Edit activity")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("Cancel") { editingDetectedID = nil } }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Save") {
+                            if let id = editingDetectedID {
+                                correctedLabels[id] = correctedKind.rawValue
+                                UserDefaults.standard.set(correctedLabels, forKey: "strap.detected.activity.labels.v1")
+                            }
+                            editingDetectedID = nil
+                        }
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showLiveSession) {
             LiveSessionView()
@@ -433,7 +462,21 @@ struct HomeView: View {
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
-                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                        HStack(spacing: 6) {
+                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            if row.id.hasPrefix("band-") {
+                                Button {
+                                    editingDetectedID = row.id
+                                    correctedKind = ActivityKind(rawValue: correctedLabels[row.id] ?? "") ?? .other
+                                } label: {
+                                    Image(systemName: "pencil.circle")
+                                        .font(.system(size: 19))
+                                        .foregroundStyle(Color.appAccent)
+                                }
+                                .accessibilityLabel("Edit activity")
+                                .buttonStyle(.plain)
+                            }
+                        }
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
@@ -500,10 +543,12 @@ struct HomeView: View {
             let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
             let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
             let kcal = store.activeKcal(for: session).map { " · \(Int($0.rounded())) kcal" } ?? ""
+            let key = "band-\(session.startUnix)"
+            let corrected = correctedLabels[key].flatMap(ActivityKind.init(rawValue:))
             return ActivityRowModel(
-                id: "band-\(session.startUnix)",
-                icon: Self.icon(forDetected: session.kind),
-                name: "\(session.kind.capitalized) · band",
+                id: key,
+                icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
+                name: "\(corrected?.label ?? session.kind.capitalized) · band",
                 detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix
             )
