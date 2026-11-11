@@ -43,30 +43,40 @@ struct SettingsView: View {
                     var importedDays = 0
                     var supplementalCounts: [String] = []
                     var recognizedFiles: [String] = []
+                    var failures: [String] = []
                     for entry in archive where entry.type == .file {
                         let name = (entry.path as NSString).lastPathComponent.lowercased()
                         guard name.hasSuffix(".csv") else { continue }
-                        // ZIPFoundation extracts to memory: no cloud upload or
-                        // unsafe archive paths are written to the filesystem.
-                        guard entry.uncompressedSize <= 50_000_000 else { continue }
-                        var data = Data()
-                        _ = try archive.extract(entry) { chunk in data.append(chunk) }
-                        recognizedFiles.append(name)
-                        if name.contains("physiological") || name.contains("cycle") {
-                            if let rows = try? WhoopCSVImport.parse(data) {
+                        // ZIPFoundation extracts to memory: no archive paths are written.
+                        if entry.uncompressedSize > 50_000_000 {
+                            failures.append("\(name): exceeds 50 MB limit")
+                            continue
+                        }
+                        do {
+                            var data = Data()
+                            _ = try archive.extract(entry) { chunk in data.append(chunk) }
+                            recognizedFiles.append(name)
+                            if name.contains("physiological") || name.contains("cycle") {
+                                let rows = try WhoopCSVImport.parse(data)
                                 importedDays += store.band.importWhoopHistory(rows)
+                            } else {
+                                let category: String? = name.contains("journal") ? "journal_entries" :
+                                    (name.contains("workout") ? "workouts" :
+                                    (name.contains("sleep") ? "sleeps" : nil))
+                                if let category {
+                                    let count = try WhoopCSVImport.importSupplemental(data, source: category)
+                                    supplementalCounts.append("\(category): \(count)")
+                                } else {
+                                    failures.append("\(name): unsupported WHOOP CSV category")
+                                }
                             }
-                        } else {
-                            let category: String? = name.contains("journal") ? "journal_entries" :
-                                (name.contains("workout") ? "workouts" :
-                                (name.contains("sleep") ? "sleeps" : nil))
-                            if let category,
-                               let count = try? WhoopCSVImport.importSupplemental(data, source: category) {
-                                supplementalCounts.append("\(category): \(count)")
-                            }
+                        } catch {
+                            failures.append("\(name): \(error.localizedDescription)")
                         }
                     }
-                    whoopImportStatus = "ZIP read: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days imported. \(supplementalCounts.joined(separator: ", ")). Supplemental rows saved locally; activity/Recovery mapping pending."
+                    let outcome = failures.isEmpty ? "All recognized files processed." :
+                        "Not imported: " + failures.joined(separator: "; ")
+                    whoopImportStatus = "ZIP: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days · \(supplementalCounts.joined(separator: ", ")). \(outcome) Supplemental rows are stored locally; activity/Recovery mapping pending."
                 } else {
                     let data = try Data(contentsOf: url)
                     let name = url.lastPathComponent.lowercased()
