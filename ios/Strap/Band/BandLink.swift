@@ -82,6 +82,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastHistorySyncAt: Date?
     @Published private(set) var batteryPercent: Int?
     @Published private(set) var liveHeartRate: Int?
+    @Published private(set) var recentLiveHR: [LiveSample] = []
     @Published private(set) var lastLiveHRAt: Date?
     @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
@@ -492,6 +493,19 @@ final class BandLink: NSObject, ObservableObject {
         if let data = try? JSONEncoder().encode(archivedLiveRRSamples) {
             UserDefaults.standard.set(data, forKey: Keys.liveRRArchive)
         }
+    }
+
+    // Always collect a bounded, timestamped live HR graph, including outside
+    // manually started sessions. One point per second; latest 30 minutes.
+    private func recordLiveHR(_ bpm: Int) {
+        let now = Int(Date().timeIntervalSince1970)
+        let entry = LiveSample(unix: now, heartRate: bpm, rrIntervalsMS: [])
+        if recentLiveHR.last?.unix == now {
+            recentLiveHR[recentLiveHR.count - 1] = entry
+        } else {
+            recentLiveHR.append(entry)
+        }
+        recentLiveHR.removeAll { $0.unix < now - 1800 }
     }
 
     // MARK: - Live session
@@ -1043,6 +1057,7 @@ final class BandLink: NSObject, ObservableObject {
                 }
             }
             liveHeartRate = bpm
+            recordLiveHR(bpm)
             lastLiveHRAt = Date()
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
@@ -1109,6 +1124,7 @@ final class BandLink: NSObject, ObservableObject {
         guard let value = characteristic.value,
               let reading = StandardHeartRate.parse(value) else { return }
         liveHeartRate = reading.heartRate
+        recordLiveHR(reading.heartRate)
         lastLiveHRAt = Date()
         liveHRNotificationCount += 1
         hrRecoveryAttempts = 0
