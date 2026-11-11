@@ -288,14 +288,27 @@ final class ActivityStore {
     /// appended, and the longer measurement wins.
     func mergeDetected(_ sessions: [ActivitySession], now: Date = Date()) {
         guard !sessions.isEmpty else { return }
-        var items = detectedActivities()
-        for session in sessions {
-            if let index = items.firstIndex(where: { Self.overlaps($0, session) }) {
-                if session.durationS > items[index].durationS {
-                    items[index] = session
+        // Replayed history can contain several overlapping variants of the
+        // same workout. Deduplicate across both existing and incoming rows,
+        // not just the first match; repeat until transitive overlaps collapse.
+        var items = detectedActivities() + sessions
+        var changed = true
+        while changed {
+            changed = false
+            outer: for i in items.indices {
+                for j in items.indices where j > i {
+                    guard Self.overlaps(items[i], items[j]) else { continue }
+                    // Keep the more complete record. Stable tie-break makes
+                    // repeated imports idempotent regardless of arrival order.
+                    let a = items[i], b = items[j]
+                    let winner = a.durationS > b.durationS ? a
+                        : b.durationS > a.durationS ? b
+                        : a.startUnix <= b.startUnix ? a : b
+                    items[i] = winner
+                    items.remove(at: j)
+                    changed = true
+                    break outer
                 }
-            } else {
-                items.append(session)
             }
         }
         let cutoff = Int(now.timeIntervalSince1970) - 60 * 86_400
