@@ -60,7 +60,9 @@ struct CaptureSummary: Codable, Equatable {
         guard !ordered.isEmpty else { return .empty }
         let wearing = ordered.filter { $0.wearing }
         let heartRates = wearing.map { Double($0.heartRate) }
-        let skinTemps = ordered.compactMap { $0.skinTempC }
+        // Skin temperature is only meaningful while worn. Off-wrist samples
+        // can reflect room temperature and corrupt the nightly baseline.
+        let skinTemps = wearing.compactMap { $0.skinTempC }
         let motion = ordered.compactMap { $0.dynamicAccelG }
 
         var minuteBuckets: [Int: [Double]] = [:]
