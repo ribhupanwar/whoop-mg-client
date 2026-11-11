@@ -62,7 +62,14 @@ struct CaptureSummary: Codable, Equatable {
         let heartRates = wearing.map { Double($0.heartRate) }
         // Skin temperature is only meaningful while worn. Off-wrist samples
         // can reflect room temperature and corrupt the nightly baseline.
-        let skinTemps = wearing.compactMap { $0.skinTempC }
+        // Band v18 offset 65 is a skin-contact sensor candidate. Ignore
+        // disconnected/invalid temperatures; don't substitute phone weather
+        // or ambient sensors. This is not core body temperature.
+        let skinTemps = wearing.compactMap { sample -> Double? in
+            guard let temp = sample.skinTempC, temp.isFinite,
+                  (20.0...43.0).contains(temp) else { return nil }
+            return temp
+        }
         let motion = ordered.compactMap { $0.dynamicAccelG }
 
         var minuteBuckets: [Int: [Double]] = [:]
