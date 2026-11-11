@@ -176,7 +176,7 @@ struct HealthView: View {
             return "Waiting for first HR packet · received 0"
         }
         let seconds = max(0, Int(clock.timeIntervalSince(last)))
-        return "HR packets: \\(count) · last packet \\(seconds)s ago"
+        return "HR packets: \(count) · last packet \(seconds)s ago"
     }
 
     private var series: [Double] { summary?.heartRateSeries ?? [] }
