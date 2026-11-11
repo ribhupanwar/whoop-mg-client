@@ -175,6 +175,19 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample.stepCounter, 1014)
     }
 
+    func testGen5V18UsesHardwareVerifiedHRAtInner14NotGenericInner17() {
+        // Gen5 frame header is 8 bytes; absolute byte 22 = inner[14].
+        // A generic record map using inner[17] must not override v18.
+        var inner = bytes(realV18Hex)
+        inner[14] = 81
+        inner[17] = 120
+        XCTAssertEqual(V18Decoder.decode(inner)?.heartRate, 81)
+        let frame = Gen5Frame.build(inner)
+        let parsed = Gen5Frame.parse(frame)
+        XCTAssertEqual(parsed?[14], 81)
+        XCTAssertEqual(frame[22], 81)
+    }
+
     func testRRIntervalsClampToPlausibleRange() {
         var inner = bytes(realV18Hex)
         inner[15] = 2
