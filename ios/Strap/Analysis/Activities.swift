@@ -50,8 +50,21 @@ enum ActivityDetect {
             let locomotion: Bool
             // The gait byte is not vendor-verified. A still/unknown gait
             // must not suppress a sustained, measured step rate.
-            let measuredSteps = (rates[index] ?? 0) >= walkSPM
-            locomotion = gait == gaitWalk || gait == gaitRun || measuredSteps
+            // With a reported still gait, require *recent* counter movement:
+            // the trailing 60-second rate otherwise extends runs into cooldown.
+            let recentSteps: Bool
+            if gait == gaitStill, index > 0,
+               let current = sample.stepCounter,
+               let previous = ordered[index - 1].stepCounter {
+                let elapsed = sample.unix - ordered[index - 1].unix
+                let delta = current - previous
+                recentSteps = elapsed > 0 && elapsed <= 5 &&
+                    delta > 0 && Double(delta) * 60.0 / Double(elapsed) >= walkSPM &&
+                    Double(delta) / Double(elapsed) <= 5
+            } else {
+                recentSteps = (rates[index] ?? 0) >= walkSPM
+            }
+            locomotion = gait == gaitWalk || gait == gaitRun || recentSteps
             let elevated: Bool
             if let baseline = baselines[index] {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
