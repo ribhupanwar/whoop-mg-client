@@ -74,7 +74,7 @@ struct DashboardView: View {
             }
             .pickerStyle(.segmented)
             .accessibilityLabel("Chart period")
-            Text("Last \\(trendWindow) calendar days · \\(recentDays.count) recorded days")
+            Text("Last \(trendWindow) calendar days · \(recentDays.count) recorded days")
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
             trendChart(
