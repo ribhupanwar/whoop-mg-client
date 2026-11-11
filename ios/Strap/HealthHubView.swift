@@ -70,12 +70,12 @@ struct HealthHubView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
-                    Text("Actual age: \\(estimate.chronologicalYears)")
+                    Text("Actual age: \(estimate.chronologicalYears)")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.appMuted)
                 }
-                Hint("7-day median resting HR: \\(String(format: "%.0f", estimate.restingHeartRate)) bpm · \\(estimate.restingNights) nights")
-                Hint("Activity: \\(estimate.exerciseDays) recorded days · estimated HUNT-like index \\(String(format: "%.1f", estimate.physicalActivityIndex))")
+                Hint("7-day median resting HR: \(String(format: "%.0f", estimate.restingHeartRate)) bpm · \(estimate.restingNights) nights")
+                Hint("Activity: \(estimate.exerciseDays) recorded days · estimated HUNT-like index \(String(format: "%.1f", estimate.physicalActivityIndex))")
                 Hint(estimate.confidenceNote)
             } else {
                 Text("—")
