@@ -119,13 +119,20 @@ struct DashboardRows: View {
         return "resting window"
     }
 
+    private var todayRecordedSteps: Int? {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        return store.band.days.first(where: { $0.dateKey == today })?.steps
+    }
+
     private var stepsText: String {
-        guard let steps = summary?.steps else { return "—" }
-        return steps.formatted()
+        todayRecordedSteps.map { $0.formatted() } ?? "—"
     }
 
     private var stepsDetail: String {
-        summary?.steps != nil ? "band step counter · last capture" : "needs a capture"
+        todayRecordedSteps != nil ? "today · recorded minimum" : "needs band history sync"
     }
 
     private func zoneText(high: Bool) -> String {
