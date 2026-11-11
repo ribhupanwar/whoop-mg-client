@@ -27,10 +27,10 @@ enum SleepDetect {
 
         let quiet = ordered.map { sample in
             guard let accel = sample.dynamicAccelG else { return false }
-            return accel <= quietAccelG
+            return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
         }
         let activeHRs = zip(ordered, quiet)
-            .filter { !$0.1 && $0.0.wearing }
+            .filter { !$0.1 && $0.0.wearing && (35...220).contains($0.0.heartRate) }
             .map { Double($0.0.heartRate) }
         guard !activeHRs.isEmpty else { return [] }
         let activeMedian = Stats.median(activeHRs)
@@ -53,8 +53,13 @@ enum SleepDetect {
             let duration = run[run.count - 1].unix - run[0].unix + 1
             guard duration >= minSleepS else { continue }
 
-            let runHRs = run.filter { $0.wearing }.map { Double($0.heartRate) }
-            guard !runHRs.isEmpty,
+            let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
+            let wornSeconds = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
+            let observedSeconds = Set(run.map(\.unix)).count
+            // Avoid interpreting sparse or off-wrist quiet records as sleep.
+            guard observedSeconds >= minSleepS / 2,
+                  wornSeconds * 5 >= observedSeconds * 4,
+                  !runHRs.isEmpty,
                   Stats.median(runHRs) <= activeMedian - hrDropBPM else { continue }
 
             let quietSeconds = quiet[start..<end].filter { $0 }.count
