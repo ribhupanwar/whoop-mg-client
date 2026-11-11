@@ -170,6 +170,38 @@ final class BandLink: NSObject, ObservableObject {
 
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
+    private var retainedHistoricalSamples: [V18Sample] = []
+
+    private var historicalArchiveURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("strap-history-v18.json")
+    }
+
+    private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
+        var bySecond = Dictionary(uniqueKeysWithValues: retainedHistoricalSamples.map { ($0.unix, $0) })
+        for sample in incoming {
+            if let old = bySecond[sample.unix] {
+                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
+                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
+                if newScore > oldScore { bySecond[sample.unix] = sample }
+            } else {
+                bySecond[sample.unix] = sample
+            }
+        }
+        let ordered = bySecond.values.sorted { $0.unix < $1.unix }
+        let cutoff = (ordered.last?.unix ?? 0) - 72 * 3600
+        let merged = ordered.filter { $0.unix >= cutoff }
+        do {
+            let url = historicalArchiveURL
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try JSONEncoder().encode(merged).write(to: url, options: .atomic)
+            retainedHistoricalSamples = merged
+            return merged
+        } catch {
+            lastMessage = "History archive save failed: \(error.localizedDescription)"
+            return nil
+        }
+    }
     private var seenRecordIndices: Set<UInt32> = []
     private var drainFrames = 0
     private var historicalRecordFrames = 0
@@ -216,7 +248,11 @@ final class BandLink: NSObject, ObservableObject {
            let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
             archivedLiveRRSamples = saved
         }
-        lastHistoryRecordCount = UserDefaults.standard.integer(forKey: Keys.retainedHistoryCount)
+        if let data = try? Data(contentsOf: historicalArchiveURL),
+           let saved = try? JSONDecoder().decode([V18Sample].self, from: data) {
+            retainedHistoricalSamples = saved
+        }
+        lastHistoryRecordCount = retainedHistoricalSamples.count
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
@@ -920,7 +956,6 @@ final class BandLink: NSObject, ObservableObject {
             $0 + max(0, $1.1 - $1.0 - 1)
         }
         let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
-        let previousHistoryCount = lastHistoryRecordCount
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
@@ -935,27 +970,25 @@ final class BandLink: NSObject, ObservableObject {
             }
             return
         }
+        guard let combined = mergeHistoricalArchive(samples) else { return }
         let fresh = CaptureSummary.make(
-            samples: samples, sex: sex, maxHR: maxHR, awakeBaseline: awakeBaseline
+            samples: combined, sex: sex, maxHR: maxHR, awakeBaseline: awakeBaseline
         )
-        // A short follow-up sync is incremental, not a replacement for the
-        // previous full capture. Preserve previously measured HRV/RHR and
-        // sleep rather than clearing the dashboard with a 25-second slice.
+        // Preserve previously validated recovery if merged data lacks a quiet window.
         let previousHasRestMetrics = summary?.hrv.rmssdMS != nil || summary?.restingHeartRate != nil
         let freshHasRestMetrics = fresh.hrv.rmssdMS != nil || fresh.restingHeartRate != nil
         let preservePrevious = previousHasRestMetrics && !freshHasRestMetrics
-            && samples.count < previousHistoryCount
         if !preservePrevious {
             summary = fresh
             persist(fresh)
-            lastHistoryRecordCount = samples.count
-            UserDefaults.standard.set(samples.count, forKey: Keys.retainedHistoryCount)
+            lastHistoryRecordCount = combined.count
+            UserDefaults.standard.set(combined.count, forKey: Keys.retainedHistoryCount)
         }
-        merge(DailyAnalysis.metrics(from: samples, sex: sex, maxHR: maxHR))
+        merge(DailyAnalysis.metrics(from: combined, sex: sex, maxHR: maxHR))
 
         if !preservePrevious && !fresh.sleepPeriods.isEmpty {
             let analysis = SleepReport.analyze(
-                samples: samples,
+                samples: combined,
                 periods: fresh.sleepPeriods,
                 needHours: needHours,
                 nights: recentNights,
