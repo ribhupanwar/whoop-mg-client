@@ -1,7 +1,7 @@
 import Foundation
 
 /// Shared gen5 historical-record header, inner-relative.
-struct BandRecordHeader: Equatable {
+struct BandRecordHeader: Equatable, Codable {
     let version: Int
     let flags: Int
     let recordIndex: UInt32
@@ -12,7 +12,7 @@ struct BandRecordHeader: Equatable {
     var ppgSampleRateHz: Int { flags & 0x80 != 0 ? 25 : 50 }
 }
 
-enum Spo2CandidateKind: String {
+enum Spo2CandidateKind: String, Codable {
     case absent
     case pct
     case saturated
@@ -21,7 +21,7 @@ enum Spo2CandidateKind: String {
 
 /// One second of v18 biometrics. Every field can be absent; an implausible
 /// value is dropped on its own rather than discarding the whole second.
-struct V18Sample: Equatable {
+struct V18Sample: Equatable, Codable {
     let header: BandRecordHeader
     let heartRate: Int
     let rrIntervalsMS: [Int]
