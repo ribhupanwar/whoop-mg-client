@@ -109,7 +109,9 @@ struct HealthView: View {
                 Text("Clean R–R beats: \(capture.hrv.nnBeats) / \(capture.hrv.beats) · respiratory beats: \(capture.respiration.beats)")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.appMuted)
-                if capture.hrv.nnBeats == 0 {
+                if capture.sampleCount < 60 {
+                    Hint("Only \(capture.sampleCount) historical records captured. The HRV algorithm requires at least 60 consecutive quiet seconds with valid motion data; 0/0 here does not mean the band sent zero R–R beats. Check source counters above and complete the overnight history sync.")
+                } else if capture.hrv.nnBeats == 0 {
                     Hint("No decoded R–R beats in the qualifying quiet window. Check historical offload, v18 R–R offset and signal quality; live BPM alone does not provide beat intervals.")
                 } else if capture.hrvWindowSeconds < 300 {
                     Hint("R–R data exists but a continuous 5-minute quiet window is not yet available for the overnight metric.")
