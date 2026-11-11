@@ -41,6 +41,7 @@ struct SettingsView: View {
                 if url.pathExtension.lowercased() == "zip" {
                     let archive = try Archive(url: url, accessMode: .read)
                     var importedDays = 0
+                    var supplementalCounts: [String] = []
                     var recognizedFiles: [String] = []
                     for entry in archive where entry.type == .file {
                         let name = (entry.path as NSString).lastPathComponent.lowercased()
@@ -55,13 +56,31 @@ struct SettingsView: View {
                             if let rows = try? WhoopCSVImport.parse(data) {
                                 importedDays += store.band.importWhoopHistory(rows)
                             }
+                        } else {
+                            let category: String? = name.contains("journal") ? "journal_entries" :
+                                (name.contains("workout") ? "workouts" :
+                                (name.contains("sleep") ? "sleeps" : nil))
+                            if let category,
+                               let count = try? WhoopCSVImport.importSupplemental(data, source: category) {
+                                supplementalCounts.append("\(category): \(count)")
+                            }
                         }
                     }
-                    whoopImportStatus = "ZIP read: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days imported. Sleep, workout and journal rows are not yet mapped."
+                    whoopImportStatus = "ZIP read: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days imported. \(supplementalCounts.joined(separator: ", ")). Supplemental rows saved locally; activity/Recovery mapping pending."
                 } else {
-                    let rows = try WhoopCSVImport.parse(Data(contentsOf: url))
-                    let added = store.band.importWhoopHistory(rows)
-                    whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                    let data = try Data(contentsOf: url)
+                    let name = url.lastPathComponent.lowercased()
+                    let category: String? = name.contains("journal") ? "journal_entries" :
+                        (name.contains("workout") ? "workouts" :
+                        (name.contains("sleep") ? "sleeps" : nil))
+                    if let category {
+                        let count = try WhoopCSVImport.importSupplemental(data, source: category)
+                        whoopImportStatus = "Saved \(count) \(category) records locally. Activity/Recovery mapping pending."
+                    } else {
+                        let rows = try WhoopCSVImport.parse(data)
+                        let added = store.band.importWhoopHistory(rows)
+                        whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                    }
                 }
             } catch {
                 whoopImportStatus = "Import failed: \(error.localizedDescription)"
