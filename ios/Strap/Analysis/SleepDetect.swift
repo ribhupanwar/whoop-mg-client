@@ -140,6 +140,20 @@ enum SleepDetect {
         return periods
     }
 
+    /// Prefer the most recent plausible overnight session. A late daytime
+    /// quiet period must not replace last night's staging or summary.
+    static func primaryNight(_ periods: [SleepPeriod], calendar: Calendar = .current) -> SleepPeriod? {
+        let overnight = periods.filter { period in
+            guard period.durationS >= 3 * 3600 else { return false }
+            let midpoint = Date(timeIntervalSince1970: TimeInterval(
+                period.startUnix + period.durationS / 2
+            ))
+            let hour = calendar.component(.hour, from: midpoint)
+            return hour >= 20 || hour < 11
+        }
+        return overnight.max { $0.endUnix < $1.endUnix }
+    }
+
     static func totalHours(_ periods: [SleepPeriod]) -> Double {
         periods.reduce(0.0) { $0 + $1.hours }
     }
