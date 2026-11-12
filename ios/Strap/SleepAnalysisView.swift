@@ -181,16 +181,29 @@ struct SleepAnalysisView: View {
 
     // MARK: Last night
 
+    // A staged sleep window is the only source that can reconcile the
+    // hypnogram with the asleep/awake summary. Never mix it with the
+    // detector's independent quiet-fraction estimate.
+    private var reconciledStaging: SleepStaging? {
+        guard let staging, staging.stageable else { return nil }
+        let total = staging.asleepMinutes + staging.wakeMinutes
+        guard total > 0, let period = editablePeriod else { return nil }
+        let periodMinutes = Double(period.durationS) / 60.0
+        guard abs(total - periodMinutes) <= 2.0 else { return nil }
+        return staging
+    }
+
     private var lastNightHours: Double? {
-        demo ? nil : analysis?.hours
+        if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
+        return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
     }
 
     private var asleepHours: Double? {
-        guard let analysis else { return nil }
-        return analysis.hours * analysis.efficiencyPct / 100.0
+        lastNightHours
     }
 
     private var awakeHours: Double? {
+        if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
         guard let analysis, let asleepHours else { return nil }
         return max(0, analysis.hours - asleepHours)
     }
@@ -310,8 +323,8 @@ struct SleepAnalysisView: View {
                 SplitBar.Segment(fraction: SampleData.awakeMinutes / total, color: .appWarn)
             ]
         }
-        if let analysis, analysis.hours > 0 {
-            let fraction = min(max(analysis.efficiencyPct / 100.0, 0), 1)
+        if let asleepHours, let awakeHours, asleepHours + awakeHours > 0 {
+            let fraction = min(max(asleepHours / (asleepHours + awakeHours), 0), 1)
             return [
                 SplitBar.Segment(fraction: fraction, color: .appSleep),
                 SplitBar.Segment(fraction: 1.0 - fraction, color: .appWarn)
@@ -465,7 +478,7 @@ struct SleepAnalysisView: View {
             .padding(.bottom, 8)
             HStack {
                 splitValue(
-                    demo ? SampleData.sleepHours : analysis.map { CoachFormat.duration($0.hours) } ?? "—",
+                    demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—",
                     label: "asleep"
                 )
                 VStack(alignment: .trailing, spacing: 2) {
