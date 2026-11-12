@@ -79,7 +79,7 @@ struct HomeView: View {
                 Form {
                     DatePicker("Sleep started", selection: $correctedSleepStart)
                     DatePicker("Woke up", selection: $correctedSleepEnd)
-                    Text("Updates the displayed sleep time and Recovery sleep-duration input. HRV and RHR remain measured values until corrected-window sensor reanalysis is available.")
+                    Text("Bed and wake times are editable. Recovery uses estimated time asleep (excluding awake periods); HRV and RHR remain sensor-derived.")
                         .font(.footnote)
                 }
                 .navigationTitle("Edit sleep")
