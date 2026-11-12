@@ -10,6 +10,13 @@ struct BandRecordHeader: Equatable, Codable {
 
     var timestamp: Double { Double(unix) + Double(subsecQ15) / 32_768.0 }
     var ppgSampleRateHz: Int { flags & 0x80 != 0 ? 25 : 50 }
+
+    /// A lost band RTC can timestamp historical records in 1970/1971.
+    /// Reject those records from metrics, but keep their raw frames on disk.
+    static func plausibleHistoricalUnix(_ unix: UInt32, now: Date = Date()) -> Bool {
+        let seconds = TimeInterval(unix)
+        return seconds >= 1_577_836_800 && seconds <= now.timeIntervalSince1970 + 48 * 3600
+    }
 }
 
 enum Spo2CandidateKind: String, Codable {
