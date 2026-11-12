@@ -85,16 +85,20 @@ struct CaptureSummary: Codable, Equatable {
         let resting = Hrv.restingHeartRate(ordered)
         let restingWindow = Hrv.restingHRV(ordered)
 
+        let periods = SleepDetect.detect(ordered)
+        // Nighttime resting HR is not exercise load. Exclude detected sleep
+        // windows before integrating awake training impulse.
+        let awakeSamples = ordered.filter { sample in
+            !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+        }
         var strain: Double?
         if let maxHR, let resting, maxHR > resting {
             strain = Hrv.strainScore(
-                Hrv.trimp(ordered, maxHR: maxHR, restingHR: resting, sex: sex)
+                Hrv.trimp(awakeSamples, maxHR: maxHR, restingHR: resting, sex: sex)
             )
         }
 
         let steps = StepCounter.total(ordered)
-
-        let periods = SleepDetect.detect(ordered)
         let staging = periods.last.map {
             SleepStager.stage(samples: ordered, period: $0)
         }
@@ -204,8 +208,11 @@ enum DailyAnalysis {
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
             if let maxHR, let resting, maxHR > resting {
+                let awakeDaySamples = daySamples.filter { sample in
+                    !dayPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+                }
                 strain = Hrv.strainScore(
-                    Hrv.trimp(daySamples, maxHR: maxHR, restingHR: resting, sex: sex)
+                    Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: resting, sex: sex)
                 )
             }
             let steps = StepCounter.total(daySamples)
