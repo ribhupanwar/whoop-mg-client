@@ -193,6 +193,25 @@ final class BandLink: NSObject, ObservableObject {
             return (unix: second, bpm: value.sum / Double(value.count))
         }
     }
+    /// Inspect the raw window before interpreting differences from WHOOP's
+    /// independently processed HR trace. This never changes HR values.
+    func historicalHRWindowDiagnostic(from start: Int, through end: Int) -> String {
+        guard end >= start else { return "Invalid activity window" }
+        let trace = historicalHeartRates(from: start, through: end)
+        guard let first = trace.first, let last = trace.last else {
+            return "No historical HR inside activity window; sync history before comparing."
+        }
+        let expected = max(1, end - start + 1)
+        let missingStart = max(0, first.unix - start)
+        let missingEnd = max(0, end - last.unix)
+        let missingInside = max(0, last.unix - first.unix + 1 - trace.count)
+        let rawCount = retainedHistoricalSamples.filter {
+            $0.unix >= start && $0.unix <= end && $0.wearing && (35...220).contains($0.heartRate)
+        }.count
+        let duplicateCount = max(0, rawCount - trace.count)
+        return "HR window: \\(trace.count)/\\(expected)s; missing start \\(missingStart)s, inside \\(missingInside)s, end \\(missingEnd)s; duplicate records \\(duplicateCount)."
+    }
+
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
     /// Never mix it into overnight recovery or bridge missing seconds.
     var liveRRQualityDiagnostic: String {
