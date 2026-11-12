@@ -185,7 +185,10 @@ enum Hrv {
     static func contiguousRuns(_ samples: [V18Sample]) -> [[V18Sample]] {
         var runs: [[V18Sample]] = []
         var current: [V18Sample] = []
-        for sample in samples {
+        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+            // Archive replay can duplicate a timestamp. Preserve continuity
+            // instead of splitting a valid resting window at duplicates.
+            if current.last?.unix == sample.unix { continue }
             if let last = current.last, sample.unix != last.unix + 1 {
                 runs.append(current)
                 current = []
