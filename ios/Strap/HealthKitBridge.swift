@@ -100,7 +100,10 @@ final class HealthKitBridge: ObservableObject {
     @MainActor
     func export(_ sessions: [ActivitySession]) async {
         guard state == .ready else { return }
-        for session in sessions {
+        // Multiple sync passes may return the same workout in one batch.
+        var seen = Set<Int>()
+        for session in sessions.sorted(by: { $0.startUnix < $1.startUnix }) {
+            guard seen.insert(session.startUnix).inserted else { continue }
             await export(session)
         }
     }
