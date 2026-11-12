@@ -764,6 +764,9 @@ struct HomeView: View {
                         let sessionDuration = max(1, (detectedSession?.durationS ?? hrTrace.count))
                         let coverage = 100 * hrTrace.count / sessionDuration
                         Hint("\(hrTrace.count) measured HR seconds of \(sessionDuration)s (\(min(100, coverage))% coverage). Missing intervals are not estimated.")
+                        if let session = detectedSession {
+                            Hint(store.band.historicalHRWindowDiagnostic(from: session.startUnix, through: session.endUnix))
+                        }
                         if let first = hrTrace.first, let last = hrTrace.last {
                             Hint("HR source: WHOOP historical v18 · \(Self.clock(first.unix))–\(Self.clock(last.unix)) · raw min \(Int(values.min() ?? 0)) / max \(Int(values.max() ?? 0)) bpm")
                         }
