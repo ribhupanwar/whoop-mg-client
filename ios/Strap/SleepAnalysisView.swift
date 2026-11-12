@@ -136,7 +136,7 @@ struct SleepAnalysisView: View {
             SectionTitle("Components")
             componentRow(
                 title: "Hours vs. needed",
-                percent: demo ? Double(SampleData.hoursVsNeeded) : analysis?.hoursVsNeededPct,
+                percent: demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct,
                 waiting: "needs an overnight capture"
             )
             componentRow(
@@ -146,7 +146,7 @@ struct SleepAnalysisView: View {
             )
             componentRow(
                 title: "Sleep efficiency",
-                percent: demo ? Double(SampleData.sleepEfficiency) : analysis?.efficiencyPct,
+                percent: demo ? Double(SampleData.sleepEfficiency) : reconciledEfficiencyPct,
                 waiting: "needs an overnight capture"
             )
             componentRow(
@@ -200,6 +200,19 @@ struct SleepAnalysisView: View {
 
     private var asleepHours: Double? {
         lastNightHours
+    }
+
+    // Use the same asleep duration for the summary and the hours-needed
+    // gauge. SleepDetect periods include brief awake intervals (time in bed).
+    private var reconciledHoursVsNeededPct: Double? {
+        guard let asleepHours, let need = analysis?.needHours, need > 0 else { return nil }
+        return min(100.0, max(0.0, 100.0 * asleepHours / need))
+    }
+
+    private var reconciledEfficiencyPct: Double? {
+        guard let asleepHours, let awakeHours,
+              asleepHours + awakeHours > 0 else { return nil }
+        return 100.0 * asleepHours / (asleepHours + awakeHours)
     }
 
     private var awakeHours: Double? {
@@ -474,7 +487,7 @@ struct SleepAnalysisView: View {
         Panel {
             CardHead(
                 title: "Hours vs. needed",
-                trailing: (demo ? Double(SampleData.hoursVsNeeded) : analysis?.hoursVsNeededPct)
+                trailing: (demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct)
                     .map { String(format: "%.0f%%", $0) } ?? "—"
             )
             SectionTitle("Hours of sleep")
@@ -505,7 +518,7 @@ struct SleepAnalysisView: View {
     }
 
     private var hoursVsNeededFraction: Double {
-        let pct = demo ? Double(SampleData.hoursVsNeeded) : analysis?.hoursVsNeededPct
+        let pct = demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct
         return min(max((pct ?? 0) / 100.0, 0), 1)
     }
 
