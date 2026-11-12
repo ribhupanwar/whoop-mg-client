@@ -328,7 +328,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let valid = today.filter { $0.wearing && (35...220).contains($0.heartRate) }
             .sorted { $0.unix < $1.unix }
-        let timestamps = Array(Set(valid.map(\\.unix))).sorted()
+        let timestamps = Array(Set(valid.map(\.unix))).sorted()
         guard !timestamps.isEmpty else { return "No valid awake HR records in today's retained archive." }
         let sleeps = SleepDetect.detect(retainedHistoricalSamples)
         let awake = timestamps.filter { t in
@@ -347,7 +347,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let score = days.first { $0.dateKey == JournalStore.dayKey(for: Date()) }?.strain
         let scoreText = score.map { String(format: "%.2f", $0) } ?? "unavailable"
-        return "Today's stored HR: \\(today.count) records; valid unique: \\(timestamps.count); awake: \\(awake.count); sleep-excluded: \\(timestamps.count - awake.count).\\nObserved: \\(observedSeconds)s; 5s-cap estimate: \\(capped5Seconds)s; 30s-cap estimate: \\(capped30Seconds)s; gaps >30s: \\(gapsOver30).\\nDaily strain: \\(scoreText). These coverage estimates are not verified continuous wear time."
+        return "Today's stored HR: \(today.count) records; valid unique: \(timestamps.count); awake: \(awake.count); sleep-excluded: \(timestamps.count - awake.count).\nObserved: \(observedSeconds)s; 5s-cap estimate: \(capped5Seconds)s; 30s-cap estimate: \(capped30Seconds)s; gaps >30s: \(gapsOver30).\nDaily strain: \(scoreText). These coverage estimates are not verified continuous wear time."
     }
 
     /// Rebuild derived scores from the retained raw archive without requiring
@@ -1071,7 +1071,7 @@ final class BandLink: NSObject, ObservableObject {
             let diagnosticCount = samples.filter { $0.spo2CandidateKind == .diagnostic }.count
             let average = values.isEmpty ? "none" :
                 String(format: "%.1f", Double(values.reduce(0, +)) / Double(values.count))
-            let report = "Research only · \\(samples.count) v18 records · \\(values.count) candidate readings · mean \\(average) · \\(sentinelCount) sentinels · \\(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
+            let report = "Research only · \(samples.count) v18 records · \(values.count) candidate readings · mean \(average) · \(sentinelCount) sentinels · \(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
             UserDefaults.standard.set(report, forKey: "strap.spo2ResearchReport")
         }
         let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
@@ -1080,7 +1080,7 @@ final class BandLink: NSObject, ObservableObject {
         let missingSeconds = zip(uniqueSeconds, uniqueSeconds.dropFirst()).reduce(0) {
             $0 + max(0, $1.1 - $1.0 - 1)
         }
-        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
+        let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
