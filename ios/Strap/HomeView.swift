@@ -761,7 +761,12 @@ struct HomeView: View {
                         }
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                        Hint("\(hrTrace.count) measured HR seconds · missing intervals are not estimated.")
+                        let sessionDuration = max(1, (detectedSession?.durationS ?? hrTrace.count))
+                        let coverage = 100 * hrTrace.count / sessionDuration
+                        Hint("\(hrTrace.count) measured HR seconds of \(sessionDuration)s (\(min(100, coverage))% coverage). Missing intervals are not estimated.")
+                        if let first = hrTrace.first, let last = hrTrace.last {
+                            Hint("HR source: WHOOP historical v18 · \(Self.clock(first.unix))–\(Self.clock(last.unix)) · raw min \(Int(values.min() ?? 0)) / max \(Int(values.max() ?? 0)) bpm")
+                        }
                         if let walkingActiveCalories {
                             Text("ACTIVE CALORIES  ~\(Int(walkingActiveCalories.rounded())) kcal")
                                 .font(.system(size: 12, weight: .medium))
