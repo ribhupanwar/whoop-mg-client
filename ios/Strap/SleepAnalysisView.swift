@@ -6,6 +6,7 @@ import SwiftUI
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showSleepEditor = false
+    @State private var confirmEndSleep = false
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
 
@@ -46,6 +47,11 @@ struct SleepAnalysisView: View {
                 Form {
                     DatePicker("Bed Time", selection: $correctedSleepStart)
                     DatePicker("Wake Time", selection: $correctedSleepEnd)
+                    Button("End Sleep") {
+                        confirmEndSleep = true
+                    }
+                    .disabled(correctedSleepEnd <= correctedSleepStart || editablePeriod == nil)
+                    .accessibilityHint("Confirm the selected wake-up time as the end of this sleep session")
                     Text("Sleep duration and its Recovery input update; HRV/RHR require overnight sensor data.")
                         .font(.footnote)
                 }
@@ -56,23 +62,33 @@ struct SleepAnalysisView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            guard let period = editablePeriod else { return }
-                            var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-                            corrections[String(period.startUnix)] = [
-                                Int(correctedSleepStart.timeIntervalSince1970),
-                                Int(correctedSleepEnd.timeIntervalSince1970)
-                            ]
-                            UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
-                            store.band.notifySleepCorrectionChanged()
-                            showSleepEditor = false
+                            saveSleepCorrection()
                         }
                         .disabled(correctedSleepEnd <= correctedSleepStart)
                     }
                 }
             }
         }
+        .alert("End Sleep?", isPresented: $confirmEndSleep) {
+            Button("Cancel", role: .cancel) {}
+            Button("End Sleep") { saveSleepCorrection() }
+        } message: {
+            Text("End this sleep session at the selected Wake Time? You can edit the time later.")
+        }
         .navigationTitle("Sleep analysis")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func saveSleepCorrection() {
+        guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart else { return }
+        var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        corrections[String(period.startUnix)] = [
+            Int(correctedSleepStart.timeIntervalSince1970),
+            Int(correctedSleepEnd.timeIntervalSince1970)
+        ]
+        UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
+        store.band.notifySleepCorrectionChanged()
+        showSleepEditor = false
     }
 
     // MARK: Performance ring
