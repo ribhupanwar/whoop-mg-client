@@ -1429,6 +1429,14 @@ final class BandLink: NSObject, ObservableObject {
                 }
                 return
             }
+            // V22 research telemetry has tag-specific optical/motion data, not HR/RR.
+            // Preserve raw capture, but never feed V22 into biometric metrics.
+            if let research = Gen5DeepBuffer.researchV22(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(research.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
                 return
