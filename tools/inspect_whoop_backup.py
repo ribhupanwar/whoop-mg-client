@@ -166,6 +166,44 @@ with zipfile.ZipFile(archive) as z:
             cache_signatures[fmt]+=1
         except Exception:
             cache_signatures["unreadable"]+=1
+    # Privacy-preserving schema discovery on cached structured files.
+    # Only aggregate field names from JSON objects; never print values, URLs,
+    # IDs, raw blobs or paths. Limit parsing to 1 MiB per entry.
+    json_key_counts=collections.Counter()
+    json_parsed=0
+    cache_db_tables=collections.Counter()
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")):
+            continue
+        if entry.file_size==0 or entry.file_size>1024*1024: continue
+        try:
+            with z.open(entry) as source: data=source.read(1024*1024+1)
+            if data.lstrip().startswith((b"{",b"[")):
+                obj=json.loads(data)
+                json_parsed+=1
+                items=[obj] if isinstance(obj,dict) else obj[:20] if isinstance(obj,list) else []
+                for item in items:
+                    if isinstance(item,dict):
+                        for key in item:
+                            # No keys that resemble unique IDs, tokens or user details.
+                            if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,48}",key) and not re.search(r'id|token|secret|auth|email|name|url|key|session|cookie',key,re.I):
+                                json_key_counts[key]+=1
+            elif is_sqlite(data):
+                with tempfile.TemporaryDirectory(prefix="whoop-cache-") as temp:
+                    dbpath=Path(temp)/"cache.sqlite"
+                    dbpath.write_bytes(data)
+                    db=sqlite3.connect(dbpath.as_uri()+"?mode=ro",uri=True)
+                    try:
+                        for (name,) in db.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+                            if re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]{0,48}",name) and not re.search(r'cookie|token|credential|secret|user|account',name,re.I):
+                                cache_db_tables[name]+=1
+                    finally: db.close()
+        except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile,OSError):
+            pass
+    print("CACHE_JSON_PARSED",json_parsed)
+    print("CACHE_JSON_FIELD_NAMES",json.dumps(json_key_counts.most_common(35)))
+    print("CACHE_SQLITE_TABLE_NAMES",json.dumps(cache_db_tables.most_common(35)))
     print("CACHE_HEADER_FORMATS",json.dumps(cache_signatures.most_common()))
     print("CACHE_SIZE_BUCKETS",json.dumps(cache_size_buckets.most_common()))
     print("CACHE_FILES_INSPECTED",cache_total)
