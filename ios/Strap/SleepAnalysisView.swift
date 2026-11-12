@@ -457,7 +457,7 @@ struct SleepAnalysisView: View {
 
     private var stagingTrailing: String {
         if demo { return "sample" }
-        guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
+        guard let staging = reconciledStaging, staging.asleepMinutes > 0 else { return "—" }
         let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
         return String(format: "%.0f%% restorative", pct)
     }
