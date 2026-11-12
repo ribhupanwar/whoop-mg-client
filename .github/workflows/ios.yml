@@ -96,6 +96,23 @@ jobs:
           echo "Xcode target entitlement build setting:"
           xcodebuild -project ios/Strap.xcodeproj -scheme Strap -configuration Release -showBuildSettings 2>/dev/null | grep -m 1 'CODE_SIGN_ENTITLEMENTS ='
 
+      - name: Package HealthKit signing entitlement for SideStore
+        run: |
+          set -euo pipefail
+          # The unsigned IPA cannot carry an effective code-signing entitlement.
+          # Export this plist for the external signer; the final signed app
+          # must include the same entitlement and an authorized profile.
+          cp ios/Strap/Strap.entitlements "$RUNNER_TEMP/ipa/Strap-signing-entitlements.plist"
+          /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$RUNNER_TEMP/ipa/Strap-signing-entitlements.plist"
+          echo "IMPORTANT: Apply this entitlement while signing, not after installation."
+          echo "Verify signed app: codesign -d --entitlements :- Payload/Strap.app"
+
+      - name: Upload signing entitlement plist
+        uses: actions/upload-artifact@v4
+        with:
+          name: Strap-HealthKit-signing-entitlements
+          path: ${{ runner.temp }}/ipa/Strap-signing-entitlements.plist
+
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
