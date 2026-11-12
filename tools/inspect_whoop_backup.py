@@ -47,6 +47,17 @@ with zipfile.ZipFile(archive) as z:
                         if con.execute("SELECT 1 FROM "+safe_table+" LIMIT 1").fetchone(): nonempty+=1
                     except sqlite3.DatabaseError: pass
                 print("DB_NONEMPTY_TABLE_COUNT",dbpath.name,nonempty)
+                # Report counts for health-related tables, including databases
+                # other than whoop.sqlite; no rows or health values are emitted.
+                health_counts=[]
+                for table_name in relevant[:50]:
+                    try:
+                        safe_table='"'+table_name.replace('"','""')+'"'
+                        n=con.execute("SELECT COUNT(*) FROM "+safe_table).fetchone()[0]
+                        if n: health_counts.append({"table":table_name,"rows":n})
+                    except sqlite3.DatabaseError: pass
+                if health_counts:
+                    print("NONEMPTY_HEALTH_TABLES",dbpath.name,json.dumps(health_counts[:30]))
                 print("DB",PurePosixPath(i.filename).name,"TABLES",len(names),"RELEVANT",json.dumps(relevant[:50]))
                 for name in relevant[:20]:
                     cols=con.execute('PRAGMA table_info("'+name.replace('"','""')+'")').fetchall()
@@ -104,6 +115,27 @@ with zipfile.ZipFile(archive) as z:
                 likely_paths[(suffix,kind)]+=1
         except Exception:
             signatures[(suffix,"unreadable")]+=1
+    # Storage topology only: group candidate files by recognized database
+    # families, without printing paths, identifiers, or file contents.
+    families=collections.Counter()
+    family_bytes=collections.Counter()
+    for entry in files:
+        lower=entry.filename.lower()
+        if lower.endswith(".mdb") or "/data.mdb" in lower or "/lock.mdb" in lower:
+            family="lmdb-candidate"
+        elif any(token in lower for token in ("/leveldb/","/indexeddb/","/rocksdb/")):
+            family="key-value-store"
+        elif any(token in lower for token in ("/cache/","/caches/","/cache.db","/cfnetwork/")):
+            family="cache"
+        elif lower.endswith((".sqlite",".sqlite3",".db")):
+            family="sqlite"
+        elif lower.endswith((".plist",".json",".state")):
+            family="plist-json-state"
+        else:
+            family="other"
+        families[family]+=1
+        family_bytes[family]+=entry.file_size
+    print("STORAGE_FAMILIES",json.dumps([{"family":k,"files":v,"bytes":family_bytes[k]} for k,v in families.most_common()]))
     print("STORAGE_SIGNATURES",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in signatures.most_common(35)]))
     print("HEALTH_STORAGE_CANDIDATE_FORMATS",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in likely_paths.most_common(20)]))
     interesting=[PurePosixPath(i.filename).name for i in files if re.search(r'heart|activity|sleep|sensor|workout|log',i.filename,re.I)]
