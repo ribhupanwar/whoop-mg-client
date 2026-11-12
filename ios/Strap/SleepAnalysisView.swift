@@ -224,7 +224,7 @@ struct SleepAnalysisView: View {
     }
 
     private var editablePeriod: SleepPeriod? {
-        periods.max(by: { $0.endUnix < $1.endUnix })
+        SleepDetect.primaryNight(periods)
     }
 
     private func openSleepEditor() {
