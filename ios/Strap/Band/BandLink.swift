@@ -377,7 +377,9 @@ final class BandLink: NSObject, ObservableObject {
         let stagedOrQuiet = periods.reduce(0.0) { total, period in
             let corrected = overrides[String(period.startUnix)]
             if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-                return total + Double(corrected[1] - corrected[0])
+                // Time correction changes the bed window, not the awake fraction.
+                let correctedHours = Double(corrected[1] - corrected[0])
+                return total + correctedHours * min(1.0, max(0.0, period.quietFraction))
             }
             if let stage = summary?.sleepStaging,
                summary?.sleepPeriods.last?.startUnix == period.startUnix,
