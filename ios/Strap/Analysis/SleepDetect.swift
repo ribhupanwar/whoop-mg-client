@@ -52,6 +52,11 @@ enum SleepDetect {
             let run = Array(ordered[start..<end])
             let duration = run[run.count - 1].unix - run[0].unix + 1
             guard duration >= minSleepS else { continue }
+            // A single sleep candidate spanning most of a day is not a
+            // trustworthy sleep interval. Archive gaps, default motion data,
+            // or overly aggressive gap closing must not erase waking HR from
+            // the day's cardiovascular load. Abstain rather than invent sleep.
+            guard duration <= 14 * 3600 else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
