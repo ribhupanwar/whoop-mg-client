@@ -351,7 +351,13 @@ struct SleepAnalysisView: View {
     }
 
     private func clock(_ unix: Int) -> String {
-        CoachFormat.clock((unix / 60 % 1440 + 1440) % 1440)
+        // UNIX timestamps are UTC instants; display them in the user's local
+        // timezone rather than interpreting UTC minutes as wall-clock time.
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.timeZone = .current
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     private func splitValue(_ value: String, label: String) -> some View {
