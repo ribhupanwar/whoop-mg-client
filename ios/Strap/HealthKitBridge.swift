@@ -41,7 +41,7 @@ final class HealthKitBridge: ObservableObject {
     /// itself publish values: each metric needs its own validated export path.
     /// In particular, candidate SpO2 and inferred VO2 max are not auto-written.
     private var shareTypes: Set<HKSampleType> {
-        Set([
+        let types: [HKSampleType?] = [
             HKObjectType.workoutType(),
             HKObjectType.quantityType(forIdentifier: .heartRate),
             HKObjectType.quantityType(forIdentifier: .restingHeartRate),
