@@ -172,12 +172,12 @@ enum SleepDetect {
         for rows in groups.reversed() {
             guard let first = rows.first, let last = rows.last else { continue }
             let duration = last.unix - first.unix + 1
-            let distinctSleepSeconds = Set(rows.map(\\.unix)).count
+            let distinctSleepSeconds = Set(rows.map(\.unix)).count
             guard duration >= 3 * 3600, duration <= 12 * 3600,
                   distinctSleepSeconds >= 60 * 60 else { continue }
             let window = samples.filter { $0.unix >= first.unix && $0.unix <= last.unix }
-            let observed = Set(window.map(\\.unix)).count
-            let worn = Set(window.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\\.unix)).count
+            let observed = Set(window.map(\.unix)).count
+            let worn = Set(window.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
             guard observed >= duration / 2, worn * 5 >= observed * 4 else { continue }
             let hours = rows.map { Double($0.heartRate) }
             return SleepPeriod(startUnix: first.unix, endUnix: last.unix,
