@@ -82,10 +82,11 @@ enum Recovery {
                 reason: "needs at least \(minBaselineDays) days of awake-quiet baseline"
             )
         }
-        guard let lnRMSSD else {
+        guard let lnRMSSD, lnRMSSD.isFinite else {
             return StressResult(index: nil, reason: "needs HRV from a verified-quiet window")
         }
-        guard baseline.lnRMSSDSD > 0 else {
+        guard baseline.lnRMSSDSD.isFinite, baseline.lnRMSSDSD > 0,
+              baseline.lnRMSSDMean.isFinite else {
             return StressResult(index: nil, reason: "baseline has no HRV variation to scale against")
         }
         let deviation = (baseline.lnRMSSDMean - lnRMSSD) / baseline.lnRMSSDSD
