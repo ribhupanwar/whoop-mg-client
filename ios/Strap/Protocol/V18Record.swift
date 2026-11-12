@@ -205,3 +205,53 @@ enum V18Decoder {
         return (value * scale).rounded() / scale
     }
 }
+
+ 
+/// OpenStrap Gen5 deep-buffer record layouts. Optical v20 is deliberately
+/// kept separate from per-second HR/RR; its ADC data is NOT RR milliseconds.
+enum Gen5DeepBuffer {
+    struct OpticalV20 {
+        let header: BandRecordHeader
+        let sampleRateHz: Int
+        let rawInner: [UInt8]
+    }
+    struct MotionV21 {
+        let header: BandRecordHeader
+        let accelXG: [Double]
+        let accelYG: [Double]
+        let accelZG: [Double]
+        let gyroXDPS: [Double]
+        let gyroYDPS: [Double]
+        let gyroZDPS: [Double]
+    }
+    private static func u16(_ b: [UInt8], _ i: Int) -> Int {
+        Int(b[i]) | Int(b[i+1]) << 8
+    }
+    private static func axis(_ b: [UInt8], _ offset: Int, _ count: Int, _ scale: Double) -> [Double] {
+        (0..<count).map { n in
+            let raw = u16(b, offset + n * 2)
+            let signed = raw >= 32768 ? raw - 65536 : raw
+            return Double(signed) * scale
+        }
+    }
+    static func opticalV20(_ inner: [UInt8]) -> OpticalV20? {
+        guard inner.count == 2128, inner[0] == 0x2F, inner[1] == 20,
+              let header = V18Decoder.header(of: inner) else { return nil }
+        let rate = u16(inner, 15)
+        guard (1...200).contains(rate) else { return nil }
+        return OpticalV20(header: header, sampleRateHz: rate, rawInner: inner)
+    }
+    static func motionV21(_ inner: [UInt8]) -> MotionV21? {
+        guard inner.count == 1232, (inner[0] == 0x2F || inner[0] == 0x2B),
+              inner[1] == 21, let header = V18Decoder.header(of: inner) else { return nil }
+        let accelCount = u16(inner, 16), gyroCount = u16(inner, 622)
+        guard (1...100).contains(accelCount), (1...100).contains(gyroCount) else { return nil }
+        return MotionV21(header: header,
+            accelXG: axis(inner, 20, accelCount, 1.0 / 4096.0),
+            accelYG: axis(inner, 220, accelCount, 1.0 / 4096.0),
+            accelZG: axis(inner, 420, accelCount, 1.0 / 4096.0),
+            gyroXDPS: axis(inner, 632, gyroCount, 2000.0 / 32768.0),
+            gyroYDPS: axis(inner, 832, gyroCount, 2000.0 / 32768.0),
+            gyroZDPS: axis(inner, 1032, gyroCount, 2000.0 / 32768.0))
+    }
+}
