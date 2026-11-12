@@ -61,10 +61,13 @@ enum SleepDetect {
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
             // sessions retain the original minimum for fragmented sleep.
-            let startHour = Calendar.current.component(
-                .hour, from: Date(timeIntervalSince1970: TimeInterval(run[0].unix))
+            // Judge the middle of the candidate, not its first second:
+            // a long daytime rest can start before the old 08:00 boundary.
+            let midpointUnix = run[0].unix + duration / 2
+            let midpointHour = Calendar.current.component(
+                .hour, from: Date(timeIntervalSince1970: TimeInterval(midpointUnix))
             )
-            let daytime = (8..<22).contains(startHour)
+            let daytime = (11..<20).contains(midpointHour)
             if daytime && duration < max(minSleepS, 90 * 60) { continue }
 
             let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
@@ -93,6 +96,19 @@ enum SleepDetect {
             let upRows = stateRows.filter { $0.sleepState == 3 }.count
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
             let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
+            // A long, quiet afternoon is not automatically an overnight
+            // sleep. Require affirmative band sleep evidence for daytime
+            // candidates >= 3 h; otherwise abstain instead of suppressing
+            // hours of waking HR from Strain. Short naps retain the separate
+            // duration and cardiac-dip gates above.
+            if daytime && duration >= 3 * 3600 {
+                let observedSleepSeconds = Set(run.filter { $0.sleepState == 2 }.map(\.unix)).count
+                let observedStateSeconds = Set(stateRows.map(\.unix)).count
+                guard observedStateSeconds >= 300,
+                      observedSleepSeconds >= 300,
+                      observedSleepSeconds * 5 >= observedStateSeconds else { continue }
+            }
+
             // If the signal is a constant zero/default, abstain entirely.
             // A reliable veto needs at least five minutes of actual state
             // observations, with "up" occupying most of the period and no
