@@ -745,13 +745,13 @@ struct HomeView: View {
                                             String(Int(floor(values.min() ?? 0)))],
                                   xLabels: [Self.clock(hrTrace[0].unix), Self.clock(hrTrace[hrTrace.count - 1].unix)])
                         HStack {
-                            Text("AVG HR  \\(Int((values.reduce(0, +) / Double(values.count)).rounded())) bpm")
+                            Text("AVG HR  \(Int((values.reduce(0, +) / Double(values.count)).rounded())) bpm")
                             Spacer()
-                            Text("MAX HR  \\(Int(values.max() ?? 0)) bpm")
+                            Text("MAX HR  \(Int(values.max() ?? 0)) bpm")
                         }
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                        Hint("\\(hrTrace.count) measured HR seconds · missing intervals are not estimated.")
+                        Hint("\(hrTrace.count) measured HR seconds · missing intervals are not estimated.")
                     } else {
                         Hint("No timestamped band HR for this session yet. Sync historical data to populate the chart.")
                     }
@@ -765,13 +765,13 @@ struct HomeView: View {
                             let bounds = zoneBounds(zone)
                             VStack(alignment: .leading, spacing: 5) {
                                 HStack {
-                                    Text("ZONE \\(zone)")
+                                    Text("ZONE \(zone)")
                                         .fontWeight(.semibold)
-                                    Text(zone == 0 ? "<\\(Int(bounds.high)) BPM" :
-                                        zone == 5 ? "\\(Int(bounds.low))+ BPM" :
-                                        "\\(Int(bounds.low))–\\(Int(bounds.high - 1)) BPM")
+                                    Text(zone == 0 ? "<\(Int(bounds.high)) BPM" :
+                                        zone == 5 ? "\(Int(bounds.low))+ BPM" :
+                                        "\(Int(bounds.low))–\(Int(bounds.high - 1)) BPM")
                                         .foregroundStyle(Color.appMuted)
-                                    Text("\\(Int((100.0 * Double(seconds) / Double(total)).rounded()))%")
+                                    Text("\(Int((100.0 * Double(seconds) / Double(total)).rounded()))%")
                                         .foregroundStyle(Color.appAccent)
                                     Spacer()
                                     Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
@@ -909,7 +909,7 @@ struct HomeView: View {
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+        store.lastCapture?.sleepPeriods.flatMap { SleepDetect.primaryNight($0).map { [$0] } }?.first
     }
 
     private var sleepTimesText: String {
