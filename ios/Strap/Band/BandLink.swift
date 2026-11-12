@@ -190,7 +190,7 @@ final class BandLink: NSObject, ObservableObject {
             longest = max(longest, current)
             previous = sample.unix
         }
-        return "Live R-R archive: \\(beats) beats / \\(records.count) seconds; longest contiguous: \\(longest)s (not overnight HRV)"
+        return "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
     }
 
     var historicalRestQualityReason: String {
