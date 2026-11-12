@@ -17,15 +17,32 @@ jobs:
         run: |
           set +x
           python3 - <<'PY'
-          import os,urllib.request
-          u=os.environ['BACKUP_URL']
-          if not u.startswith('https://'): raise ValueError('Set WHOOP_BACKUP_URL Actions secret to an HTTPS Dropbox download URL')
-          with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=120) as r,open('/tmp/whoop-backup.zip','wb') as out:
+          import os, urllib.request, zipfile, tempfile, shutil
+          from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+          url=os.environ['BACKUP_URL'].strip()
+          if not url.startswith('https://'):
+              raise ValueError('Set WHOOP_BACKUP_URL to an HTTPS Dropbox shared link')
+          parsed=urlsplit(url)
+          if parsed.hostname not in ('www.dropbox.com','dropbox.com') and not parsed.hostname.endswith('.dropboxusercontent.com'):
+              raise ValueError('Only Dropbox HTTPS URLs are accepted')
+          if parsed.hostname in ('www.dropbox.com','dropbox.com'):
+              query=[(k,v) for k,v in parse_qsl(parsed.query,keep_blank_values=True) if k not in ('dl','raw')]
+              query.append(('dl','1'))
+              url=urlunsplit((parsed.scheme,parsed.netloc,parsed.path,urlencode(query),''))
+          request=urllib.request.Request(url,headers={'User-Agent':'Mozilla/5.0'})
+          with urllib.request.urlopen(request,timeout=120) as response,open('/tmp/whoop-backup.zip','wb') as out:
+              content_type=response.headers.get('Content-Type','')
+              total=0
               while True:
-                  chunk=r.read(1024*1024)
+                  chunk=response.read(1024*1024)
                   if not chunk: break
+                  total+=len(chunk)
+                  if total>1024*1024*1024: raise ValueError('Backup exceeds 1 GiB limit')
                   out.write(chunk)
-          print('Backup downloaded to temporary runner disk')
+          print('Downloaded bytes:',total,'Content-Type:',content_type.split(';')[0])
+          if not zipfile.is_zipfile('/tmp/whoop-backup.zip'):
+              raise ValueError('Dropbox returned a non-ZIP response. Check shared link and download permissions; no content printed.')
+          print('ZIP validation passed')
           PY
       - name: Inventory database schemas (no health values)
         shell: bash
