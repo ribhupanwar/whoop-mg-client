@@ -909,7 +909,7 @@ struct HomeView: View {
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.flatMap { SleepDetect.primaryNight($0).map { [$0] } }?.first
+        store.lastCapture.flatMap { SleepDetect.primaryNight($0.sleepPeriods) }
     }
 
     private var sleepTimesText: String {
