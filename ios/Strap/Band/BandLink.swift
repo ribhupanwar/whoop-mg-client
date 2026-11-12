@@ -1119,6 +1119,23 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    /// Sends NOOP's WHOOP 5/MG "notify" haptic preset over the authenticated link.
+    /// This is an immediate, user-triggered test only; it does NOT install a
+    /// persistent alarm on the band or promise vibration after disconnection.
+    @discardableResult
+    func testBandBuzz() -> Bool {
+        guard status == .ready, hrBondConfirmed, commandCharacteristic != nil else {
+            lastMessage = "Band buzz unavailable: connect and authenticate the strap first."
+            return false
+        }
+        // NOOP whoop_frame.py: MAVERICK_HAPTIC_NOTIFY (12 bytes).
+        // Gen5Frame.build handles the required 4-byte inner alignment.
+        let preset: [UInt8] = [0x01, 47, 152, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        enqueue(BandCommand.runHapticPatternMaverick.rawValue, body: preset, response: true)
+        lastMessage = "Test buzz command queued. Confirm vibration on the band."
+        return true
+    }
+
     private func enqueue(_ opcode: UInt8, body: [UInt8] = [], response: Bool = true) {
         commandQueue.append(PendingCommand(opcode: opcode, body: body, expectResponse: response))
         pump()
