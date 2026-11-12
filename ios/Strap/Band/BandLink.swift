@@ -475,6 +475,11 @@ final class BandLink: NSObject, ObservableObject {
         // every detected nap/session in the retained multi-day capture.
         guard let period = SleepDetect.primaryNight(periods) else { return nil }
         let corrected = overrides[String(period.startUnix)]
+        let start = corrected?.first ?? period.startUnix
+        let end = (corrected?.count == 2 && (corrected?.last ?? 0) > start) ? corrected!.last! : period.endUnix
+        if let exact = overnightStaging(startUnix: start, endUnix: end) {
+            return exact.asleepMinutes / 60.0
+        }
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
             let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
             return correctedHours * min(1.0, max(0.0, period.quietFraction))
