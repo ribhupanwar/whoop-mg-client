@@ -85,8 +85,10 @@ jobs:
             --generate-entitlement-der "$APP"
           /usr/bin/codesign --verify --deep --strict "$APP"
           /usr/bin/codesign -d --entitlements :- "$APP" 2>&1 | tee "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.txt"
-          /usr/bin/codesign -d --entitlements :- "$APP" 2>/dev/null | \
-            /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" /dev/stdin
+          # PlistBuddy cannot reliably read /dev/stdin on GitHub macOS runners.
+          # Extract the embedded entitlement into a regular file before checking.
+          /usr/bin/codesign -d --entitlements :- "$APP" 2>/dev/null > "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.plist"
+          /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.plist" | grep -qx true
           cd "$RUNNER_TEMP/ipa"
           /usr/bin/zip -qry Strap-unsigned.ipa Payload
           shasum -a 256 Strap-unsigned.ipa
