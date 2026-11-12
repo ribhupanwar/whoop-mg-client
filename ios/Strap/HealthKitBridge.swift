@@ -52,7 +52,8 @@ final class HealthKitBridge: ObservableObject {
             HKObjectType.quantityType(forIdentifier: .oxygenSaturation),
             HKObjectType.quantityType(forIdentifier: .vo2Max),
             HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
-        ].compactMap { $0 })
+        ]
+        return Set(types.compactMap { $0 })
     }
 
     private var readTypes: Set<HKObjectType> {
