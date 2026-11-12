@@ -126,6 +126,17 @@ final class ProtocolTests: XCTestCase {
         XCTAssertGreaterThan(reassembler.pending, 0)
     }
 
+    // MARK: - Historical clock validation
+
+    func testLostRTCRecordsAreRejectedWithoutAssumingSleep() {
+        let now = Date(timeIntervalSince1970: 1_794_500_000)
+        XCTAssertFalse(BandRecordHeader.plausibleHistoricalUnix(100, now: now))
+        XCTAssertFalse(BandRecordHeader.plausibleHistoricalUnix(1_577_836_799, now: now))
+        XCTAssertTrue(BandRecordHeader.plausibleHistoricalUnix(1_794_214_831, now: now))
+        XCTAssertTrue(BandRecordHeader.plausibleHistoricalUnix(UInt32(now.timeIntervalSince1970 + 48 * 3600), now: now))
+        XCTAssertFalse(BandRecordHeader.plausibleHistoricalUnix(UInt32(now.timeIntervalSince1970 + 48 * 3600 + 1), now: now))
+    }
+
     // MARK: - v18 decode
 
     func testRealRecordHeader() {
