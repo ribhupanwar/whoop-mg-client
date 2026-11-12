@@ -452,6 +452,20 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Corrected sleep durations affect Recovery immediately; original
     /// physiological samples remain unchanged for HRV/RHR provenance.
+    /// Stage the exact selected overnight window from retained sensor records.
+    /// Never reuse a hypnogram scored against a different capture window.
+    func overnightStaging(startUnix: Int, endUnix: Int) -> SleepStaging? {
+        guard endUnix > startUnix, endUnix - startUnix <= 14 * 3600 else { return nil }
+        let window = retainedHistoricalSamples.filter {
+            $0.unix >= startUnix - 360 && $0.unix <= endUnix + 420
+        }
+        guard !window.isEmpty else { return nil }
+        let period = SleepPeriod(startUnix: startUnix, endUnix: endUnix,
+                                 quietFraction: 1, meanHR: 0, wakeEvents: 0)
+        let result = SleepStager.stage(samples: window, period: period)
+        return result.stageable ? result : nil
+    }
+
     var lastNightHours: Double? {
         guard let periods = summary?.sleepPeriods else { return nil }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
