@@ -278,6 +278,45 @@ with zipfile.ZipFile(archive) as z:
                     if token in head.lower(): strain_context_counts[label]+=1
         except (OSError,ValueError,zipfile.BadZipFile):
             continue
+    # Classify strain-bearing non-JSON caches without exposing their content.
+    # Detect common HTTP metadata wrappers, plist and compression; summarize
+    # size buckets and whether structured JSON occurs after a header prefix.
+    strain_wrappers=collections.Counter()
+    strain_sizes=collections.Counter()
+    strain_json_embedded=collections.Counter()
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")) or entry.file_size==0:
+            continue
+        try:
+            with z.open(entry) as source: head=source.read(131072)
+            if b"strain" not in head.lower() or head.lstrip().startswith((b"{",b"[")):
+                continue
+            n=entry.file_size
+            strain_sizes["<1KB" if n<1024 else "1-64KB" if n<65536 else "64KB-1MB" if n<1048576 else ">=1MB"]+=1
+            if head.startswith(b"bplist00"): wrapper="binary-plist"
+            elif head.startswith(b"SQLite format 3"): wrapper="sqlite"
+            elif head.startswith(b"RIFF"): wrapper="riff"
+            elif head.startswith(bytes.fromhex("1f8b")): wrapper="gzip"
+            elif head.startswith(bytes.fromhex("504b0304")): wrapper="zip"
+            elif head.startswith(bytes.fromhex("28b52ffd")): wrapper="zstd"
+            elif head.startswith(bytes.fromhex("789c")): wrapper="zlib-candidate"
+            elif b"HTTP/1." in head[:256]: wrapper="http-response"
+            elif b"application/json" in head.lower(): wrapper="http-json-metadata-candidate"
+            elif head[:256].count(b"\\x00")>32: wrapper="binary"
+            else: wrapper="unclassified"
+            strain_wrappers[wrapper]+=1
+            # Do not parse or print embedded content. Only indicate if JSON
+            # delimiters occur after a non-JSON prefix.
+            if b"{" in head or b"[" in head:
+                strain_json_embedded["has-json-delimiter"]+=1
+            else:
+                strain_json_embedded["no-json-delimiter"]+=1
+        except (OSError,ValueError,zipfile.BadZipFile):
+            continue
+    print("CACHE_STRAIN_NONJSON_WRAPPERS",json.dumps(strain_wrappers.most_common()))
+    print("CACHE_STRAIN_NONJSON_SIZES",json.dumps(strain_sizes.most_common()))
+    print("CACHE_STRAIN_NONJSON_EMBEDDED",json.dumps(strain_json_embedded.most_common()))
     print("CACHE_RIFF_FORMS",json.dumps(riff_forms.most_common(20)))
     print("CACHE_RIFF_CHUNK_TAGS",json.dumps(riff_chunk_tags.most_common(20)))
     print("CACHE_STRAIN_CONTAINER_KINDS",json.dumps(strain_container_kinds.most_common()))
