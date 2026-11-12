@@ -459,7 +459,7 @@ final class BandLink: NSObject, ObservableObject {
         // still be excluded when no correction is present.
         // The Home card represents the latest sleep session, not the sum of
         // every detected nap/session in the retained multi-day capture.
-        guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
+        guard let period = SleepDetect.primaryNight(periods) else { return nil }
         let corrected = overrides[String(period.startUnix)]
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
             let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
