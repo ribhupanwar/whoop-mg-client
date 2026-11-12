@@ -203,7 +203,14 @@ enum DailyAnalysis {
             // Home must count estimated asleep time, not time in bed.
             // Match SleepReport's quiet-fraction-based awake exclusion.
             let sleepHours = dayPeriods.reduce(0.0) { total, period in
-                total + period.hours * min(1.0, max(0.0, period.quietFraction))
+                // Prefer stage-derived awake subtraction when staging passes
+                // quality checks. Otherwise use the conservative quiet-time
+                // estimate rather than counting the entire bed interval.
+                let stage = SleepStager.stage(samples: ordered, period: period)
+                if stage.reason == nil {
+                    return total + stage.asleepMinutes / 60.0
+                }
+                return total + period.hours * min(1.0, max(0.0, period.quietFraction))
             }
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
