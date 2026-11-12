@@ -147,7 +147,10 @@ enum Calories {
         guard let bmr = bmrKcalPerDay(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex),
               let gate = gateHR(restingHR: restingHR, maxHR: maxHR),
               maxGapSeconds.isFinite, maxGapSeconds > 0 else { return nil }
-        let points = heartRates.filter { $0.bpm.isFinite && $0.bpm > 0 }
+        // Discard physiologically implausible optical spikes rather than
+        // allowing a corrupt sample to create artificial exercise energy.
+        // Retain below-gate valid HR as zero-active observations.
+        let points = heartRates.filter { $0.bpm.isFinite && (35...220).contains($0.bpm) }
             .sorted { $0.unix < $1.unix }
         guard points.count >= 2 else { return 0 }
         let basalPerSecond = bmr / 86400
