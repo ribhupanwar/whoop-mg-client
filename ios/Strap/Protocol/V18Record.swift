@@ -214,6 +214,15 @@ enum Gen5DeepBuffer {
         let header: BandRecordHeader
         let sampleRateHz: Int
         let rawInner: [UInt8]
+        let blocks: [OpticalBlock]
+    }
+    struct OpticalBlock {
+        let sampleCount: Int
+        let channel0ADC: [Int]
+        let channel1ADC: [Int]
+        let sharedMetadata: [UInt8]
+        let channel0Metadata: [UInt8]
+        let channel1Metadata: [UInt8]
     }
     struct MotionV21 {
         let header: BandRecordHeader
@@ -234,12 +243,31 @@ enum Gen5DeepBuffer {
             return Double(signed) * scale
         }
     }
+    private static func opticalChannel(_ bytes: [UInt8], _ start: Int, _ count: Int) -> [Int] {
+        (0..<count).map { index in
+            let offset = start + 4 * index
+            let raw = Int(bytes[offset]) | Int(bytes[offset + 1]) << 8
+                | Int(bytes[offset + 2]) << 16 | Int(bytes[offset + 3]) << 24
+            let value = raw & 0xFFFFF
+            return value & 0x80000 != 0 ? value - 0x100000 : value
+        }
+    }
     static func opticalV20(_ inner: [UInt8]) -> OpticalV20? {
         guard inner.count == 2128, inner[0] == 0x2F, inner[1] == 20,
               let header = V18Decoder.header(of: inner) else { return nil }
         let rate = u16(inner, 15)
         guard (1...200).contains(rate) else { return nil }
-        return OpticalV20(header: header, sampleRateHz: rate, rawInner: inner)
+        let blocks: [OpticalBlock] = (0..<5).map { index in
+            let start = 18 + index * 422
+            let count = Int(inner[start]) <= 50 ? Int(inner[start]) : 0
+            return OpticalBlock(sampleCount: count,
+                channel0ADC: opticalChannel(inner, start + 21, count),
+                channel1ADC: opticalChannel(inner, start + 221, count),
+                sharedMetadata: Array(inner[(start + 1)..<(start + 7)]),
+                channel0Metadata: Array(inner[(start + 7)..<(start + 14)]),
+                channel1Metadata: Array(inner[(start + 14)..<(start + 21)]))
+        }
+        return OpticalV20(header: header, sampleRateHz: rate, rawInner: inner, blocks: blocks)
     }
     static func motionV21(_ inner: [UInt8]) -> MotionV21? {
         guard inner.count == 1232, (inner[0] == 0x2F || inner[0] == 0x2B),
