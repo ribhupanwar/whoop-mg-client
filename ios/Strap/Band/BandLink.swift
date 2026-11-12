@@ -354,6 +354,26 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    /// Side-by-side, read-only strain model comparison from today's raw archive.
+    var strainModelComparison: String {
+        let today = retainedHistoricalSamples.filter {
+            Calendar.current.isDate(Date(timeIntervalSince1970: TimeInterval($0.unix)), inSameDayAs: Date())
+        }
+        let periods = SleepDetect.detect(retainedHistoricalSamples)
+        let awake = today.filter { sample in
+            !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+        }
+        guard let maxHR, let resting = summary?.restingHeartRate, maxHR > resting else {
+            return "Comparison unavailable: measured resting HR and max HR are required."
+        }
+        let edwards = Hrv.edwardsStrain(Hrv.edwardsTrimp(awake, maxHR: maxHR, restingHR: resting))
+        let banister = Hrv.strainScore(Hrv.trimp(awake, maxHR: maxHR, restingHR: resting, sex: sex))
+        let format: (Double?) -> String = { $0.map { String(format: "%.2f", $0) } ?? "—" }
+        return "Banister: " + format(banister) + " · Edwards: " + format(edwards)
+            + " · Awake HR records: " + String(awake.count)
+            + " (comparison only; not WHOOP calibration)"
+    }
+
     // MARK: - Derived values
 
     var isConnected: Bool { peripheral?.state == .connected }
