@@ -228,7 +228,7 @@ struct SleepCoachView: View {
                 _ = store.band.testBandBuzz()
             }
             .buttonStyle(.bordered)
-            .disabled(demo || !store.band.status.isConnected)
+            .disabled(demo || store.band.status != .ready)
             .frame(maxWidth: .infinity, alignment: .trailing)
             Hint("Test Band Buzz sends the WHOOP 5/MG haptic command while connected; verify the vibration on your wrist. The scheduled alarm is still an iPhone notification, NOT an offline band alarm. Keep a Clock alarm as backup.")
         }
