@@ -4,7 +4,7 @@ import HealthKit
 
 /// Optional, write-only export to Apple Health.
 ///
-/// Only sessions the band actually measured are written, as workouts with
+/// Currently only sessions the band actually measured are written, as workouts with
 /// their real start and end. Nothing is read back, no estimate (VO2 max,
 /// SpO2 candidate, calories) is written, and every workout carries an
 /// external UUID built from its start second so a replayed drain cannot
@@ -22,7 +22,7 @@ final class HealthKitBridge: ObservableObject {
             case .off: return "Off — nothing is written to Health"
             case .unavailable: return "HealthKit is not available on this device"
             case .denied: return "Write access was declined in the Health app"
-            case .ready: return "On — measured sessions export automatically"
+            case .ready: return "On — workouts export; other health categories authorized separately"
             case .failed(let message): return "Not enabled — \(message)"
             }
         }
@@ -37,8 +37,26 @@ final class HealthKitBridge: ObservableObject {
 
     private let store = HKHealthStore()
 
+    /// Permissions for supported Health categories. Authorization does not
+    /// itself publish values: each metric needs its own validated export path.
+    /// In particular, candidate SpO2 and inferred VO2 max are not auto-written.
     private var shareTypes: Set<HKSampleType> {
-        [HKObjectType.workoutType()]
+        [
+            HKObjectType.workoutType(),
+            HKObjectType.quantityType(forIdentifier: .heartRate),
+            HKObjectType.quantityType(forIdentifier: .restingHeartRate),
+            HKObjectType.quantityType(forIdentifier: .heartRateVariabilitySDNN),
+            HKObjectType.quantityType(forIdentifier: .stepCount),
+            HKObjectType.quantityType(forIdentifier: .activeEnergyBurned),
+            HKObjectType.quantityType(forIdentifier: .respiratoryRate),
+            HKObjectType.quantityType(forIdentifier: .oxygenSaturation),
+            HKObjectType.quantityType(forIdentifier: .vo2Max),
+            HKObjectType.categoryType(forIdentifier: .sleepAnalysis)
+        ]
+    }
+
+    private var readTypes: Set<HKObjectType> {
+        Set(shareTypes.map { $0 as HKObjectType })
     }
 
     /// Stable across drains and relaunches: the session's first second.
@@ -64,7 +82,7 @@ final class HealthKitBridge: ObservableObject {
             return
         }
         do {
-            try await store.requestAuthorization(toShare: shareTypes, read: [])
+            try await store.requestAuthorization(toShare: shareTypes, read: readTypes)
             state = store.authorizationStatus(for: HKObjectType.workoutType()) == .sharingAuthorized
                 ? .ready
                 : .denied
