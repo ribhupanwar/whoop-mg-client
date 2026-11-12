@@ -177,10 +177,20 @@ final class BandLink: NSObject, ObservableObject {
     /// These are real recorded seconds, never interpolated or fabricated.
     func historicalHeartRates(from start: Int, through end: Int) -> [(unix: Int, bpm: Double)] {
         guard end >= start else { return [] }
-        return retainedHistoricalSamples.compactMap { sample in
+        // Historical retransmissions may contain several records for one second.
+        // Aggregate by timestamp so duplicated packets cannot bias AVG HR,
+        // MAX HR, zone durations or the plotted time series.
+        var bySecond: [Int: (sum: Double, count: Int)] = [:]
+        for sample in retainedHistoricalSamples {
             guard sample.unix >= start, sample.unix <= end,
-                  sample.wearing, (35...220).contains(sample.heartRate) else { return nil }
-            return (unix: sample.unix, bpm: Double(sample.heartRate))
+                  sample.wearing, (35...220).contains(sample.heartRate) else { continue }
+            let previous = bySecond[sample.unix] ?? (sum: 0, count: 0)
+            bySecond[sample.unix] = (sum: previous.sum + Double(sample.heartRate),
+                                     count: previous.count + 1)
+        }
+        return bySecond.keys.sorted().compactMap { second in
+            guard let value = bySecond[second], value.count > 0 else { return nil }
+            return (unix: second, bpm: value.sum / Double(value.count))
         }
     }
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
