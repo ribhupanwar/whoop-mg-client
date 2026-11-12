@@ -11,7 +11,12 @@ enum SleepReport {
     // MARK: - Consistency
 
     static func minutesOfDay(_ unix: Int) -> Int {
-        ((unix / 60) % 1440 + 1440) % 1440
+        // Sleep consistency compares local bed/wake clock times, not UTC.
+        let parts = Calendar.current.dateComponents(
+            [.hour, .minute],
+            from: Date(timeIntervalSince1970: TimeInterval(unix))
+        )
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
     }
 
     static func circularDeviation(_ a: Int, _ b: Int) -> Int {
