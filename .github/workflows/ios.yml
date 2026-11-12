@@ -63,7 +63,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
-      - name: Archive and package unsigned device IPA
+      - name: Archive and package SideStore-ready ad-hoc signed IPA
         run: |
           set -uo pipefail
           xcodebuild archive -project ios/Strap.xcodeproj -scheme Strap \
@@ -74,6 +74,19 @@ jobs:
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           ditto "$RUNNER_TEMP/Strap.xcarchive/Products/Applications/Strap.app" "$RUNNER_TEMP/ipa/Payload/Strap.app"
+          # An entirely unsigned bundle has no signed entitlements for a
+          # sideloading signer to preserve. Ad-hoc sign with the declared
+          # HealthKit capability so SideStore can inspect and re-sign it.
+          # This is NOT an Apple provisioning signature and still needs
+          # authorized re-signing on the user's device.
+          APP="$RUNNER_TEMP/ipa/Payload/Strap.app"
+          /usr/bin/codesign --force --deep --sign - \
+            --entitlements ios/Strap/Strap.entitlements \
+            --generate-entitlement-der "$APP"
+          /usr/bin/codesign --verify --deep --strict "$APP"
+          /usr/bin/codesign -d --entitlements :- "$APP" 2>&1 | tee "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.txt"
+          /usr/bin/codesign -d --entitlements :- "$APP" 2>/dev/null | \
+            /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" /dev/stdin
           cd "$RUNNER_TEMP/ipa"
           /usr/bin/zip -qry Strap-unsigned.ipa Payload
           shasum -a 256 Strap-unsigned.ipa
@@ -83,9 +96,9 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/ipa/Payload/Strap.app"
           ENTITLEMENTS="$APP/archived-expanded-entitlements.xcent"
-          echo "Checking unsigned IPA entitlement payload"
+          echo "Checking ad-hoc signed IPA entitlement payload"
           if [ ! -f "$ENTITLEMENTS" ]; then
-            echo "::warning::No archived entitlement payload in unsigned app. SideStore must add authorized HealthKit entitlement during signing."
+            echo "::warning::No archived entitlement payload in unsigned app. SideStore must preserve and authorize HealthKit during final signing."
           else
             /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$ENTITLEMENTS" || {
               echo "::warning::Packaged app does not declare HealthKit in archived entitlements."
@@ -99,7 +112,7 @@ jobs:
       - name: Package HealthKit signing entitlement for SideStore
         run: |
           set -euo pipefail
-          # The unsigned IPA cannot carry an effective code-signing entitlement.
+          # The ad-hoc signed IPA declares HealthKit but still requires authorized final signing.
           # Export this plist for the external signer; the final signed app
           # must include the same entitlement and an authorized profile.
           cp ios/Strap/Strap.entitlements "$RUNNER_TEMP/ipa/Strap-signing-entitlements.plist"
