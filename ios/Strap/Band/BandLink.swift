@@ -305,12 +305,17 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Settings
 
+    private var lastRecalculationSettings: String?
+
     func configure(sex: Sex, maxHR: Double?, needHours: Double) {
         self.sex = sex
         self.maxHR = maxHR
         self.needHours = needHours
-        // Recalculate saved metrics when settings or the app version change;
-        // otherwise persisted summaries retain pre-fix strain/sleep indefinitely.
+        // Avoid reprocessing the full BLE archive whenever SwiftUI reconfigures
+        // the same BandLink instance with unchanged settings.
+        let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
+        guard lastRecalculationSettings != settingsKey else { return }
+        lastRecalculationSettings = settingsKey
         recalculateRetainedMetrics()
     }
 
