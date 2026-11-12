@@ -77,5 +77,34 @@ with zipfile.ZipFile(archive) as z:
                 con.close()
         except Exception as exc:
             print("DB_ERROR",PurePosixPath(i.filename).suffix,type(exc).__name__)
+    # Identify non-SQLite storage formats without reading or logging sensitive values.
+    extensions=collections.Counter()
+    signatures=collections.Counter()
+    likely_paths=collections.Counter()
+    for entry in files:
+        if entry.file_size>MAX_FILE: continue
+        suffix=PurePosixPath(entry.filename).suffix.lower() or "(none)"
+        extensions[suffix]+=1
+        if suffix in (".webp",".png",".jpg",".jpeg",".ktx",".sqlite-wal",".sqlite-shm",".db-wal",".db-shm",".sqlite3-wal",".sqlite3-shm"):
+            continue
+        try:
+            with z.open(entry) as fh: header=fh.read(64)
+            if header.startswith(b"SQLite format 3"): kind="sqlite"
+            elif header.startswith(b"bplist00"): kind="binary-plist"
+            elif header.startswith(b"{") or header.startswith(b"["): kind="json-like"
+            elif header.startswith(b"<?xml"): kind="xml"
+            elif header.startswith(b"PK\\x03\\x04"): kind="zip"
+            elif header.startswith(b"\\x1f\\x8b"): kind="gzip"
+            elif header.startswith(b"\\x28\\xb5\\x2f\\xfd"): kind="zstd"
+            elif header.startswith(b"\\x04\\x22\\x4d\\x18"): kind="lz4"
+            elif not header: kind="empty"
+            else: kind="other-binary-or-text"
+            signatures[(suffix,kind)]+=1
+            if re.search(r'cache|database|leveldb|realm|rocksdb|activity|health|workout|heart|sensor|sleep|metrics',entry.filename,re.I):
+                likely_paths[(suffix,kind)]+=1
+        except Exception:
+            signatures[(suffix,"unreadable")]+=1
+    print("STORAGE_SIGNATURES",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in signatures.most_common(35)]))
+    print("HEALTH_STORAGE_CANDIDATE_FORMATS",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in likely_paths.most_common(20)]))
     interesting=[PurePosixPath(i.filename).name for i in files if re.search(r'heart|activity|sleep|sensor|workout|log',i.filename,re.I)]
     print("RELEVANT_FILE_BASENAMES",json.dumps(interesting[:70]))
