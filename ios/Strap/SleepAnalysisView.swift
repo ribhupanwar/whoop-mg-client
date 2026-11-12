@@ -94,7 +94,7 @@ struct SleepAnalysisView: View {
     // MARK: Performance ring
 
     private var performancePct: Double? {
-        demo ? Double(SampleData.sleepPerformance) : analysis?.performancePct
+        demo ? Double(SampleData.sleepPerformance) : reconciledHoursVsNeededPct
     }
 
     private var performancePanel: some View {
@@ -126,7 +126,8 @@ struct SleepAnalysisView: View {
         guard let analysis else {
             return "needs an overnight capture"
         }
-        return "\(String(format: "%.1f", analysis.hours)) h of \(String(format: "%.1f", analysis.needHours)) h needed, from the last stored capture."
+        guard let asleepHours else { return "needs a validated sleep session" }
+        return "\(CoachFormat.duration(asleepHours)) asleep of \(CoachFormat.duration(analysis.needHours)) needed, from the latest sleep session."
     }
 
     // MARK: Components
@@ -719,7 +720,10 @@ struct SleepAnalysisView: View {
     }
 
     private var recentNights: [RecordedNight] {
-        Array(nights.sorted { $0.dateKey < $1.dateKey }.suffix(7))
+        let ordered = nights.sorted { $0.dateKey < $1.dateKey }
+        var byDate: [String: RecordedNight] = [:]
+        for night in ordered { byDate[night.dateKey] = night }
+        return Array(byDate.values.sorted { $0.dateKey < $1.dateKey }.suffix(7))
     }
 
     private var liveDebtMinutes: [Double] {
