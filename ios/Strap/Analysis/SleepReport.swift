@@ -146,7 +146,10 @@ enum SleepReport {
             / Double(totalSeconds)
         let consistencyResult = consistency(nights: nights)
         let stress = stressSplit(samples: samples, periods: periods, baseline: sleepBaseline)
-        let hoursComponent = min(100.0, 100.0 * hours / needHours)
+        // Detected periods include short awake gaps. Score actual estimated
+        // asleep duration, not the entire time in bed.
+        let estimatedAsleepHours = hours * min(100.0, max(0.0, efficiency)) / 100.0
+        let hoursComponent = min(100.0, 100.0 * estimatedAsleepHours / needHours)
 
         var components: [Double] = [hoursComponent, efficiency]
         if let pct = consistencyResult.pct { components.append(pct) }
