@@ -696,11 +696,31 @@ struct HomeView: View {
             return f.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
         }
 
+        private var detectedSession: ActivitySession? {
+            guard let start = row.startUnix else { return nil }
+            let day = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))
+            return store.detectedActivities(on: day).first { $0.startUnix == start }
+        }
+
         private var hrTrace: [(unix: Int, bpm: Double)] {
-            guard let start = row.startUnix else { return [] }
-            // End is bounded by the next hour so unrelated later HR is excluded.
-            let end = start + 3600 * 4
-            return store.band.historicalHeartRates(from: start, through: end)
+            guard let session = detectedSession else { return [] }
+            return store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
+        }
+
+        private var maxHeartRate: Double {
+            Double(store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age))
+        }
+
+        // WHOOP-style six zones. Zone 0 is below 60% of configured max HR.
+        // These are local estimates, not WHOOP's personalised thresholds.
+        private func zoneBounds(_ zone: Int) -> (low: Double, high: Double) {
+            let cutoffs = [0.0, 0.60, 0.70, 0.80, 0.90, 1.0, Double.infinity]
+            return (cutoffs[zone] * maxHeartRate, cutoffs[zone + 1] * maxHeartRate)
+        }
+
+        private func zoneSeconds(_ zone: Int) -> Int {
+            let bounds = zoneBounds(zone)
+            return hrTrace.filter { $0.bpm >= bounds.low && $0.bpm < bounds.high }.count
         }
 
         var body: some View {
@@ -714,39 +734,65 @@ struct HomeView: View {
                 }
                 Panel {
                     SectionTitle("Heart rate")
-                    if let start = row.startUnix,
-                       let session = store.detectedActivities(on: JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))).first(where: { $0.startUnix == start }) {
-                        let trace = store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
-                        if trace.count >= 2 {
-                            LineChart(values: trace.map(\.bpm), color: .appAccent, height: 120,
-                                      xLabels: [Self.clock(trace[0].unix), Self.clock(trace[trace.count - 1].unix)])
-                            Hint("\(trace.count) measured HR seconds · gaps are not inferred.")
-                        } else {
-                            Hint("No timestamped HR samples retained for this activity. Sync the band to load historical measurements.")
+                    if hrTrace.count >= 2 {
+                        let values = hrTrace.map(\.bpm)
+                        LineChart(values: values, color: .appAccent,
+                                  minY: values.min().map { floor($0) - 2 },
+                                  maxY: values.max().map { ceil($0) + 2 },
+                                  height: 180,
+                                  yLabels: [String(Int(ceil(values.max() ?? 0))),
+                                            String(Int(((values.max() ?? 0) + (values.min() ?? 0)) / 2)),
+                                            String(Int(floor(values.min() ?? 0)))],
+                                  xLabels: [Self.clock(hrTrace[0].unix), Self.clock(hrTrace[hrTrace.count - 1].unix)])
+                        HStack {
+                            Text("AVG HR  \\(Int((values.reduce(0, +) / Double(values.count)).rounded())) bpm")
+                            Spacer()
+                            Text("MAX HR  \\(Int(values.max() ?? 0)) bpm")
                         }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                        Hint("\\(hrTrace.count) measured HR seconds · missing intervals are not estimated.")
                     } else {
-                        Hint("No matching measured session is available for a heart-rate chart.")
+                        Hint("No timestamped band HR for this session yet. Sync historical data to populate the chart.")
                     }
                 }
                 Panel {
                     SectionTitle("Heart rate zones")
-                    if let start = row.startUnix,
-                       let session = store.detectedActivities(on: JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))).first(where: { $0.startUnix == start }) {
-                        let trace = store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
-                        if trace.count >= 2 {
-                            let maxHR = store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)
-                            if maxHR > 100 {
-                                ForEach(0..<5, id: \.self) { zone in
-                                    let low = Double(zone + 5) / 10.0 * maxHR
-                                    let high = Double(zone + 6) / 10.0 * maxHR
-                                    let seconds = trace.filter { $0.bpm >= low && (zone == 4 ? $0.bpm <= maxHR : $0.bpm < high) }.count
-                                    HStack { Text("Zone \(zone + 1)"); Spacer(); Text("\(seconds / 60)m \(seconds % 60)s") }
-                                        .font(.system(size: 12)).foregroundStyle(Color.appFG)
+                    if hrTrace.count >= 2, maxHeartRate > 100 {
+                        let total = hrTrace.count
+                        ForEach((0...5).reversed(), id: \.self) { zone in
+                            let seconds = zoneSeconds(zone)
+                            let bounds = zoneBounds(zone)
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text("ZONE \\(zone)")
+                                        .fontWeight(.semibold)
+                                    Text(zone == 0 ? "<\\(Int(bounds.high)) BPM" :
+                                        zone == 5 ? "\\(Int(bounds.low))+ BPM" :
+                                        "\\(Int(bounds.low))–\\(Int(bounds.high - 1)) BPM")
+                                        .foregroundStyle(Color.appMuted)
+                                    Text("\\(Int((100.0 * Double(seconds) / Double(total)).rounded()))%")
+                                        .foregroundStyle(Color.appAccent)
+                                    Spacer()
+                                    Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
                                 }
-                                Hint("Measured seconds only; gaps are excluded.")
-                            } else { Hint("Set a valid maximum HR to calculate zones.") }
-                        } else { Hint("Timestamped HR is unavailable for this session.") }
-                    } else { Hint("Zone durations require a measured activity.") }
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.appFG)
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(Color.appRaised)
+                                        Capsule().fill(Color.appAccent)
+                                            .frame(width: geo.size.width * CGFloat(seconds) / CGFloat(total))
+                                    }
+                                }
+                                .frame(height: 6)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                        Hint("Zone thresholds use your configured maximum HR; percentages count measured seconds only.")
+                    } else {
+                        Hint("Zone durations need timestamped band HR and a valid maximum HR.")
+                    }
                 }
                 Panel {
                     SectionTitle("Outdoor GPS")
