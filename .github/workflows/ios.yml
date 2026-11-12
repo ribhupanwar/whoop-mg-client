@@ -78,6 +78,24 @@ jobs:
           /usr/bin/zip -qry Strap-unsigned.ipa Payload
           shasum -a 256 Strap-unsigned.ipa
 
+      - name: Verify packaged HealthKit entitlement
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/ipa/Payload/Strap.app"
+          ENTITLEMENTS="$APP/archived-expanded-entitlements.xcent"
+          echo "Checking unsigned IPA entitlement payload"
+          if [ ! -f "$ENTITLEMENTS" ]; then
+            echo "::warning::No archived entitlement payload in unsigned app. SideStore must add authorized HealthKit entitlement during signing."
+          else
+            /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$ENTITLEMENTS" || {
+              echo "::warning::Packaged app does not declare HealthKit in archived entitlements."
+            }
+          fi
+          echo "Configured source entitlement:"
+          /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" ios/Strap/Strap.entitlements
+          echo "Xcode target entitlement build setting:"
+          xcodebuild -project ios/Strap.xcodeproj -scheme Strap -configuration Release -showBuildSettings 2>/dev/null | grep -m 1 'CODE_SIGN_ENTITLEMENTS ='
+
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
