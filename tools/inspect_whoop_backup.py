@@ -30,6 +30,29 @@ with zipfile.ZipFile(archive) as z:
                 for name in relevant[:20]:
                     cols=con.execute('PRAGMA table_info("'+name.replace('"','""')+'")').fetchall()
                     print("SCHEMA",name,json.dumps([c[1] for c in cols][:35]))
+                # Privacy-safe diagnostics: only aggregates, never row values or identifiers.
+                for table in ("ZACTIVITYENTITY", "ZCACHEDHEARTDATAENTITY", "ZACTIVITYLOCATIONDATAENTITY"):
+                    if table not in names: continue
+                    quoted='"'+table.replace('"','""')+'"'
+                    count=con.execute("SELECT COUNT(*) FROM "+quoted).fetchone()[0]
+                    print("RECORD_COUNT",table,count)
+                    columns={c[1] for c in con.execute("PRAGMA table_info("+quoted+")")}
+                    for field in (("ZRAWSTRAINSCORE","ZSCALEDSTRAINSCORE") if table=="ZACTIVITYENTITY" else ("ZHEARTRATE","ZTIMESTAMP") if table=="ZCACHEDHEARTDATAENTITY" else ("ZTIMESTAMP",)):
+                        if field not in columns: continue
+                        qfield='"'+field+'"'
+                        nonnull=con.execute("SELECT COUNT("+qfield+") FROM "+quoted).fetchone()[0]
+                        print("FIELD_COVERAGE",table,field,nonnull,count)
+                    if table=="ZACTIVITYENTITY" and {"ZRAWSTRAINSCORE","ZSCALEDSTRAINSCORE"}.issubset(columns):
+                        pair=con.execute("SELECT COUNT(*) FROM "+quoted+" WHERE ZRAWSTRAINSCORE IS NOT NULL AND ZSCALEDSTRAINSCORE IS NOT NULL").fetchone()[0]
+                        print("STRAIN_PAIRED_RECORDS",pair)
+                    if table=="ZCACHEDHEARTDATAENTITY" and "ZTIMESTAMP" in columns:
+                        # Distribution of positive sampling intervals, rounded to whole seconds.
+                        # No timestamps or individual HR readings leave the runner.
+                        intervals=con.execute("SELECT ZTIMESTAMP FROM "+quoted+" WHERE ZTIMESTAMP IS NOT NULL ORDER BY ZTIMESTAMP LIMIT 20000").fetchall()
+                        diffs=[b[0]-a[0] for a,b in zip(intervals,intervals[1:]) if 0 < b[0]-a[0] <= 3600]
+                        if diffs:
+                            diffs.sort()
+                            print("HR_SAMPLE_INTERVAL_SECONDS_P50_P90",round(diffs[len(diffs)//2]),round(diffs[int((len(diffs)-1)*.9)]),"SAMPLES",len(diffs))
                 con.close()
         except Exception as exc:
             print("DB_ERROR",PurePosixPath(i.filename).suffix,type(exc).__name__)
