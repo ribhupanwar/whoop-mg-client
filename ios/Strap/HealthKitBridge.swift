@@ -107,6 +107,7 @@ final class HealthKitBridge: ObservableObject {
 
     @MainActor
     func export(_ session: ActivitySession) async {
+        guard state == .ready, session.endUnix > session.startUnix else { return }
         let id = Self.externalID(startUnix: session.startUnix)
         let alreadySaved = await exists(id)
         guard !alreadySaved else { return }
@@ -127,6 +128,7 @@ final class HealthKitBridge: ObservableObject {
 
     @MainActor
     func export(live record: LiveActivityRecord) async {
+        guard state == .ready else { return }
         let id = Self.externalID(startUnix: record.startedUnix)
         let alreadySaved = await exists(id)
         guard !alreadySaved else { return }
