@@ -315,15 +315,30 @@ enum Hrv {
             $0.wearing && (35...220).contains($0.heartRate)
         }.sorted { $0.unix < $1.unix }
         guard !valid.isEmpty else { return nil }
+        // WHOOP 5/MG archive HR can be sparse. One record is not necessarily
+        // one second of wear. Integrate the observed cadence, but never fill
+        // long disconnects or missing archive chunks with invented exercise.
+        // Deduplicate repeated records at the same timestamp first.
+        var unique: [V18Sample] = []
+        for sample in valid where unique.last?.unix != sample.unix {
+            unique.append(sample)
+        }
         var total = 0.0
-        var lastSecond: Int?
-        for sample in valid {
-            guard sample.unix != lastSecond else { continue }
-            lastSecond = sample.unix
+        for index in unique.indices {
+            let sample = unique[index]
             guard let ratio = hrReserveRatio(
                 Double(sample.heartRate), resting: restingHR, maximum: maxHR
             ) else { continue }
-            total += (1.0 / 60.0) * ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
+            // Preserve dense 1 Hz behavior; sparse samples cover up to 30 s.
+            // Do not integrate a long data gap (e.g. disconnected strap).
+            let seconds: Int
+            if index + 1 < unique.count {
+                let gap = unique[index + 1].unix - sample.unix
+                seconds = gap > 0 && gap <= 30 ? gap : 1
+            } else {
+                seconds = 1
+            }
+            total += (Double(seconds) / 60.0) * ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
         }
         return total
     }
