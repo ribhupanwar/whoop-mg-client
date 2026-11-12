@@ -150,7 +150,7 @@ enum V18Decoder {
     }
 
     static func header(of inner: [UInt8]) -> BandRecordHeader? {
-        guard inner.count >= 13, inner[0] == 0x2F else { return nil }
+        guard inner.count >= 13, (inner[0] == 0x2F || inner[0] == 0x2B) else { return nil }
         guard let index = u32(inner, 3), let unix = u32(inner, 7),
               let subsec = u16(inner, 11) else { return nil }
         return BandRecordHeader(
