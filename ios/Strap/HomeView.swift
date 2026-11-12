@@ -241,7 +241,7 @@ struct HomeView: View {
         var parts: [String] = []
         if sleepPercent == nil { parts.append("sleep needs an overnight capture") }
         if recoveryScore == nil { parts.append(store.band.recovery.reason ?? "recovery needs a baseline") }
-        if strain == nil { parts.append("strain needs a max HR override") }
+        if strain == nil { parts.append("strain needs recorded awake HR and a resting HR") }
         return parts.joined(separator: " · ")
     }
 
@@ -254,7 +254,12 @@ struct HomeView: View {
 
     private var recoveryScore: Double? { store.band.recovery.score }
 
-    private var strain: Double? { store.lastCapture?.strain }
+    private var strain: Double? {
+        // Keep the Home ring consistent with the daily Strain History bar.
+        let today = JournalStore.dayKey(for: Date())
+        return store.band.days.first(where: { $0.dateKey == today })?.strain
+            ?? store.lastCapture?.strain
+    }
 
     private var batteryText: String {
         guard let battery = store.band.batteryPercent else { return "—" }
@@ -746,12 +751,12 @@ struct HomeView: View {
     private var sleepTimesText: String {
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
         let times = sleepCorrections[String(period.startUnix)]
-        return "\(Self.hourMinute(times?.first ?? period.startUnix))\n\(Self.hourMinute(times?.last ?? period.endUnix))"
+        return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? period.endUnix, includeDay: false))"
     }
 
-    private static func hourMinute(_ unix: Int) -> String {
+    private static func sleepClock(_ unix: Int, includeDay: Bool) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
+        formatter.dateFormat = includeDay ? "[EEE] h:mm a" : "h:mm a"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
