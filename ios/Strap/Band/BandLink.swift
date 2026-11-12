@@ -354,6 +354,36 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    /// Count actual HR records and expose coverage assumptions without filling missing data.
+    var strainCoverageDiagnostics: String {
+        let today = retainedHistoricalSamples.filter {
+            Calendar.current.isDate(Date(timeIntervalSince1970: TimeInterval($0.unix)), inSameDayAs: Date())
+        }
+        let valid = today.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            .sorted { $0.unix < $1.unix }
+        let times = Array(Set(valid.map(\.unix))).sorted()
+        let sleeps = SleepDetect.detect(retainedHistoricalSamples)
+        let awake = times.filter { t in
+            !sleeps.contains { $0.startUnix <= t && t <= $0.endUnix }
+        }
+        var gapCount = 0
+        var seconds30 = 0
+        var seconds5 = 0
+        for i in awake.indices {
+            let gap = i + 1 < awake.count ? awake[i + 1] - awake[i] : 1
+            if gap > 30 { gapCount += 1 }
+            seconds30 += gap > 0 && gap <= 30 ? gap : 1
+            seconds5 += gap > 0 ? min(gap, 5) : 1
+        }
+        let coverage = awake.count > 0 ? Double(awake.count) / Double(max(1, seconds30)) : 0
+        let quality = awake.isEmpty ? "INSUFFICIENT DATA" : (coverage < 0.5 || gapCount > 0 ? "SPARSE / REVIEW" : "OBSERVED")
+        return "HR records: " + String(today.count) + " · unique: " + String(times.count)
+            + " · awake: " + String(awake.count) + " · sleep excluded: " + String(times.count - awake.count)
+            + " · >30s gaps: " + String(gapCount) + " · 5s coverage: " + String(seconds5)
+            + "s · 30s coverage: " + String(seconds30) + "s · quality: " + quality
+            + ". Estimates are not verified continuous wear time."
+    }
+
     /// Side-by-side, read-only strain model comparison from today's raw archive.
     var strainModelComparison: String {
         let today = retainedHistoricalSamples.filter {
