@@ -4,6 +4,8 @@ import SwiftUI
 /// Inspired by the navigation structure of WHOOP and offline-first clients.
 struct MoreView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var dstaExportURL: URL?
+    @State private var dstaExportError: String?
 
     var body: some View {
         Screen {
@@ -75,6 +77,26 @@ struct MoreView: View {
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
+                    Button {
+                        do {
+                            dstaExportURL = try store.band.makeDSTAExport()
+                            dstaExportError = nil
+                        } catch {
+                            dstaExportError = error.localizedDescription
+                        }
+                    } label: {
+                        moreRow("Export DSTA research data", icon: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    if let dstaExportURL {
+                        ShareLink(item: dstaExportURL) {
+                            Label("Share DSTA JSON export", systemImage: "square.and.arrow.up")
+                        }
+                        .font(.system(size: 12))
+                    }
+                    if let dstaExportError {
+                        Hint(dstaExportError)
+                    }
                     NavigationLink(value: Route.settings) {
                         moreRow("Health permissions & app information", icon: "lock.shield")
                     }
