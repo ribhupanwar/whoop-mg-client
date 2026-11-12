@@ -24,6 +24,8 @@ enum BandUUID {
 /// Command opcodes observed on gen5 hardware. 0x0F (FORGET_BONDS) is
 /// destructive and is deliberately absent: nothing here can send it.
 enum BandCommand: UInt8 {
+    /// WHOOP 5/MG maverick haptic; documented in NOOP's hardware-tested buzz utility.
+    case runHapticPatternMaverick = 0x13
     case realtimeHROn = 0x03
     case setGenericHRProfile = 0x0E
     case abortHistoricalTransmits = 0x14
