@@ -195,7 +195,8 @@ struct SleepAnalysisView: View {
 
     private var lastNightHours: Double? {
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
-        return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
+        guard let period = editablePeriod else { return nil }
+        return Double(period.durationS) / 3600.0 * min(1, max(0, period.quietFraction))
     }
 
     private var asleepHours: Double? {
@@ -217,12 +218,12 @@ struct SleepAnalysisView: View {
 
     private var awakeHours: Double? {
         if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
-        guard let analysis, let asleepHours else { return nil }
-        return max(0, analysis.hours - asleepHours)
+        guard let period = editablePeriod, let asleepHours else { return nil }
+        return max(0, Double(period.durationS) / 3600.0 - asleepHours)
     }
 
     private var editablePeriod: SleepPeriod? {
-        periods.max(by: { $0.durationS < $1.durationS })
+        periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private func openSleepEditor() {
