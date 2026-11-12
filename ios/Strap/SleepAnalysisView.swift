@@ -291,6 +291,8 @@ struct SleepAnalysisView: View {
                 } else {
                     EmptyState(title: "Overnight HR unavailable", detail: "Sync the band to restore timestamped HR for this sleep window.")
                 }
+            } else if editablePeriod == nil {
+                EmptyState(title: "No confirmed overnight sleep", detail: "A daytime rest or incomplete capture cannot be counted as last night. Sync an overnight recording.")
             } else if let series = store.band.summary?.heartRateSeries, series.count >= 2 {
                 LineChart(
                     values: series,
