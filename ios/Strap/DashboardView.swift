@@ -486,6 +486,10 @@ struct DashboardView: View {
             }
             Hint("Daily strain from recorded band samples. Missing days are left blank.")
             if focusedMetric == "strain" {
+                Text(store.band.strainCoverageDiagnostics)
+                    .font(.system(size: 11, design: .monospaced))
+                    .foregroundStyle(Color.appMuted)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text(store.band.strainModelComparison)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(Color.appMuted)
