@@ -201,6 +201,45 @@ with zipfile.ZipFile(archive) as z:
                     finally: db.close()
         except (ValueError,UnicodeError,sqlite3.DatabaseError,zipfile.BadZipFile,OSError):
             pass
+    # Opaque cache reconnaissance, aggregate-only. Avoid logging sensitive
+    # content, cache keys, HTTP endpoints or per-file identifiers.
+    opaque_magic=collections.Counter()
+    opaque_entropy=collections.Counter()
+    opaque_text_markers=collections.Counter()
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")):
+            continue
+        if entry.file_size==0: continue
+        try:
+            with z.open(entry) as source: head=source.read(8192)
+            if not head: continue
+            if head.startswith(b"SQLite format 3") or head.startswith(b"bplist00") or head.lstrip().startswith((b"{",b"[",b"<?xml")):
+                continue
+            # Shannon entropy of byte frequencies, bucketed without exposing bytes.
+            import math
+            counts=collections.Counter(head)
+            entropy=-sum((n/len(head))*math.log2(n/len(head)) for n in counts.values())
+            bucket="low (<4)" if entropy<4 else "medium (4-6)" if entropy<6 else "high (6-7.5)" if entropy<7.5 else "very-high (>=7.5)"
+            opaque_entropy[bucket]+=1
+            if head.startswith(bytes.fromhex("1f8b")): kind="gzip"
+            elif head.startswith(bytes.fromhex("28b52ffd")): kind="zstd"
+            elif head.startswith(bytes.fromhex("04224d18")): kind="lz4"
+            elif head.startswith(bytes.fromhex("504b0304")): kind="zip"
+            elif head.startswith(b"bplist00"): kind="plist"
+            elif head.startswith(b"RIFF"): kind="riff"
+            elif head.startswith(bytes.fromhex("789c")) or head.startswith(bytes.fromhex("78da")) or head.startswith(bytes.fromhex("7801")): kind="zlib-candidate"
+            elif head.startswith(bytes.fromhex("0a")): kind="protobuf-candidate-unverified"
+            else: kind="unknown"
+            opaque_magic[kind]+=1
+            lower_head=head.lower()
+            for label,needle in (("json-token",b"application/json"),("protobuf-token",b"protobuf"),("gzip-token",b"gzip"),("http-header",b"http/1."),("activity-token",b"activity"),("strain-token",b"strain"),("heart-token",b"heart_rate")):
+                if needle in lower_head: opaque_text_markers[label]+=1
+        except (OSError,ValueError,zipfile.BadZipFile):
+            continue
+    print("CACHE_OPAQUE_MAGIC",json.dumps(opaque_magic.most_common()))
+    print("CACHE_OPAQUE_ENTROPY",json.dumps(opaque_entropy.most_common()))
+    print("CACHE_OPAQUE_TEXT_MARKERS",json.dumps(opaque_text_markers.most_common()))
     print("CACHE_JSON_PARSED",json_parsed)
     print("CACHE_JSON_FIELD_NAMES",json.dumps(json_key_counts.most_common(35)))
     print("CACHE_SQLITE_TABLE_NAMES",json.dumps(cache_db_tables.most_common(35)))
