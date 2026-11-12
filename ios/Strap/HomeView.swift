@@ -726,13 +726,11 @@ struct HomeView: View {
         private var walkingActiveCalories: Double? {
             guard let session = detectedSession, session.kind == "walk",
                   let weight = store.settings.weightKG,
-                  let height = store.settings.heightCM,
-                  let bmr = Calories.bmrKcalPerDay(weightKg: weight, heightCm: height,
-                        age: Double(store.settings.age), sex: store.settings.sex) else { return nil }
-            // Moderate walking ~3 MET; active calories exclude the resting 1 MET.
-            // A cadence-based estimate, not a direct WHOOP energy measurement.
-            let durationMinutes = Double(max(0, session.endUnix - session.startUnix + 1)) / 60.0
-            return (3.0 - 1.0) * bmr / 1440.0 * durationMinutes
+                  weight >= 30, weight <= 300 else { return nil }
+            // A conservative 3-MET walking estimate, minus the resting 1 MET.
+            // Does not require height or sex; not a measured WHOOP value.
+            let durationHours = Double(max(0, session.endUnix - session.startUnix + 1)) / 3600.0
+            return 2.0 * weight * durationHours
         }
 
         var body: some View {
@@ -772,6 +770,35 @@ struct HomeView: View {
                         }
                     } else {
                         Hint("No timestamped band HR for this session yet. Sync historical data to populate the chart.")
+                    }
+                }
+                Panel {
+                    SectionTitle("Key statistics")
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("ACTIVE CALORIES")
+                            Text(walkingActiveCalories.map { "~\\(Int($0.rounded())) kcal" } ?? "—")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("AVG HR")
+                            Text(hrTrace.isEmpty ? "—" : "\\(Int((hrTrace.reduce(0.0) { $0 + $1.bpm } / Double(hrTrace.count)).rounded())) bpm")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("MAX HR")
+                            Text(hrTrace.map(\\.bpm).max().map { "\\(Int($0)) bpm" } ?? "—")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                    }
+                    Hint("HR from measured band seconds; calories estimated from walking duration and profile weight.")
+                    if walkingActiveCalories == nil {
+                        Hint("Set weight in Settings to calculate walking calories.")
                     }
                 }
                 Panel {
