@@ -734,7 +734,7 @@ struct HomeView: View {
                        let session = store.detectedActivities(on: JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))).first(where: { $0.startUnix == start }) {
                         let trace = store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
                         if trace.count >= 2 {
-                            let maxHR = Double(store.settings.maxHR)
+                            let maxHR = store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)
                             if maxHR > 100 {
                                 ForEach(0..<5, id: \.self) { zone in
                                     let low = Double(zone + 5) / 10.0 * maxHR
