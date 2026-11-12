@@ -56,7 +56,15 @@ enum SleepDetect {
             // trustworthy sleep interval. Archive gaps, default motion data,
             // or overly aggressive gap closing must not erase waking HR from
             // the day's cardiovascular load. Abstain rather than invent sleep.
-            guard duration <= 14 * 3600 else { continue }
+            guard duration <= 12 * 3600 else { continue }
+            // NOOP-inspired coverage gate: a long wall-clock span with a
+            // sparse history archive is not evidence of continuous sleep.
+            // GapClosing only closes short motion gaps; it cannot prove the
+            // wearer slept during missing BLE/recording time.
+            let uniqueSeconds = Set(run.map(\.unix)).count
+            guard uniqueSeconds * 10 >= duration * 7 else { continue }
+            let timestamps = Array(Set(run.map(\.unix))).sorted()
+            guard !zip(timestamps, timestamps.dropFirst()).contains(where: { $1 - $0 > 15 * 60 }) else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
@@ -144,7 +152,8 @@ enum SleepDetect {
     /// quiet period must not replace last night's staging or summary.
     static func primaryNight(_ periods: [SleepPeriod], calendar: Calendar = .current) -> SleepPeriod? {
         let overnight = periods.filter { period in
-            guard period.durationS >= 3 * 3600 else { return false }
+            guard period.durationS >= 3 * 3600,
+                  period.durationS <= 12 * 3600 else { return false }
             let midpoint = Date(timeIntervalSince1970: TimeInterval(
                 period.startUnix + period.durationS / 2
             ))
