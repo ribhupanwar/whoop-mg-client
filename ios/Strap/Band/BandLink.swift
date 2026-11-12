@@ -1071,8 +1071,13 @@ final class BandLink: NSObject, ObservableObject {
                 sleepHours: max(day.sleepHours, previous.sleepHours),
                 sleepStartUnix: day.sleepStartUnix ?? previous.sleepStartUnix,
                 sleepEndUnix: day.sleepEndUnix ?? previous.sleepEndUnix,
-                strain: max(day.strain ?? 0, previous.strain ?? 0) > 0
-                    ? max(day.strain ?? 0, previous.strain ?? 0) : nil,
+                // Strain is a recomputed score, not an additive counter.
+                // Keeping the historical maximum permanently locks in an
+                // overestimated value after HR/sleep quality improves.
+                // Prefer a fresh, valid recomputation; preserve the prior
+                // score only when this capture cannot calculate one.
+                strain: day.strain.flatMap { $0.isFinite && (0...21).contains($0) ? $0 : nil }
+                    ?? previous.strain,
                 steps: day.steps == nil && previous.steps == nil ? nil :
                     max(day.steps ?? 0, previous.steps ?? 0)
             )
