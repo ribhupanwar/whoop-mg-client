@@ -309,6 +309,37 @@ final class BandLink: NSObject, ObservableObject {
         self.sex = sex
         self.maxHR = maxHR
         self.needHours = needHours
+        // Recalculate saved metrics when settings or the app version change;
+        // otherwise persisted summaries retain pre-fix strain/sleep indefinitely.
+        recalculateRetainedMetrics()
+    }
+
+    /// Rebuild derived scores from the retained raw archive without requiring
+    /// another BLE drain. This also migrates cached values after algorithm fixes.
+    func recalculateRetainedMetrics() {
+        guard !retainedHistoricalSamples.isEmpty else { return }
+        let fresh = CaptureSummary.make(
+            samples: retainedHistoricalSamples, sex: sex, maxHR: maxHR,
+            awakeBaseline: awakeBaseline
+        )
+        summary = fresh
+        persist(fresh)
+        merge(DailyAnalysis.metrics(
+            from: retainedHistoricalSamples, sex: sex, maxHR: maxHR
+        ))
+        if !fresh.sleepPeriods.isEmpty {
+            let analysis = SleepReport.analyze(
+                samples: retainedHistoricalSamples,
+                periods: fresh.sleepPeriods,
+                needHours: needHours,
+                nights: recentNights,
+                sleepBaseline: sleepBaseline
+            )
+            lastSleepAnalysis = analysis
+            if let analysis, let data = try? JSONEncoder().encode(analysis) {
+                UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
+            }
+        }
     }
 
     // MARK: - Derived values
@@ -341,14 +372,21 @@ final class BandLink: NSObject, ObservableObject {
     var lastNightHours: Double? {
         guard let periods = summary?.sleepPeriods else { return nil }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        let seconds = periods.reduce(0) { total, period in
+        // Manual corrections define the sleep window, but awake periods must
+        // still be excluded when no correction is present.
+        let stagedOrQuiet = periods.reduce(0.0) { total, period in
             let corrected = overrides[String(period.startUnix)]
             if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-                return total + corrected[1] - corrected[0]
+                return total + Double(corrected[1] - corrected[0])
             }
-            return total + period.durationS
+            if let stage = summary?.sleepStaging,
+               summary?.sleepPeriods.last?.startUnix == period.startUnix,
+               stage.reason == nil {
+                return total + stage.asleepMinutes * 60.0
+            }
+            return total + Double(period.durationS) * min(1.0, max(0.0, period.quietFraction))
         }
-        return Double(seconds) / 3600
+        return stagedOrQuiet / 3600
     }
 
     func notifySleepCorrectionChanged() {
@@ -1068,7 +1106,9 @@ final class BandLink: NSObject, ObservableObject {
                 restingHR: day.restingHR ?? previous.restingHR,
                 lnRMSSD: day.lnRMSSD ?? previous.lnRMSSD,
                 hrvWindowSeconds: max(day.hrvWindowSeconds, previous.hrvWindowSeconds),
-                sleepHours: max(day.sleepHours, previous.sleepHours),
+                // Recomputed sleep is authoritative when a detected night is present.
+                // A max() merge would permanently preserve the older inflated value.
+                sleepHours: day.sleepStartUnix != nil ? day.sleepHours : previous.sleepHours,
                 sleepStartUnix: day.sleepStartUnix ?? previous.sleepStartUnix,
                 sleepEndUnix: day.sleepEndUnix ?? previous.sleepEndUnix,
                 // Strain is a recomputed score, not an additive counter.
