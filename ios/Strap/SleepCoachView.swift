@@ -223,7 +223,14 @@ struct SleepCoachView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.appGood)
             }
-            Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")
+            Button("TEST BAND BUZZ") {
+                alarmConfirmation = false
+                _ = store.band.testBandBuzz()
+            }
+            .buttonStyle(.bordered)
+            .disabled(demo || !store.band.status.isConnected)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            Hint("Test Band Buzz sends the WHOOP 5/MG haptic command while connected; verify the vibration on your wrist. The scheduled alarm is still an iPhone notification, NOT an offline band alarm. Keep a Clock alarm as backup.")
         }
     }
 
