@@ -49,6 +49,7 @@ struct HomeView: View {
         .sheet(item: $selectedActivity) { row in
             NavigationStack {
                 ActivityDetailView(row: row, gpsRuns: GPSRunHistory().all())
+                    .environmentObject(store)
             }
         }
         .sheet(isPresented: $showLogger) {
@@ -679,6 +680,7 @@ struct HomeView: View {
     private struct ActivityDetailView: View {
         let row: ActivityRowModel
         let gpsRuns: [GPSRunRecord]
+        @EnvironmentObject private var store: AppStore
         @Environment(\.dismiss) private var dismiss
 
         private var matchedRun: GPSRunRecord? {
@@ -687,6 +689,18 @@ struct HomeView: View {
                 abs($0.startedAt.timeIntervalSince1970 - Double(start)) < 180 &&
                 $0.distanceMeters >= 100
             }
+        }
+
+        private static func clock(_ unix: Int) -> String {
+            let f = DateFormatter(); f.timeStyle = .short
+            return f.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+        }
+
+        private var hrTrace: [(unix: Int, bpm: Double)] {
+            guard let start = row.startUnix else { return [] }
+            // End is bounded by the next hour so unrelated later HR is excluded.
+            let end = start + 3600 * 4
+            return store.band.historicalHeartRates(from: start, through: end)
         }
 
         var body: some View {
@@ -700,11 +714,39 @@ struct HomeView: View {
                 }
                 Panel {
                     SectionTitle("Heart rate")
-                    Hint("A time-aligned HR trace for this exact session is not saved in the activity record yet. The chart will appear when timestamped HR samples are available; no fabricated graph.")
+                    if let start = row.startUnix,
+                       let session = store.detectedActivities(on: JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))).first(where: { $0.startUnix == start }) {
+                        let trace = store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
+                        if trace.count >= 2 {
+                            LineChart(values: trace.map(\.bpm), color: .appAccent, height: 120,
+                                      xLabels: [Self.clock(trace[0].unix), Self.clock(trace[trace.count - 1].unix)])
+                            Hint("\(trace.count) measured HR seconds · gaps are not inferred.")
+                        } else {
+                            Hint("No timestamped HR samples retained for this activity. Sync the band to load historical measurements.")
+                        }
+                    } else {
+                        Hint("No matching measured session is available for a heart-rate chart.")
+                    }
                 }
                 Panel {
                     SectionTitle("Heart rate zones")
-                    Hint("Zone durations require timestamped HR samples for this activity. A single average HR cannot reconstruct the zones.")
+                    if let start = row.startUnix,
+                       let session = store.detectedActivities(on: JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))).first(where: { $0.startUnix == start }) {
+                        let trace = store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
+                        if trace.count >= 2 {
+                            let maxHR = Double(store.settings.maxHR)
+                            if maxHR > 100 {
+                                ForEach(0..<5, id: \.self) { zone in
+                                    let low = Double(zone + 5) / 10.0 * maxHR
+                                    let high = Double(zone + 6) / 10.0 * maxHR
+                                    let seconds = trace.filter { $0.bpm >= low && (zone == 4 ? $0.bpm <= maxHR : $0.bpm < high) }.count
+                                    HStack { Text("Zone \(zone + 1)"); Spacer(); Text("\(seconds / 60)m \(seconds % 60)s") }
+                                        .font(.system(size: 12)).foregroundStyle(Color.appFG)
+                                }
+                                Hint("Measured seconds only; gaps are excluded.")
+                            } else { Hint("Set a valid maximum HR to calculate zones.") }
+                        } else { Hint("Timestamped HR is unavailable for this session.") }
+                    } else { Hint("Zone durations require a measured activity.") }
                 }
                 Panel {
                     SectionTitle("Outdoor GPS")
