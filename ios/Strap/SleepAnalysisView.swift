@@ -186,11 +186,18 @@ struct SleepAnalysisView: View {
     // hypnogram with the asleep/awake summary. Never mix it with the
     // detector's independent quiet-fraction estimate.
     private var reconciledStaging: SleepStaging? {
-        guard correctedWindow == nil, let staging, staging.stageable else { return nil }
-        let total = staging.asleepMinutes + staging.wakeMinutes
-        guard total > 0, let period = editablePeriod else { return nil }
-        let periodMinutes = Double(period.durationS) / 60.0
-        guard abs(total - periodMinutes) <= 2.0 else { return nil }
+        guard let period = editablePeriod else { return nil }
+        let start = correctedWindow?.start ?? period.startUnix
+        let end = correctedWindow?.end ?? period.endUnix
+        // Prefer a stage calculation for the selected overnight window. The
+        // capture-wide staging can describe a different, longer sleep period.
+        if let exact = store.band.overnightStaging(startUnix: start, endUnix: end) {
+            return exact
+        }
+        guard correctedWindow == nil, let staging, staging.stageable,
+              let first = staging.segments.first, let last = staging.segments.last,
+              abs(first.startUnix - start) <= 30,
+              abs(last.endUnix - (end + 1)) <= 30 else { return nil }
         return staging
     }
 
@@ -203,10 +210,10 @@ struct SleepAnalysisView: View {
     }
 
     private var lastNightHours: Double? {
+        if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         if let correctedWindow, let period = editablePeriod {
             return Double(correctedWindow.end - correctedWindow.start) / 3600.0 * min(1, max(0, period.quietFraction))
         }
-        if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         guard let period = editablePeriod else { return nil }
         return Double(period.durationS) / 3600.0 * min(1, max(0, period.quietFraction))
     }
