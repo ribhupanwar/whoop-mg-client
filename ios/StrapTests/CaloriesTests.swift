@@ -102,6 +102,27 @@ final class CaloriesTests: XCTestCase {
         XCTAssertEqual(kcal ?? -1, 0, accuracy: 0.0001)
     }
 
+    func testConfirmedSlowBandWalkGetsLightActivityEnergy() {
+        let kcal = Calories.sessionActiveKcal(
+            meanHR: 100, steps: 314, minutes: 13,
+            restingHR: resting, maxHR: maximum,
+            weightKg: weight, heightCm: height, age: age,
+            sex: .male, walkingDetected: true
+        )
+        XCTAssertGreaterThan(kcal ?? 0, 0)
+        XCTAssertLessThan(kcal ?? 999, 40)
+    }
+
+    func testSlowStationarySessionStillHasZeroActiveEnergy() {
+        let kcal = Calories.sessionActiveKcal(
+            meanHR: 95, steps: 314, minutes: 13,
+            restingHR: resting, maxHR: maximum,
+            weightKg: weight, heightCm: height, age: age,
+            sex: .male
+        )
+        XCTAssertEqual(kcal ?? -1, 0, accuracy: 0.0001)
+    }
+
     func testSessionAbstainsWithoutBodyData() {
         XCTAssertNil(Calories.sessionActiveKcal(
             meanHR: 150, steps: 0, minutes: 10, restingHR: resting, maxHR: maximum,
