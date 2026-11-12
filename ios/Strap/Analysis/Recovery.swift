@@ -33,7 +33,7 @@ enum Recovery {
                 hrvComponent: nil, rhrComponent: nil, sleepComponent: nil
             )
         }
-        guard let lnRMSSD, let rhr else {
+        guard let lnRMSSD, lnRMSSD.isFinite, let rhr, rhr.isFinite, rhr > 0 else {
             return RecoveryResult(
                 score: nil,
                 reason: "needs HRV and resting HR from a rest/sleep window",
@@ -53,7 +53,8 @@ enum Recovery {
         var weighted = hrvComponent * hrvWeight + rhrComponent * rhrWeight
         var weight = hrvWeight + rhrWeight
         var sleepComponent: Double?
-        if let sleepHours, let sleepNeedHours, sleepNeedHours > 0 {
+        if let sleepHours, sleepHours.isFinite, sleepHours >= 0,
+           let sleepNeedHours, sleepNeedHours.isFinite, sleepNeedHours > 0 {
             let sleep = 100.0 * min(sleepHours / sleepNeedHours, 1.0)
             sleepComponent = sleep
             weighted += sleep * sleepWeight
