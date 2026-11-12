@@ -172,6 +172,17 @@ final class BandLink: NSObject, ObservableObject {
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
+
+    /// Timestamped, persisted band HR for activity and overnight charts.
+    /// These are real recorded seconds, never interpolated or fabricated.
+    func historicalHeartRates(from start: Int, through end: Int) -> [(unix: Int, bpm: Double)] {
+        guard end >= start else { return [] }
+        return retainedHistoricalSamples.compactMap { sample in
+            guard sample.unix >= start, sample.unix <= end,
+                  sample.wearing, (35...220).contains(sample.heartRate) else { return nil }
+            return (unix: sample.unix, bpm: Double(sample.heartRate))
+        }
+    }
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
     /// Never mix it into overnight recovery or bridge missing seconds.
     var liveRRQualityDiagnostic: String {
