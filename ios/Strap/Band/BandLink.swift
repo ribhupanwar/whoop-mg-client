@@ -319,6 +319,37 @@ final class BandLink: NSObject, ObservableObject {
         recalculateRetainedMetrics()
     }
 
+    /// Read-only coverage diagnostics for today's locally retained archive.
+    /// Reports observed HR coverage, not inferred exercise duration.
+    var strainDiagnostics: String {
+        let calendar = Calendar.current
+        let today = retainedHistoricalSamples.filter {
+            calendar.isDate(Date(timeIntervalSince1970: TimeInterval($0.unix)), inSameDayAs: Date())
+        }
+        let valid = today.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            .sorted { $0.unix < $1.unix }
+        let timestamps = Array(Set(valid.map(\\.unix))).sorted()
+        guard !timestamps.isEmpty else { return "No valid awake HR records in today's retained archive." }
+        let sleeps = SleepDetect.detect(retainedHistoricalSamples)
+        let awake = timestamps.filter { t in
+            !sleeps.contains { $0.startUnix <= t && t <= $0.endUnix }
+        }
+        var observedSeconds = 0
+        var capped5Seconds = 0
+        var capped30Seconds = 0
+        var gapsOver30 = 0
+        for i in awake.indices {
+            let gap = i + 1 < awake.count ? awake[i + 1] - awake[i] : 1
+            if gap > 30 { gapsOver30 += 1 }
+            observedSeconds += 1
+            capped5Seconds += gap > 0 ? min(gap, 5) : 1
+            capped30Seconds += gap > 0 && gap <= 30 ? gap : 1
+        }
+        let score = days.first { $0.dateKey == JournalStore.dayKey(for: Date()) }?.strain
+        let scoreText = score.map { String(format: "%.2f", $0) } ?? "unavailable"
+        return "Today's stored HR: \\(today.count) records; valid unique: \\(timestamps.count); awake: \\(awake.count); sleep-excluded: \\(timestamps.count - awake.count).\\nObserved: \\(observedSeconds)s; 5s-cap estimate: \\(capped5Seconds)s; 30s-cap estimate: \\(capped30Seconds)s; gaps >30s: \\(gapsOver30).\\nDaily strain: \\(scoreText). These coverage estimates are not verified continuous wear time."
+    }
+
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
     func recalculateRetainedMetrics() {
