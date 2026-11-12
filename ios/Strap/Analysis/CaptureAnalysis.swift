@@ -186,12 +186,17 @@ enum DailyAnalysis {
                     return (period: period, hrv: result.result,
                             window: result.windowSeconds, rhr: rhr)
                 }
-            let resting = sessions.compactMap(\.rhr).min()
+            // Use the median of validated sleep-session resting HR estimates.
+            // The absolute minimum is sensitive to a single anomalously low night segment.
+            let restingValues = sessions.compactMap(\.rhr).filter { $0.isFinite && $0 > 0 }
+            let resting = restingValues.isEmpty ? nil : Stats.median(restingValues)
             let weightedHRV: Double? = {
                 let values = sessions.compactMap { session -> (Double, Double)? in
                     guard let rmssd = session.hrv.rmssdMS,
                           rmssd.isFinite, rmssd > 0 else { return nil }
-                    return (rmssd, Double(session.period.durationS))
+                    guard session.window >= 300, session.hrv.nnBeats >= 20 else { return nil }
+                    // Weight by the verified quiet R-R window, not time in bed.
+                    return (rmssd, Double(session.window))
                 }
                 let weight = values.reduce(0.0) { $0 + $1.1 }
                 guard weight > 0 else { return nil }
@@ -216,7 +221,9 @@ enum DailyAnalysis {
             var strain: Double?
             if let maxHR, let resting, maxHR > resting {
                 let awakeDaySamples = daySamples.filter { sample in
-                    !dayPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+                    // Sleep assigned to the day it ends can begin yesterday.
+                    // Exclude all overlapping sleep windows, not only today's.
+                    !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
                 }
                 strain = Hrv.strainScore(
                     Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: resting, sex: sex)
