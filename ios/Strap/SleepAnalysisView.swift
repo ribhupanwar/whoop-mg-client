@@ -275,6 +275,22 @@ struct SleepAnalysisView: View {
                     xLabels: ["00:26", "07:33"]
                 )
                 .padding(.bottom, 4)
+            } else if let period = editablePeriod {
+                let trace = store.band.historicalHeartRates(from: period.startUnix, through: period.endUnix)
+                if trace.count >= 2 {
+                    let series = trace.map(\.bpm)
+                    LineChart(values: series, color: .appAccent,
+                              minY: series.min().map { floor($0) - 2 },
+                              maxY: series.max().map { ceil($0) + 2 },
+                              height: 120, yLabels: seriesLabels(series),
+                              xLabels: [clock(period.startUnix), clock(period.endUnix)])
+                    .padding(.bottom, 4)
+                    Text("Recorded overnight heart rate only · \(trace.count) measured seconds.")
+                        .font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 8)
+                } else {
+                    EmptyState(title: "Overnight HR unavailable", detail: "Sync the band to restore timestamped HR for this sleep window.")
+                }
             } else if let series = store.band.summary?.heartRateSeries, series.count >= 2 {
                 LineChart(
                     values: series,
