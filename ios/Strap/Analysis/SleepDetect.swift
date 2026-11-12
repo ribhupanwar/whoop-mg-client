@@ -56,12 +56,7 @@ enum SleepDetect {
             // trustworthy sleep interval. Archive gaps, default motion data,
             // or overly aggressive gap closing must not erase waking HR from
             // the day's cardiovascular load. Abstain rather than invent sleep.
-            guard duration <= 12 * 3600 else { continue }
-            // NOOP-inspired coverage gate: a long wall-clock span with a
-            // sparse history archive is not evidence of continuous sleep.
-            // GapClosing only closes short motion gaps; it cannot prove the
-            // wearer slept during missing BLE/recording time.
-            guard hasContinuousCoverage(run.map(\.unix), durationS: duration) else { continue }
+            guard duration <= 14 * 3600 else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
@@ -145,20 +140,11 @@ enum SleepDetect {
         return periods
     }
 
-    /// Reject sparse archives masquerading as uninterrupted sleep.
-    static func hasContinuousCoverage(_ unix: [Int], durationS: Int) -> Bool {
-        guard durationS > 0 else { return false }
-        let times = Array(Set(unix)).sorted()
-        guard times.count * 10 >= durationS * 7 else { return false }
-        return !zip(times, times.dropFirst()).contains { $1 - $0 > 15 * 60 }
-    }
-
     /// Prefer the most recent plausible overnight session. A late daytime
     /// quiet period must not replace last night's staging or summary.
     static func primaryNight(_ periods: [SleepPeriod], calendar: Calendar = .current) -> SleepPeriod? {
         let overnight = periods.filter { period in
-            guard period.durationS >= 3 * 3600,
-                  period.durationS <= 12 * 3600 else { return false }
+            guard period.durationS >= 3 * 3600 else { return false }
             let midpoint = Date(timeIntervalSince1970: TimeInterval(
                 period.startUnix + period.durationS / 2
             ))
