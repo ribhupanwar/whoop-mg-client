@@ -363,6 +363,14 @@ final class BandLink: NSObject, ObservableObject {
             .sorted { $0.unix < $1.unix }
         let times = Array(Set(valid.map(\.unix))).sorted()
         let sleeps = SleepDetect.detect(retainedHistoricalSamples)
+        let sleepWindows = sleeps.map { period -> String in
+            let start = Date(timeIntervalSince1970: TimeInterval(period.startUnix))
+            let end = Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE HH:mm"
+            return formatter.string(from: start) + "–" + formatter.string(from: end)
+                + " (" + String(format: "%.1fh", period.hours) + ")"
+        }.joined(separator: "; ")
         let awake = times.filter { t in
             !sleeps.contains { $0.startUnix <= t && t <= $0.endUnix }
         }
@@ -381,6 +389,7 @@ final class BandLink: NSObject, ObservableObject {
             + " · awake: " + String(awake.count) + " · sleep excluded: " + String(times.count - awake.count)
             + " · >30s gaps: " + String(gapCount) + " · 5s coverage: " + String(seconds5)
             + "s · 30s coverage: " + String(seconds30) + "s · quality: " + quality
+            + ". Sleep windows: " + (sleepWindows.isEmpty ? "none" : sleepWindows)
             + ". Estimates are not verified continuous wear time."
     }
 
