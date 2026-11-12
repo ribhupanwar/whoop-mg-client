@@ -264,8 +264,9 @@ struct HomeView: View {
     private var strain: Double? {
         // Keep the Home ring consistent with the daily Strain History bar.
         let today = JournalStore.dayKey(for: Date())
+        // Do not label a capture-scoped estimate as measured daily strain.
+        // The Home ring and Strain History must share the same dated source.
         return store.band.days.first(where: { $0.dateKey == today })?.strain
-            ?? store.lastCapture?.strain
     }
 
     private var batteryText: String {
