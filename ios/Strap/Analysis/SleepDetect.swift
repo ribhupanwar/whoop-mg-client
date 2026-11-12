@@ -137,7 +137,54 @@ enum SleepDetect {
                 )
             )
         }
+        // A real night can contain repeated motion/awake interruptions, so the
+        // quiet-run detector may fragment it into sub-hour pieces and report
+        // nothing. Rescue only when the band independently reports sustained
+        // sleep state, never from motionless HR alone.
+        if primaryNight(periods) == nil,
+           let confirmed = confirmedBandNight(ordered) {
+            periods.append(confirmed)
+        }
         return periods
+    }
+
+    /// Conservative fallback for fragmented nights with explicit band sleep
+    /// evidence. It cannot invent sleep when the band state is absent.
+    static func confirmedBandNight(_ samples: [V18Sample], calendar: Calendar = .current) -> SleepPeriod? {
+        let sleepRows = samples.filter { sample in
+            guard sample.wearing, (35...220).contains(sample.heartRate),
+                  sample.sleepState == 2 else { return false }
+            let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: TimeInterval(sample.unix)))
+            return hour >= 20 || hour < 11
+        }.sorted { $0.unix < $1.unix }
+        guard !sleepRows.isEmpty else { return nil }
+        // Group evidence by night, rather than accidentally joining two dates.
+        var groups: [[V18Sample]] = []
+        var group: [V18Sample] = []
+        for sample in sleepRows {
+            if let last = group.last, sample.unix - last.unix > 2 * 3600 {
+                groups.append(group)
+                group = []
+            }
+            group.append(sample)
+        }
+        if !group.isEmpty { groups.append(group) }
+        for rows in groups.reversed() {
+            guard let first = rows.first, let last = rows.last else { continue }
+            let duration = last.unix - first.unix + 1
+            let distinctSleepSeconds = Set(rows.map(\\.unix)).count
+            guard duration >= 3 * 3600, duration <= 12 * 3600,
+                  distinctSleepSeconds >= 60 * 60 else { continue }
+            let window = samples.filter { $0.unix >= first.unix && $0.unix <= last.unix }
+            let observed = Set(window.map(\\.unix)).count
+            let worn = Set(window.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\\.unix)).count
+            guard observed >= duration / 2, worn * 5 >= observed * 4 else { continue }
+            let hours = rows.map { Double($0.heartRate) }
+            return SleepPeriod(startUnix: first.unix, endUnix: last.unix,
+                               quietFraction: Double(distinctSleepSeconds) / Double(max(1, observed)),
+                               meanHR: Stats.mean(hours), wakeEvents: 0)
+        }
+        return nil
     }
 
     /// Prefer the most recent plausible overnight session. A late daytime
