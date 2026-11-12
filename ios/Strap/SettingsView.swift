@@ -480,6 +480,18 @@ struct SettingsView: View {
     private var healthPanel: some View {
         Panel {
             SectionTitle("Apple Health")
+            Button {
+                store.setHealthKit(true)
+            } label: {
+                Label("Connect Apple Health", systemImage: "heart.text.square")
+                    .font(.system(size: 14, weight: .semibold))
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.vertical, 10)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(.appAccent)
+            .disabled(store.health.state == .ready)
+            .accessibilityHint("Request permission to export measured workouts to Apple Health")
             Toggle("Export measured sessions", isOn: Binding(
                 get: { store.settings.healthKitEnabled },
                 set: { store.setHealthKit($0) }
