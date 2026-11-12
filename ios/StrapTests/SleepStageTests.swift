@@ -68,6 +68,7 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
+
     func testQuietNightTilesTheWindow() throws {
         let (samples, period) = makeNight()
         let staging = SleepStager.stage(samples: samples, period: period)

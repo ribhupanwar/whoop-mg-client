@@ -183,7 +183,8 @@ enum Calories {
         weightKg: Double,
         heightCm: Double,
         age: Double,
-        sex: Sex
+        sex: Sex,
+        walkingDetected: Bool = false
     ) -> Double? {
         guard minutes > 0, minutes.isFinite,
               let bmr = bmrKcalPerDay(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex),
@@ -196,10 +197,16 @@ enum Calories {
             return max(0, perMinute - basalPerMinute) * minutes
         }
         let cadence = Double(max(0, steps)) / minutes
-        guard cadence >= walkingCadenceFloor else { return 0 }
-        // Tudor-Locke 2019: 100/110/120/130 spm ≈ 3/4/5/6 MET, linear between,
-        // clamped at the fitted ends.
-        let met = min(6, 3 + 0.1 * (cadence - walkingCadenceFloor))
+        // Automatic gait detection independently confirms walking even when
+        // the step counter undercounts. Very slow walking is light activity:
+        // use a conservative 1.5 MET rather than showing a false zero.
+        // Do not apply this fallback to stationary or manually timed sessions.
+        guard cadence >= walkingCadenceFloor || walkingDetected else { return 0 }
+        // Tudor-Locke moderate anchors: 100/110/120/130 spm ≈ 3/4/5/6 MET.
+        // Below 100 spm, confirmed slow walking uses a conservative 1.5–3 MET.
+        let met = cadence >= walkingCadenceFloor
+            ? min(6, 3 + 0.1 * (cadence - walkingCadenceFloor))
+            : 1.5 + 1.5 * min(1, max(0, cadence / walkingCadenceFloor))
         return max(0, met - 1) * basalPerMinute * minutes
     }
 }

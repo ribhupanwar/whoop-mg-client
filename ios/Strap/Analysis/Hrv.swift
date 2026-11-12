@@ -343,6 +343,42 @@ enum Hrv {
         return total
     }
 
+    /// Independent Edwards five-zone comparison for diagnosing low Banister scores.
+    /// Not used as the production headline until validated against observed days.
+    static func edwardsTrimp(
+        _ samples: [V18Sample], maxHR: Double, restingHR: Double
+    ) -> Double? {
+        guard maxHR > restingHR else { return nil }
+        let valid = samples.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            .sorted { $0.unix < $1.unix }
+        guard !valid.isEmpty else { return nil }
+        var unique: [V18Sample] = []
+        for sample in valid where unique.last?.unix != sample.unix { unique.append(sample) }
+        var total = 0.0
+        for i in unique.indices {
+            let ratio = hrReserveRatio(Double(unique[i].heartRate), resting: restingHR, maximum: maxHR) ?? 0
+            let zone: Double
+            switch ratio {
+            case 0.9...: zone = 5
+            case 0.8..<0.9: zone = 4
+            case 0.7..<0.8: zone = 3
+            case 0.6..<0.7: zone = 2
+            case 0.5..<0.6: zone = 1
+            default: zone = 0
+            }
+            let gap = i + 1 < unique.count ? unique[i + 1].unix - unique[i].unix : 1
+            let seconds = gap > 0 && gap <= 30 ? gap : 1
+            total += zone * Double(seconds) / 60.0
+        }
+        return total
+    }
+
+    /// NOOP-style Edwards mapping, for comparison only (not WHOOP proprietary strain).
+    static func edwardsStrain(_ trimp: Double?) -> Double? {
+        guard let trimp, trimp.isFinite, trimp >= 0 else { return nil }
+        return min(21, 21 * log1p(trimp) / log(7201))
+    }
+
     /// Map TRIMP onto our own local 0-21 scale. Not WHOOP strain.
     static func strainScore(_ trimp: Double?) -> Double? {
         guard let trimp, trimp >= 0 else { return nil }

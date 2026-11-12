@@ -325,7 +325,8 @@ final class AppStore: ObservableObject {
             weightKg: weight,
             heightCm: height,
             age: Double(settings.age),
-            sex: settings.sex
+            sex: settings.sex,
+            walkingDetected: session.kind == "walk"
         )
     }
 

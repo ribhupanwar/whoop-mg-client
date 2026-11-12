@@ -1,9 +1,14 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Utility and account hub, not another copy of Home or Health metrics.
 /// Inspired by the navigation structure of WHOOP and offline-first clients.
 struct MoreView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var dstaExportURL: URL?
+    @State private var dstaExportError: String?
+    @State private var showDSTARestore = false
+    @State private var dstaRestoreStatus: String?
 
     var body: some View {
         Screen {
@@ -75,11 +80,49 @@ struct MoreView: View {
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
+                    Button {
+                        do {
+                            dstaExportURL = try store.band.makeDSTAExport()
+                            dstaExportError = nil
+                        } catch {
+                            dstaExportError = error.localizedDescription
+                        }
+                    } label: {
+                        moreRow("Export DSTA research data", icon: "square.and.arrow.up")
+                    }
+                    .buttonStyle(.plain)
+                    Button {
+                        showDSTARestore = true
+                    } label: {
+                        moreRow("Restore DSTA backup", icon: "square.and.arrow.down")
+                    }
+                    .buttonStyle(.plain)
+                    if let dstaRestoreStatus { Hint(dstaRestoreStatus) }
+                    if let dstaExportURL {
+                        ShareLink(item: dstaExportURL) {
+                            Label("Share DSTA JSON export", systemImage: "square.and.arrow.up")
+                        }
+                        .font(.system(size: 12))
+                    }
+                    if let dstaExportError {
+                        Hint(dstaExportError)
+                    }
                     NavigationLink(value: Route.settings) {
                         moreRow("Health permissions & app information", icon: "lock.shield")
                     }
                     .buttonStyle(.plain)
                 }
+            }
+        }
+        .fileImporter(isPresented: $showDSTARestore, allowedContentTypes: [.json]) { result in
+            do {
+                let url = try result.get()
+                let secured = url.startAccessingSecurityScopedResource()
+                defer { if secured { url.stopAccessingSecurityScopedResource() } }
+                let added = try store.band.restoreDSTAExport(from: url)
+                dstaRestoreStatus = "Backup restored. \\(added) additional historical records. Sync band to refresh current readings."
+            } catch {
+                dstaRestoreStatus = "Restore failed: \\(error.localizedDescription)"
             }
         }
         .navigationTitle("More")

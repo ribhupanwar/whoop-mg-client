@@ -52,14 +52,22 @@ enum SleepDetect {
             let run = Array(ordered[start..<end])
             let duration = run[run.count - 1].unix - run[0].unix + 1
             guard duration >= minSleepS else { continue }
+            // A single sleep candidate spanning most of a day is not a
+            // trustworthy sleep interval. Archive gaps, default motion data,
+            // or overly aggressive gap closing must not erase waking HR from
+            // the day's cardiovascular load. Abstain rather than invent sleep.
+            guard duration <= 14 * 3600 else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
             // sessions retain the original minimum for fragmented sleep.
-            let startHour = Calendar.current.component(
-                .hour, from: Date(timeIntervalSince1970: TimeInterval(run[0].unix))
+            // Judge the middle of the candidate, not its first second:
+            // a long daytime rest can start before the old 08:00 boundary.
+            let midpointUnix = run[0].unix + duration / 2
+            let midpointHour = Calendar.current.component(
+                .hour, from: Date(timeIntervalSince1970: TimeInterval(midpointUnix))
             )
-            let daytime = (8..<22).contains(startHour)
+            let daytime = (11..<20).contains(midpointHour)
             if daytime && duration < max(minSleepS, 90 * 60) { continue }
 
             let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
@@ -88,6 +96,19 @@ enum SleepDetect {
             let upRows = stateRows.filter { $0.sleepState == 3 }.count
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
             let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
+            // A long, quiet afternoon is not automatically an overnight
+            // sleep. Require affirmative band sleep evidence for daytime
+            // candidates >= 3 h; otherwise abstain instead of suppressing
+            // hours of waking HR from Strain. Short naps retain the separate
+            // duration and cardiac-dip gates above.
+            if daytime && duration >= 3 * 3600 {
+                let observedSleepSeconds = Set(run.filter { $0.sleepState == 2 }.map(\.unix)).count
+                let observedStateSeconds = Set(stateRows.map(\.unix)).count
+                guard observedStateSeconds >= 300,
+                      observedSleepSeconds >= 300,
+                      observedSleepSeconds * 5 >= observedStateSeconds else { continue }
+            }
+
             // If the signal is a constant zero/default, abstain entirely.
             // A reliable veto needs at least five minutes of actual state
             // observations, with "up" occupying most of the period and no
@@ -116,7 +137,68 @@ enum SleepDetect {
                 )
             )
         }
+        // A real night can contain repeated motion/awake interruptions, so the
+        // quiet-run detector may fragment it into sub-hour pieces and report
+        // nothing. Rescue only when the band independently reports sustained
+        // sleep state, never from motionless HR alone.
+        if primaryNight(periods) == nil,
+           let confirmed = confirmedBandNight(ordered) {
+            periods.append(confirmed)
+        }
         return periods
+    }
+
+    /// Conservative fallback for fragmented nights with explicit band sleep
+    /// evidence. It cannot invent sleep when the band state is absent.
+    static func confirmedBandNight(_ samples: [V18Sample], calendar: Calendar = .current) -> SleepPeriod? {
+        let sleepRows = samples.filter { sample in
+            guard sample.wearing, (35...220).contains(sample.heartRate),
+                  sample.sleepState == 2 else { return false }
+            let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: TimeInterval(sample.unix)))
+            return hour >= 20 || hour < 11
+        }.sorted { $0.unix < $1.unix }
+        guard !sleepRows.isEmpty else { return nil }
+        // Group evidence by night, rather than accidentally joining two dates.
+        var groups: [[V18Sample]] = []
+        var group: [V18Sample] = []
+        for sample in sleepRows {
+            if let last = group.last, sample.unix - last.unix > 2 * 3600 {
+                groups.append(group)
+                group = []
+            }
+            group.append(sample)
+        }
+        if !group.isEmpty { groups.append(group) }
+        for rows in groups.reversed() {
+            guard let first = rows.first, let last = rows.last else { continue }
+            let duration = last.unix - first.unix + 1
+            let distinctSleepSeconds = Set(rows.map(\.unix)).count
+            guard duration >= 3 * 3600, duration <= 12 * 3600,
+                  distinctSleepSeconds >= 60 * 60 else { continue }
+            let window = samples.filter { $0.unix >= first.unix && $0.unix <= last.unix }
+            let observed = Set(window.map(\.unix)).count
+            let worn = Set(window.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
+            guard observed >= duration / 2, worn * 5 >= observed * 4 else { continue }
+            let hours = rows.map { Double($0.heartRate) }
+            return SleepPeriod(startUnix: first.unix, endUnix: last.unix,
+                               quietFraction: Double(distinctSleepSeconds) / Double(max(1, observed)),
+                               meanHR: Stats.mean(hours), wakeEvents: 0)
+        }
+        return nil
+    }
+
+    /// Prefer the most recent plausible overnight session. A late daytime
+    /// quiet period must not replace last night's staging or summary.
+    static func primaryNight(_ periods: [SleepPeriod], calendar: Calendar = .current) -> SleepPeriod? {
+        let overnight = periods.filter { period in
+            guard period.durationS >= 3 * 3600 else { return false }
+            let midpoint = Date(timeIntervalSince1970: TimeInterval(
+                period.startUnix + period.durationS / 2
+            ))
+            let hour = calendar.component(.hour, from: midpoint)
+            return hour >= 20 || hour < 11
+        }
+        return overnight.max { $0.endUnix < $1.endUnix }
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {

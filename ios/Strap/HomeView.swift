@@ -9,6 +9,7 @@ struct HomeView: View {
 
     @State private var dayOffset = 0
     @State private var showLogger = false
+    @State private var selectedActivity: ActivityRowModel?
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
@@ -45,6 +46,12 @@ struct HomeView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $selectedActivity) { row in
+            NavigationStack {
+                ActivityDetailView(row: row, gpsRuns: GPSRunHistory().all())
+                    .environmentObject(store)
+            }
+        }
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
         }
@@ -519,7 +526,10 @@ struct HomeView: View {
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            Button { selectedActivity = row } label: {
+                                activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            }
+                            .buttonStyle(.plain)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -568,7 +578,7 @@ struct HomeView: View {
 
     // MARK: Activity rows
 
-    private struct ActivityRowModel: Identifiable {
+    struct ActivityRowModel: Identifiable {
         let id: String
         let icon: String
         let name: String
@@ -667,6 +677,213 @@ struct HomeView: View {
         .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
     }
 
+    private struct ActivityDetailView: View {
+        let row: ActivityRowModel
+        let gpsRuns: [GPSRunRecord]
+        @EnvironmentObject private var store: AppStore
+        @Environment(\.dismiss) private var dismiss
+
+        private var matchedRun: GPSRunRecord? {
+            guard let start = row.startUnix else { return nil }
+            return gpsRuns.first {
+                abs($0.startedAt.timeIntervalSince1970 - Double(start)) < 180 &&
+                $0.distanceMeters >= 100
+            }
+        }
+
+        private static func clock(_ unix: Int) -> String {
+            let f = DateFormatter(); f.timeStyle = .short
+            return f.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+        }
+
+        private var detectedSession: ActivitySession? {
+            guard let start = row.startUnix else { return nil }
+            let day = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)))
+            return store.detectedActivities(on: day).first { $0.startUnix == start }
+        }
+
+        private var hrTrace: [(unix: Int, bpm: Double)] {
+            guard let session = detectedSession else { return [] }
+            return store.band.historicalHeartRates(from: session.startUnix, through: session.endUnix)
+        }
+
+        private var maxHeartRate: Double {
+            Double(store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age))
+        }
+
+        // WHOOP-like six-zone boundaries, based on configured max HR.
+        // These are estimates: WHOOP may use a different personalised max HR.
+        private func zoneBounds(_ zone: Int) -> (low: Double, high: Double) {
+            let cutoffs = [0.0, 0.60, 0.73, 0.79, 0.86, 0.92, Double.infinity]
+            return (cutoffs[zone] * maxHeartRate, cutoffs[zone + 1] * maxHeartRate)
+        }
+
+        private func zoneSeconds(_ zone: Int) -> Int {
+            let bounds = zoneBounds(zone)
+            return hrTrace.filter { $0.bpm >= bounds.low && $0.bpm < bounds.high }.count
+        }
+
+        private var walkingActiveCalories: Double? {
+            guard let session = detectedSession, session.kind == "walk",
+                  let weight = store.settings.weightKG,
+                  weight >= 30, weight <= 300 else { return nil }
+            // A conservative 3-MET walking estimate, minus the resting 1 MET.
+            // Does not require height or sex; not a measured WHOOP value.
+            let durationHours = Double(max(0, session.endUnix - session.startUnix + 1)) / 3600.0
+            return 2.0 * weight * durationHours
+        }
+
+        var body: some View {
+            Screen {
+                Panel {
+                    SectionTitle(row.name)
+                    Text(row.detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.appFG)
+                    Hint("Automatically detected activity · band measurements")
+                }
+                Panel {
+                    SectionTitle("Heart rate")
+                    if hrTrace.count >= 2 {
+                        let values = hrTrace.map(\.bpm)
+                        LineChart(values: values, color: .appAccent,
+                                  minY: values.min().map { floor($0) - 2 },
+                                  maxY: values.max().map { ceil($0) + 2 },
+                                  height: 180,
+                                  yLabels: [String(Int(ceil(values.max() ?? 0))),
+                                            String(Int(((values.max() ?? 0) + (values.min() ?? 0)) / 2)),
+                                            String(Int(floor(values.min() ?? 0)))],
+                                  xLabels: [Self.clock(hrTrace[0].unix), Self.clock(hrTrace[hrTrace.count - 1].unix)])
+                        HStack {
+                            Text("AVG HR  \(Int((values.reduce(0, +) / Double(values.count)).rounded())) bpm")
+                            Spacer()
+                            Text("MAX HR  \(Int(values.max() ?? 0)) bpm")
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                        let sessionDuration = max(1, (detectedSession?.durationS ?? hrTrace.count))
+                        let coverage = 100 * hrTrace.count / sessionDuration
+                        Hint("\(hrTrace.count) measured HR seconds of \(sessionDuration)s (\(min(100, coverage))% coverage). Missing intervals are not estimated.")
+                        if let session = detectedSession {
+                            Hint(store.band.historicalHRWindowDiagnostic(from: session.startUnix, through: session.endUnix))
+                        }
+                        if let first = hrTrace.first, let last = hrTrace.last {
+                            Hint("HR source: WHOOP historical v18 · \(Self.clock(first.unix))–\(Self.clock(last.unix)) · raw min \(Int(values.min() ?? 0)) / max \(Int(values.max() ?? 0)) bpm")
+                        }
+                        if let walkingActiveCalories {
+                            Text("ACTIVE CALORIES  ~\(Int(walkingActiveCalories.rounded())) kcal")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.appFG)
+                            Hint("Walking energy estimate from duration and confirmed body profile; not a WHOOP calorie measurement.")
+                        }
+                    } else {
+                        Hint("No timestamped band HR for this session yet. Sync historical data to populate the chart.")
+                    }
+                }
+                Panel {
+                    SectionTitle("Key statistics")
+                    HStack(spacing: 10) {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("ACTIVE CALORIES")
+                            Text(walkingActiveCalories.map { "~\(Int($0.rounded())) kcal" } ?? "—")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("AVG HR")
+                            Text(hrTrace.isEmpty ? "—" : "\(Int((hrTrace.reduce(0.0) { $0 + $1.bpm } / Double(hrTrace.count)).rounded())) bpm")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        Spacer()
+                        VStack(alignment: .leading, spacing: 5) {
+                            Hint("MAX HR")
+                            Text(hrTrace.map(\.bpm).max().map { "\(Int($0)) bpm" } ?? "—")
+                                .font(.system(size: 19, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                    }
+                    Hint("HR from measured band seconds; calories estimated from walking duration and profile weight.")
+                    if walkingActiveCalories == nil {
+                        Hint("Set weight in Settings to calculate walking calories.")
+                    }
+                }
+                Panel {
+                    SectionTitle("Heart rate zones")
+                    if hrTrace.count >= 2, maxHeartRate > 100 {
+                        let total = hrTrace.count
+                        ForEach((0...5).reversed(), id: \.self) { zone in
+                            let seconds = zoneSeconds(zone)
+                            let bounds = zoneBounds(zone)
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack {
+                                    Text("ZONE \(zone)")
+                                        .fontWeight(.semibold)
+                                    Text(zone == 0 ? "<\(Int(bounds.high)) BPM" :
+                                        zone == 5 ? "\(Int(bounds.low))+ BPM" :
+                                        "\(Int(bounds.low))–\(Int(bounds.high - 1)) BPM")
+                                        .foregroundStyle(Color.appMuted)
+                                    Text("\(Int((100.0 * Double(seconds) / Double(total)).rounded()))%")
+                                        .foregroundStyle(Color.appAccent)
+                                    Spacer()
+                                    Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                                }
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.appFG)
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(Color.appRaised)
+                                        Capsule().fill(Color.appAccent)
+                                            .frame(width: geo.size.width * CGFloat(seconds) / CGFloat(total))
+                                    }
+                                }
+                                .frame(height: 6)
+                            }
+                            .padding(.vertical, 6)
+                        }
+                        Hint("WHOOP-like thresholds use your configured maximum HR. WHOOP may have a different personalised max HR; percentages count measured seconds only.")
+                    } else {
+                        Hint("Zone durations need timestamped band HR and a valid maximum HR.")
+                    }
+                }
+                Panel {
+                    SectionTitle("Outdoor GPS")
+                    if let run = matchedRun {
+                        Text(String(format: "%.2f km", run.distanceMeters / 1000))
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(Color.appFG)
+                        if let pace = run.paceSecondsPerKM {
+                            Text(String(format: "Average pace %d:%02d /km", Int(pace) / 60, Int(pace) % 60))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        ForEach(Array(run.splitSeconds.enumerated()), id: \.offset) { index, seconds in
+                            HStack {
+                                Text("KM \(index + 1)")
+                                Spacer()
+                                Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                            }
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.appFG)
+                        }
+                        if run.route.count >= 2 {
+                            Hint("GPS route saved · open GPS Run history to view the route map.")
+                        }
+                    } else {
+                        Hint("No matching GPS recording. Band-only walks do not contain a GPS route. Start an outdoor GPS session on the iPhone to record kilometres and splits.")
+                    }
+                }
+            }
+            .navigationTitle("Activity details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
+    }
+
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
@@ -745,7 +962,7 @@ struct HomeView: View {
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+        store.lastCapture.flatMap { SleepDetect.primaryNight($0.sleepPeriods) }
     }
 
     private var sleepTimesText: String {

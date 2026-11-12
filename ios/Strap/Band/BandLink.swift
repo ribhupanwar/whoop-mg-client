@@ -94,6 +94,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRAccepted = 0
     @Published private(set) var historyRRRejected = 0
     @Published private(set) var historyUndecodableFrames = 0
+    @Published private(set) var historyInvalidTimestampRecords = 0
     @Published private(set) var historyVersionCounts: [Int: Int] = [:]
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
@@ -171,6 +172,46 @@ final class BandLink: NSObject, ObservableObject {
     private var captureWriter: CaptureWriter?
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
+
+    /// Timestamped, persisted band HR for activity and overnight charts.
+    /// These are real recorded seconds, never interpolated or fabricated.
+    func historicalHeartRates(from start: Int, through end: Int) -> [(unix: Int, bpm: Double)] {
+        guard end >= start else { return [] }
+        // Historical retransmissions may contain several records for one second.
+        // Aggregate by timestamp so duplicated packets cannot bias AVG HR,
+        // MAX HR, zone durations or the plotted time series.
+        var bySecond: [Int: (sum: Double, count: Int)] = [:]
+        for sample in retainedHistoricalSamples {
+            guard sample.unix >= start, sample.unix <= end,
+                  sample.wearing, (35...220).contains(sample.heartRate) else { continue }
+            let previous = bySecond[sample.unix] ?? (sum: 0, count: 0)
+            bySecond[sample.unix] = (sum: previous.sum + Double(sample.heartRate),
+                                     count: previous.count + 1)
+        }
+        return bySecond.keys.sorted().compactMap { second in
+            guard let value = bySecond[second], value.count > 0 else { return nil }
+            return (unix: second, bpm: value.sum / Double(value.count))
+        }
+    }
+    /// Inspect the raw window before interpreting differences from WHOOP's
+    /// independently processed HR trace. This never changes HR values.
+    func historicalHRWindowDiagnostic(from start: Int, through end: Int) -> String {
+        guard end >= start else { return "Invalid activity window" }
+        let trace = historicalHeartRates(from: start, through: end)
+        guard let first = trace.first, let last = trace.last else {
+            return "No historical HR inside activity window; sync history before comparing."
+        }
+        let expected = max(1, end - start + 1)
+        let missingStart = max(0, first.unix - start)
+        let missingEnd = max(0, end - last.unix)
+        let missingInside = max(0, last.unix - first.unix + 1 - trace.count)
+        let rawCount = retainedHistoricalSamples.filter {
+            $0.unix >= start && $0.unix <= end && $0.wearing && (35...220).contains($0.heartRate)
+        }.count
+        let duplicateCount = max(0, rawCount - trace.count)
+        return "HR window: \\(trace.count)/\\(expected)s; missing start \\(missingStart)s, inside \\(missingInside)s, end \\(missingEnd)s; duplicate records \\(duplicateCount)."
+    }
+
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
     /// Never mix it into overnight recovery or bridge missing seconds.
     var liveRRQualityDiagnostic: String {
@@ -354,6 +395,65 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    /// Count actual HR records and expose coverage assumptions without filling missing data.
+    var strainCoverageDiagnostics: String {
+        let today = retainedHistoricalSamples.filter {
+            Calendar.current.isDate(Date(timeIntervalSince1970: TimeInterval($0.unix)), inSameDayAs: Date())
+        }
+        let valid = today.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            .sorted { $0.unix < $1.unix }
+        let times = Array(Set(valid.map(\.unix))).sorted()
+        let sleeps = SleepDetect.detect(retainedHistoricalSamples)
+        let sleepWindows = sleeps.map { period -> String in
+            let start = Date(timeIntervalSince1970: TimeInterval(period.startUnix))
+            let end = Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+            let formatter = DateFormatter()
+            formatter.dateFormat = "EEE HH:mm"
+            return formatter.string(from: start) + "–" + formatter.string(from: end)
+                + " (" + String(format: "%.1fh", period.hours) + ")"
+        }.joined(separator: "; ")
+        let awake = times.filter { t in
+            !sleeps.contains { $0.startUnix <= t && t <= $0.endUnix }
+        }
+        var gapCount = 0
+        var seconds30 = 0
+        var seconds5 = 0
+        for i in awake.indices {
+            let gap = i + 1 < awake.count ? awake[i + 1] - awake[i] : 1
+            if gap > 30 { gapCount += 1 }
+            seconds30 += gap > 0 && gap <= 30 ? gap : 1
+            seconds5 += gap > 0 ? min(gap, 5) : 1
+        }
+        let coverage = awake.count > 0 ? Double(awake.count) / Double(max(1, seconds30)) : 0
+        let quality = awake.isEmpty ? "INSUFFICIENT DATA" : (coverage < 0.5 || gapCount > 0 ? "SPARSE / REVIEW" : "OBSERVED")
+        return "HR records: " + String(today.count) + " · unique: " + String(times.count)
+            + " · awake: " + String(awake.count) + " · sleep excluded: " + String(times.count - awake.count)
+            + " · >30s gaps: " + String(gapCount) + " · 5s coverage: " + String(seconds5)
+            + "s · 30s coverage: " + String(seconds30) + "s · quality: " + quality
+            + ". Sleep windows: " + (sleepWindows.isEmpty ? "none" : sleepWindows)
+            + ". Estimates are not verified continuous wear time."
+    }
+
+    /// Side-by-side, read-only strain model comparison from today's raw archive.
+    var strainModelComparison: String {
+        let today = retainedHistoricalSamples.filter {
+            Calendar.current.isDate(Date(timeIntervalSince1970: TimeInterval($0.unix)), inSameDayAs: Date())
+        }
+        let periods = SleepDetect.detect(retainedHistoricalSamples)
+        let awake = today.filter { sample in
+            !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+        }
+        guard let maxHR, let resting = summary?.restingHeartRate, maxHR > resting else {
+            return "Comparison unavailable: measured resting HR and max HR are required."
+        }
+        let edwards = Hrv.edwardsStrain(Hrv.edwardsTrimp(awake, maxHR: maxHR, restingHR: resting))
+        let banister = Hrv.strainScore(Hrv.trimp(awake, maxHR: maxHR, restingHR: resting, sex: sex))
+        let format: (Double?) -> String = { $0.map { String(format: "%.2f", $0) } ?? "—" }
+        return "Banister: " + format(banister) + " · Edwards: " + format(edwards)
+            + " · Awake HR records: " + String(awake.count)
+            + " (comparison only; not WHOOP calibration)"
+    }
+
     // MARK: - Derived values
 
     var isConnected: Bool { peripheral?.state == .connected }
@@ -381,6 +481,89 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Corrected sleep durations affect Recovery immediately; original
     /// physiological samples remain unchanged for HRV/RHR provenance.
+    private struct DSTAExportBundle: Codable {
+        let format: String
+        let version: Int
+        let exportedAt: Date
+        let historicalSamples: [V18Sample]
+        let liveRRSamples: [LiveSample]
+        let captureSummary: CaptureSummary?
+    }
+
+    /// Portable research export for the DSTA/PulseForge analysis project.
+    /// Contains the original captured records; no calculated HRV or recovery
+    /// values are substituted for raw R-R observations.
+    func makeDSTAExport() throws -> URL {
+        guard !retainedHistoricalSamples.isEmpty || !archivedLiveRRSamples.isEmpty else {
+            throw NSError(domain: "Strap.DSTAExport", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Sync band history or record live R-R data before exporting."])
+        }
+        let payload = DSTAExportBundle(format: "strap-dsta-research-export", version: 1,
+                                   exportedAt: Date(), historicalSamples: retainedHistoricalSamples,
+                                   liveRRSamples: archivedLiveRRSamples, captureSummary: summary)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("strap-dsta-export-\\(Int(Date().timeIntervalSince1970)).json")
+        try encoder.encode(payload).write(to: url, options: .atomic)
+        return url
+    }
+
+    /// Restore a previously shared Strap DSTA export after reinstall.
+    /// Reject unsupported formats and merge without discarding newer records.
+    func restoreDSTAExport(from url: URL) throws -> Int {
+        let data = try Data(contentsOf: url)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let payload = try decoder.decode(DSTAExportBundle.self, from: data)
+        guard payload.format == "strap-dsta-research-export", payload.version == 1 else {
+            throw NSError(domain: "Strap.DSTAExport", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Unsupported DSTA export format."])
+        }
+        let before = retainedHistoricalSamples.count
+        if !payload.historicalSamples.isEmpty {
+            guard mergeHistoricalArchive(payload.historicalSamples) != nil else {
+                throw NSError(domain: "Strap.DSTAExport", code: 3,
+                              userInfo: [NSLocalizedDescriptionKey: "Could not save restored history."])
+            }
+        }
+        var bySecond: [Int: LiveSample] = [:]
+        for sample in archivedLiveRRSamples {
+            if (bySecond[sample.unix]?.rrIntervalsMS.count ?? -1) < sample.rrIntervalsMS.count {
+                bySecond[sample.unix] = sample
+            }
+        }
+        for sample in payload.liveRRSamples {
+            if (bySecond[sample.unix]?.rrIntervalsMS.count ?? -1) < sample.rrIntervalsMS.count {
+                bySecond[sample.unix] = sample
+            }
+        }
+        archivedLiveRRSamples = bySecond.values.sorted { $0.unix < $1.unix }
+        UserDefaults.standard.set(try JSONEncoder().encode(archivedLiveRRSamples), forKey: Keys.liveRRArchive)
+        if let restored = payload.captureSummary, summary == nil {
+            summary = restored
+            UserDefaults.standard.set(try JSONEncoder().encode(restored), forKey: Keys.summary)
+        }
+        lastHistoryRecordCount = retainedHistoricalSamples.count
+        lastMessage = "DSTA backup restored: \\(retainedHistoricalSamples.count - before) additional historical records."
+        objectWillChange.send()
+        return retainedHistoricalSamples.count - before
+    }
+
+    /// Stage the exact selected overnight window from retained sensor records.
+    /// Never reuse a hypnogram scored against a different capture window.
+    func overnightStaging(startUnix: Int, endUnix: Int) -> SleepStaging? {
+        guard endUnix > startUnix, endUnix - startUnix <= 14 * 3600 else { return nil }
+        let window = retainedHistoricalSamples.filter {
+            $0.unix >= startUnix - 360 && $0.unix <= endUnix + 420
+        }
+        guard !window.isEmpty else { return nil }
+        let period = SleepPeriod(startUnix: startUnix, endUnix: endUnix,
+                                 quietFraction: 1, meanHR: 0, wakeEvents: 0)
+        let result = SleepStager.stage(samples: window, period: period)
+        return result.stageable ? result : nil
+    }
+
     var lastNightHours: Double? {
         guard let periods = summary?.sleepPeriods else { return nil }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
@@ -388,8 +571,17 @@ final class BandLink: NSObject, ObservableObject {
         // still be excluded when no correction is present.
         // The Home card represents the latest sleep session, not the sum of
         // every detected nap/session in the retained multi-day capture.
-        guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
+        guard let period = SleepDetect.primaryNight(periods) else { return nil }
         let corrected = overrides[String(period.startUnix)]
+        var start = period.startUnix
+        var end = period.endUnix
+        if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
+            start = corrected[0]
+            end = corrected[1]
+        }
+        if let exact = overnightStaging(startUnix: start, endUnix: end) {
+            return exact.asleepMinutes / 60.0
+        }
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
             let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
             return correctedHours * min(1.0, max(0.0, period.quietFraction))
@@ -992,6 +1184,7 @@ final class BandLink: NSObject, ObservableObject {
         historyRRAccepted = 0
         historyRRRejected = 0
         historyUndecodableFrames = 0
+        historyInvalidTimestampRecords = 0
         historyVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
@@ -1049,7 +1242,7 @@ final class BandLink: NSObject, ObservableObject {
         let missingSeconds = zip(uniqueSeconds, uniqueSeconds.dropFirst()).reduce(0) {
             $0 + max(0, $1.1 - $1.0 - 1)
         }
-        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
+        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s; invalid RTC timestamps: \(historyInvalidTimestampRecords)"
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
@@ -1057,6 +1250,8 @@ final class BandLink: NSObject, ObservableObject {
         guard !samples.isEmpty else {
             if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
+            } else if historyInvalidTimestampRecords > 0 {
+                lastMessage = "Historical records had invalid band-clock timestamps (\(historyInvalidTimestampRecords) rejected from metrics). Raw capture is preserved. Check the band clock and resync."
             } else if historicalRecordFrames > 0 {
                 lastMessage = "Received \(historicalRecordFrames) history frames but decoded no samples. Check record version and decoder compatibility; do not discard the raw capture."
             } else {
@@ -1219,8 +1414,37 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
             if Gen5V26Record.decode(inner) != nil { return }
+            // Gen5 R20 optical and R21 motion buffers are not R18 HR/RR
+            // records. Decode/validate their own layouts; raw frames have
+            // already been persisted by CaptureWriter for research export.
+            if let optical = Gen5DeepBuffer.opticalV20(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(optical.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
+            if let motion = Gen5DeepBuffer.motionV21(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(motion.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
+            // V22 research telemetry has tag-specific optical/motion data, not HR/RR.
+            // Preserve raw capture, but never feed V22 into biometric metrics.
+            if let research = Gen5DeepBuffer.researchV22(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(research.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
+                return
+            }
+            // Raw frames are already written to CaptureWriter above. A lost RTC
+            // must not create phantom sleep days or invalidate strain windows.
+            guard BandRecordHeader.plausibleHistoricalUnix(sample.header.unix) else {
+                historyInvalidTimestampRecords += 1
                 return
             }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {

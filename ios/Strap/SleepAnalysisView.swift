@@ -94,7 +94,7 @@ struct SleepAnalysisView: View {
     // MARK: Performance ring
 
     private var performancePct: Double? {
-        demo ? Double(SampleData.sleepPerformance) : analysis?.performancePct
+        demo ? Double(SampleData.sleepPerformance) : reconciledHoursVsNeededPct
     }
 
     private var performancePanel: some View {
@@ -126,7 +126,8 @@ struct SleepAnalysisView: View {
         guard let analysis else {
             return "needs an overnight capture"
         }
-        return "\(String(format: "%.1f", analysis.hours)) h of \(String(format: "%.1f", analysis.needHours)) h needed, from the last stored capture."
+        guard let asleepHours else { return "needs a validated sleep session" }
+        return "\(CoachFormat.duration(asleepHours)) asleep of \(CoachFormat.duration(analysis.needHours)) needed, from the latest sleep session."
     }
 
     // MARK: Components
@@ -185,17 +186,36 @@ struct SleepAnalysisView: View {
     // hypnogram with the asleep/awake summary. Never mix it with the
     // detector's independent quiet-fraction estimate.
     private var reconciledStaging: SleepStaging? {
-        guard let staging, staging.stageable else { return nil }
-        let total = staging.asleepMinutes + staging.wakeMinutes
-        guard total > 0, let period = editablePeriod else { return nil }
-        let periodMinutes = Double(period.durationS) / 60.0
-        guard abs(total - periodMinutes) <= 2.0 else { return nil }
+        guard let period = editablePeriod else { return nil }
+        let start = correctedWindow?.start ?? period.startUnix
+        let end = correctedWindow?.end ?? period.endUnix
+        // Prefer a stage calculation for the selected overnight window. The
+        // capture-wide staging can describe a different, longer sleep period.
+        if let exact = store.band.overnightStaging(startUnix: start, endUnix: end) {
+            return exact
+        }
+        guard correctedWindow == nil, let staging, staging.stageable,
+              let first = staging.segments.first, let last = staging.segments.last,
+              abs(first.startUnix - start) <= 30,
+              abs(last.endUnix - (end + 1)) <= 30 else { return nil }
         return staging
+    }
+
+    private var correctedWindow: (start: Int, end: Int)? {
+        guard let period = editablePeriod else { return nil }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        guard let times = overrides[String(period.startUnix)], times.count == 2,
+              times[1] > times[0] else { return nil }
+        return (times[0], times[1])
     }
 
     private var lastNightHours: Double? {
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
-        return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
+        if let correctedWindow, let period = editablePeriod {
+            return Double(correctedWindow.end - correctedWindow.start) / 3600.0 * min(1, max(0, period.quietFraction))
+        }
+        guard let period = editablePeriod else { return nil }
+        return Double(period.durationS) / 3600.0 * min(1, max(0, period.quietFraction))
     }
 
     private var asleepHours: Double? {
@@ -217,12 +237,13 @@ struct SleepAnalysisView: View {
 
     private var awakeHours: Double? {
         if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
-        guard let analysis, let asleepHours else { return nil }
-        return max(0, analysis.hours - asleepHours)
+        guard let period = editablePeriod, let asleepHours else { return nil }
+        let windowSeconds = correctedWindow.map { $0.end - $0.start } ?? period.durationS
+        return max(0, Double(windowSeconds) / 3600.0 - asleepHours)
     }
 
     private var editablePeriod: SleepPeriod? {
-        periods.max(by: { $0.durationS < $1.durationS })
+        SleepDetect.primaryNight(periods)
     }
 
     private func openSleepEditor() {
@@ -273,6 +294,24 @@ struct SleepAnalysisView: View {
                     xLabels: ["00:26", "07:33"]
                 )
                 .padding(.bottom, 4)
+            } else if let period = editablePeriod {
+                let trace = store.band.historicalHeartRates(from: correctedWindow?.start ?? period.startUnix, through: correctedWindow?.end ?? period.endUnix)
+                if trace.count >= 2 {
+                    let series = trace.map(\.bpm)
+                    LineChart(values: series, color: .appAccent,
+                              minY: series.min().map { floor($0) - 2 },
+                              maxY: series.max().map { ceil($0) + 2 },
+                              height: 120, yLabels: seriesLabels(series),
+                              xLabels: [clock(correctedWindow?.start ?? period.startUnix), clock(correctedWindow?.end ?? period.endUnix)])
+                    .padding(.bottom, 4)
+                    Text("Recorded overnight heart rate only · \(trace.count) measured seconds.")
+                        .font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 8)
+                } else {
+                    EmptyState(title: "Overnight HR unavailable", detail: "Sync the band to restore timestamped HR for this sleep window.")
+                }
+            } else if editablePeriod == nil {
+                EmptyState(title: "No confirmed overnight sleep", detail: "A daytime rest or incomplete capture cannot be counted as last night. Sync an overnight recording.")
             } else if let series = store.band.summary?.heartRateSeries, series.count >= 2 {
                 LineChart(
                     values: series,
@@ -325,7 +364,8 @@ struct SleepAnalysisView: View {
 
     private var wakeEventText: String {
         guard !periods.isEmpty else { return "—" }
-        return "\(periods.reduce(0) { $0 + $1.wakeEvents })"
+        guard let period = editablePeriod else { return "—" }
+        return "\(period.wakeEvents)"
     }
 
     private var lastNightSegments: [SplitBar.Segment] {
@@ -403,7 +443,7 @@ struct SleepAnalysisView: View {
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
-            } else if let staging, staging.stageable {
+            } else if let staging = reconciledStaging {
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
@@ -418,6 +458,8 @@ struct SleepAnalysisView: View {
                     .padding(.vertical, 12)
                 }
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
+            } else if correctedWindow != nil {
+                EmptyState(title: "Stages need recalculation", detail: "Sleep times were edited. The old hypnogram is hidden because it covers a different window; re-stage the corrected interval before showing stage totals.")
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason)
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
@@ -436,7 +478,7 @@ struct SleepAnalysisView: View {
 
     private var stagingTrailing: String {
         if demo { return "sample" }
-        guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
+        guard let staging = reconciledStaging, staging.asleepMinutes > 0 else { return "—" }
         let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
         return String(format: "%.0f%% restorative", pct)
     }
@@ -718,7 +760,10 @@ struct SleepAnalysisView: View {
     }
 
     private var recentNights: [RecordedNight] {
-        Array(nights.sorted { $0.dateKey < $1.dateKey }.suffix(7))
+        let ordered = nights.sorted { $0.dateKey < $1.dateKey }
+        var byDate: [String: RecordedNight] = [:]
+        for night in ordered { byDate[night.dateKey] = night }
+        return Array(byDate.values.sorted { $0.dateKey < $1.dateKey }.suffix(7))
     }
 
     private var liveDebtMinutes: [Double] {
