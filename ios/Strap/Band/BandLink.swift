@@ -94,6 +94,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRAccepted = 0
     @Published private(set) var historyRRRejected = 0
     @Published private(set) var historyUndecodableFrames = 0
+    @Published private(set) var historyInvalidTimestampRecords = 0
     @Published private(set) var historyVersionCounts: [Int: Int] = [:]
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
@@ -1051,6 +1052,7 @@ final class BandLink: NSObject, ObservableObject {
         historyRRAccepted = 0
         historyRRRejected = 0
         historyUndecodableFrames = 0
+        historyInvalidTimestampRecords = 0
         historyVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
@@ -1116,6 +1118,8 @@ final class BandLink: NSObject, ObservableObject {
         guard !samples.isEmpty else {
             if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
+            } else if historyInvalidTimestampRecords > 0 {
+                lastMessage = "Historical records had invalid band-clock timestamps (\(historyInvalidTimestampRecords) rejected from metrics). Raw capture is preserved. Check the band clock and resync."
             } else if historicalRecordFrames > 0 {
                 lastMessage = "Received \(historicalRecordFrames) history frames but decoded no samples. Check record version and decoder compatibility; do not discard the raw capture."
             } else {
@@ -1280,6 +1284,12 @@ final class BandLink: NSObject, ObservableObject {
             if Gen5V26Record.decode(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
+                return
+            }
+            // Raw frames are already written to CaptureWriter above. A lost RTC
+            // must not create phantom sleep days or invalidate strain windows.
+            guard BandRecordHeader.plausibleHistoricalUnix(sample.header.unix) else {
+                historyInvalidTimestampRecords += 1
                 return
             }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
