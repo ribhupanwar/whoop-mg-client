@@ -237,6 +237,51 @@ with zipfile.ZipFile(archive) as z:
                 if needle in lower_head: opaque_text_markers[label]+=1
         except (OSError,ValueError,zipfile.BadZipFile):
             continue
+    # Inspect RIFF container types and strain-bearing cache headers only.
+    # Report aggregate counts, not paths, payloads, or individual health readings.
+    riff_forms=collections.Counter()
+    riff_chunk_tags=collections.Counter()
+    strain_container_kinds=collections.Counter()
+    strain_context_counts=collections.Counter()
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")) or entry.file_size==0:
+            continue
+        try:
+            with z.open(entry) as source: head=source.read(65536)
+            if head.startswith(b"RIFF") and len(head)>=12:
+                form=head[8:12]
+                label=form.decode("ascii","replace")
+                if re.fullmatch(r"[A-Za-z0-9 ]{4}",label):
+                    riff_forms[label]+=1
+                else:
+                    riff_forms["non-ascii"]+=1
+                # RIFF chunk walk; bounded to the header sample, no raw output.
+                offset=12
+                for _ in range(20):
+                    if offset+8>len(head): break
+                    tag=head[offset:offset+4]
+                    chunk_size=int.from_bytes(head[offset+4:offset+8],"little")
+                    if all(32<=b<=126 for b in tag):
+                        riff_chunk_tags[tag.decode("ascii")]+=1
+                    next_offset=offset+8+chunk_size+(chunk_size&1)
+                    if next_offset<=offset or next_offset>len(head): break
+                    offset=next_offset
+            if b"strain" in head.lower():
+                if head.startswith(b"RIFF"): kind="riff"
+                elif head.lstrip().startswith((b"{",b"[")): kind="json-like"
+                elif head.startswith(b"SQLite format 3"): kind="sqlite"
+                elif head.startswith(b"bplist00"): kind="plist"
+                else: kind="other"
+                strain_container_kinds[kind]+=1
+                for label,token in (("json-content-type",b"application/json"),("http",b"http/1."),("activity",b"activity"),("recovery",b"recovery"),("score",b"score"),("heart",b"heart")):
+                    if token in head.lower(): strain_context_counts[label]+=1
+        except (OSError,ValueError,zipfile.BadZipFile):
+            continue
+    print("CACHE_RIFF_FORMS",json.dumps(riff_forms.most_common(20)))
+    print("CACHE_RIFF_CHUNK_TAGS",json.dumps(riff_chunk_tags.most_common(20)))
+    print("CACHE_STRAIN_CONTAINER_KINDS",json.dumps(strain_container_kinds.most_common()))
+    print("CACHE_STRAIN_CONTEXT",json.dumps(strain_context_counts.most_common()))
     print("CACHE_OPAQUE_MAGIC",json.dumps(opaque_magic.most_common()))
     print("CACHE_OPAQUE_ENTROPY",json.dumps(opaque_entropy.most_common()))
     print("CACHE_OPAQUE_TEXT_MARKERS",json.dumps(opaque_text_markers.most_common()))
