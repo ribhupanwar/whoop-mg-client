@@ -343,7 +343,14 @@ final class BandLink: NSObject, ObservableObject {
             lastSleepAnalysis = analysis
             if let analysis, let data = try? JSONEncoder().encode(analysis) {
                 UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
+            } else {
+                UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
             }
+        } else {
+            // A new archive with no detected night must not keep displaying
+            // the previous capture's sleep report.
+            lastSleepAnalysis = nil
+            UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
         }
     }
 
