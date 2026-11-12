@@ -68,6 +68,23 @@ final class ProtocolTests: XCTestCase {
         XCTAssertNil(Gen5DeepBuffer.motionV21(inner))
     }
 
+    func testV22ResearchTagsAndInvalidFrames() {
+        for tag in 1...6 {
+            var inner = [UInt8](repeating: 0, count: 176)
+            inner[0] = 0x2F; inner[1] = 22; inner[13] = UInt8(tag)
+            let record = Gen5DeepBuffer.researchV22(inner)
+            XCTAssertEqual(record?.tag, tag)
+            XCTAssertEqual(record?.opticalWindows.count, tag == 3 ? 2 : (tag == 6 ? 0 : 1))
+            XCTAssertEqual(record?.accelAxesRaw.count, tag == 6 ? 3 : 0)
+            XCTAssertNil(V18Decoder.decode(inner))
+        }
+        var invalid = [UInt8](repeating: 0, count: 176)
+        invalid[0] = 0x2F; invalid[1] = 22; invalid[13] = 7
+        XCTAssertNil(Gen5DeepBuffer.researchV22(invalid))
+        invalid[13] = 1
+        XCTAssertNil(Gen5DeepBuffer.researchV22(Array(invalid.dropLast())))
+    }
+
     // MARK: - Checksums
 
     func testCRC32MatchesZlib() {
