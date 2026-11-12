@@ -327,7 +327,8 @@ struct SleepAnalysisView: View {
 
     private var wakeEventText: String {
         guard !periods.isEmpty else { return "—" }
-        return "\(periods.reduce(0) { $0 + $1.wakeEvents })"
+        guard let period = editablePeriod else { return "—" }
+        return "\(period.wakeEvents)"
     }
 
     private var lastNightSegments: [SplitBar.Segment] {
@@ -405,7 +406,7 @@ struct SleepAnalysisView: View {
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
-            } else if let staging, staging.stageable {
+            } else if let staging = reconciledStaging {
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
