@@ -43,8 +43,8 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
-        NSHealthShareUsageDescription: "Strap writes measured sessions to Apple Health. It does not read any health data."
-        NSHealthUpdateUsageDescription: "Optional: writes sessions the band measured to Apple Health as workouts."
+        NSHealthShareUsageDescription: "Strap can read Apple Health activity, heart rate, sleep and fitness data to compare with band measurements. Reading is optional."
+        NSHealthUpdateUsageDescription: "Optional: saves measured workouts and, when supported and validated, band-derived heart rate, steps, sleep and fitness metrics to Apple Health."
         UIBackgroundModes:
           - bluetooth-central
     settings:
