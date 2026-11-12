@@ -334,7 +334,10 @@ enum Hrv {
             let seconds: Int
             if index + 1 < unique.count {
                 let gap = unique[index + 1].unix - sample.unix
-                seconds = gap > 0 && gap <= 30 ? gap : 1
+                // Do not treat a single HR observation as 30 seconds of
+                // continuous exertion. Sparse archive gaps are not proof
+                // of stable HR; limit unobserved extrapolation to 5 s.
+                seconds = gap > 0 ? min(gap, 5) : 1
             } else {
                 seconds = 1
             }
