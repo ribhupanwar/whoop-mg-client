@@ -724,7 +724,7 @@ struct HomeView: View {
         }
 
         private var walkingActiveCalories: Double? {
-            guard let session = detectedSession, session.kind == .walking,
+            guard let session = detectedSession, session.kind == "walk",
                   let weight = store.settings.weightKG,
                   let height = store.settings.heightCM,
                   let bmr = Calories.bmrKcalPerDay(weightKg: weight, heightCm: height,
