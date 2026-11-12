@@ -452,6 +452,33 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Corrected sleep durations affect Recovery immediately; original
     /// physiological samples remain unchanged for HRV/RHR provenance.
+    /// Portable research export for the DSTA/PulseForge analysis project.
+    /// Contains the original captured records; no calculated HRV or recovery
+    /// values are substituted for raw R-R observations.
+    func makeDSTAExport() throws -> URL {
+        struct ExportBundle: Encodable {
+            let format: String
+            let version: Int
+            let exportedAt: Date
+            let historicalSamples: [V18Sample]
+            let liveRRSamples: [LiveSample]
+            let captureSummary: CaptureSummary?
+        }
+        guard !retainedHistoricalSamples.isEmpty || !archivedLiveRRSamples.isEmpty else {
+            throw NSError(domain: "Strap.DSTAExport", code: 1,
+                          userInfo: [NSLocalizedDescriptionKey: "Sync band history or record live R-R data before exporting."])
+        }
+        let payload = ExportBundle(format: "strap-dsta-research-export", version: 1,
+                                   exportedAt: Date(), historicalSamples: retainedHistoricalSamples,
+                                   liveRRSamples: archivedLiveRRSamples, captureSummary: summary)
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("strap-dsta-export-\\(Int(Date().timeIntervalSince1970)).json")
+        try encoder.encode(payload).write(to: url, options: .atomic)
+        return url
+    }
+
     /// Stage the exact selected overnight window from retained sensor records.
     /// Never reuse a hypnogram scored against a different capture window.
     func overnightStaging(startUnix: Int, endUnix: Int) -> SleepStaging? {
