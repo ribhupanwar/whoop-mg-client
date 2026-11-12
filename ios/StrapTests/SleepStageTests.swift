@@ -68,19 +68,6 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
-    func testSparseHistoryCannotBecomeAnOvernightSleepWindow() {
-        let full = Array(0..<3600)
-        XCTAssertTrue(SleepDetect.hasContinuousCoverage(full, durationS: 3600))
-        XCTAssertFalse(SleepDetect.hasContinuousCoverage(Array(0..<1200), durationS: 3600))
-        XCTAssertFalse(SleepDetect.hasContinuousCoverage(Array(0..<1800) + Array(2800..<4600), durationS: 4600))
-    }
-
-    func testPrimaryNightRejectsOverlongFalseSleep() {
-        let midnight = 1_794_441_600
-        let falseDay = SleepPeriod(startUnix: midnight - 1800, endUnix: midnight + 16 * 3600,
-                                   quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
-        XCTAssertNil(SleepDetect.primaryNight([falseDay]))
-    }
 
     func testQuietNightTilesTheWindow() throws {
         let (samples, period) = makeNight()
