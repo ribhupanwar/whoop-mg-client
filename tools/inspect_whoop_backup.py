@@ -314,6 +314,53 @@ with zipfile.ZipFile(archive) as z:
                 strain_json_embedded["no-json-delimiter"]+=1
         except (OSError,ValueError,zipfile.BadZipFile):
             continue
+    # Validate embedded JSON documents rather than assuming a brace indicates JSON.
+    # Scan bounded text windows, parse via raw_decode, and emit only counts of
+    # records containing physiological keys. Never emit values or source paths.
+    embedded_parse=collections.Counter()
+    health_fields=collections.Counter()
+    decoder=json.JSONDecoder()
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")) or entry.file_size==0:
+            continue
+        try:
+            with z.open(entry) as source: raw=source.read(262144)
+            if b"strain" not in raw.lower(): continue
+            if raw.lstrip().startswith((b"{",b"[")): continue
+            candidate=raw.decode("utf-8","replace")
+            parsed=False
+            # Limit candidate starts and total parsing work per file.
+            positions=[i for i,ch in enumerate(candidate) if ch in "{["][:32]
+            for start in positions:
+                try:
+                    obj,end=decoder.raw_decode(candidate[start:])
+                    if not isinstance(obj,(dict,list)): continue
+                    parsed=True
+                    embedded_parse["valid-json-fragment"]+=1
+                    stack=[obj]
+                    seen=0
+                    while stack and seen<500:
+                        node=stack.pop()
+                        seen+=1
+                        if isinstance(node,dict):
+                            for key,value in node.items():
+                                if isinstance(key,str):
+                                    k=key.lower()
+                                    for label,pattern in (("strain",r"strain"),("heart-rate",r"heart.?rate|^hr$|^bpm$"),("hrv",r"hrv|rmssd"),("activity",r"activity|workout"),("recovery",r"recovery"),("timestamp",r"timestamp|start_time|end_time")):
+                                        if re.search(pattern,k):
+                                            health_fields[label]+=1
+                                if isinstance(value,(dict,list)): stack.append(value)
+                        elif isinstance(node,list):
+                            stack.extend(x for x in node[:100] if isinstance(x,(dict,list)))
+                    break
+                except (ValueError,RecursionError):
+                    continue
+            if not parsed: embedded_parse["no-valid-json-fragment"]+=1
+        except (OSError,UnicodeError,zipfile.BadZipFile):
+            embedded_parse["unreadable"]+=1
+    print("CACHE_EMBEDDED_JSON_VALIDATION",json.dumps(embedded_parse.most_common()))
+    print("CACHE_EMBEDDED_HEALTH_FIELD_COUNTS",json.dumps(health_fields.most_common()))
     print("CACHE_STRAIN_NONJSON_WRAPPERS",json.dumps(strain_wrappers.most_common()))
     print("CACHE_STRAIN_NONJSON_SIZES",json.dumps(strain_sizes.most_common()))
     print("CACHE_STRAIN_NONJSON_EMBEDDED",json.dumps(strain_json_embedded.most_common()))
