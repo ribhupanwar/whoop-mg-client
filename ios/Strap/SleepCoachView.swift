@@ -114,8 +114,7 @@ struct SleepCoachView: View {
                 Text(CoachFormat.clock(rec.bedtimeMinutes))
                     .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(Color.appFG)
-                Text("SUGGESTED
-BEDTIME")
+                Text("SUGGESTED\nBEDTIME")
                     .font(.system(size: 9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
@@ -125,8 +124,7 @@ BEDTIME")
             VStack(alignment: .trailing, spacing: 3) {
                 DatePicker("", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
                     .labelsHidden()
-                Text("YOUR WAKE
-TIME")
+                Text("YOUR WAKE\nTIME")
                     .font(.system(size: 9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
