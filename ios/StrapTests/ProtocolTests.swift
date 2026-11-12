@@ -27,6 +27,47 @@ final class ProtocolTests: XCTestCase {
         return result
     }
 
+    // MARK: - Gen5 deep-buffer parity and malformed-record guards
+
+    func testV20OpticalSigned20BitChannelsAndMetadata() {
+        var inner = [UInt8](repeating: 0, count: 2128)
+        inner[0] = 0x2F
+        inner[1] = 20
+        inner[15] = 25 // 25 Hz
+        inner[18] = 2 // two samples in first optical block
+        inner[19] = 0xAB // shared block metadata
+        // Channel 0: +1234 and -1 as signed 20-bit values.
+        inner[39] = 0xD2; inner[40] = 0x04
+        inner[43] = 0xFF; inner[44] = 0xFF; inner[45] = 0x0F
+        // Channel 1: -524288, signed 20-bit lower rail.
+        inner[239] = 0x00; inner[240] = 0x00; inner[241] = 0x08
+        let result = Gen5DeepBuffer.opticalV20(inner)
+        XCTAssertEqual(result?.sampleRateHz, 25)
+        XCTAssertEqual(result?.blocks.count, 5)
+        XCTAssertEqual(result?.blocks[0].sampleCount, 2)
+        XCTAssertEqual(result?.blocks[0].channel0ADC, [1234, -1])
+        XCTAssertEqual(result?.blocks[0].channel1ADC.first, -524288)
+        XCTAssertEqual(result?.blocks[0].sharedMetadata.first, 0xAB)
+        XCTAssertNil(Gen5DeepBuffer.opticalV20(Array(inner.dropLast())))
+        XCTAssertNil(V18Decoder.decode(inner))
+    }
+
+    func testV21LiveAndHistoricalIMURespectDeclaredCounts() {
+        var inner = [UInt8](repeating: 0, count: 1232)
+        inner[1] = 21
+        inner[16] = 1 // one accelerometer sample
+        inner[622] = 1 // one gyroscope sample
+        inner[20] = 0x00; inner[21] = 0x10 // +1 g
+        inner[632] = 0x00; inner[633] = 0x40 // +1000 dps
+        inner[0] = 0x2F
+        XCTAssertEqual(Gen5DeepBuffer.motionV21(inner)?.accelXG, [1.0])
+        XCTAssertEqual(Gen5DeepBuffer.motionV21(inner)?.gyroXDPS, [1000.0])
+        inner[0] = 0x2B
+        XCTAssertNotNil(Gen5DeepBuffer.motionV21(inner))
+        inner[16] = 0
+        XCTAssertNil(Gen5DeepBuffer.motionV21(inner))
+    }
+
     // MARK: - Checksums
 
     func testCRC32MatchesZlib() {
