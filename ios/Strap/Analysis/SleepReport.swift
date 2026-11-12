@@ -80,15 +80,20 @@ enum SleepReport {
             )
         }
         var buckets: [StressBucket: [Double]] = [:]
-        for sample in samples {
-            guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
+        var seenSeconds = Set<Int>()
+        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+            guard sample.wearing, !sample.rrIntervalsMS.isEmpty,
+                  !seenSeconds.contains(sample.unix) else { continue }
+            let cleanRR = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
+            guard !cleanRR.isEmpty else { continue }
             for (periodIndex, period) in periods.enumerated()
             where period.startUnix <= sample.unix && sample.unix <= period.endUnix {
                 let key = StressBucket(
                     period: periodIndex,
                     window: (sample.unix - period.startUnix) / stressWindowS
                 )
-                buckets[key, default: []].append(contentsOf: sample.rrIntervalsMS.map(Double.init))
+                seenSeconds.insert(sample.unix)
+                buckets[key, default: []].append(contentsOf: cleanRR)
                 break
             }
         }
