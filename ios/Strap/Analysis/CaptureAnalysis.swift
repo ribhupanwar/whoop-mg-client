@@ -195,7 +195,12 @@ enum DailyAnalysis {
             }()
             let nightlyLnRMSSD = weightedHRV.map { log($0) }
             let nightlyWindowSeconds = sessions.reduce(0) { $0 + $1.window }
-            let sleepHours = dayPeriods.reduce(0.0) { $0 + $1.hours }
+            // SleepPeriod spans include brief awake gaps. Daily totals and
+            // Home must count estimated asleep time, not time in bed.
+            // Match SleepReport's quiet-fraction-based awake exclusion.
+            let sleepHours = dayPeriods.reduce(0.0) { total, period in
+                total + period.hours * min(1.0, max(0.0, period.quietFraction))
+            }
             let longest = dayPeriods.max { $0.durationS < $1.durationS }
             var strain: Double?
             if let maxHR, let resting, maxHR > resting {
