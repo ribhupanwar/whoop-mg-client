@@ -1110,7 +1110,7 @@ final class BandLink: NSObject, ObservableObject {
         let missingSeconds = zip(uniqueSeconds, uniqueSeconds.dropFirst()).reduce(0) {
             $0 + max(0, $1.1 - $1.0 - 1)
         }
-        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
+        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s; invalid RTC timestamps: \(historyInvalidTimestampRecords)"
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
