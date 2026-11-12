@@ -135,6 +135,40 @@ with zipfile.ZipFile(archive) as z:
             family="other"
         families[family]+=1
         family_bytes[family]+=entry.file_size
+    # Cache-only structural probe: no names, URLs, identifiers or values printed.
+    # A small header read keeps memory bounded even for large cached responses.
+    cache_signatures=collections.Counter()
+    cache_size_buckets=collections.Counter()
+    cache_total=0
+    for entry in files:
+        lower=entry.filename.lower()
+        if not any(t in lower for t in ("/cache/","/caches/","/cache.db","/cfnetwork/")):
+            continue
+        cache_total+=1
+        size=entry.file_size
+        bucket="empty" if size==0 else "<1KB" if size<1024 else "1-64KB" if size<65536 else "64KB-1MB" if size<1048576 else "1-10MB" if size<10485760 else ">=10MB"
+        cache_size_buckets[bucket]+=1
+        try:
+            with z.open(entry) as source:
+                head=source.read(4096)
+            if head.startswith(b"SQLite format 3"): fmt="sqlite"
+            elif head.startswith(b"bplist00"): fmt="binary-plist"
+            elif head.startswith(bytes.fromhex("1f8b")): fmt="gzip"
+            elif head.startswith(bytes.fromhex("28b52ffd")): fmt="zstd"
+            elif head.startswith(bytes.fromhex("04224d18")): fmt="lz4"
+            elif head.startswith(bytes.fromhex("504b0304")): fmt="zip"
+            elif head.lstrip().startswith((b"{",b"[")): fmt="json-like"
+            elif head.lstrip().startswith(b"<?xml"): fmt="xml"
+            elif not head: fmt="empty"
+            elif head[:4096].count(b"\\x00") > len(head)//8: fmt="binary"
+            elif all((b in (9,10,13) or 32<=b<127) for b in head[:256]): fmt="ascii-text"
+            else: fmt="opaque"
+            cache_signatures[fmt]+=1
+        except Exception:
+            cache_signatures["unreadable"]+=1
+    print("CACHE_HEADER_FORMATS",json.dumps(cache_signatures.most_common()))
+    print("CACHE_SIZE_BUCKETS",json.dumps(cache_size_buckets.most_common()))
+    print("CACHE_FILES_INSPECTED",cache_total)
     print("STORAGE_FAMILIES",json.dumps([{"family":k,"files":v,"bytes":family_bytes[k]} for k,v in families.most_common()]))
     print("STORAGE_SIGNATURES",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in signatures.most_common(35)]))
     print("HEALTH_STORAGE_CANDIDATE_FORMATS",json.dumps([{"extension":k[0],"format":k[1],"count":v} for k,v in likely_paths.most_common(20)]))
