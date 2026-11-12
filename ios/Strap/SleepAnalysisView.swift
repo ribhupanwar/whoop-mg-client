@@ -186,7 +186,7 @@ struct SleepAnalysisView: View {
     // hypnogram with the asleep/awake summary. Never mix it with the
     // detector's independent quiet-fraction estimate.
     private var reconciledStaging: SleepStaging? {
-        guard let staging, staging.stageable else { return nil }
+        guard correctedWindow == nil, let staging, staging.stageable else { return nil }
         let total = staging.asleepMinutes + staging.wakeMinutes
         guard total > 0, let period = editablePeriod else { return nil }
         let periodMinutes = Double(period.durationS) / 60.0
@@ -194,7 +194,18 @@ struct SleepAnalysisView: View {
         return staging
     }
 
+    private var correctedWindow: (start: Int, end: Int)? {
+        guard let period = editablePeriod else { return nil }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        guard let times = overrides[String(period.startUnix)], times.count == 2,
+              times[1] > times[0] else { return nil }
+        return (times[0], times[1])
+    }
+
     private var lastNightHours: Double? {
+        if let correctedWindow, let period = editablePeriod {
+            return Double(correctedWindow.end - correctedWindow.start) / 3600.0 * min(1, max(0, period.quietFraction))
+        }
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         guard let period = editablePeriod else { return nil }
         return Double(period.durationS) / 3600.0 * min(1, max(0, period.quietFraction))
@@ -220,7 +231,8 @@ struct SleepAnalysisView: View {
     private var awakeHours: Double? {
         if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
         guard let period = editablePeriod, let asleepHours else { return nil }
-        return max(0, Double(period.durationS) / 3600.0 - asleepHours)
+        let windowSeconds = correctedWindow.map { $0.end - $0.start } ?? period.durationS
+        return max(0, Double(windowSeconds) / 3600.0 - asleepHours)
     }
 
     private var editablePeriod: SleepPeriod? {
@@ -276,14 +288,14 @@ struct SleepAnalysisView: View {
                 )
                 .padding(.bottom, 4)
             } else if let period = editablePeriod {
-                let trace = store.band.historicalHeartRates(from: period.startUnix, through: period.endUnix)
+                let trace = store.band.historicalHeartRates(from: correctedWindow?.start ?? period.startUnix, through: correctedWindow?.end ?? period.endUnix)
                 if trace.count >= 2 {
                     let series = trace.map(\.bpm)
                     LineChart(values: series, color: .appAccent,
                               minY: series.min().map { floor($0) - 2 },
                               maxY: series.max().map { ceil($0) + 2 },
                               height: 120, yLabels: seriesLabels(series),
-                              xLabels: [clock(period.startUnix), clock(period.endUnix)])
+                              xLabels: [clock(correctedWindow?.start ?? period.startUnix), clock(correctedWindow?.end ?? period.endUnix)])
                     .padding(.bottom, 4)
                     Text("Recorded overnight heart rate only · \(trace.count) measured seconds.")
                         .font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
@@ -439,6 +451,8 @@ struct SleepAnalysisView: View {
                     .padding(.vertical, 12)
                 }
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
+            } else if correctedWindow != nil {
+                EmptyState(title: "Stages need recalculation", detail: "Sleep times were edited. The old hypnogram is hidden because it covers a different window; re-stage the corrected interval before showing stage totals.")
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason)
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
