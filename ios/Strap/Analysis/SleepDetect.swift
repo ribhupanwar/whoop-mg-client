@@ -61,10 +61,7 @@ enum SleepDetect {
             // sparse history archive is not evidence of continuous sleep.
             // GapClosing only closes short motion gaps; it cannot prove the
             // wearer slept during missing BLE/recording time.
-            let uniqueSeconds = Set(run.map(\.unix)).count
-            guard uniqueSeconds * 10 >= duration * 7 else { continue }
-            let timestamps = Array(Set(run.map(\.unix))).sorted()
-            guard !zip(timestamps, timestamps.dropFirst()).contains(where: { $1 - $0 > 15 * 60 }) else { continue }
+            guard hasContinuousCoverage(run.map(\.unix), durationS: duration) else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
@@ -146,6 +143,14 @@ enum SleepDetect {
             )
         }
         return periods
+    }
+
+    /// Reject sparse archives masquerading as uninterrupted sleep.
+    static func hasContinuousCoverage(_ unix: [Int], durationS: Int) -> Bool {
+        guard durationS > 0 else { return false }
+        let times = Array(Set(unix)).sorted()
+        guard times.count * 10 >= durationS * 7 else { return false }
+        return !zip(times, times.dropFirst()).contains { $1 - $0 > 15 * 60 }
     }
 
     /// Prefer the most recent plausible overnight session. A late daytime
