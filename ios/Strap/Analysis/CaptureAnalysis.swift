@@ -99,7 +99,7 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let staging = periods.last.map {
+        let staging = SleepDetect.primaryNight(periods).map {
             SleepStager.stage(samples: ordered, period: $0)
         }
         let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
