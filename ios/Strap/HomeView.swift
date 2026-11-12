@@ -711,16 +711,28 @@ struct HomeView: View {
             Double(store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age))
         }
 
-        // WHOOP-style six zones. Zone 0 is below 60% of configured max HR.
-        // These are local estimates, not WHOOP's personalised thresholds.
+        // WHOOP-like six-zone boundaries, based on configured max HR.
+        // These are estimates: WHOOP may use a different personalised max HR.
         private func zoneBounds(_ zone: Int) -> (low: Double, high: Double) {
-            let cutoffs = [0.0, 0.60, 0.70, 0.80, 0.90, 1.0, Double.infinity]
+            let cutoffs = [0.0, 0.60, 0.73, 0.79, 0.86, 0.92, Double.infinity]
             return (cutoffs[zone] * maxHeartRate, cutoffs[zone + 1] * maxHeartRate)
         }
 
         private func zoneSeconds(_ zone: Int) -> Int {
             let bounds = zoneBounds(zone)
             return hrTrace.filter { $0.bpm >= bounds.low && $0.bpm < bounds.high }.count
+        }
+
+        private var walkingActiveCalories: Double? {
+            guard let session = detectedSession, session.kind == .walking,
+                  let weight = store.settings.weightKG,
+                  let height = store.settings.heightCM,
+                  let bmr = Calories.bmrKcalPerDay(weightKg: weight, heightCm: height,
+                        age: Double(store.settings.age), sex: store.settings.sex) else { return nil }
+            // Moderate walking ~3 MET; active calories exclude the resting 1 MET.
+            // A cadence-based estimate, not a direct WHOOP energy measurement.
+            let durationMinutes = Double(max(0, session.endUnix - session.startUnix + 1)) / 60.0
+            return (3.0 - 1.0) * bmr / 1440.0 * durationMinutes
         }
 
         var body: some View {
@@ -752,6 +764,12 @@ struct HomeView: View {
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.appFG)
                         Hint("\(hrTrace.count) measured HR seconds · missing intervals are not estimated.")
+                        if let walkingActiveCalories {
+                            Text("ACTIVE CALORIES  ~\(Int(walkingActiveCalories.rounded())) kcal")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(Color.appFG)
+                            Hint("Walking energy estimate from duration and confirmed body profile; not a WHOOP calorie measurement.")
+                        }
                     } else {
                         Hint("No timestamped band HR for this session yet. Sync historical data to populate the chart.")
                     }
@@ -789,7 +807,7 @@ struct HomeView: View {
                             }
                             .padding(.vertical, 6)
                         }
-                        Hint("Zone thresholds use your configured maximum HR; percentages count measured seconds only.")
+                        Hint("WHOOP-like thresholds use your configured maximum HR. WHOOP may have a different personalised max HR; percentages count measured seconds only.")
                     } else {
                         Hint("Zone durations need timestamped band HR and a valid maximum HR.")
                     }
