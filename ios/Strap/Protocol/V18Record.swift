@@ -224,6 +224,13 @@ enum Gen5DeepBuffer {
         let channel0Metadata: [UInt8]
         let channel1Metadata: [UInt8]
     }
+    struct ResearchV22 {
+        let header: BandRecordHeader
+        let tag: Int
+        let opticalWindows: [[Int]]
+        let accelAxesRaw: [[Int]]
+        let rawInner: [UInt8]
+    }
     struct MotionV21 {
         let header: BandRecordHeader
         let accelXG: [Double]
@@ -268,6 +275,38 @@ enum Gen5DeepBuffer {
                 channel1Metadata: Array(inner[(start + 14)..<(start + 21)]))
         }
         return OpticalV20(header: header, sampleRateHz: rate, rawInner: inner, blocks: blocks)
+    }
+    /// OpenStrap Gen5 R22: research telemetry, not an HR or RR measurement.
+    /// Tag-specific parsing prevents stale bytes in unused slots becoming samples.
+    static func researchV22(_ inner: [UInt8]) -> ResearchV22? {
+        guard inner.count == 176, inner[0] == 0x2F, inner[1] == 22,
+              let header = V18Decoder.header(of: inner) else { return nil }
+        let tag = Int(inner[13])
+        guard (1...6).contains(tag) else { return nil }
+        func signed16(_ offset: Int) -> Int {
+            let value = u16(inner, offset)
+            return value >= 32768 ? value - 65536 : value
+        }
+        func optical(_ start: Int, _ slots: Int) -> [Int] {
+            (0..<slots).map { signed16(start + 4 + 2 * $0) }
+        }
+        var windows: [[Int]] = []
+        var axes: [[Int]] = []
+        switch tag {
+        case 1, 2, 4:
+            windows = [optical(15, 49)]
+        case 3:
+            windows = [optical(15, 24), optical(67, 24)]
+        case 5:
+            windows = [optical(23, 24)]
+        case 6:
+            axes = (0..<3).map { axis in
+                (0..<25).map { signed16(18 + axis * 50 + $0 * 2) }
+            }
+        default: return nil
+        }
+        return ResearchV22(header: header, tag: tag,
+                           opticalWindows: windows, accelAxesRaw: axes, rawInner: inner)
     }
     static func motionV21(_ inner: [UInt8]) -> MotionV21? {
         guard inner.count == 1232, (inner[0] == 0x2F || inner[0] == 0x2B),
