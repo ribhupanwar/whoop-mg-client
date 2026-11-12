@@ -538,10 +538,11 @@ final class SleepReportTests: XCTestCase {
         )
         XCTAssertNotNil(analysis)
         XCTAssertEqual(analysis!.hours, 8.0, accuracy: 1e-6)
-        XCTAssertEqual(analysis!.hoursVsNeededPct, 100.0)
+        // 8h in bed at 90% efficiency means 7h12m asleep, not 8h.
+        XCTAssertEqual(analysis!.hoursVsNeededPct, 90.0)
         XCTAssertEqual(analysis!.efficiencyPct, 90.0)
         XCTAssertEqual(analysis!.consistencyPct, 100.0)
-        XCTAssertEqual(analysis!.performancePct!, 96.7, accuracy: 0.001)
+        XCTAssertEqual(analysis!.performancePct!, 93.3, accuracy: 0.001)
     }
 
     func testEmptyPeriodsProduceNoAnalysis() {
