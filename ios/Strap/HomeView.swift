@@ -777,21 +777,21 @@ struct HomeView: View {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 5) {
                             Hint("ACTIVE CALORIES")
-                            Text(walkingActiveCalories.map { "~\\(Int($0.rounded())) kcal" } ?? "—")
+                            Text(walkingActiveCalories.map { "~\(Int($0.rounded())) kcal" } ?? "—")
                                 .font(.system(size: 19, weight: .semibold))
                                 .foregroundStyle(Color.appFG)
                         }
                         Spacer()
                         VStack(alignment: .leading, spacing: 5) {
                             Hint("AVG HR")
-                            Text(hrTrace.isEmpty ? "—" : "\\(Int((hrTrace.reduce(0.0) { $0 + $1.bpm } / Double(hrTrace.count)).rounded())) bpm")
+                            Text(hrTrace.isEmpty ? "—" : "\(Int((hrTrace.reduce(0.0) { $0 + $1.bpm } / Double(hrTrace.count)).rounded())) bpm")
                                 .font(.system(size: 19, weight: .semibold))
                                 .foregroundStyle(Color.appFG)
                         }
                         Spacer()
                         VStack(alignment: .leading, spacing: 5) {
                             Hint("MAX HR")
-                            Text(hrTrace.map(\\.bpm).max().map { "\\(Int($0)) bpm" } ?? "—")
+                            Text(hrTrace.map(\.bpm).max().map { "\(Int($0)) bpm" } ?? "—")
                                 .font(.system(size: 19, weight: .semibold))
                                 .foregroundStyle(Color.appFG)
                         }
