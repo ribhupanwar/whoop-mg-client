@@ -1395,6 +1395,21 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
             if Gen5V26Record.decode(inner) != nil { return }
+            // Gen5 R20 optical and R21 motion buffers are not R18 HR/RR
+            // records. Decode/validate their own layouts; raw frames have
+            // already been persisted by CaptureWriter for research export.
+            if let optical = Gen5DeepBuffer.opticalV20(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(optical.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
+            if let motion = Gen5DeepBuffer.motionV21(inner) {
+                if !BandRecordHeader.plausibleHistoricalUnix(motion.header.unix) {
+                    historyInvalidTimestampRecords += 1
+                }
+                return
+            }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
                 return
