@@ -114,7 +114,8 @@ struct SleepCoachView: View {
                 Text(CoachFormat.clock(rec.bedtimeMinutes))
                     .font(.system(size: 26, weight: .medium))
                     .foregroundStyle(Color.appFG)
-                Text("SUGGESTED\nBEDTIME")
+                Text("SUGGESTED
+BEDTIME")
                     .font(.system(size: 9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
@@ -124,7 +125,8 @@ struct SleepCoachView: View {
             VStack(alignment: .trailing, spacing: 3) {
                 DatePicker("", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
                     .labelsHidden()
-                Text("YOUR WAKE\nTIME")
+                Text("YOUR WAKE
+TIME")
                     .font(.system(size: 9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
@@ -223,7 +225,11 @@ struct SleepCoachView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.appGood)
             }
-            Text(WakeAlarm.bandHapticStatus)\n                .font(.system(size: 12, weight: .medium))\n                .foregroundStyle(Color.appWarn)\n                .fixedSize(horizontal: false, vertical: true)\n            Hint("The current alarm schedules an iPhone notification only. A wrist alarm and Test Vibration will be enabled only after a verified band BLE haptic command and device test.")
+            Text(WakeAlarm.bandHapticStatus)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.appWarn)
+                .fixedSize(horizontal: false, vertical: true)
+            Hint("The current alarm schedules an iPhone notification only. A wrist alarm and Test Vibration will be enabled only after a verified band BLE haptic command and device test.")
         }
     }
 
