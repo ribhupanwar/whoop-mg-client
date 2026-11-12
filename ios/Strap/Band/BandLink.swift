@@ -498,7 +498,12 @@ final class BandLink: NSObject, ObservableObject {
                               userInfo: [NSLocalizedDescriptionKey: "Could not save restored history."])
             }
         }
-        var bySecond = Dictionary(uniqueKeysWithValues: archivedLiveRRSamples.map { ($0.unix, $0) })
+        var bySecond: [Int: LiveSample] = [:]
+        for sample in archivedLiveRRSamples {
+            if (bySecond[sample.unix]?.rrIntervalsMS.count ?? -1) < sample.rrIntervalsMS.count {
+                bySecond[sample.unix] = sample
+            }
+        }
         for sample in payload.liveRRSamples {
             if (bySecond[sample.unix]?.rrIntervalsMS.count ?? -1) < sample.rrIntervalsMS.count {
                 bySecond[sample.unix] = sample
