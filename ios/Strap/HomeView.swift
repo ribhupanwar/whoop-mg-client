@@ -9,6 +9,7 @@ struct HomeView: View {
 
     @State private var dayOffset = 0
     @State private var showLogger = false
+    @State private var selectedActivity: ActivityRowModel?
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
@@ -45,6 +46,11 @@ struct HomeView: View {
             }
         }
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(item: $selectedActivity) { row in
+            NavigationStack {
+                ActivityDetailView(row: row, gpsRuns: GPSRunHistory().all())
+            }
+        }
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
         }
@@ -519,7 +525,10 @@ struct HomeView: View {
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            Button { selectedActivity = row } label: {
+                                activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            }
+                            .buttonStyle(.plain)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -568,7 +577,7 @@ struct HomeView: View {
 
     // MARK: Activity rows
 
-    private struct ActivityRowModel: Identifiable {
+    struct ActivityRowModel: Identifiable {
         let id: String
         let icon: String
         let name: String
@@ -665,6 +674,73 @@ struct HomeView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
+    }
+
+    private struct ActivityDetailView: View {
+        let row: ActivityRowModel
+        let gpsRuns: [GPSRunRecord]
+        @Environment(\.dismiss) private var dismiss
+
+        private var matchedRun: GPSRunRecord? {
+            guard let start = row.startUnix else { return nil }
+            return gpsRuns.first {
+                abs($0.startedAt.timeIntervalSince1970 - Double(start)) < 180 &&
+                $0.distanceMeters >= 100
+            }
+        }
+
+        var body: some View {
+            Screen {
+                Panel {
+                    SectionTitle(row.name)
+                    Text(row.detail)
+                        .font(.system(size: 13))
+                        .foregroundStyle(Color.appFG)
+                    Hint("Automatically detected activity · band measurements")
+                }
+                Panel {
+                    SectionTitle("Heart rate")
+                    Hint("A time-aligned HR trace for this exact session is not saved in the activity record yet. The chart will appear when timestamped HR samples are available; no fabricated graph.")
+                }
+                Panel {
+                    SectionTitle("Heart rate zones")
+                    Hint("Zone durations require timestamped HR samples for this activity. A single average HR cannot reconstruct the zones.")
+                }
+                Panel {
+                    SectionTitle("Outdoor GPS")
+                    if let run = matchedRun {
+                        Text(String(format: "%.2f km", run.distanceMeters / 1000))
+                            .font(.system(size: 30, weight: .semibold))
+                            .foregroundStyle(Color.appFG)
+                        if let pace = run.paceSecondsPerKM {
+                            Text(String(format: "Average pace %d:%02d /km", Int(pace) / 60, Int(pace) % 60))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        ForEach(Array(run.splitSeconds.enumerated()), id: \.offset) { index, seconds in
+                            HStack {
+                                Text("KM \(index + 1)")
+                                Spacer()
+                                Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
+                            }
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.appFG)
+                        }
+                        if run.route.count >= 2 {
+                            Hint("GPS route saved · open GPS Run history to view the route map.")
+                        }
+                    } else {
+                        Hint("No matching GPS recording. Band-only walks do not contain a GPS route. Start an outdoor GPS session on the iPhone to record kilometres and splits.")
+                    }
+                }
+            }
+            .navigationTitle("Activity details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+        }
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
