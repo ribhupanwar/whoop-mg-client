@@ -305,13 +305,21 @@ enum Hrv {
         case .unspecified: return nil
         }
         guard maxHR > restingHR else { return nil }
-        let wearing = samples.filter { $0.wearing }
-        guard !wearing.isEmpty else { return nil }
+        // The decoded archive may contain multiple records per second and
+        // discontinuous sync chunks. Integrate observed seconds only: counting
+        // every record as one second overstates strain after repeat imports.
+        let valid = samples.filter {
+            $0.wearing && (35...220).contains($0.heartRate)
+        }.sorted { $0.unix < $1.unix }
+        guard !valid.isEmpty else { return nil }
         var total = 0.0
-        for sample in wearing {
+        var lastSecond: Int?
+        for sample in valid {
+            guard sample.unix != lastSecond else { continue }
+            lastSecond = sample.unix
             guard let ratio = hrReserveRatio(
                 Double(sample.heartRate), resting: restingHR, maximum: maxHR
-            ) else { return nil }
+            ) else { continue }
             total += (1.0 / 60.0) * ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
         }
         return total
