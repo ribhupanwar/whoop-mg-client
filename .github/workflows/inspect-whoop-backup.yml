@@ -1,0 +1,35 @@
+name: Inspect WHOOP iPhone backup
+on:
+  workflow_dispatch:
+    inputs:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download backup without logging URL
+        env:
+          BACKUP_URL: ${{ secrets.WHOOP_BACKUP_URL }}
+        shell: bash
+        run: |
+          set +x
+          python3 - <<'PY'
+          import os,urllib.request
+          u=os.environ['BACKUP_URL']
+          if not u.startswith('https://'): raise ValueError('Set WHOOP_BACKUP_URL Actions secret to an HTTPS Dropbox download URL')
+          with urllib.request.urlopen(urllib.request.Request(u,headers={'User-Agent':'Mozilla/5.0'}),timeout=120) as r,open('/tmp/whoop-backup.zip','wb') as out:
+              while True:
+                  chunk=r.read(1024*1024)
+                  if not chunk: break
+                  out.write(chunk)
+          print('Backup downloaded to temporary runner disk')
+          PY
+      - name: Inventory database schemas (no health values)
+        shell: bash
+        run: python3 tools/inspect_whoop_backup.py /tmp/whoop-backup.zip
+      - name: Remove temporary archive
+        if: always()
+        run: rm -f /tmp/whoop-backup.zip
