@@ -145,6 +145,8 @@ final class HealthKitBridge: ObservableObject {
         if let meanHR = record.meanHR {
             metadata["com.ribhupanwar.strap.meanHR"] = Int(meanHR.rounded())
         }
+        // Live records do not currently preserve a verified sport classification.
+        // Export as .other rather than mislabeling them as runs for WHOOP/Strava.
         await save(start: start, end: end, type: .other, metadata: metadata)
     }
 
