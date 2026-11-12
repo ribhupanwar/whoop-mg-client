@@ -374,21 +374,20 @@ final class BandLink: NSObject, ObservableObject {
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
         // Manual corrections define the sleep window, but awake periods must
         // still be excluded when no correction is present.
-        let stagedOrQuiet = periods.reduce(0.0) { total, period in
-            let corrected = overrides[String(period.startUnix)]
-            if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-                // Time correction changes the bed window, not the awake fraction.
-                let correctedHours = Double(corrected[1] - corrected[0])
-                return total + correctedHours * min(1.0, max(0.0, period.quietFraction))
-            }
-            if let stage = summary?.sleepStaging,
-               summary?.sleepPeriods.last?.startUnix == period.startUnix,
-               stage.reason == nil {
-                return total + stage.asleepMinutes * 60.0
-            }
-            return total + Double(period.durationS) * min(1.0, max(0.0, period.quietFraction))
+        // The Home card represents the latest sleep session, not the sum of
+        // every detected nap/session in the retained multi-day capture.
+        guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
+        let corrected = overrides[String(period.startUnix)]
+        if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
+            let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
+            return correctedHours * min(1.0, max(0.0, period.quietFraction))
         }
-        return stagedOrQuiet / 3600
+        if let stage = summary?.sleepStaging,
+           summary?.sleepPeriods.last?.startUnix == period.startUnix,
+           stage.reason == nil {
+            return stage.asleepMinutes / 60.0
+        }
+        return period.hours * min(1.0, max(0.0, period.quietFraction))
     }
 
     func notifySleepCorrectionChanged() {
