@@ -7,7 +7,12 @@ import UserNotifications
 /// verified on the strap, so nothing is sent to the band. The notification
 /// repeats at the chosen wake time until turned off.
 enum WakeAlarm {
-    /// Band haptic alarm remains unsupported until an actual WHOOP BLE command is verified.\n    /// Never report a successful wrist alarm based on a phone notification.\n    static let bandHapticVerified = false\n    static let bandHapticStatus = "Band vibration unavailable — WHOOP BLE haptic command not verified"\n\n    static let identifier = "strap.wake.alarm"
+    /// Band haptic alarm remains unsupported until an actual WHOOP BLE command is verified.
+    /// Never report a successful wrist alarm based on a phone notification.
+    static let bandHapticVerified = false
+    static let bandHapticStatus = "Band vibration unavailable — WHOOP BLE haptic command not verified"
+
+    static let identifier = "strap.wake.alarm"
     private static let enabledKey = "strap.wake.alarm.enabled.v1"
 
     static var isEnabled: Bool {
