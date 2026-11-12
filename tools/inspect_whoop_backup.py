@@ -104,10 +104,10 @@ with zipfile.ZipFile(archive) as z:
             elif header.startswith(b"bplist00"): kind="binary-plist"
             elif header.startswith(b"{") or header.startswith(b"["): kind="json-like"
             elif header.startswith(b"<?xml"): kind="xml"
-            elif header.startswith(b"PK\\x03\\x04"): kind="zip"
-            elif header.startswith(b"\\x1f\\x8b"): kind="gzip"
-            elif header.startswith(b"\\x28\\xb5\\x2f\\xfd"): kind="zstd"
-            elif header.startswith(b"\\x04\\x22\\x4d\\x18"): kind="lz4"
+            elif header.startswith(bytes.fromhex("504b0304")): kind="zip"
+            elif header.startswith(bytes.fromhex("1f8b")): kind="gzip"
+            elif header.startswith(bytes.fromhex("28b52ffd")): kind="zstd"
+            elif header.startswith(bytes.fromhex("04224d18")): kind="lz4"
             elif not header: kind="empty"
             else: kind="other-binary-or-text"
             signatures[(suffix,kind)]+=1
@@ -359,6 +359,35 @@ with zipfile.ZipFile(archive) as z:
             if not parsed: embedded_parse["no-valid-json-fragment"]+=1
         except (OSError,UnicodeError,zipfile.BadZipFile):
             embedded_parse["unreadable"]+=1
+    # Final batch: assess backup completeness and non-SQLite stores.
+    # This reports only aggregate evidence, never user records or paths.
+    store_headers=collections.Counter()
+    store_sizes=collections.Counter()
+    sidecars=collections.Counter()
+    cache_content_types=collections.Counter()
+    for entry in files:
+        low=entry.filename.lower()
+        if low.endswith(("-wal","-shm")):
+            sidecars["wal" if low.endswith("-wal") else "shm"]+=1
+        if low.endswith((".mdb",".ldb",".sst",".log")) or any(x in low for x in ("/leveldb/","/indexeddb/","/rocksdb/")):
+            store_sizes["lmdb" if low.endswith(".mdb") else "leveldb-or-log"]+=1
+            try:
+                with z.open(entry) as source: prefix=source.read(64)
+                if prefix[:4] in (bytes.fromhex("fedeadbe"),bytes.fromhex("beaddeef")):
+                    store_headers["lmdb-magic-candidate"]+=1
+                elif prefix.startswith(b"SQLite format 3"): store_headers["sqlite"]+=1
+                else: store_headers["unknown"]+=1
+            except (OSError,zipfile.BadZipFile): store_headers["unreadable"]+=1
+        if any(x in low for x in ("/cache/","/caches/","/cfnetwork/")) and 0<entry.file_size<=1024*1024:
+            try:
+                with z.open(entry) as source: header=source.read(8192).lower()
+                for label,needle in (("json",b"application/json"),("protobuf",b"application/x-protobuf"),("octet-stream",b"application/octet-stream"),("gzip",b"content-encoding: gzip"),("http",b"http/1.")):
+                    if needle in header: cache_content_types[label]+=1
+            except (OSError,zipfile.BadZipFile): pass
+    print("BACKUP_COMPLETENESS",json.dumps({"file_count":len(files),"total_uncompressed_bytes":sum(e.file_size for e in files),"sqlite_candidates":len(dbs),"wal_sidecars":sidecars["wal"],"shm_sidecars":sidecars["shm"],"key_value_candidates":sum(store_sizes.values())}))
+    print("KEY_VALUE_STORE_FORMATS",json.dumps(store_headers.most_common()))
+    print("KEY_VALUE_STORE_COUNTS",json.dumps(store_sizes.most_common()))
+    print("CACHE_HTTP_CONTENT_TYPE_HINTS",json.dumps(cache_content_types.most_common()))
     print("CACHE_EMBEDDED_JSON_VALIDATION",json.dumps(embedded_parse.most_common()))
     print("CACHE_EMBEDDED_HEALTH_FIELD_COUNTS",json.dumps(health_fields.most_common()))
     print("CACHE_STRAIN_NONJSON_WRAPPERS",json.dumps(strain_wrappers.most_common()))
