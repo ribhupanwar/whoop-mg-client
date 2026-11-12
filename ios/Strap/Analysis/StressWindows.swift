@@ -22,13 +22,19 @@ enum StressWindows {
             )
         }
         var buckets: [Int: [Double]] = [:]
-        for sample in samples {
-            guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
+        // Replayed BLE archive chunks can repeat a second. Count its RR
+        // payload once, otherwise stress confidence is artificially inflated.
+        var seenSeconds = Set<Int>()
+        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+            guard sample.wearing, !sample.rrIntervalsMS.isEmpty,
+                  !seenSeconds.contains(sample.unix) else { continue }
             if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
                 continue
             }
-            buckets[sample.unix / windowSeconds, default: []]
-                .append(contentsOf: sample.rrIntervalsMS.map(Double.init))
+            let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
+            guard !rr.isEmpty else { continue }
+            seenSeconds.insert(sample.unix)
+            buckets[sample.unix / windowSeconds, default: []].append(contentsOf: rr)
         }
 
         var high = 0
@@ -80,13 +86,19 @@ enum StressWindows {
     ) -> [StressPoint] {
         guard let baseline, baseline.days >= Recovery.minBaselineDays else { return [] }
         var buckets: [Int: [Double]] = [:]
-        for sample in samples {
-            guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
+        // Replayed BLE archive chunks can repeat a second. Count its RR
+        // payload once, otherwise stress confidence is artificially inflated.
+        var seenSeconds = Set<Int>()
+        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+            guard sample.wearing, !sample.rrIntervalsMS.isEmpty,
+                  !seenSeconds.contains(sample.unix) else { continue }
             if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
                 continue
             }
-            buckets[sample.unix / windowSeconds, default: []]
-                .append(contentsOf: sample.rrIntervalsMS.map(Double.init))
+            let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
+            guard !rr.isEmpty else { continue }
+            seenSeconds.insert(sample.unix)
+            buckets[sample.unix / windowSeconds, default: []].append(contentsOf: rr)
         }
         var points: [StressPoint] = []
         for bucket in buckets.keys.sorted() {
