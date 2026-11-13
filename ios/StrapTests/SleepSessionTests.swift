@@ -90,6 +90,26 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(session.unclassifiedHours, 300.0 / 3600, accuracy: 1e-9)
         XCTAssertNil(SleepReport.analyze(samples: samples, session: session, needHours: 8, nights: [], sleepBaseline: nil))
     }
+
+    func testEditedEightHourTwelveMinuteWindowKeepsObservedSleepSeparateFromUnknown() {
+        let observedSeconds = 211 * 60
+        let editedEnd = start + 492 * 60
+        let samples = (0..<observedSeconds).map { sample(start + $0) }
+        let session = SleepSession.make(
+            samples: samples, period: period(492 * 60),
+            correctedTimes: [start, editedEnd]
+        )
+
+        XCTAssertTrue(session.isEdited)
+        XCTAssertEqual(session.startUnix, start)
+        XCTAssertEqual(session.endUnix, editedEnd)
+        XCTAssertEqual(session.timeInBedHours, 8.2, accuracy: 1e-9)
+        XCTAssertEqual(session.staging.hrCoverage, Double(observedSeconds) / Double(492 * 60), accuracy: 1e-12)
+        XCTAssertFalse(session.isComplete)
+        XCTAssertNil(session.asleepHours)
+        XCTAssertEqual(session.staging.totalMinutes * 60, Double(observedSeconds), accuracy: 1e-9)
+        XCTAssertEqual(session.unclassifiedHours, 281.0 / 60.0, accuracy: 1e-9)
+    }
     func testHRBucketsPreserveLongGapAndEditedScope() {
         let samples = [sample(start), sample(start + 1), sample(start + 600)]
         let session = SleepSession.make(samples: samples, period: period(1800))
