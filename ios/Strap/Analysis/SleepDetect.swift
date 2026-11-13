@@ -130,7 +130,8 @@ enum SleepDetect {
                     endUnix: run[run.count - 1].unix,
                     quietFraction: estimatedAsleepFraction(
                         quiet: Array(quiet[start..<end]), unix: run.map(\.unix),
-                        sleepStates: run.map(\.sleepState)
+                        sleepStates: run.map(\.sleepState),
+                        heartRates: run.map { Optional($0.heartRate) }
                     ),
                     meanHR: Stats.mean(runHRs),
                     wakeEvents: wakeEvents
@@ -144,6 +145,7 @@ enum SleepDetect {
     /// Sustained motion or a consistent band wake/up state contributes awake time.
     static func estimatedAsleepFraction(
         quiet: [Bool], unix: [Int], sleepStates: [Int?]? = nil,
+        heartRates: [Int?]? = nil,
         minimumAwakeMotionS: Int = awakeMotionMinS, motionGapS: Int = awakeMotionGapS
     ) -> Double {
         guard quiet.count == unix.count, !unix.isEmpty else { return 0 }
@@ -158,12 +160,34 @@ enum SleepDetect {
         let reliableStateStream = sleepStateSeconds.count >= 300 && stateObserved.count >= 600
         if reliableStateStream { awakeSeconds.formUnion(awakeStateSeconds) }
 
+        let validHR = (heartRates ?? []).compactMap { value -> Double? in
+            guard let value, (35...220).contains(value) else { return nil }
+            return Double(value)
+        }
+        // Movement during sleep is common. Only count a sustained motion bout
+        // as awake when heart rate is also materially elevated above this
+        // window's median; band wake/up states remain the direct signal.
+        let motionWakeThreshold = validHR.isEmpty ? nil : Stats.median(validHR) + 10
+        let elevatedHRSeconds: Set<Int>
+        if let threshold = motionWakeThreshold, let heartRates, heartRates.count == unix.count {
+            elevatedHRSeconds = Set(zip(unix, heartRates).compactMap { timestamp, value in
+                guard let value, (35...220).contains(value), Double(value) >= threshold else { return nil }
+                return timestamp
+            })
+        } else {
+            elevatedHRSeconds = []
+        }
+
         var motionStart: Int?
         var lastMotion: Int?
         func closeMotionBout() {
-            guard let motionStart, let lastMotion,
-                  lastMotion - motionStart + 1 >= minimumAwakeMotionS else { return }
-            awakeSeconds.formUnion(motionStart...lastMotion)
+            guard let motionStart, let lastMotion else { return }
+            let duration = lastMotion - motionStart + 1
+            guard duration >= minimumAwakeMotionS else { return }
+            let bout = Set(motionStart...lastMotion)
+            let elevatedCount = bout.intersection(elevatedHRSeconds).count
+            guard elevatedCount * 2 >= duration else { return }
+            awakeSeconds.formUnion(bout)
         }
         for index in unix.indices {
             let timestamp = unix[index]
