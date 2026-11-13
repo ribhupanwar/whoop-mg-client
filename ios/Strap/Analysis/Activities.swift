@@ -2,13 +2,11 @@ import Foundation
 
 /// Automatic run/walk/workout detection ported from `whoop/activity.py`.
 ///
-/// Session start/stop uses the HR-only detector (baseline = median HR 5-15 min
-/// old, start at max(100, baseline+20) sustained 4 min, minimum 5 min). Gait
-/// or a sustained step rate also opens a session, so a walk counts without a
-/// start tap. The gait byte reads 0 still / 1 walk / 2 run, but the enum is
-/// not vendor-verified, so a label always combines gait, steps and HR rather
-/// than trusting the byte alone. Steps/min comes from the step counter, never
-/// the cadence byte, which reads 97-108 even while sitting still.
+/// A session opens from sustained measured step-counter motion or a sustained
+/// heart-rate rise (baseline = median HR 5-15 min old, start at max(100,
+/// baseline+20) for 4 min; minimum session 5 min). The raw gait byte is not
+/// vendor-verified and cannot open a session. Steps/min comes from step-counter
+/// deltas, never the cadence byte, which can read 97-108 while sitting still.
 enum ActivityDetect {
     static let baselineMinAgeS = 300
     static let baselineMaxAgeS = 900
