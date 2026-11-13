@@ -701,12 +701,19 @@ struct HomeView: View {
             .frame(width: 88, height: 54)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.appAccent))
 
-            Text(row.name.replacingOccurrences(of: " · band", with: "").uppercased())
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(0.5)
-                .foregroundStyle(Color.appFG)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.name.replacingOccurrences(of: " · band", with: "").uppercased())
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.appFG)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(row.detail)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.appMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
 
             Spacer(minLength: 4)
 
@@ -721,15 +728,6 @@ struct HomeView: View {
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 15).fill(Color.appRaised))
-        .overlay(alignment: .bottomLeading) {
-            Text(row.detail)
-                .font(.system(size: 9))
-                .foregroundStyle(Color.appMuted)
-                .lineLimit(1)
-                .padding(.leading, 108)
-                .padding(.bottom, 2)
-                .hidden()
-        }
     }
 
     private static func clockTime(_ unix: Int) -> String {
