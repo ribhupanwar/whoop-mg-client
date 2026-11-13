@@ -431,13 +431,16 @@ final class BandLink: NSObject, ObservableObject {
         )
         // Copy only this night's records; never hand the full archive to the
         // background task or repeatedly score it from SwiftUI body getters.
-        let nightSamples = retainedHistoricalSamples.filter {
-            $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
-        }
+        // Snapshot the array (copy-on-write) on main, then filter and score
+        // off-main. Filtering the full archive on main can freeze Home.
+        let archiveSnapshot = retainedHistoricalSamples
         let requiredHours = needHours
         let priorNights = recentNights
         let baselineSnapshot = sleepBaseline
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let nightSamples = archiveSnapshot.filter {
+                $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
+            }
             let result = SleepStager.stage(samples: nightSamples, period: corrected)
             let report: SleepAnalysis?
             if result.stageable {
