@@ -192,6 +192,28 @@ struct DashboardView: View {
             .sorted { $0.dateKey < $1.dateKey }
     }
 
+    /// One slot per calendar day. A missing capture keeps its position as nil.
+    private var trendDayKeys: [String] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        return (0..<trendWindow).compactMap { offset in
+            calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: today)
+                .map { formatter.string(from: $0) }
+        }
+    }
+
+    private var trendDayMetrics: [DayMetrics?] {
+        SparseSeries.align(
+            keys: store.band.days.map(\.dateKey),
+            values: store.band.days,
+            to: trendDayKeys
+        )
+    }
+
     private var trendsPanel: some View {
         Panel {
             SectionTitle(focusedMetric == "recovery" ? "Recovery history" : focusedMetric == "strain" ? "Strain history" : "Sleep · Recovery · Strain")
@@ -212,28 +234,28 @@ struct DashboardView: View {
             trendChart(
                 title: "STEPS · RECORDED MINIMUM",
                 unit: "steps",
-                values: recentDays.map { $0.steps.map(Double.init) },
+                values: trendDayMetrics.map { $0?.steps.map(Double.init) },
                 color: .appAccent,
                 upper: max(1000, Double(recentDays.compactMap { $0.steps }.max() ?? 1000))
             )
             trendChart(
                 title: "RESTING HEART RATE",
                 unit: "bpm",
-                values: recentDays.map { $0.restingHR },
+                values: trendDayMetrics.map { $0?.restingHR },
                 color: .appWarn,
                 upper: max(100, (recentDays.compactMap { $0.restingHR }.max() ?? 80) + 10)
             )
             trendChart(
                 title: "HRV · RMSSD",
                 unit: "ms",
-                values: recentDays.map { $0.lnRMSSD.map { exp($0) } },
+                values: trendDayMetrics.map { $0?.lnRMSSD.map { exp($0) } },
                 color: .appGood,
                 upper: max(100, (recentDays.compactMap { $0.lnRMSSD }.map { exp($0) }.max() ?? 70) + 10)
             )
             trendChart(
                 title: "SLEEP",
                 unit: "hours",
-                values: recentDays.map { $0.sleepHours > 0 ? $0.sleepHours : nil },
+                values: trendDayMetrics.map { $0.flatMap { $0.sleepHours > 0 ? $0.sleepHours : nil } },
                 color: .appSleep,
                 upper: max(10, store.settings.sleepNeedHours + 2)
             )
@@ -518,7 +540,7 @@ struct DashboardView: View {
                     minY: 0,
                     maxY: upper,
                     height: 105,
-                    xLabels: [recentDays.first?.dateKey ?? "", recentDays.last?.dateKey ?? ""]
+                    xLabels: [trendDayKeys.first ?? "", trendDayKeys.last ?? ""]
                 )
                 Text("Missing days stay blank; no values are interpolated.")
                     .font(.system(size: 10))

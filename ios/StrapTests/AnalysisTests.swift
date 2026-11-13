@@ -740,6 +740,18 @@ final class RespirationTests: XCTestCase {
 
 
 final class SparseSeriesChartTests: XCTestCase {
+    func testCalendarAlignmentKeepsMissingDateSlots() {
+        let aligned = SparseSeries.align(
+            keys: ["2026-11-11", "2026-11-13"],
+            values: [12, 15],
+            to: ["2026-11-11", "2026-11-12", "2026-11-13"]
+        )
+        XCTAssertEqual(aligned.count, 3)
+        XCTAssertEqual(aligned[0], 12)
+        XCTAssertNil(aligned[1])
+        XCTAssertEqual(aligned[2], 15)
+    }
+
     func testMissingDaysSplitTrendIntoSeparateRuns() {
         let runs = SparseSeries.runs([10.0, 12.0, nil, 18.0, nil, 20.0, 22.0])
         XCTAssertEqual(runs.map { $0.map(\.index) }, [[0, 1], [3], [5, 6]])

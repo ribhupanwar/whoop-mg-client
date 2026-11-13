@@ -782,6 +782,11 @@ struct SparseSeriesPoint: Equatable, Identifiable {
 }
 
 enum SparseSeries {
+    static func align<T>(keys: [String], values: [T], to calendarDays: [String]) -> [T?] {
+        let byDay = Dictionary(zip(keys, values), uniquingKeysWith: { _, latest in latest })
+        return calendarDays.map { byDay[$0] }
+    }
+
     static func runs(_ values: [Double?]) -> [[SparseSeriesPoint]] {
         var result: [[SparseSeriesPoint]] = []
         var current: [SparseSeriesPoint] = []
