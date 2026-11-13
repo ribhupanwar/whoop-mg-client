@@ -94,7 +94,7 @@ struct SleepAnalysisView: View {
     // MARK: Performance ring
 
     private var performancePct: Double? {
-        demo ? Double(SampleData.sleepPerformance) : (editedSleepWindowHours != nil ? nil : analysis?.performancePct)
+        demo ? Double(SampleData.sleepPerformance) : analysis?.performancePct
     }
 
     private var performancePanel: some View {
@@ -444,7 +444,7 @@ struct SleepAnalysisView: View {
             } else if editedSleepWindowHours != nil {
                 EmptyState(
                     title: "Recalculating corrected sleep",
-                    detail: "Analyzing the manually edited window from retained sensor data. Original capture stages are intentionally hidden to avoid mixing two different sleep windows."
+                    detail: store.band.correctedSleepStaging?.reason.map { "Corrected stages unavailable: \($0). Original capture stages are hidden to avoid mixing windows." } ?? "Analyzing the manually edited window from retained sensor data. Original capture stages are hidden until recalculation completes."
                 )
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
                 EmptyState(
