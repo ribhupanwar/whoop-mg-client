@@ -142,10 +142,30 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(SleepDetect.estimatedAsleepFraction(quiet: quiet, unix: Array(0..<600)), 1, accuracy: 0.001)
     }
 
-    func testSustainedPhoneMotionCountsAsAwake() {
+    func testSustainedPhoneMotionCountsAsAwakeWhenHeartRateRises() {
         var quiet = Array(repeating: true, count: 600)
         for second in 120..<300 { quiet[second] = false }
-        XCTAssertEqual(SleepDetect.estimatedAsleepFraction(quiet: quiet, unix: Array(0..<600)), 0.7, accuracy: 0.01)
+        let heartRates = (0..<600).map { Optional((120..<300).contains($0) ? 88 : 55) }
+        XCTAssertEqual(
+            SleepDetect.estimatedAsleepFraction(
+                quiet: quiet, unix: Array(0..<600), heartRates: heartRates
+            ),
+            0.7,
+            accuracy: 0.01
+        )
+    }
+
+    func testSustainedMotionWithoutHeartRateRiseIsNotCountedAsAwake() {
+        var quiet = Array(repeating: true, count: 600)
+        for second in 120..<300 { quiet[second] = false }
+        let heartRates = Array(repeating: Optional(55), count: 600)
+        XCTAssertEqual(
+            SleepDetect.estimatedAsleepFraction(
+                quiet: quiet, unix: Array(0..<600), heartRates: heartRates
+            ),
+            1.0,
+            accuracy: 0.01
+        )
     }
 
     func testReliableBandWakeStateCountsStillPhoneUseAsAwake() {
