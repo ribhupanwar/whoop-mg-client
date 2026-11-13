@@ -24,7 +24,7 @@ struct HomeView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 topBar
                 titleBlock
                 ringTrio
@@ -91,7 +91,7 @@ struct HomeView: View {
                         Button("Save") {
                             if correctedSleepEnd > correctedSleepStart,
                                let period = latestSleepPeriod {
-                                sleepCorrections[String(period.startUnix)] = [
+                                sleepCorrections[SleepCorrectionStore.key(for: period)] = [
                                     Int(correctedSleepStart.timeIntervalSince1970),
                                     Int(correctedSleepEnd.timeIntervalSince1970)
                                 ]
@@ -208,7 +208,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: .appGood
+                    color: recoveryScore.map { $0 >= 67 ? Color.appGood : ($0 >= 34 ? Color.appWarn : Color.appHigh) } ?? .appMuted
                     )
                 }
                 .buttonStyle(.plain)
@@ -500,7 +500,7 @@ struct HomeView: View {
                     Spacer()
                     Button("Edit sleep time") {
                         guard let period = latestSleepPeriod else { return }
-                        let times = sleepCorrections[String(period.startUnix)]
+                        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
                         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
                         correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
                         showSleepEditor = true
@@ -520,7 +520,7 @@ struct HomeView: View {
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            activityCard(row)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -534,6 +534,18 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .contextMenu {
+                            if row.id.hasPrefix("band-"),
+                               let start = Int(row.id.dropFirst("band-".count)) {
+                                Button(role: .destructive) {
+                                    store.hideDetectedActivity(startUnix: start)
+                                } label: {
+                                    Label("Delete activity", systemImage: "trash")
+                                }
+                            }
+                        }
+                        .contentShape(Rectangle())
+
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
@@ -575,6 +587,8 @@ struct HomeView: View {
         let name: String
         let detail: String
         let startUnix: Int?
+        let endUnix: Int?
+        let metricLabel: String?
     }
 
     private var timedRows: [ActivityRowModel] {
@@ -606,8 +620,10 @@ struct HomeView: View {
                 id: key,
                 icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(steps)\(heart)\(kcal)",
-                startUnix: session.startUnix
+                detail: "\(minutes) min\(steps)\(heart)\(kcal)",
+                startUnix: session.startUnix,
+                endUnix: session.endUnix,
+                metricLabel: "\(minutes)m"
             )
         }
     }
@@ -621,8 +637,10 @@ struct HomeView: View {
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
-                startUnix: record.startedUnix
+                detail: "\(minutes) min\(heart)\(kcal)",
+                startUnix: record.startedUnix,
+                endUnix: record.endedUnix,
+                metricLabel: "\(minutes)m"
             )
         }
     }
@@ -634,7 +652,9 @@ struct HomeView: View {
                 icon: activity.kind.icon,
                 name: "\(activity.name) · logged",
                 detail: activity.summary,
-                startUnix: nil
+                startUnix: nil,
+                endUnix: nil,
+                metricLabel: nil
             )
         }
     }
@@ -666,6 +686,55 @@ struct HomeView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
+    }
+
+    private func activityCard(_ row: ActivityRowModel) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: row.icon)
+                    .font(.system(size: 19, weight: .medium))
+                Text(row.metricLabel ?? "—")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Color.white)
+            .frame(width: 88, height: 54)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appAccent))
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(row.name.replacingOccurrences(of: " · band", with: "").uppercased())
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(0.5)
+                    .foregroundStyle(Color.appFG)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Text(row.detail)
+                    .font(.system(size: 9))
+                    .foregroundStyle(Color.appMuted)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+
+            Spacer(minLength: 4)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(row.startUnix.map(Self.clockTime) ?? "—")
+                Text(row.endUnix.map(Self.clockTime) ?? "")
+            }
+            .font(.system(size: 11, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Color.appMuted)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 15).fill(Color.appRaised))
+    }
+
+    private static func clockTime(_ unix: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -741,24 +810,19 @@ struct HomeView: View {
     }
 
     private var lastNightText: String {
-        // Keep the displayed duration consistent with an edited start/end.
-        // This is elapsed time in the edited window, not measured time asleep.
-        if let period = latestSleepPeriod,
-           let corrected = sleepCorrections[String(period.startUnix)],
-           corrected.count == 2, corrected[1] > corrected[0] {
-            return CoachFormat.duration(Double(corrected[1] - corrected[0]) / 3600.0)
-        }
+        // Display measured asleep time (Light + Deep + REM), never the
+        // manually edited bed-to-wake window which includes awake minutes.
         guard let hours = store.band.lastNightHours else { return "—" }
         return CoachFormat.duration(hours)
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+        store.lastCapture?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private var sleepTimesText: String {
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
-        let times = sleepCorrections[String(period.startUnix)]
+        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
         return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? period.endUnix, includeDay: false))"
     }
 

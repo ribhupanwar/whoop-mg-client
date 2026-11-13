@@ -8,6 +8,8 @@ enum SleepDetect {
     static let minSleepS = 3600
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
+    static let awakeMotionMinS = 120
+    static let awakeMotionGapS = 20
 
     /// Sustained-quiet periods confirmed by a heart-rate drop.
     ///
@@ -24,7 +26,6 @@ enum SleepDetect {
     ) -> [SleepPeriod] {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
-
         let quiet = ordered.map { sample in
             guard let accel = sample.dynamicAccelG else { return false }
             return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
@@ -120,24 +121,131 @@ enum SleepDetect {
                 continue
             }
 
-            let quietSeconds = quiet[start..<end].filter { $0 }.count
-            var wakeEvents = 0
-            if end > start + 1 {
-                for second in (start + 1)..<end where !quiet[second] && quiet[second - 1] {
-                    wakeEvents += 1
-                }
-            }
+            let wakeEvents = movementBoutCount(
+                quiet: Array(quiet[start..<end]), unix: run.map(\.unix)
+            )
             periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
                     endUnix: run[run.count - 1].unix,
-                    quietFraction: Double(quietSeconds) / Double(run.count),
+                    quietFraction: estimatedAsleepFraction(
+                        quiet: Array(quiet[start..<end]), unix: run.map(\.unix),
+                        sleepStates: run.map(\.sleepState),
+                        heartRates: run.map { Optional($0.heartRate) }
+                    ),
                     meanHR: Stats.mean(runHRs),
                     wakeEvents: wakeEvents
                 )
             )
         }
         return periods
+    }
+
+    /// Estimates asleep time without treating every small movement as an awakening.
+    /// Sustained motion or a consistent band wake/up state contributes awake time.
+    static func estimatedAsleepFraction(
+        quiet: [Bool], unix: [Int], sleepStates: [Int?]? = nil,
+        heartRates: [Int?]? = nil,
+        minimumAwakeMotionS: Int = awakeMotionMinS, motionGapS: Int = awakeMotionGapS
+    ) -> Double {
+        guard quiet.count == unix.count, !unix.isEmpty else { return 0 }
+        var awakeSeconds = Set<Int>()
+        let states = sleepStates ?? Array(repeating: nil, count: unix.count)
+        let statePairs = Array(zip(unix, states))
+        let sleepStateSeconds = Set(statePairs.compactMap { pair -> Int? in pair.1 == 2 ? pair.0 : nil })
+        let awakeStateSeconds = Set(statePairs.compactMap { pair -> Int? in
+            pair.1 == 0 || pair.1 == 3 ? pair.0 : nil
+        })
+        let stateObserved = sleepStateSeconds.union(awakeStateSeconds)
+        let reliableStateStream = sleepStateSeconds.count >= 300 && stateObserved.count >= 600
+        if reliableStateStream { awakeSeconds.formUnion(awakeStateSeconds) }
+
+        let validHR = (heartRates ?? []).compactMap { value -> Double? in
+            guard let value, (35...220).contains(value) else { return nil }
+            return Double(value)
+        }
+        // Movement during sleep is common. Only count a sustained motion bout
+        // as awake when heart rate is also materially elevated above this
+        // window's median; band wake/up states remain the direct signal.
+        let motionWakeThreshold = validHR.isEmpty ? nil : Stats.median(validHR) + 10
+        let elevatedHRSeconds: Set<Int>
+        if let threshold = motionWakeThreshold, let heartRates, heartRates.count == unix.count {
+            elevatedHRSeconds = Set(zip(unix, heartRates).compactMap { timestamp, value in
+                guard let value, (35...220).contains(value), Double(value) >= threshold else { return nil }
+                return timestamp
+            })
+        } else {
+            elevatedHRSeconds = []
+        }
+
+        var motionStart: Int?
+        var lastMotion: Int?
+        func closeMotionBout() {
+            guard let motionStart, let lastMotion else { return }
+            let duration = lastMotion - motionStart + 1
+            guard duration >= minimumAwakeMotionS else { return }
+            let bout = Set(motionStart...lastMotion)
+            let elevatedCount = bout.intersection(elevatedHRSeconds).count
+            guard elevatedCount * 2 >= duration else { return }
+            awakeSeconds.formUnion(bout)
+        }
+        for index in unix.indices {
+            let timestamp = unix[index]
+            if !quiet[index] {
+                if let previous = lastMotion, timestamp - previous > motionGapS {
+                    closeMotionBout()
+                    motionStart = nil
+                    lastMotion = nil
+                }
+                if motionStart == nil { motionStart = timestamp }
+                lastMotion = timestamp
+            } else if let previous = lastMotion, timestamp - previous > motionGapS {
+                closeMotionBout()
+                motionStart = nil
+                lastMotion = nil
+            }
+        }
+        closeMotionBout()
+        let observed = Set(unix)
+        guard !observed.isEmpty else { return 0 }
+        return 1.0 - Double(awakeSeconds.intersection(observed).count) / Double(observed.count)
+    }
+
+    /// Counts coarse motion bouts, never individual movement samples or verified awakenings.
+    /// A bout needs 30 seconds of observed motion; gaps up to 20 seconds are coalesced.
+    static func movementBoutCount(quiet: [Bool], unix: [Int], minimumDurationS: Int = 30, gapToleranceS: Int = 20) -> Int {
+        guard quiet.count == unix.count else { return 0 }
+        var bouts = 0
+        var start: Int?
+        var lastMovement: Int?
+        var lastCountedSecond: Int?
+        var activeSeconds = 0
+        func closeBout() {
+            if start != nil && activeSeconds >= minimumDurationS { bouts += 1 }
+        }
+        func resetBout() {
+            start = nil
+            lastMovement = nil
+            lastCountedSecond = nil
+            activeSeconds = 0
+        }
+        for (index, timestamp) in unix.enumerated() {
+            if !quiet[index] {
+                if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
+                    closeBout(); resetBout()
+                }
+                if start == nil { start = timestamp }
+                if lastCountedSecond != timestamp {
+                    activeSeconds += 1
+                    lastCountedSecond = timestamp
+                }
+                lastMovement = timestamp
+            } else if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
+                closeBout(); resetBout()
+            }
+        }
+        closeBout()
+        return bouts
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {

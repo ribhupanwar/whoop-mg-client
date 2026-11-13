@@ -94,7 +94,7 @@ enum SleepStager {
 
         for sample in ordered where sample.unix >= padLo && sample.unix < padHi {
             let second = sample.unix
-            if sample.heartRate > 0 {
+            if sample.wearing, (35...220).contains(sample.heartRate) {
                 hrSum[second, default: 0] += Double(sample.heartRate)
                 hrCount[second, default: 0] += 1
             }
@@ -125,13 +125,22 @@ enum SleepStager {
         let epochs = features(
             start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
         )
-        let hrEpochs = epochs.filter { $0.hr != nil }.count
-        let coverage = Double(hrEpochs) / Double(gridEpochs)
+        // Coverage is unique in-window seconds with a valid HR sample, not
+        // the fraction of 30-second bins containing even one sample.
+        let hrSeconds = secHR.keys.filter { $0 >= start && $0 < end }.sorted()
+        let hrWindowSeconds = max(0, end - start)
+        let coverage = Double(hrSeconds.count) / Double(max(1, hrWindowSeconds))
+        let longestMissingHRGap = longestMissingGap(
+            start: start, end: end, observed: hrSeconds
+        )
         guard coverage >= minHRCoverage else {
             let percent = Int((coverage * 100).rounded())
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+                longestHRGapSeconds: longestMissingHRGap,
+                epochs: epochs.count, hrCoverage: coverage,
                 reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
             )
         }
@@ -140,14 +149,39 @@ enum SleepStager {
         guard labels.count == epochs.count else {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+                longestHRGapSeconds: longestMissingHRGap,
+                epochs: epochs.count, hrCoverage: coverage,
                 reason: "staging produced no labels"
             )
         }
 
+        let declaredSleepSeconds = Set(ordered.filter {
+            $0.unix >= start && $0.unix < end && $0.sleepState == 2
+        }.map(\.unix))
+        let awakeStateSeconds = Set(ordered.filter {
+            $0.unix >= start && $0.unix < end && ($0.sleepState == 0 || $0.sleepState == 3)
+        }.map(\.unix))
+        let stateObservedSeconds = declaredSleepSeconds.union(awakeStateSeconds).count
+        // Treat explicit band wake/up states as awake only when the same window
+        // contains sustained sleep-state evidence; ignore default/constant bytes.
+        let reliableStateStream = declaredSleepSeconds.count >= 300 && stateObservedSeconds >= 600
+        let displayLabels = epochs.enumerated().map { index, epoch in
+            if epoch.hr == nil && epoch.moveFrac == nil && epoch.respReg == nil {
+                return SleepStage.unclassified
+            }
+            if reliableStateStream {
+                let awakeCount = (epoch.start..<(epoch.start + epochS)).filter {
+                    awakeStateSeconds.contains($0)
+                }.count
+                if awakeCount >= epochS / 2 { return SleepStage.wake }
+            }
+            return labels[index]
+        }
         var segments: [SleepStageSegment] = []
         for (index, epoch) in epochs.enumerated() {
-            let stage = labels[index]
+            let stage = displayLabels[index]
             let segmentStart = index == 0 ? start : epoch.start
             let segmentEnd = index == epochs.count - 1 ? end : epochs[index + 1].start
             if let last = segments.last, last.stage == stage {
@@ -165,20 +199,35 @@ enum SleepStager {
         var light = 0.0
         var rem = 0.0
         var wake = 0.0
+        var unclassified = 0.0
         for segment in segments {
             switch segment.stage {
             case .deep: deep += segment.minutes
             case .light: light += segment.minutes
             case .rem: rem += segment.minutes
             case .wake: wake += segment.minutes
+            case .unclassified: unclassified += segment.minutes
             }
         }
 
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
-            remMinutes: rem, wakeMinutes: wake, epochs: epochs.count,
-            hrCoverage: coverage, reason: nil
+            remMinutes: rem, wakeMinutes: wake, unclassifiedMinutes: unclassified,
+            hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+            longestHRGapSeconds: longestMissingHRGap,
+            epochs: epochs.count, hrCoverage: coverage, reason: nil
         )
+    }
+
+    private static func longestMissingGap(start: Int, end: Int, observed: [Int]) -> Int {
+        guard end > start else { return 0 }
+        var previous = start - 1
+        var longest = 0
+        for second in observed {
+            longest = max(longest, second - previous - 1)
+            previous = second
+        }
+        return max(longest, end - previous - 1)
     }
 
     // MARK: - Features
@@ -201,7 +250,7 @@ enum SleepStager {
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
-        let moveFrac: Double
+        let moveFrac: Double?
         let jerkMax: Double
         let respReg: Double?
         let clock: Double
@@ -245,11 +294,6 @@ enum SleepStager {
                 if let value = secHR[second] { hrs.append(value) }
                 if let point = secGravity[second] { gravity.append(point) }
             }
-            if hrs.isEmpty && gravity.isEmpty {
-                epochStart += epochS
-                continue
-            }
-
             var jerks: [Double] = []
             if gravity.count >= 2 {
                 for index in 1..<gravity.count {
@@ -304,7 +348,7 @@ enum SleepStager {
                 hr: raw.hr,
                 hrVar: raw.hrVar,
                 hrFlat11: raw.hrFlat11,
-                moveFrac: Double(moves) / Double(raw.gapCount),
+                moveFrac: raw.jerks.isEmpty ? nil : Double(moves) / Double(raw.gapCount),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
                 clock: raw.clock,
@@ -396,7 +440,7 @@ enum SleepStager {
     }
 
     private static func motionQuiescent(_ epoch: Epoch) -> Bool {
-        epoch.moveFrac <= 0 && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
+        (epoch.moveFrac.map { $0 <= 0 } ?? false) && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
     }
 
     private static func remGuard(_ minutesSinceOnset: Double) -> Double {
@@ -484,7 +528,7 @@ enum SleepStager {
         guard !epochs.isEmpty else { return [] }
         let zHR = zScorer(epochs.map { $0.hr })
         let zVar = zScorer(epochs.map { $0.hrVar })
-        let zMove = zScorer(epochs.map { Optional($0.moveFrac) })
+        let zMove = zScorer(epochs.map { $0.moveFrac })
         let zResp = zScorer(epochs.map { $0.respReg })
         let flatSorted = epochs.compactMap { $0.hrFlat11 }.sorted()
 

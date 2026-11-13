@@ -44,7 +44,9 @@ enum ActivityDetect {
         let baselines = baselineHRs(ordered)
 
         var flags: [Bool] = []
+        var elevatedFlags: [Bool] = []
         flags.reserveCapacity(ordered.count)
+        elevatedFlags.reserveCapacity(ordered.count)
         for (index, sample) in ordered.enumerated() {
             let gait = sample.activityClass
             let locomotion: Bool
@@ -72,6 +74,7 @@ enum ActivityDetect {
                 elevated = false
             }
             flags.append(locomotion || elevated)
+            elevatedFlags.append(elevated)
         }
         let closed = GapClosing.closed(
             flags, unix: ordered.map { $0.unix }, maxGapS: gapToleranceS
@@ -97,6 +100,13 @@ enum ActivityDetect {
             let spm = rates[start..<end].compactMap { $0 }.filter { $0 > 0 }
             let steps = StepCounter.total(run) ?? 0
             let hasSteps = run.contains { $0.stepCounter != nil }
+            let hasMeaningfulSteps = steps >= 100
+            let gaitOnlyWithoutCounter = !hasSteps && walkTicks + runTicks >= startSustainS
+            let sustainedElevatedHR = elevatedFlags[start..<end].filter { $0 }.count >= startSustainS
+            // A stale gait label plus one isolated step is not an activity.
+            // Keep genuine HR-driven sessions and firmware sessions where the
+            // step counter is absent, but require meaningful step evidence otherwise.
+            guard hasMeaningfulSteps || gaitOnlyWithoutCounter || sustainedElevatedHR else { continue }
 
             sessions.append(
                 ActivitySession(

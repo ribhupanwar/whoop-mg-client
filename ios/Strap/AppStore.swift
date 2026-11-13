@@ -18,6 +18,15 @@ final class AppStore: ObservableObject {
     /// still shows on yesterday's screen.
     @Published private(set) var detectedBandActivities: [ActivitySession] = []
 
+    /// Persist hidden false-positive detections across band re-syncs.
+    @Published private(set) var hiddenDetectedStarts: Set<Int> =
+        Set(UserDefaults.standard.array(forKey: "strap.activities.hiddenStarts.v1") as? [Int] ?? [])
+
+    func hideDetectedActivity(startUnix: Int) {
+        hiddenDetectedStarts.insert(startUnix)
+        defaults.set(Array(hiddenDetectedStarts).sorted(), forKey: "strap.activities.hiddenStarts.v1")
+    }
+
     let band = BandLink()
     /// Optional Apple Health export. OFF until the toggle in Settings asks.
     let health = HealthKitBridge()
@@ -216,6 +225,11 @@ final class AppStore: ObservableObject {
         let merged = (band.summary?.activities ?? []) + detectedBandActivities
         return merged
             .filter { JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix))) == dateKey }
+            // Detector boundaries can shift slightly after a partial sync.
+            // Keep a user deletion attached to the same session across re-imports.
+            .filter { session in
+                !hiddenDetectedStarts.contains(where: { abs($0 - session.startUnix) <= 300 })
+            }
             .filter { seen.insert($0.startUnix).inserted }
             .sorted { $0.startUnix < $1.startUnix }
     }

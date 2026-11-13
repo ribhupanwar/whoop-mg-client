@@ -83,6 +83,36 @@ struct SleepPeriod: Codable, Equatable {
     var hours: Double { Double(durationS) / 3600.0 }
 }
 
+
+
+/// Stable wake-day key keeps user-edited sleep boundaries attached when detection trims onset.
+enum SleepCorrectionStore {
+    static func key(for period: SleepPeriod, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let wakeDate = Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+        return "wake-day-\(formatter.string(from: wakeDate))"
+    }
+
+    static func times(for period: SleepPeriod, overrides: [String: [Int]], timeZone: TimeZone = .current) -> [Int]? {
+        overrides[key(for: period, timeZone: timeZone)] ?? overrides[String(period.startUnix)]
+    }
+
+    /// Sensor-derived fallback for an edited bed window when stage data is incomplete.
+    /// Quiet fraction comes from recorded on-wrist motion; it never treats the full
+    /// time-in-bed window as asleep and never fills missing HR or stages.
+    static func estimatedAsleepHours(period: SleepPeriod, editedTimes: [Int]?) -> Double {
+        let observedEstimate = period.hours * min(1.0, max(0.0, period.quietFraction))
+        guard let editedTimes, editedTimes.count == 2, editedTimes[1] > editedTimes[0] else {
+            return observedEstimate
+        }
+        let editedWindowHours = Double(editedTimes[1] - editedTimes[0]) / 3600.0
+        return min(observedEstimate, editedWindowHours)
+    }
+}
+
 /// One bedtime-to-waketime span, used by the consistency rule.
 struct NightSpan: Codable, Equatable {
     let startUnix: Int
@@ -91,7 +121,7 @@ struct NightSpan: Codable, Equatable {
 
 /// A four-class estimate. Never a PSG reading and never presented as one.
 enum SleepStage: String, Codable, CaseIterable, Identifiable {
-    case wake, light, deep, rem
+    case wake, light, deep, rem, unclassified
 
     var id: String { rawValue }
 
@@ -101,6 +131,7 @@ enum SleepStage: String, Codable, CaseIterable, Identifiable {
         case .light: return "Light"
         case .deep: return "Deep"
         case .rem: return "REM"
+        case .unclassified: return "Unclassified"
         }
     }
 }
@@ -126,6 +157,15 @@ struct SleepStaging: Codable, Equatable {
     let lightMinutes: Double
     let remMinutes: Double
     let wakeMinutes: Double
+    /// Minutes without enough HR, motion or R-R evidence to assign a stage.
+    /// Optional so summaries saved by older builds still decode.
+    var unclassifiedMinutes: Double? = nil
+    /// Unique in-window seconds containing at least one valid HR sample.
+    var hrObservedSeconds: Int? = nil
+    /// Full analyzed window in seconds; older cached summaries omit this.
+    var hrWindowSeconds: Int? = nil
+    /// Longest run of seconds without an HR sample inside the analyzed window.
+    var longestHRGapSeconds: Int? = nil
     let epochs: Int
     let hrCoverage: Double
     let reason: String?
@@ -138,7 +178,7 @@ struct SleepStaging: Codable, Equatable {
 
     var asleepMinutes: Double { deepMinutes + lightMinutes + remMinutes }
     var restorativeMinutes: Double { deepMinutes + remMinutes }
-    var totalMinutes: Double { asleepMinutes + wakeMinutes }
+    var totalMinutes: Double { asleepMinutes + wakeMinutes + (unclassifiedMinutes ?? 0) }
 
     func minutes(for stage: SleepStage) -> Double {
         switch stage {
@@ -146,6 +186,7 @@ struct SleepStaging: Codable, Equatable {
         case .light: return lightMinutes
         case .deep: return deepMinutes
         case .rem: return remMinutes
+        case .unclassified: return unclassifiedMinutes ?? 0
         }
     }
 

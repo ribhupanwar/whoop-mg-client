@@ -211,27 +211,9 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
-        // Older archives may contain duplicate timestamps. Never crash during reload.
-        var bySecond: [Int: V18Sample] = [:]
-        for sample in retainedHistoricalSamples {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
-        for sample in incoming {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
-        let ordered = bySecond.values.sorted { $0.unix < $1.unix }
+        // Deduplicate exact Q15 timestamps only. Record indices can be reused,
+        // and separate sub-second records in one second are valid history.
+        let ordered = HistoricalArchive.deduplicated(retainedHistoricalSamples + incoming)
         let cutoff = (ordered.last?.unix ?? 0) - 72 * 3600
         let merged = ordered.filter { $0.unix >= cutoff }
         do {
@@ -245,7 +227,7 @@ final class BandLink: NSObject, ObservableObject {
             return nil
         }
     }
-    private var seenRecordIndices: Set<UInt32> = []
+    private var seenRecordTimestamps: Set<UInt64> = []
     private var drainFrames = 0
     private var historicalRecordFrames = 0
     private var drainAcks = 0
@@ -316,6 +298,7 @@ final class BandLink: NSObject, ObservableObject {
         let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
         guard lastRecalculationSettings != settingsKey else { return }
         lastRecalculationSettings = settingsKey
+        scheduleCorrectedSleepRestaging()
         // Startup safety: do not synchronously analyze the entire retained
         // BLE archive on the SwiftUI/main thread. The cached summary and
         // daily metrics were restored in init(); the next history sync will
@@ -331,11 +314,14 @@ final class BandLink: NSObject, ObservableObject {
             samples: retainedHistoricalSamples, sex: sex, maxHR: maxHR,
             awakeBaseline: awakeBaseline
         )
-        summary = fresh
-        persist(fresh)
         merge(DailyAnalysis.metrics(
             from: retainedHistoricalSamples, sex: sex, maxHR: maxHR
         ))
+        // A detector regression or partial archive must not erase a previously
+        // validated night during settings migration or refresh.
+        if fresh.sleepPeriods.isEmpty, summary?.sleepPeriods.isEmpty == false { return }
+        summary = fresh
+        persist(fresh)
         if !fresh.sleepPeriods.isEmpty {
             let analysis = SleepReport.analyze(
                 samples: retainedHistoricalSamples,
@@ -393,10 +379,14 @@ final class BandLink: NSObject, ObservableObject {
         // The Home card represents the latest sleep session, not the sum of
         // every detected nap/session in the retained multi-day capture.
         guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
-        let corrected = overrides[String(period.startUnix)]
+        let corrected = SleepCorrectionStore.times(for: period, overrides: overrides)
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-            let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
-            return correctedHours * min(1.0, max(0.0, period.quietFraction))
+            if let staged = correctedSleepStaging, staged.stageable {
+                return staged.asleepMinutes / 60.0
+            }
+            // Keep the sleep ring useful when HR coverage is too sparse for stages.
+            // This remains a motion-derived estimate and is capped by the edited window.
+            return SleepCorrectionStore.estimatedAsleepHours(period: period, editedTimes: corrected)
         }
         if let stage = summary?.sleepStaging,
            summary?.sleepPeriods.last?.startUnix == period.startUnix,
@@ -406,7 +396,66 @@ final class BandLink: NSObject, ObservableObject {
         return period.hours * min(1.0, max(0.0, period.quietFraction))
     }
 
+    // A computed SwiftUI property must never restage a multi-hour raw archive.
+    // The previous implementation ran trigonometric stage scoring on the
+    // main thread during AttributeGraph updates and could trip 0x8BADF00D.
+    @Published private(set) var correctedSleepStaging: SleepStaging?
+    private var correctedStageRequest = 0
+
+    private func scheduleCorrectedSleepRestaging() {
+        correctedStageRequest += 1
+        let request = correctedStageRequest
+        correctedSleepStaging = nil
+        lastSleepAnalysis = nil // Do not show stale performance after a correction.
+        guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        guard let times = SleepCorrectionStore.times(for: period, overrides: overrides), times.count == 2,
+              times[1] > times[0], !retainedHistoricalSamples.isEmpty else { return }
+        let corrected = SleepPeriod(
+            startUnix: times[0], endUnix: times[1] - 1,
+            quietFraction: period.quietFraction, meanHR: period.meanHR,
+            wakeEvents: period.wakeEvents
+        )
+        // Copy only this night's records; never hand the full archive to the
+        // background task or repeatedly score it from SwiftUI body getters.
+        // Snapshot the array (copy-on-write) on main, then filter and score
+        // off-main. Filtering the full archive on main can freeze Home.
+        let archiveSnapshot = retainedHistoricalSamples
+        let requiredHours = needHours
+        let priorNights = recentNights
+        let baselineSnapshot = sleepBaseline
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let nightSamples = archiveSnapshot.filter {
+                $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
+            }
+            let result = SleepStager.stage(samples: nightSamples, period: corrected)
+            let report: SleepAnalysis?
+            if result.stageable {
+                let fraction = min(1.0, max(0.0,
+                    result.asleepMinutes * 60.0 / Double(max(1, corrected.durationS))))
+                let measuredPeriod = SleepPeriod(
+                    startUnix: corrected.startUnix, endUnix: corrected.endUnix,
+                    quietFraction: fraction, meanHR: corrected.meanHR,
+                    wakeEvents: corrected.wakeEvents
+                )
+                report = SleepReport.analyze(
+                    samples: nightSamples, periods: [measuredPeriod],
+                    needHours: requiredHours, nights: priorNights,
+                    sleepBaseline: baselineSnapshot
+                )
+            } else {
+                report = nil
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.correctedStageRequest == request else { return }
+                self.correctedSleepStaging = result
+                self.lastSleepAnalysis = report
+            }
+        }
+    }
+
     func notifySleepCorrectionChanged() {
+        scheduleCorrectedSleepRestaging()
         objectWillChange.send()
     }
 
@@ -987,7 +1036,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startCaptureFile() {
         capturedSamples = []
-        seenRecordIndices = []
+        seenRecordTimestamps = []
         drainFrames = 0
         drainAcks = 0
         drainStats = DrainStats()
@@ -1029,11 +1078,9 @@ final class BandLink: NSObject, ObservableObject {
         captureWriter?.close()
         captureWriter = nil
 
-        let samples = capturedSamples.sorted {
-            $0.unix != $1.unix
-                ? $0.unix < $1.unix
-                : $0.header.recordIndex < $1.header.recordIndex
-        }
+        // Only exact Q15 timestamps are duplicates: record indices may be reused,
+        // and multiple records within one second are valid history.
+        let samples = HistoricalArchive.deduplicated(capturedSamples)
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
@@ -1075,7 +1122,9 @@ final class BandLink: NSObject, ObservableObject {
         // Preserve previously validated recovery if merged data lacks a quiet window.
         let previousHasRestMetrics = summary?.hrv.rmssdMS != nil || summary?.restingHeartRate != nil
         let freshHasRestMetrics = fresh.hrv.rmssdMS != nil || fresh.restingHeartRate != nil
-        let preservePrevious = previousHasRestMetrics && !freshHasRestMetrics
+        let previousHasSleep = summary?.sleepPeriods.isEmpty == false
+        let preservePrevious = (previousHasRestMetrics && !freshHasRestMetrics)
+            || (previousHasSleep && fresh.sleepPeriods.isEmpty)
         if !preservePrevious {
             summary = fresh
             persist(fresh)
@@ -1227,7 +1276,12 @@ final class BandLink: NSObject, ObservableObject {
                 historyUndecodableFrames += 1
                 return
             }
-            if seenRecordIndices.insert(sample.header.recordIndex).inserted {
+            // Record indices can be reused by the band. Count RR diagnostics once
+            // per exact Q15 timestamp, but retain every decoded frame until drain
+            // completion so exact-timestamp duplicates can keep the best payload.
+            let timestampKey = UInt64(sample.header.unix) * 32_768
+                + UInt64(max(0, sample.header.subsecQ15))
+            if seenRecordTimestamps.insert(timestampKey).inserted {
                 if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
                 let declared = Int(inner[15])
                 if declared <= 4 {
@@ -1237,8 +1291,8 @@ final class BandLink: NSObject, ObservableObject {
                 } else {
                     historyRRRejected += 1 // malformed count byte
                 }
-                capturedSamples.append(sample)
             }
+            capturedSamples.append(sample)
         } else if type == BandPacket.metadata, inner.count >= 3 {
             if inner[2] == BandPacket.historyEnd, inner.count >= 21 {
                 // WHOOP 5: eight-byte end_data token at absolute frame[21:29].
