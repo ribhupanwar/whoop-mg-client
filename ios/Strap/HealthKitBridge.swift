@@ -132,8 +132,7 @@ final class HealthKitBridge: ObservableObject {
     func export(live record: LiveActivityRecord) async {
         guard state == .ready else { return }
         let id = Self.externalID(startUnix: record.startedUnix)
-        let alreadySaved = await exists(id)
-        guard !alreadySaved else { return }
+        guard let alreadySaved = await exists(id), !alreadySaved else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(record.startedUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(record.endedUnix))
         guard end > start else { return }
