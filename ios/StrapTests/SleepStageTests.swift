@@ -112,16 +112,16 @@ final class SleepStageTests: XCTestCase {
             case 3: state = 2       // coarse band sleep confirmation
             default: state = offset % 30 < 15 ? 1 : 2 // ambiguous transition
             }
-            return stageSample(unix: base + offset, sleepState: state)
+            return stageSample(unix: alignedBase + offset, sleepState: state)
         }
         let staging = SleepStager.stage(samples: samples, period: period)
 
         // Wake/up are counted awake; still and mixed state intervals stay blank.
         assertTotals(staging, period: period, classifiedSeconds: 90)
         XCTAssertEqual(staging.wakeMinutes, 1.0, accuracy: 1e-9)
-        XCTAssertFalse(staging.segments.contains { $0.startUnix < base + 90 && $0.endUnix > base + 60 })
-        XCTAssertTrue(staging.segments.contains { $0.startUnix < base + 120 && $0.endUnix > base + 90 })
-        assertHole(staging, start: base + 120, end: base + 150)
+        XCTAssertFalse(staging.segments.contains { $0.startUnix < alignedBase + 90 && $0.endUnix > alignedBase + 60 })
+        XCTAssertTrue(staging.segments.contains { $0.startUnix < alignedBase + 120 && $0.endUnix > alignedBase + 90 })
+        assertHole(staging, start: alignedBase + 120, end: alignedBase + 150)
     }
 
     func testTotalsMatchSegments() {
