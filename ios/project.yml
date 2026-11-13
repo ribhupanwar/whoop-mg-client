@@ -49,6 +49,8 @@ targets:
           - ProximaNova-RegularIt.ttf
           - ProximaNova-BoldIt.ttf
           - ProximaNova-LightIt.ttf
+          - proxima-nova-medium.ttf
+          - proxima-nova-semibold.ttf
           - DINPro-Regular.ttf
           - DINPro-Light.ttf
           - DINPro-Bold.ttf

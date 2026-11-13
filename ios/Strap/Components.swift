@@ -6,7 +6,7 @@ import CoreText
 // Bundled Proxima Nova and DIN Pro; keep font weight explicit to avoid thin fallbacks.
 enum StrapTypography {
     private static let registered: Bool = {
-        let names = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light", "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt", "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
+        let names = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light", "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt", "proxima-nova-medium", "proxima-nova-semibold", "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
         for name in names {
             guard let url = Bundle.main.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts") ?? Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
@@ -15,9 +15,9 @@ enum StrapTypography {
     }()
     private static func weightName(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
-        // Semibold maps to bundled Bold; Medium maps to Regular until a licensed Medium face is available.
-        if weight == .semibold { return "Bold" }
-        if weight == .medium { return "Regular" }
+        // Use the bundled genuine Semibold and Medium faces for their requested weights.
+        if weight == .semibold { return "Semibold" }
+        if weight == .medium { return "Medium" }
         if weight == .light || weight == .ultraLight { return "Light" }
         return "Regular"
     }

@@ -136,13 +136,13 @@ jobs:
         run: |
           set -euo pipefail
           APP="$RUNNER_TEMP/ipa/Payload/Strap.app"
-          for font in ProximaNova-Regular ProximaNova-Bold ProximaNova-Light ProximaNova-RegularIt ProximaNova-BoldIt ProximaNova-LightIt DINPro-Regular DINPro-Light DINPro-Bold; do
+          for font in ProximaNova-Regular ProximaNova-Bold ProximaNova-Light ProximaNova-RegularIt ProximaNova-BoldIt ProximaNova-LightIt proxima-nova-medium proxima-nova-semibold DINPro-Regular DINPro-Light DINPro-Bold; do
             if ! find "$APP" -type f -name "$font.ttf" -print -quit | grep -q .; then
               echo "::error::Missing bundled font: $font.ttf"
               exit 1
             fi
           done
-          echo "All nine licensed fonts are present in the IPA payload"
+          echo "All eleven licensed fonts are present in the IPA payload"
 
       - name: Verify packaged HealthKit entitlement
         run: |
