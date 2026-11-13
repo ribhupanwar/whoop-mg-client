@@ -104,11 +104,17 @@ enum SleepDetect {
             // trim the false early onset to the first sustained band sleep
             // declaration instead. Keep the rest of the night available.
             var verifiedStart = run[0].unix
-            if (18..<22).contains(startHour) && stateRows.count >= 300 {
-                let sleepRows = run.filter { $0.sleepState == 2 }
-                if let first = sleepRows.first, first.unix > verifiedStart {
-                    verifiedStart = first.unix
+            let informativeStateRows = stateRows.filter { $0.sleepState != 0 }
+            if (18..<22).contains(startHour) && informativeStateRows.count >= 300 {
+                let sleepRows = run.filter {
+                    $0.sleepState == 2 && $0.wearing && (35...220).contains($0.heartRate)
                 }
+                // An isolated state=2 packet while resting with a phone is
+                // not sustained onset. Require five contiguous minutes, and
+                // retain the start of that confirmation rather than its end.
+                guard let confirmed = Hrv.contiguousRuns(sleepRows).first(where: { $0.count >= 300 }),
+                      let first = confirmed.first else { continue }
+                verifiedStart = first.unix
             }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes

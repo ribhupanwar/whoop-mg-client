@@ -418,6 +418,31 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
+    func testEveningOnsetRequiresSustainedBandEvidenceNotOnePacket() {
+        let evening = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!
+        let start = Int(evening.timeIntervalSince1970)
+        var rows = stretch(start, 600, hr: 100, accel: 0.5)
+        rows += (600..<14400).map { offset in
+            makeSample(start + offset, hr: 60, accel: 0.02,
+                       sleepState: offset == 660 || offset >= 7200 ? 2 : 1)
+        }
+        rows += stretch(start + 14400, 600, hr: 100, accel: 0.5)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(periods.first?.startUnix, start + 7200)
+    }
+
+    func testLongEveningStillnessWithoutSustainedSleepIsNotSleep() {
+        let evening = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!
+        let start = Int(evening.timeIntervalSince1970)
+        var rows = stretch(start, 600, hr: 100, accel: 0.5)
+        rows += (600..<14400).map { offset in
+            makeSample(start + offset, hr: 60, accel: 0.02, sleepState: offset == 660 ? 2 : 1)
+        }
+        rows += stretch(start + 14400, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
     func testQuietPeriodWithHrDropIsSleep() {
         var rows = stretch(0, 600, hr: 100, accel: 0.5)
         rows += stretch(600, 3600, hr: 60, accel: 0.02)
