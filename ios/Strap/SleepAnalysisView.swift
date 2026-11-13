@@ -483,21 +483,62 @@ struct SleepAnalysisView: View {
         }
     }
 
+    // WHOOP-style stacked stage distribution, rather than four compressed columns.
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
-        HStack(spacing: 8) {
-            ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(CoachFormat.duration((minutes[stage] ?? 0) / 60.0))
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(stage.color)
-                    Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+        let total = max(1.0, minutes.values.reduce(0, +))
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("DURATION")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(1)
+                    .foregroundStyle(Color.appMuted)
+                Spacer()
+                Text(CoachFormat.duration(total / 60.0))
+                    .font(.system(size: 16, weight: .semibold))
             }
+            ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
+                let value = minutes[stage] ?? 0
+                let fraction = min(1.0, max(0.0, value / total))
+                VStack(alignment: .leading, spacing: 7) {
+                    HStack(spacing: 8) {
+                        Circle()
+                            .strokeBorder(stage.color, lineWidth: 2)
+                            .frame(width: 19, height: 19)
+                        Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
+                            .font(.system(size: 12, weight: .semibold))
+                            .tracking(0.5)
+                        Text(String(format: "%.0f%%", fraction * 100))
+                            .font(.system(size: 11))
+                            .foregroundStyle(stage.color)
+                        Spacer()
+                        Text(CoachFormat.duration(value / 60.0))
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    GeometryReader { geometry in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.appRaised)
+                            Capsule().fill(stage.color)
+                                .frame(width: max(0, geometry.size.width * fraction))
+                        }
+                    }
+                    .frame(height: 12)
+                }
+            }
+            let restorative = (minutes[.deep] ?? 0) + (minutes[.rem] ?? 0)
+            HStack {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(SleepStage.deep.color)
+                    .frame(width: 10, height: 10)
+                Text("RESTORATIVE SLEEP")
+                    .font(.system(size: 12, weight: .semibold))
+                    .tracking(0.5)
+                Spacer()
+                Text(CoachFormat.duration(restorative / 60.0))
+                    .font(.system(size: 17, weight: .semibold))
+            }
+            .padding(.top, 4)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 8)
     }
 
     // MARK: Hours vs. needed detail
