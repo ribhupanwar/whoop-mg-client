@@ -214,6 +214,11 @@ struct DashboardView: View {
         )
     }
 
+    private var trendDayLabels: [String] {
+        guard let first = trendDayKeys.first, let last = trendDayKeys.last else { return [] }
+        return [first, last].map { String($0.suffix(5)).replacingOccurrences(of: "-", with: "/") }
+    }
+
     private var trendsPanel: some View {
         Panel {
             SectionTitle(focusedMetric == "recovery" ? "Recovery history" : focusedMetric == "strain" ? "Strain history" : "Sleep · Recovery · Strain")
@@ -540,7 +545,7 @@ struct DashboardView: View {
                     minY: 0,
                     maxY: upper,
                     height: 105,
-                    xLabels: [trendDayKeys.first ?? "", trendDayKeys.last ?? ""]
+                    xLabels: trendDayLabels
                 )
                 Text("Missing days stay blank; no values are interpolated.")
                     .font(.system(size: 10))
