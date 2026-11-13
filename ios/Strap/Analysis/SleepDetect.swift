@@ -88,9 +88,9 @@ enum SleepDetect {
             let upRows = stateRows.filter { $0.sleepState == 3 }.count
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
             let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
-            let wornSeconds = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix))
+            let wornSecondSet = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix))
             let stateSeconds = Set(stateRows.map(\.unix))
-            let stateCoverage = wornSeconds.isEmpty ? 0 : Double(stateSeconds.count) / Double(wornSeconds.count)
+            let stateCoverage = wornSecondSet.isEmpty ? 0 : Double(stateSeconds.count) / Double(wornSecondSet.count)
             // Gen5 v18 carries the band's own coarse envelope (0 wake, 1 still,
             // 2 asleep, 3 up). When it is present for most worn seconds, require
             // at least 15 minutes of recorded asleep state before accepting a
