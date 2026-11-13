@@ -534,6 +534,26 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if row.id.hasPrefix("band-"),
+                               let startUnix = Int(row.id.dropFirst("band-".count)) {
+                                Button(role: .destructive) {
+                                    store.hideDetectedActivity(startUnix: startUnix)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
+                        .contextMenu {
+                            if row.id.hasPrefix("band-"),
+                               let startUnix = Int(row.id.dropFirst("band-".count)) {
+                                Button(role: .destructive) {
+                                    store.hideDetectedActivity(startUnix: startUnix)
+                                } label: {
+                                    Label("Delete activity", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
