@@ -236,6 +236,13 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(updated.first?.sourceEndUnix, source.endUnix + 1)
         XCTAssertNil(updated.first?.asleepHours, "New out-of-archive bounds are unknown, not the stale old total")
         XCTAssertEqual(updated.first?.sourcePeriod.startUnix, old.sourceStartUnix)
+        let expiredDay = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(start)), calendar: calendar)
+        let laterDaily = DailyAnalysis.metrics(from: [sample(start + 3 * 86400)], sex: .male, maxHR: nil,
+                                               calendar: calendar, analyzedSleepSessions: updated)
+        let correctedDay = try XCTUnwrap(laterDaily.first { $0.dateKey == expiredDay })
+        XCTAssertEqual(correctedDay.sleepEndUnix, start + 3600 - 1)
+        XCTAssertFalse(correctedDay.sleepDurationReliable ?? true)
+        XCTAssertNil(correctedDay.reliableSleepHours, "An edited expired night must not keep stale dashboard/debt hours")
     }
 
     func testMissingLegacySourceEndDecodesSafely() throws {

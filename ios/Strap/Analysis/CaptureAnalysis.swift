@@ -172,6 +172,13 @@ enum DailyAnalysis {
         let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
             samples: ordered, periods: periods, overrides: sleepCorrections
         )
+        // Saved/edited nights can outlive raw retention; still update their dated
+        // duration and reliability even when that day has no retained samples.
+        for session in sleepSessions {
+            let end = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
+            let key = JournalStore.dayKey(for: end, calendar: calendar)
+            if byDay[key] == nil { byDay[key] = [] }
+        }
 
         var result: [DayMetrics] = []
         for (key, daySamples) in byDay {
