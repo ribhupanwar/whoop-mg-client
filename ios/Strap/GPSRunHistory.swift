@@ -33,8 +33,15 @@ final class GPSRunHistory {
         self.defaults = defaults
         let root = directory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         // Custom test suites must never share the production file.
-        let suffix = directory == nil && defaults !== UserDefaults.standard
-            ? "gps-runs-\(UUID().uuidString).json" : "gps-runs-v2.json"
+        let suffix: String
+        if directory == nil && defaults !== UserDefaults.standard {
+            let idKey = "strap.gps.test.storageID"
+            let id = defaults.string(forKey: idKey) ?? UUID().uuidString
+            defaults.set(id, forKey: idKey)
+            suffix = "gps-runs-\(id).json"
+        } else {
+            suffix = "gps-runs-v2.json"
+        }
         self.fileURL = root.appendingPathComponent("Strap", isDirectory: true)
             .appendingPathComponent(suffix)
     }
