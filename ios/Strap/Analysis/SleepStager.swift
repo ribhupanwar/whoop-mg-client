@@ -131,7 +131,8 @@ enum SleepStager {
             let percent = Int((coverage * 100).rounded())
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                epochs: epochs.count, hrCoverage: coverage,
                 reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
             )
         }
@@ -140,14 +141,37 @@ enum SleepStager {
         guard labels.count == epochs.count else {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                epochs: epochs.count, hrCoverage: coverage,
                 reason: "staging produced no labels"
             )
         }
 
+        let declaredSleepSeconds = Set(ordered.filter {
+            $0.unix >= start && $0.unix < end && $0.sleepState == 2
+        }.map(\.unix))
+        let awakeStateSeconds = Set(ordered.filter {
+            $0.unix >= start && $0.unix < end && ($0.sleepState == 0 || $0.sleepState == 3)
+        }.map(\.unix))
+        let stateObservedSeconds = declaredSleepSeconds.union(awakeStateSeconds).count
+        // Treat explicit band wake/up states as awake only when the same window
+        // contains sustained sleep-state evidence; ignore default/constant bytes.
+        let reliableStateStream = declaredSleepSeconds.count >= 300 && stateObservedSeconds >= 600
+        let displayLabels = epochs.enumerated().map { index, epoch in
+            if epoch.hr == nil && epoch.moveFrac == nil && epoch.respReg == nil {
+                return SleepStage.unclassified
+            }
+            if reliableStateStream {
+                let awakeCount = (epoch.start..<(epoch.start + epochS)).filter {
+                    awakeStateSeconds.contains($0)
+                }.count
+                if awakeCount >= epochS / 2 { return SleepStage.wake }
+            }
+            return labels[index]
+        }
         var segments: [SleepStageSegment] = []
         for (index, epoch) in epochs.enumerated() {
-            let stage = labels[index]
+            let stage = displayLabels[index]
             let segmentStart = index == 0 ? start : epoch.start
             let segmentEnd = index == epochs.count - 1 ? end : epochs[index + 1].start
             if let last = segments.last, last.stage == stage {
@@ -165,19 +189,21 @@ enum SleepStager {
         var light = 0.0
         var rem = 0.0
         var wake = 0.0
+        var unclassified = 0.0
         for segment in segments {
             switch segment.stage {
             case .deep: deep += segment.minutes
             case .light: light += segment.minutes
             case .rem: rem += segment.minutes
             case .wake: wake += segment.minutes
+            case .unclassified: unclassified += segment.minutes
             }
         }
 
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
-            remMinutes: rem, wakeMinutes: wake, epochs: epochs.count,
-            hrCoverage: coverage, reason: nil
+            remMinutes: rem, wakeMinutes: wake, unclassifiedMinutes: unclassified,
+            epochs: epochs.count, hrCoverage: coverage, reason: nil
         )
     }
 
@@ -245,11 +271,6 @@ enum SleepStager {
                 if let value = secHR[second] { hrs.append(value) }
                 if let point = secGravity[second] { gravity.append(point) }
             }
-            if hrs.isEmpty && gravity.isEmpty {
-                epochStart += epochS
-                continue
-            }
-
             var jerks: [Double] = []
             if gravity.count >= 2 {
                 for index in 1..<gravity.count {
