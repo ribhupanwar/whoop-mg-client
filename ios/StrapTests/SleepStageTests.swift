@@ -11,6 +11,7 @@ private func makeNight(
     breathing: Bool = true,
     heartRateOverride: Int? = nil,
     hrAvailableMinutes: Int? = nil,
+    hrSampleEvery: Int? = nil,
     motion: Bool = true,
     bandWakeMinutes: (Int, Int)? = nil
 ) -> ([V18Sample], SleepPeriod) {
@@ -32,7 +33,9 @@ private func makeNight(
         let state = bandWakeMinutes.map { range in
             range.0 * 60 <= second && second < range.1 * 60 ? 0 : 2
         }
-        let measuredHR = heartRateOverride ?? ((hrAvailableMinutes.map { second < $0 * 60 } ?? true) ? Int(rate.rounded()) : 0)
+        let inAvailableWindow = hrAvailableMinutes.map { second < $0 * 60 } ?? true
+        let onSampleTick = hrSampleEvery.map { second % max(1, $0) == 0 } ?? true
+        let measuredHR = heartRateOverride ?? ((inAvailableWindow && onSampleTick) ? Int(rate.rounded()) : 0)
         samples.append(
             V18Sample(
                 header: BandRecordHeader(
@@ -216,6 +219,16 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(staging.hrObservedSeconds, 26 * 60)
         XCTAssertEqual(staging.hrWindowSeconds, 60 * 60)
         XCTAssertEqual(staging.longestHRGapSeconds, 34 * 60)
+    }
+
+    func testHRCoverageCountsObservedSecondsNotAnySampleInAnEpoch() {
+        let (samples, period) = makeNight(hrSampleEvery: 30)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertFalse(staging.stageable)
+        XCTAssertEqual(staging.hrCoverage, 120.0 / 3600.0, accuracy: 0.001)
+        XCTAssertEqual(staging.hrObservedSeconds, 120)
+        XCTAssertEqual(staging.longestHRGapSeconds, 29)
+        XCTAssertTrue(staging.reason?.contains("3%") == true)
     }
 
     func testMissingMotionIsUnknownRatherThanInventedStillness() {
