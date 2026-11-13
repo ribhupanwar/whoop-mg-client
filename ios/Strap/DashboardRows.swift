@@ -225,7 +225,7 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appMuted)
                         .frame(width: 20)
                     Text("VO₂ MAX")
-                        .font(StrapTypography.body(12.5, weight: .semibold))
+                        .font(StrapTypography.body(12.5, weight: .bold))
                         .tracking(0.6)
                         .foregroundStyle(Color.appFG)
                     Spacer()

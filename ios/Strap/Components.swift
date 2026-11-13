@@ -15,9 +15,9 @@ enum StrapTypography {
     }()
     private static func weightName(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
-        // These font files have no Medium/Semibold face. Resolve both to Bold,
-        // rather than falling back to thin system fonts or silently losing weight.
-        if weight == .semibold || weight == .medium { return "Bold" }
+        // Semibold maps to bundled Bold; Medium maps to Regular until a licensed Medium face is available.
+        if weight == .semibold { return "Bold" }
+        if weight == .medium { return "Regular" }
         if weight == .light || weight == .ultraLight { return "Light" }
         return "Regular"
     }
