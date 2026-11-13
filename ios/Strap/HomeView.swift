@@ -48,8 +48,13 @@ struct HomeView: View {
         }
         .coordinateSpace(name: "home-scroll")
         .onPreferenceChange(HomeHeroPosition.self) { value in
-            if !compactScores && value < 0 { compactScores = true }
-            else if compactScores && value > 80 { compactScores = false }
+            // Hysteresis prevents repeated whole-home re-layout while dragging
+            // near the hero boundary. Do not animate every scroll-position update.
+            let shouldCompact = compactScores ? value < 80 : value < 0
+            guard shouldCompact != compactScores else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { compactScores = shouldCompact }
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {

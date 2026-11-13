@@ -112,18 +112,42 @@ struct RootView: View {
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 4)
-            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 29))
-            .overlay(RoundedRectangle(cornerRadius: 29).stroke(Color.appLine, lineWidth: 1))
+            .strapLiquidGlass(cornerRadius: 29)
             Button { showInsights = true } label: {
                 Image(systemName: "waveform.path.ecg").font(.system(size: 24, weight: .light))
                     .foregroundStyle(Color.appFG).frame(width: 54, height: 54)
-                    .background(.ultraThinMaterial, in: Circle())
-                    .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
+                    .strapLiquidGlassCircle()
             }.buttonStyle(.plain).accessibilityLabel("Daily insights")
         }
         .padding(.horizontal, 10).padding(.bottom, 4).padding(.top, 5)
     }
 
+}
+
+
+/// Native Liquid Glass on iOS 26+, with a material fallback for older devices.
+/// Keep glass limited to the floating navigation: applying it to every scrolling
+/// card increases offscreen compositing and harms scroll responsiveness.
+private extension View {
+    @ViewBuilder
+    func strapLiquidGlass(cornerRadius: CGFloat) -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
+        }
+    }
+
+    @ViewBuilder
+    func strapLiquidGlassCircle() -> some View {
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .circle)
+        } else {
+            self.background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
+        }
+    }
 }
 
 extension View {
