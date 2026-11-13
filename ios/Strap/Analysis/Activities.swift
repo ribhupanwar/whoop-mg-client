@@ -16,7 +16,9 @@ enum ActivityDetect {
     static let hrStartAbsolute = 100.0
     static let hrStartDelta = 20.0
     static let startSustainS = 240
-    static let minSessionS = 300
+    static let minSessionS = 600
+    static let minRunSessionS = 300
+    static let minActiveFraction = 0.70
     static let gapToleranceS = 180
     static let stepWindowS = 60
     static let walkSPM = 60.0
@@ -46,32 +48,28 @@ enum ActivityDetect {
         var flags: [Bool] = []
         flags.reserveCapacity(ordered.count)
         for (index, sample) in ordered.enumerated() {
+            // The vendor gait byte is unverified; it cannot start a workout
+            // without independent counter evidence. Elevated HR alone can be
+            // commuting, stress, or stationary exercise, not walking/running.
+            let measuredRate = rates[index] ?? 0
             let gait = sample.activityClass
-            let locomotion: Bool
-            // The gait byte is not vendor-verified. A still/unknown gait
-            // must not suppress a sustained, measured step rate.
-            // With a reported still gait, require *recent* counter movement:
-            // the trailing 60-second rate otherwise extends runs into cooldown.
-            let recentSteps: Bool
-            if gait == gaitStill, index > 0,
-               let current = sample.stepCounter,
+            let counterMoving = measuredRate >= walkSPM
+            let recentMoving: Bool
+            if index > 0, let current = sample.stepCounter,
                let previous = ordered[index - 1].stepCounter {
                 let elapsed = sample.unix - ordered[index - 1].unix
-                let delta = current - previous
-                recentSteps = elapsed > 0 && elapsed <= 5 &&
-                    delta > 0 && Double(delta) * 60.0 / Double(elapsed) >= walkSPM &&
+                let delta = (current - previous) & 0xFFFF
+                recentMoving = elapsed > 0 && elapsed <= 5 && delta > 0 &&
                     Double(delta) / Double(elapsed) <= 5
             } else {
-                recentSteps = (rates[index] ?? 0) >= walkSPM
+                recentMoving = false
             }
-            locomotion = gait == gaitWalk || gait == gaitRun || recentSteps
-            let elevated: Bool
-            if let baseline = baselines[index] {
-                elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
-            } else {
-                elevated = false
-            }
-            flags.append(locomotion || elevated)
+            // Require both sustained step cadence and recent movement;
+            // trailing-minute cadence alone must not extend a stopped run.
+            // HR is supporting evidence only, never an activity trigger.
+            let locomotion = counterMoving && recentMoving
+            _ = gait
+            flags.append(locomotion)
         }
         let closed = GapClosing.closed(
             flags, unix: ordered.map { $0.unix }, maxGapS: gapToleranceS
@@ -89,8 +87,14 @@ enum ActivityDetect {
             let end = index
             let run = Array(ordered[start..<end])
 
-            guard run[run.count - 1].unix - run[0].unix + 1 >= minSessionS else { continue }
-            guard flags[start..<end].filter({ $0 }).count >= startSustainS else { continue }
+            let duration = run[run.count - 1].unix - run[0].unix + 1
+            let activeCount = flags[start..<end].filter { $0 }.count
+            let runEvidence = rates[start..<end].compactMap { $0 }.filter { $0 >= runSPM }.count
+            let running = runEvidence >= max(60, activeCount / 2)
+            guard duration >= (running ? minRunSessionS : minSessionS) else { continue }
+            guard activeCount >= startSustainS else { continue }
+            // A few isolated steps with 3-minute bridged gaps are not a walk.
+            guard Double(activeCount) / Double(max(1, run.count)) >= minActiveFraction else { continue }
 
             let walkTicks = run.filter { $0.activityClass == gaitWalk }.count
             let runTicks = run.filter { $0.activityClass == gaitRun }.count
@@ -102,7 +106,7 @@ enum ActivityDetect {
                 ActivitySession(
                     startUnix: run[0].unix,
                     endUnix: run[run.count - 1].unix,
-                    kind: kind(runTicks: runTicks, walkTicks: walkTicks, spm: spm, hasSteps: hasSteps),
+                    kind: running ? "run" : "walk",
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
