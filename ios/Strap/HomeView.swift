@@ -743,13 +743,8 @@ struct HomeView: View {
     }
 
     private var lastNightText: String {
-        // Keep the displayed duration consistent with an edited start/end.
-        // This is elapsed time in the edited window, not measured time asleep.
-        if let period = latestSleepPeriod,
-           let corrected = sleepCorrections[String(period.startUnix)],
-           corrected.count == 2, corrected[1] > corrected[0] {
-            return CoachFormat.duration(Double(corrected[1] - corrected[0]) / 3600.0)
-        }
+        // Use the same measured asleep duration as the Home sleep ring.
+        // The edited window length includes awake time and is not sleep.
         guard let hours = store.band.lastNightHours else { return "—" }
         return CoachFormat.duration(hours)
     }
