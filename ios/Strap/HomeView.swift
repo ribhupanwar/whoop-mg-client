@@ -10,7 +10,6 @@ struct HomeView: View {
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var showLiveSession = false
-    @State private var swipedDetectedID: String?
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
     @State private var correctedLabels: [String: String] = UserDefaults.standard.dictionary(forKey: "strap.detected.activity.labels.v1") as? [String: String] ?? [:]
@@ -545,51 +544,8 @@ struct HomeView: View {
                                 }
                             }
                         }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if row.id.hasPrefix("band-"),
-                               let start = Int(row.id.dropFirst("band-".count)) {
-                                Button(role: .destructive) {
-                                    store.hideDetectedActivity(startUnix: start)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
-                                }
-                            }
-                        }
-                        .offset(x: swipedDetectedID == row.id ? -76 : 0)
-                        .background(alignment: .trailing) {
-                            if row.id.hasPrefix("band-"),
-                               let startUnix = Int(row.id.dropFirst("band-".count)) {
-                                Button(role: .destructive) {
-                                    store.hideDetectedActivity(startUnix: startUnix)
-                                    swipedDetectedID = nil
-                                } label: {
-                                    VStack(spacing: 3) {
-                                        Image(systemName: "trash.fill")
-                                        Text("Delete").font(.system(size: 10))
-                                    }
-                                    .foregroundStyle(.white)
-                                    .frame(width: 76, height: 54)
-                                    .background(Color.red)
-                                    .clipShape(RoundedRectangle(cornerRadius: 9))
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
                         .contentShape(Rectangle())
-                        .simultaneousGesture(DragGesture(minimumDistance: 20).onEnded { value in
-                            guard row.id.hasPrefix("band-") else { return }
-                            if value.translation.width < -35 { swipedDetectedID = row.id }
-                            else if value.translation.width > 25 { swipedDetectedID = nil }
-                        })
-                        .contextMenu {
-                            if row.id.hasPrefix("band-"),
-                               let startUnix = Int(row.id.dropFirst("band-".count)) {
-                                Button(role: .destructive) {
-                                    store.hideDetectedActivity(startUnix: startUnix)
-                                    swipedDetectedID = nil
-                                } label: { Label("Delete activity", systemImage: "trash") }
-                            }
-                        }
+
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
