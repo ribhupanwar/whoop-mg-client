@@ -124,7 +124,9 @@ struct SleepAnalysisView: View {
             return "Sample: 66% of your needed sleep last night."
         }
         guard let analysis else {
-            return "needs an overnight capture"
+            return editedSleepWindowHours != nil
+                ? "Recalculating the corrected night; previous performance is hidden."
+                : "needs an overnight capture"
         }
         return "\(String(format: "%.1f", analysis.hours)) h of \(String(format: "%.1f", analysis.needHours)) h needed, from the last stored capture."
     }
@@ -439,6 +441,11 @@ struct SleepAnalysisView: View {
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason)
+            } else if editedSleepWindowHours != nil {
+                EmptyState(
+                    title: "Recalculating corrected sleep",
+                    detail: "Analyzing the manually edited window from retained sensor data. Original capture stages are intentionally hidden to avoid mixing two different sleep windows."
+                )
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
                 EmptyState(
                     title: "not staged yet",
