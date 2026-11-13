@@ -94,7 +94,7 @@ enum SleepStager {
 
         for sample in ordered where sample.unix >= padLo && sample.unix < padHi {
             let second = sample.unix
-            if sample.heartRate > 0 {
+            if sample.wearing, (35...220).contains(sample.heartRate) {
                 hrSum[second, default: 0] += Double(sample.heartRate)
                 hrCount[second, default: 0] += 1
             }
@@ -125,10 +125,11 @@ enum SleepStager {
         let epochs = features(
             start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
         )
-        let hrEpochs = epochs.filter { $0.hr != nil }.count
-        let coverage = Double(hrEpochs) / Double(gridEpochs)
+        // Coverage is unique in-window seconds with a valid HR sample, not
+        // the fraction of 30-second bins containing even one sample.
         let hrSeconds = secHR.keys.filter { $0 >= start && $0 < end }.sorted()
         let hrWindowSeconds = max(0, end - start)
+        let coverage = Double(hrSeconds.count) / Double(max(1, hrWindowSeconds))
         let longestMissingHRGap = longestMissingGap(
             start: start, end: end, observed: hrSeconds
         )
