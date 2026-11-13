@@ -103,6 +103,12 @@ enum SleepDetect {
                     verifiedStart = first.unix
                 }
             }
+            // A trimmed onset must still leave a real sleep-length window.
+            // Otherwise an hours-long quiet evening with only a few minutes
+            // of declared sleep could pass the earlier duration check.
+            guard run[run.count - 1].unix - verifiedStart + 1 >= minSleepS else {
+                continue
+            }
             // If the signal is a constant zero/default, abstain entirely.
             // A reliable veto needs at least five minutes of actual state
             // observations, with "up" occupying most of the period and no
