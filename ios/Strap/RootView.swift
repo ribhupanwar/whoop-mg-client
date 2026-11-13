@@ -125,28 +125,20 @@ struct RootView: View {
 }
 
 
-/// Native Liquid Glass on iOS 26+, with a material fallback for older devices.
+/// Material-backed floating navigation compatible with the CI Xcode SDK.
 /// Keep glass limited to the floating navigation: applying it to every scrolling
 /// card increases offscreen compositing and harms scroll responsiveness.
 private extension View {
     @ViewBuilder
     func strapLiquidGlass(cornerRadius: CGFloat) -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
-        } else {
-            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
-                .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
-        }
+        self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+            .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
     }
 
     @ViewBuilder
     func strapLiquidGlassCircle() -> some View {
-        if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: .circle)
-        } else {
-            self.background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
-        }
+        self.background(.ultraThinMaterial, in: Circle())
+            .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
     }
 }
 
