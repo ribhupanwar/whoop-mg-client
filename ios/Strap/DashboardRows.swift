@@ -170,9 +170,9 @@ struct DashboardRows: View {
     }
 
     private var zoneDetail: String {
-        let hasZones = !store.liveActivities.isEmpty
-            && store.liveActivities.contains { !$0.zoneSeconds.isEmpty }
-        return hasZones ? "last 7 days · measured sessions" : "run a live session"
+        store.weeklyZoneMinutes(high: false) != nil
+            ? "last 7 days · recorded HR"
+            : "needs band history or a live session"
     }
 
     private var strengthText: String {

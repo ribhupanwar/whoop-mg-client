@@ -102,7 +102,7 @@ struct CardHead: View {
     var body: some View {
         HStack {
             Text(title.uppercased())
-                .font(.system(size: 10.5, weight: .medium))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appFG)
             Spacer()
@@ -125,7 +125,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 10.5, weight: .medium))
+            .font(.system(size: 12, weight: .semibold))
             .tracking(0.8)
             .foregroundStyle(Color.appMuted)
             .padding(.bottom, 8)

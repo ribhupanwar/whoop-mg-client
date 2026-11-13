@@ -128,7 +128,7 @@ struct MetricDetailView: View {
         .alert("About these measurements", isPresented: $showInfo) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Recovery and strain are local estimates from your recorded data. Recovery requires earlier baseline days. Zone time is recorded HR coverage; calories are active session estimates, not a full-day total. Missing data stays blank. The values are not WHOOP's proprietary scores.")
+            Text("Recovery and strain are local estimates from your recorded data. The white strain-ring marker is the previous 30-day recorded average. Recovery requires earlier baseline days. Zone time is recorded HR coverage; calories are active session estimates, not a full-day total. Missing data stays blank. The values are not WHOOP's proprietary scores.")
         }
         .sheet(item: $detail) { metric in
             NavigationStack {

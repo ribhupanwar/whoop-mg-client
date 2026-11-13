@@ -32,7 +32,7 @@ final class SettingsTests: XCTestCase {
     func testSavedDashboardOrderAndHiddenRowsSurviveRoundTrip() throws {
         var settings = AppSettings()
         settings.dashboardOrder = [.stress, .steps, .hrv, .restingHR, .zonesLow,
-                                   .zonesHigh, .vo2Max, .calories]
+                                   .zonesHigh, .vo2Max, .calories, .strength]
         settings.hiddenDashboardRows = [.zonesHigh, .calories]
         let data = try JSONEncoder().encode(settings)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)

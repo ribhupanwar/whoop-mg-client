@@ -449,7 +449,7 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Text(title.uppercased())
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 12, weight: .semibold))
                     .tracking(0.7)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -465,7 +465,7 @@ struct HomeView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine, lineWidth: 1))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .semibold))
                         .tracking(0.4)
                         .foregroundStyle(stateColor)
                     Text(detail)
@@ -550,24 +550,12 @@ struct HomeView: View {
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 4)
-            if !demo, latestSleepPeriod != nil {
-                HStack {
-                    Spacer()
-                    Button("Edit sleep time") {
-                        guard let period = latestSleepPeriod else { return }
-                        let session = store.band.latestSleepSession
-                        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-                        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
-                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
-                        showSleepEditor = true
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.appAccent)
+            .contextMenu {
+                if !demo, latestSleepPeriod != nil {
+                    Button("Edit sleep time") { openHomeSleepEditor() }
                 }
-                .padding(.bottom, 8)
             }
-
+            .padding(.bottom, 4)
             VStack(spacing: 8) {
                 if demo {
                     activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
@@ -624,23 +612,19 @@ struct HomeView: View {
             }
             .padding(.bottom, 10)
 
-            if !demo {
-                Text("Run, walk and cardio sessions auto-detect from sustained step-counter movement or an elevated heart rate. Short bursts are filtered; detected sessions appear after capture and stay in the log. Lifting load has to be entered by hand; the band does not measure it.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.appMuted)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
-            }
-
-            HStack(spacing: 9) {
-                activityButton("+ ADD ACTIVITY") { showLogger = true }
-                activityButton("START ACTIVITY") { showLiveSession = true }
-            }
         }
     }
 
     // MARK: Activity rows
+
+    private func openHomeSleepEditor() {
+        guard let period = latestSleepPeriod else { return }
+        let session = store.band.latestSleepSession
+        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
+        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
+        showSleepEditor = true
+    }
 
     private struct ActivityRowModel: Identifiable {
         let id: String
@@ -817,7 +801,10 @@ struct HomeView: View {
             Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
                 .font(.system(size: 10, weight: .semibold))
                 .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
-            Hint("Bedtime is worked back from your wake time, sleep need, tomorrow's intent and accumulated sleep debt. Open the coach to change the wake time or intent; debt starts counting from your first recorded night.")
+            DisclosureGroup("How bedtime is calculated") {
+                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The alarm is a phone notification.")
+                    .font(.system(size: 11)).foregroundStyle(Color.appMuted)
+            }.font(.system(size: 10)).tint(Color.appMuted).padding(.top, 8)
         }
     }
 
@@ -918,7 +905,7 @@ struct HomeView: View {
         if demo {
             return "Filled · 2 yes · mood Good · sample"
         }
-        return "Not filled today — seven yes/no taps, a mood and a soreness pick."
+        return "Not filled today"
     }
 
     // MARK: Inline dashboard
@@ -983,7 +970,7 @@ struct HomeView: View {
                             Text("Set goals, track progress, and build a consistent routine.").font(.system(size: 12)).foregroundStyle(Color.appMuted)
                             Label("EXPLORE PLANS", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
                         }
-                        Image(systemName: "figure.strengthtraining.traditional").font(.system(size: 52, weight: .light)).foregroundStyle(Color.appGood)
+                        PlanOrbitView().frame(width: 90, height: 96)
                     }.foregroundStyle(Color.appFG)
                 }
             }.buttonStyle(.plain)
@@ -1053,4 +1040,22 @@ struct HomeView: View {
 private struct HomeHeroPosition: PreferenceKey {
     static var defaultValue: CGFloat = 200
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+
+private struct PlanOrbitView: View {
+    private let symbols = ["moon.stars", "heart", "figure.strengthtraining.traditional", "book.closed"]
+    private let positions: [CGPoint] = [CGPoint(x: 62, y: 24), CGPoint(x: 23, y: 39), CGPoint(x: 34, y: 77), CGPoint(x: 75, y: 67)]
+    var body: some View {
+        ZStack {
+            ForEach(0..<4) { index in
+                ZStack {
+                    Circle().stroke(Color.appMuted.opacity(0.2), lineWidth: 2)
+                    Circle().trim(from: 0.05, to: index == 0 ? 0.8 : 0.5)
+                        .stroke(Color.appGood, style: StrokeStyle(lineWidth: 2, lineCap: .round)).rotationEffect(.degrees(-90))
+                    Image(systemName: symbols[index]).font(.system(size: index == 0 ? 18 : 12)).foregroundStyle(Color.appMuted)
+                }.frame(width: index == 0 ? 46 : 30, height: index == 0 ? 46 : 30).position(positions[index])
+            }
+        }.accessibilityHidden(true)
+    }
 }

@@ -90,16 +90,17 @@ extension MetricTimeline {
             guard let date = calendar.date(byAdding: .day, value: offset - count + 1, to: end) else { return nil }
             let key = JournalStore.dayKey(for: date, calendar: calendar)
             let wave = sin(Double(offset) * 1.7)
-            let record = DayMetrics(dateKey: key, state: "sleep", restingHR: 63 + wave * 5,
-                lnRMSSD: log(46 + wave * 12), hrvWindowSeconds: 600, sleepHours: 7.2 + wave * 0.3,
-                sleepStartUnix: nil, sleepEndUnix: nil, strain: 5.5 + wave * 1.5,
-                steps: 6500 + Int(wave * 3000), sleepDurationReliable: true,
-                respiratoryRate: 18.2 + wave * 0.4, sleepPerformancePct: 76 + wave * 10)
+            let record = DayMetrics(dateKey: key, state: "sleep", restingHR: offset == count - 1 ? 67 : 63 + wave * 5,
+                lnRMSSD: log(offset == count - 1 ? 44 : 46 + wave * 12), hrvWindowSeconds: 600, sleepHours: 7.2 + wave * 0.3,
+                sleepStartUnix: nil, sleepEndUnix: nil, strain: offset == count - 1 ? 4.7 : 5.5 + wave * 1.5,
+                steps: offset == count - 1 ? 3921 : 6500 + Int(wave * 3000), sleepDurationReliable: true,
+                respiratoryRate: offset == count - 1 ? 18.0 : 18.2 + wave * 0.4,
+                sleepPerformancePct: offset == count - 1 ? 78 : 76 + wave * 10)
             if offset % 7 == 4 {
                 return MetricDay(date: date, key: key, recorded: nil, recovery: nil, zones: nil, calories: nil, strength: nil)
             }
             let zones: [Double] = offset % 3 == 0 ? [0, 0, 0, 0, 0] : [900, 300, 120, 60, 0]
-            return MetricDay(date: date, key: key, recorded: record, recovery: 50 + wave * 35,
+            return MetricDay(date: date, key: key, recorded: record, recovery: offset == count - 1 ? 53 : 50 + wave * 35,
                              zones: zones, calories: 350 + wave * 150, strength: offset % 4 == 0 ? 40 : 0)
         }
     }
