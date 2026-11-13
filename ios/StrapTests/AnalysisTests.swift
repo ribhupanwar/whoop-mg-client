@@ -763,6 +763,22 @@ final class RespirationTests: XCTestCase {
 }
 
 final class DailyMetricQualityTests: XCTestCase {
+    func testEditedWindowAlsoSelectsNightlyBiometrics() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let rows = stretch(0, 600, hr: 60, accel: 0.01, rr: [990, 1010])
+            + stretch(600, 600, hr: 75, accel: 0.01, rr: [790, 810])
+        let period = SleepPeriod(startUnix: 0, endUnix: 1199, quietFraction: 1, meanHR: 67.5, wakeEvents: 0)
+        let edited = SleepSession.make(samples: rows, period: period, correctedTimes: [600, 1200])
+        let day = try XCTUnwrap(DailyAnalysis.metrics(
+            from: rows, sex: .male, maxHR: 180, calendar: calendar,
+            analyzedSleepSessions: [edited]
+        ).first)
+        XCTAssertEqual(day.sleepStartUnix, 600)
+        XCTAssertEqual(try XCTUnwrap(day.restingHR), 75, accuracy: 1e-9)
+        XCTAssertEqual(exp(try XCTUnwrap(day.lnRMSSD)), 20, accuracy: 1e-9)
+    }
+
     func testAwakeTrainingLoadDoesNotRequireDetectedSleepOrRR() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

@@ -50,7 +50,7 @@ enum SleepDetect {
             while index < ordered.count && closed[index] {
                 // No samples means no evidence of quiet. A gap longer than
                 // the movement tolerance must split the candidate night.
-                if index > start && ordered[index].unix - ordered[index - 1].unix > gapToleranceS {
+                if index > start && ordered[index].unix - ordered[index - 1].unix - 1 > gapToleranceS {
                     break
                 }
                 index += 1

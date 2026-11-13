@@ -168,10 +168,16 @@ enum DailyAnalysis {
             let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
             byDay[JournalStore.dayKey(for: date, calendar: calendar), default: []].append(sample)
         }
-        let periods = SleepDetect.detect(ordered)
+        let detectedPeriods = SleepDetect.detect(ordered)
         let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
-            samples: ordered, periods: periods, overrides: sleepCorrections
+            samples: ordered, periods: detectedPeriods, overrides: sleepCorrections
         )
+        // Sleep duration, nightly biometrics and awake load must share the
+        // canonical edited bounds. The measurements remain sensor-derived.
+        let periods = sleepSessions.map {
+            SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                        quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+        }
         // Saved/edited nights can outlive raw retention; still update their dated
         // duration and reliability even when that day has no retained samples.
         for session in sleepSessions {

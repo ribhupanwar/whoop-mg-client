@@ -99,6 +99,21 @@ class TestReassembler(unittest.TestCase):
                 self.assertEqual(out[0], pad_inner(inner))
                 self.assertEqual(reasm.bad_frames, 0)
 
+    def test_corrupt_length_does_not_stall_next_frame(self):
+        corrupt = bytearray(build_frame(b"abcd", GEN5_PROFILE))
+        corrupt[2:4] = (0xF000).to_bytes(2, "little")
+        inner = b"next"
+        reasm = FrameReassembler(GEN5_PROFILE)
+        self.assertEqual(reasm.feed(bytes(corrupt) + build_frame(inner, GEN5_PROFILE)), [inner])
+        self.assertEqual(reasm.pending, 0)
+
+    def test_dropped_fragment_does_not_consume_next_frame(self):
+        first = build_frame(bytes([42]) * 112, GEN5_PROFILE)
+        inner = b"next"
+        reasm = FrameReassembler(GEN5_PROFILE)
+        stream = first[:30] + build_frame(inner, GEN5_PROFILE) + bytes(112)
+        self.assertEqual(reasm.feed(stream), [inner])
+
     def test_multiple_frames_in_one_chunk(self):
         a = build_frame(b"\x28\x00\x01", GEN5_PROFILE)
         b = build_frame(b"\x30\x00\x02", GEN5_PROFILE)
