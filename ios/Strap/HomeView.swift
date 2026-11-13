@@ -485,11 +485,11 @@ struct HomeView: View {
     private var myDayOutlook: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("My Day").font(.system(size: 23, weight: .semibold)).foregroundStyle(Color.appFG)
+                Text("My Day").font(.system(size: 24, weight: .semibold)).foregroundStyle(Color.appFG)
                 Spacer()
                 Button { showLogger = true } label: {
                     Image(systemName: "plus").font(.system(size: 21, weight: .medium))
-                        .foregroundStyle(Color.appBG).frame(width: 36, height: 36)
+                        .foregroundStyle(Color.appBG).frame(width: 40, height: 40)
                         .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
                 }.buttonStyle(.plain).accessibilityLabel("Add activity")
             }
@@ -499,7 +499,7 @@ struct HomeView: View {
                         .font(.system(size: 16))
                         .foregroundStyle(Color.appWarn)
                     Text("Your Day in Review")
-                        .font(.system(size: 13))
+                        .font(.system(size: 14))
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
@@ -521,7 +521,7 @@ struct HomeView: View {
 
     private var activitiesCard: some View {
         Panel {
-            CardHead(title: "Today's activities", trailing: "›")
+            CardHead(title: "Today's activities", trailing: "⤢")
 
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
@@ -536,7 +536,7 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 9).fill(Color.appSleep))
 
                     Text("SLEEP")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
@@ -752,7 +752,7 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -783,7 +783,7 @@ struct HomeView: View {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
                         .font(.system(size: 21, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("LATEST\nALARM")
+                    Text("ALARM ON\nEXACT TIME")
                         .font(.system(size: 9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
@@ -852,7 +852,7 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("MY JOURNAL")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()

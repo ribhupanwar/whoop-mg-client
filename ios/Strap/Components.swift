@@ -21,7 +21,7 @@ struct Screen<Content: View>: View {
                 content
             }
             .padding(.horizontal, AppLayout.screenInset)
-            .padding(.top, 14)
+            .padding(.top, 12)
             .padding(.bottom, 28)
         }
         .background(

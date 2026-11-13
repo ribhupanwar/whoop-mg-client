@@ -32,11 +32,11 @@ extension Color {
 }
 /// Shared geometry keeps cards and metric rows aligned across tabs.
 enum AppLayout {
-    static let screenInset: CGFloat = 14
-    static let cardInset: CGFloat = 16
-    static let cardRadius: CGFloat = 16
-    static let cardSpacing: CGFloat = 14
-    static let metricRadius: CGFloat = 14
+    static let screenInset: CGFloat = 16
+    static let cardInset: CGFloat = 15
+    static let cardRadius: CGFloat = 15
+    static let cardSpacing: CGFloat = 12
+    static let metricRadius: CGFloat = 13
 }
 
 /// Subtle gray card shading shared by every tab and detail page.
