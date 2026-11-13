@@ -54,10 +54,12 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
+        NSLocationWhenInUseUsageDescription: "Strap records your running route and distance using iPhone GPS when you start a run."
         NSHealthShareUsageDescription: "Strap can read Apple Health activity, heart rate, sleep and fitness data to compare with band measurements. Reading is optional."
         NSHealthUpdateUsageDescription: "Optional: saves measured workouts and, when supported and validated, band-derived heart rate, steps, sleep and fitness metrics to Apple Health."
         UIBackgroundModes:
           - bluetooth-central
+          - location
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap
