@@ -36,8 +36,8 @@ struct V18Sample: Equatable, Codable {
     let tempAux1C: Double?
     let tempAux2C: Double?
     let sleepStateByte: Int?
-    /// Bits 4-5 of the sleep-state byte. The enum is NOT established, so it is
-    /// reported but never named or used to decide sleep.
+    /// Bits 4-5 of the sleep-state byte. These coarse states are not vendor-validated;
+    /// the detector uses them only as supporting evidence when a consistent stream exists.
     let sleepState: Int?
     let cardiacFlags: Int?
     let hrQualityFlags: Int?
