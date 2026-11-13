@@ -967,8 +967,8 @@ struct HomeView: View {
     private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
         NavigationLink(value: route) {
             HStack(spacing: 6) {
-                RingView(progress: progress, color: color, lineWidth: 2, size: 20, centerText: "")
-                Text(title).font(.system(size: 9, weight: .bold)).tracking(0.5)
+                RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
+                Text(title).font(StrapTypography.body(11, weight: .semibold)).tracking(0.9)
             }.foregroundStyle(Color.appFG)
         }.buttonStyle(.plain)
     }

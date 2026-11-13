@@ -194,7 +194,11 @@ struct DashboardView: View {
 
     private var trendsPanel: some View {
         Panel {
-            SectionTitle(focusedMetric == "recovery" ? "Recovery history" : focusedMetric == "strain" ? "Strain history" : "Sleep · Recovery · Strain")
+            SectionTitle("Weekly Trends")
+            Text(focusedMetric == "recovery" ? "RECOVERY" : focusedMetric == "strain" ? "STRAIN" : "SLEEP · RECOVERY · STRAIN")
+                .font(StrapTypography.body(12, weight: .semibold))
+                .tracking(0.8)
+                .foregroundStyle(Color.appMuted)
             Picker("Chart period", selection: $trendWindow) {
                 Text("7D").tag(7)
                 Text("30D").tag(30)
@@ -385,8 +389,8 @@ struct DashboardView: View {
                                     maximum: Double) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(0.7)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .tracking(0.8)
                 .foregroundStyle(Color.appFG)
             HStack(alignment: .bottom, spacing: 4) {
                 ForEach(Array(recentDays.enumerated()), id: \.offset) { index, day in
@@ -428,7 +432,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("STRAIN")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -466,7 +470,7 @@ struct DashboardView: View {
                                     .frame(width: width, height: max(2, barHeight))
                                     .position(x: x, y: 166 - barHeight / 2)
                                 Text(String(format: "%.1f", value))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(StrapTypography.metric(11, weight: .bold))
                                     .foregroundStyle(Color(hex: 0x009FEE))
                                     .position(x: x, y: max(10, 154 - barHeight))
                             }
@@ -506,7 +510,7 @@ struct DashboardView: View {
                             color: Color, upper: Double) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(title).foregroundStyle(Color.appFG)
+                Text(title).font(StrapTypography.body(12, weight: .semibold)).tracking(0.7).foregroundStyle(Color.appFG)
                 Spacer()
                 Text(unit).foregroundStyle(Color.appMuted)
             }
