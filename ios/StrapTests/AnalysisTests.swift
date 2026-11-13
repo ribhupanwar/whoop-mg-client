@@ -365,11 +365,9 @@ final class ActivityDetectTests: XCTestCase {
         XCTAssertEqual(sessions[0].kind, "cardio")
     }
 
-    func testGaitLabelsRunWithoutStepData() {
-        let rows = stream(0, 1200, hr: 150, accel: 0.4, gait: 2, withSteps: false)
-        let sessions = ActivityDetect.detect(rows)
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions[0].kind, "run")
+    func testUnverifiedGaitAloneDoesNotCreateActivityWithoutSteps() {
+        let rows = stream(0, 1200, hr: 70, accel: 0.4, gait: 2, withSteps: false)
+        XCTAssertTrue(ActivityDetect.detect(rows).isEmpty)
     }
 
     func testArmMotionWhileStillIsNotASession() {

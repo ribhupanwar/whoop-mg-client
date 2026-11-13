@@ -214,6 +214,18 @@ final class BandLink: NSObject, ObservableObject {
         return Hrv.restingQualityReason(overnight)
     }
 
+    /// Export the exact retained channels and staged labels for this displayed
+    /// night. The file stays local until the user explicitly shares it.
+    func exportSleepDiagnostics() async throws -> URL {
+        guard let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
+        let samples = retainedHistoricalSamples
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("sleep-exports", isDirectory: true)
+        return try await Task.detached(priority: .utility) {
+            try SleepDiagnostics.write(samples: samples, session: session, directory: directory)
+        }.value
+    }
+
     private var historicalArchiveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("strap-history-v18.json")

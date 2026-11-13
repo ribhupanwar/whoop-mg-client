@@ -5,6 +5,9 @@ import SwiftUI
 /// The hypnogram is a labelled four-class estimate, never a PSG reading.
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var sleepExportURL: URL?
+    @State private var sleepExportError: String?
+    @State private var preparingSleepExport = false
     @State private var showSleepEditor = false
     @State private var confirmEndSleep = false
     @State private var correctedSleepStart = Date()
@@ -417,7 +420,31 @@ struct SleepAnalysisView: View {
                 .padding(.top, 10)
                 Hint("Keep the strap nearby while syncing. Saved raw captures are recovered automatically when the app opens. Time the strap did not record cannot be reconstructed.")
             }
+            if !demo, session != nil {
+                Button {
+                    preparingSleepExport = true
+                    sleepExportError = nil
+                    Task {
+                        do { sleepExportURL = try await store.band.exportSleepDiagnostics() }
+                        catch { sleepExportError = error.localizedDescription }
+                        preparingSleepExport = false
+                    }
+                } label: {
+                    Label(preparingSleepExport ? "Preparing sleep export…" : "Export sleep sensor data",
+                          systemImage: "square.and.arrow.up")
+                }
+                .disabled(preparingSleepExport || store.band.isAnalyzingHistory)
+                .padding(.top, 10)
+                if let sleepExportURL {
+                    ShareLink("Share sleep CSV", item: sleepExportURL)
+                        .padding(.top, 6)
+                    Hint("Contains this night's recorded heart rate, R-R intervals, movement and estimated labels. Share only when you choose.")
+                }
+                if let sleepExportError { Hint(sleepExportError) }
+            }
         }
+        .onChange(of: session?.startUnix) { _, _ in sleepExportURL = nil }
+        .onChange(of: session?.endUnix) { _, _ in sleepExportURL = nil }
     }
 
     private var stagingTrailing: String {
