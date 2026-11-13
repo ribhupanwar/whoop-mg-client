@@ -316,7 +316,11 @@ final class BandLink: NSObject, ObservableObject {
         let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
         guard lastRecalculationSettings != settingsKey else { return }
         lastRecalculationSettings = settingsKey
-        recalculateRetainedMetrics()
+        // Startup safety: do not synchronously analyze the entire retained
+        // BLE archive on the SwiftUI/main thread. The cached summary and
+        // daily metrics were restored in init(); the next history sync will
+        // refresh them. Explicit recalculateRetainedMetrics() remains
+        // available for an intentional recalculation.
     }
 
     /// Rebuild derived scores from the retained raw archive without requiring
