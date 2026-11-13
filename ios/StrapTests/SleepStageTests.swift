@@ -122,7 +122,7 @@ final class SleepStageTests: XCTestCase {
         let (samples, period) = makeNight(bandWakeMinutes: (20, 26))
         let staging = SleepStager.stage(samples: samples, period: period)
         XCTAssertTrue(staging.stageable)
-        XCTAssertGreaterThanOrEqual(staging.wakeMinutes, 5, accuracy: 0.5)
+        XCTAssertGreaterThan(staging.wakeMinutes, 4.5)
         XCTAssertTrue(staging.segments.contains { $0.stage == .wake })
     }
 
