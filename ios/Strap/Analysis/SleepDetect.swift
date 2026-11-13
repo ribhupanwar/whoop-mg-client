@@ -144,18 +144,30 @@ enum SleepDetect {
         var bouts = 0
         var start: Int?
         var lastMovement: Int?
+        var lastCountedSecond: Int?
+        var activeSeconds = 0
         func closeBout() {
-            if let start, let lastMovement, lastMovement - start + 1 >= minimumDurationS { bouts += 1 }
+            if start != nil && activeSeconds >= minimumDurationS { bouts += 1 }
+        }
+        func resetBout() {
+            start = nil
+            lastMovement = nil
+            lastCountedSecond = nil
+            activeSeconds = 0
         }
         for (index, timestamp) in unix.enumerated() {
             if !quiet[index] {
                 if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
-                    closeBout(); start = nil; lastMovement = nil
+                    closeBout(); resetBout()
                 }
                 if start == nil { start = timestamp }
+                if lastCountedSecond != timestamp {
+                    activeSeconds += 1
+                    lastCountedSecond = timestamp
+                }
                 lastMovement = timestamp
             } else if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
-                closeBout(); start = nil; lastMovement = nil
+                closeBout(); resetBout()
             }
         }
         closeBout()

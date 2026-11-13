@@ -147,6 +147,8 @@ final class SleepStageTests: XCTestCase {
         let saved = [SleepCorrectionStore.key(for: original, timeZone: zone): manualTimes]
         XCTAssertEqual(end - start, 8 * 3600 + 12 * 60)
         XCTAssertEqual(SleepCorrectionStore.times(for: restaged, overrides: saved, timeZone: zone), manualTimes)
+        XCTAssertEqual(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), restaged.hours * restaged.quietFraction, accuracy: 0.001)
+        XCTAssertLessThan(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), Double(end - start) / 3600.0)
         _ = calendar
     }
 

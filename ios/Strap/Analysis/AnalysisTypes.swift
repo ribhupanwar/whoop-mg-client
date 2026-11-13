@@ -99,6 +99,18 @@ enum SleepCorrectionStore {
     static func times(for period: SleepPeriod, overrides: [String: [Int]], timeZone: TimeZone = .current) -> [Int]? {
         overrides[key(for: period, timeZone: timeZone)] ?? overrides[String(period.startUnix)]
     }
+
+    /// Sensor-derived fallback for an edited bed window when stage data is incomplete.
+    /// Quiet fraction comes from recorded on-wrist motion; it never treats the full
+    /// time-in-bed window as asleep and never fills missing HR or stages.
+    static func estimatedAsleepHours(period: SleepPeriod, editedTimes: [Int]?) -> Double {
+        let observedEstimate = period.hours * min(1.0, max(0.0, period.quietFraction))
+        guard let editedTimes, editedTimes.count == 2, editedTimes[1] > editedTimes[0] else {
+            return observedEstimate
+        }
+        let editedWindowHours = Double(editedTimes[1] - editedTimes[0]) / 3600.0
+        return min(observedEstimate, editedWindowHours)
+    }
 }
 
 /// One bedtime-to-waketime span, used by the consistency rule.

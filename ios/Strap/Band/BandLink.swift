@@ -378,10 +378,12 @@ final class BandLink: NSObject, ObservableObject {
         guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
         let corrected = SleepCorrectionStore.times(for: period, overrides: overrides)
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-            // Only measured restaging may supply asleep time for an edited night.
-            // A historical quiet fraction is not valid over a new interval.
-            guard let staged = correctedSleepStaging, staged.stageable else { return nil }
-            return staged.asleepMinutes / 60.0
+            if let staged = correctedSleepStaging, staged.stageable {
+                return staged.asleepMinutes / 60.0
+            }
+            // Keep the sleep ring useful when HR coverage is too sparse for stages.
+            // This remains a motion-derived estimate and is capped by the edited window.
+            return SleepCorrectionStore.estimatedAsleepHours(period: period, editedTimes: corrected)
         }
         if let stage = summary?.sleepStaging,
            summary?.sleepPeriods.last?.startUnix == period.startUnix,
