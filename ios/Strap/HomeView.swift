@@ -11,6 +11,8 @@ struct HomeView: View {
     @State private var showLogger = false
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
+    @State private var deletingDetectedID: String?
+    @State private var hiddenDetectedIDs: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "strap.detected.activity.hidden.v1") ?? [])
     @State private var correctedKind: ActivityKind = .other
     @State private var correctedLabels: [String: String] = UserDefaults.standard.dictionary(forKey: "strap.detected.activity.labels.v1") as? [String: String] ?? [:]
     @State private var showDashboardCustomize = false
@@ -73,6 +75,18 @@ struct HomeView: View {
                     }
                 }
             }
+        }
+        .confirmationDialog("Delete activity?", isPresented: Binding(get: { deletingDetectedID != nil }, set: { if !$0 { deletingDetectedID = nil } }), titleVisibility: .visible) {
+            Button("Delete activity", role: .destructive) {
+                if let id = deletingDetectedID {
+                    hiddenDetectedIDs.insert(id)
+                    UserDefaults.standard.set(Array(hiddenDetectedIDs).sorted(), forKey: "strap.detected.activity.hidden.v1")
+                }
+                deletingDetectedID = nil
+            }
+            Button("Cancel", role: .cancel) { deletingDetectedID = nil }
+        } message: {
+            Text("Remove this activity from the STRAP timeline? Raw band samples remain available.")
         }
         .sheet(isPresented: $showSleepEditor) {
             NavigationStack {
@@ -532,6 +546,15 @@ struct HomeView: View {
                                 }
                                 .accessibilityLabel("Edit activity")
                                 .buttonStyle(.plain)
+                                Button {
+                                    deletingDetectedID = row.id
+                                } label: {
+                                    Image(systemName: "trash.circle")
+                                        .font(.system(size: 19))
+                                        .foregroundStyle(.red)
+                                }
+                                .accessibilityLabel("Delete activity")
+                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -595,7 +618,7 @@ struct HomeView: View {
     }
 
     private var detectedRows: [ActivityRowModel] {
-        store.detectedActivities(on: selectedDayKey).map { session in
+        store.detectedActivities(on: selectedDayKey).filter { !hiddenDetectedIDs.contains("band-\($0.startUnix)") }.map { session in
             let minutes = Int(session.minutes.rounded())
             let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
             let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
