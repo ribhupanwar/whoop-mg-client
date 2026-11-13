@@ -176,8 +176,9 @@ final class ActivityStoreTests: XCTestCase {
 
     func testDeleteLiveActivityPersists() {
         let record = LiveActivityRecord(
-            id: UUID(), startedUnix: 1_800_000_000, endedUnix: 1_800_000_600,
-            meanHR: 120, maxHR: 150, zoneSeconds: []
+            dateKey: "2026-11-10", startedUnix: 1_800_000_000,
+            endedUnix: 1_800_000_600, meanHR: 120, maxHR: 150, beats: 80,
+            hrv: .empty, zoneSeconds: []
         )
         store.saveLive(record)
         store.deleteLive(id: record.id)
