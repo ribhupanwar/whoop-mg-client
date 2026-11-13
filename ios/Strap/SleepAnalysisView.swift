@@ -36,7 +36,6 @@ struct SleepAnalysisView: View {
                 performancePanel
                 componentsPanel
                 lastNightPanel
-                stagingPanel
                 needPanel
                 consistencyPanel
                 stressDetailPanel
@@ -300,6 +299,11 @@ struct SleepAnalysisView: View {
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(Color.appFG)
             }
+
+            Divider()
+                .overlay(Color.appLine)
+                .padding(.vertical, 14)
+            stagingPanel
         }
     }
 
@@ -358,7 +362,7 @@ struct SleepAnalysisView: View {
     }
 
     private var stagingPanel: some View {
-        Panel {
+        VStack(alignment: .leading, spacing: 0) {
             CardHead(title: "Sleep stages", trailing: stagingTrailing)
             if demo {
                 SplitBar(segments: splitSegments(demoStageMinutes))
