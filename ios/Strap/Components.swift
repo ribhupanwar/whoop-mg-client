@@ -772,3 +772,89 @@ struct TimedLineChart: View {
         return path
     }
 }
+
+
+/// Ordered trend points keep their day indexes when intermediate measurements are absent.
+struct SparseSeriesPoint: Equatable, Identifiable {
+    let index: Int
+    let value: Double
+    var id: Int { index }
+}
+
+enum SparseSeries {
+    static func runs(_ values: [Double?]) -> [[SparseSeriesPoint]] {
+        var result: [[SparseSeriesPoint]] = []
+        var current: [SparseSeriesPoint] = []
+        for (index, value) in values.enumerated() {
+            if let value {
+                current.append(SparseSeriesPoint(index: index, value: value))
+            } else if !current.isEmpty {
+                result.append(current)
+                current = []
+            }
+        }
+        if !current.isEmpty { result.append(current) }
+        return result
+    }
+}
+
+/// A day-indexed line chart that leaves missing days visibly blank.
+struct SparseLineChart: View {
+    let values: [Double?]
+    var color: Color = .appAccent
+    var minY: Double = 0
+    var maxY: Double = 100
+    var height: CGFloat = 105
+    var xLabels: [String] = []
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let leftPad: CGFloat = 0
+            let bottomPad: CGFloat = xLabels.isEmpty ? 0 : 14
+            let plotW = max(w - leftPad, 1)
+            let plotH = max(h - bottomPad, 1)
+            let range = max(maxY - minY, 0.0001)
+            let fractions: [CGFloat] = [0, 0.5, 1]
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(fractions.enumerated()), id: \.offset) { _, fraction in
+                    Path { p in
+                        let y = plotH * fraction
+                        p.move(to: CGPoint(x: leftPad, y: y))
+                        p.addLine(to: CGPoint(x: w, y: y))
+                    }
+                    .stroke(Color.appLine, lineWidth: 1)
+                }
+                ForEach(Array(SparseSeries.runs(values).enumerated()), id: \.offset) { _, run in
+                    if run.count > 1 {
+                        Path { p in
+                            for (offset, point) in run.enumerated() {
+                                let x = leftPad + plotW * CGFloat(point.index) / CGFloat(max(values.count - 1, 1))
+                                let y = plotH * (1 - CGFloat((point.value - minY) / range))
+                                if offset == 0 { p.move(to: CGPoint(x: x, y: y)) }
+                                else { p.addLine(to: CGPoint(x: x, y: y)) }
+                            }
+                        }
+                        .stroke(color, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+                    }
+                }
+                ForEach(SparseSeries.runs(values).flatMap { $0 }) { point in
+                    let x = leftPad + plotW * CGFloat(point.index) / CGFloat(max(values.count - 1, 1))
+                    let y = plotH * (1 - CGFloat((point.value - minY) / range))
+                    Circle().fill(color).frame(width: 3.5, height: 3.5).position(x: x, y: y)
+                }
+                ForEach(Array(xLabels.enumerated()), id: \.offset) { index, label in
+                    Text(label)
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.appMuted)
+                        .position(
+                            x: plotW * CGFloat(index) / CGFloat(max(xLabels.count - 1, 1)),
+                            y: h - 7
+                        )
+                }
+            }
+        }
+        .frame(height: height)
+    }
+}

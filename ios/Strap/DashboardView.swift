@@ -511,12 +511,20 @@ struct DashboardView: View {
                 Text(unit).foregroundStyle(Color.appMuted)
             }
             .font(.system(size: 12))
-            if values.count >= 2 && values.allSatisfy({ $0 != nil }) {
-                LineChart(values: values.compactMap { $0 },
-                          color: color, minY: 0, maxY: upper, height: 105,
-                          xLabels: [recentDays.first?.dateKey ?? "", recentDays.last?.dateKey ?? ""])
+            if values.compactMap({ $0 }).count >= 2 {
+                SparseLineChart(
+                    values: values,
+                    color: color,
+                    minY: 0,
+                    maxY: upper,
+                    height: 105,
+                    xLabels: [recentDays.first?.dateKey ?? "", recentDays.last?.dateKey ?? ""]
+                )
+                Text("Missing days stay blank; no values are interpolated.")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.appMuted)
             } else {
-                Hint("Not enough continuous recorded data to draw this trend.")
+                Hint("At least two measured days are needed to draw this trend.")
             }
         }
         .padding(.top, 10)

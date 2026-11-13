@@ -737,3 +737,12 @@ final class RespirationTests: XCTestCase {
         XCTAssertEqual(estimate.beats, 3)
     }
 }
+
+
+final class SparseSeriesChartTests: XCTestCase {
+    func testMissingDaysSplitTrendIntoSeparateRuns() {
+        let runs = SparseSeries.runs([10.0, 12.0, nil, 18.0, nil, 20.0, 22.0])
+        XCTAssertEqual(runs.map { $0.map(\.index) }, [[0, 1], [3], [5, 6]])
+        XCTAssertEqual(runs.map { $0.map(\.value) }, [[10, 12], [18], [20, 22]])
+    }
+}
