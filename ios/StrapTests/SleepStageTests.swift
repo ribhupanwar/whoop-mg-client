@@ -11,7 +11,8 @@ private func stageSample(
     rr: [Int] = [],
     gravity: (Double, Double, Double)? = (0, 0, 1),
     recordIndex: UInt32 = 0,
-    subsecQ15: Int = 0
+    subsecQ15: Int = 0,
+    sleepState: Int? = nil
 ) -> V18Sample {
     V18Sample(
         header: BandRecordHeader(
@@ -22,7 +23,7 @@ private func stageSample(
         gravityXG: gravity?.0, gravityYG: gravity?.1, gravityZG: gravity?.2,
         stepCounter: nil, stepCadence: nil, activityClass: nil,
         skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
-        sleepStateByte: nil, sleepState: nil, cardiacFlags: nil, hrQualityFlags: nil,
+        sleepStateByte: sleepState.map { $0 << 4 }, sleepState: sleepState, cardiacFlags: nil, hrQualityFlags: nil,
         spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
         signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
     )
@@ -98,6 +99,29 @@ final class SleepStageTests: XCTestCase {
         XCTAssertGreaterThan(staging.lightMinutes, staging.deepMinutes)
         XCTAssertGreaterThan(staging.restorativeMinutes, 0)
         XCTAssertEqual(staging.asleepMinutes + staging.wakeMinutes, staging.totalMinutes, accuracy: 0.001)
+    }
+
+    func testBandStateKeepsStillAndMixedEpochsUnclassified() {
+        let period = stageWindow(seconds: 150)
+        let samples = (0..<150).map { offset -> V18Sample in
+            let state: Int
+            switch offset / 30 {
+            case 0: state = 0       // wake
+            case 1: state = 3       // up
+            case 2: state = 1       // still in bed, not proven asleep
+            case 3: state = 2       // coarse band sleep confirmation
+            default: state = offset % 30 < 15 ? 1 : 2 // ambiguous transition
+            }
+            return stageSample(unix: base + offset, sleepState: state)
+        }
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        // Wake/up are counted awake; still and mixed state intervals stay blank.
+        assertTotals(staging, period: period, classifiedSeconds: 90)
+        XCTAssertEqual(staging.wakeMinutes, 1.0, accuracy: 1e-9)
+        XCTAssertFalse(staging.segments.contains { $0.startUnix < base + 90 && $0.endUnix > base + 60 })
+        XCTAssertTrue(staging.segments.contains { $0.startUnix < base + 120 && $0.endUnix > base + 90 })
+        assertHole(staging, start: base + 120, end: base + 150)
     }
 
     func testTotalsMatchSegments() {
