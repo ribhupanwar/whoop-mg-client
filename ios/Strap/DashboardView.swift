@@ -275,7 +275,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("RECOVERY")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -315,7 +315,7 @@ struct DashboardView: View {
                                     .frame(width: width, height: max(2, barHeight))
                                     .position(x: x, y: 166 - barHeight / 2)
                                 Text(String(format: "%.0f%%", value))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(StrapTypography.body(11, weight: .semibold))
                                     .foregroundStyle(color)
                                     .position(x: x, y: max(10, 154 - barHeight))
                             }

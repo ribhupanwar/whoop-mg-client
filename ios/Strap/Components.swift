@@ -3,9 +3,7 @@ import CoreText
 
 
 // MARK: - Typography
-// Fonts are intentionally not bundled in this commit. When the user's licensed
-// app-embeddable font files are installed and registered in UIAppFonts, these
-// PostScript names activate automatically; otherwise system fonts remain safe.
+// Bundled Proxima Nova and DIN Pro; keep font weight explicit to avoid thin fallbacks.
 enum StrapTypography {
     private static let registered: Bool = {
         let names = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light", "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt", "DINPro-Regular", "DINPro-Light"]
@@ -17,8 +15,9 @@ enum StrapTypography {
     }()
     private static func weightName(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
-        if weight == .semibold { return "Semibold" }
-        if weight == .medium { return "Medium" }
+        // These font files have no Medium/Semibold face. Resolve both to Bold,
+        // rather than falling back to thin system fonts or silently losing weight.
+        if weight == .semibold || weight == .medium { return "Bold" }
         if weight == .light || weight == .ultraLight { return "Light" }
         return "Regular"
     }
@@ -36,6 +35,11 @@ enum StrapTypography {
     static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         _ = registered
         let variant = weightName(weight)
+        // DINPro-Bold is not bundled: use a genuine bold system face for
+        // prominent numbers instead of DINPro-Regular (which appears too thin).
+        if weight == .semibold || weight == .bold || weight == .heavy || weight == .black {
+            return .system(size: size, weight: .bold, design: .default).monospacedDigit()
+        }
         let names = ["DINPro-\(variant)", "DINPro-Regular", "DINPro-Light", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
         for name in names where UIFont(name: name, size: size) != nil {
             return .custom(name, size: size).monospacedDigit()
