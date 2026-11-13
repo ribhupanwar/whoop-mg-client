@@ -365,7 +365,7 @@ struct SleepAnalysisView: View {
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
-            } else if let staging, staging.stageable {
+            } else if let staging, !staging.segments.isEmpty {
                 if session?.isEdited == true {
                     Hint("Recalculated from retained sensor data for your edited bed/wake times.")
                 }
@@ -385,6 +385,9 @@ struct SleepAnalysisView: View {
                 if let session {
                     Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
                 }
+                if let reason = staging.reason {
+                    Hint("Partial stages only. \(reason). Missing intervals remain unclassified; the full-night sleep score is withheld.")
+                }
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason + ". Missing data is not assigned a sleep stage.")
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
@@ -403,7 +406,10 @@ struct SleepAnalysisView: View {
 
     private var stagingTrailing: String {
         if demo { return "sample" }
-        guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
+        guard let staging, !staging.segments.isEmpty, staging.asleepMinutes > 0 else { return "—" }
+        if staging.reason != nil {
+            return "Partial · \(Int((staging.hrCoverage * 100).rounded()))% HR"
+        }
         let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
         return String(format: "%.0f%% restorative", pct)
     }
