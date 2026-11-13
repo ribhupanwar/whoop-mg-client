@@ -574,7 +574,7 @@ struct HomeView: View {
             .padding(.bottom, 10)
 
             if !demo {
-                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 5+ minutes appears here after each capture and stays in the log. Lifting load has to be entered by hand; the band never sees it.")
+                Text("Run, walk and cardio sessions auto-detect from sustained step-counter movement or an elevated heart rate. Short bursts are filtered; detected sessions appear after capture and stay in the log. Lifting load has to be entered by hand; the band does not measure it.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .lineSpacing(3)
