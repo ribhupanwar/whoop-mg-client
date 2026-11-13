@@ -126,7 +126,7 @@ struct ActivityLoggerView: View {
                 .foregroundStyle(Color.appFG)
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .padding(.top, 6)
         }
     }
@@ -169,7 +169,7 @@ struct ActivityLoggerView: View {
                         .padding(.vertical, 6)
                         .padding(.horizontal, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     Text("kg")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.appMuted)
@@ -209,7 +209,7 @@ struct ActivityLoggerView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 

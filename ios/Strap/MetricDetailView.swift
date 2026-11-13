@@ -199,6 +199,20 @@ struct MetricDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
+    @ViewBuilder
+    private func comparisonIndicator(_ metric: DetailMetric, day: MetricDay?, history: [MetricDay]) -> some View {
+        if let value = day?.value(metric),
+           let mean = MetricTimeline.comparison(metric, before: selectedKey, in: history) {
+            let unchanged = metric.text(value) == metric.text(mean)
+            let rises = value > mean
+            let favourable = (metric == .rhr || metric == .respiration) ? !rises : rises
+            Image(systemName: unchanged ? "circle.fill" : rises ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                .font(.system(size: unchanged ? 5 : 7))
+                .foregroundStyle(unchanged ? Color.appMuted : favourable ? Color.appGood : Color.appWarn)
+                .accessibilityLabel(unchanged ? "Same as comparison" : rises ? "Above comparison" : "Below comparison")
+        }
+    }
+
     private func summary(_ day: MetricDay?, history: [MetricDay]) -> some View {
         let rows: [DetailMetric] = recoveryMode ? [.hrv, .rhr, .respiration, .sleepPerformance] : [.zonesLow, .zonesHigh, .strength, .steps]
         return Panel {
@@ -208,7 +222,10 @@ struct MetricDetailView: View {
                     Text(metric.title.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.5)
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 3) {
-                        Text(metric.text(day?.value(metric))).font(.system(size: 23, weight: .semibold, design: .rounded)).monospacedDigit()
+                        HStack(spacing: 6) {
+                            Text(metric.text(day?.value(metric))).font(.system(size: 23, weight: .semibold, design: .rounded)).monospacedDigit()
+                            comparisonIndicator(metric, day: day, history: history)
+                        }
                         Text(metric.text(MetricTimeline.comparison(metric, before: selectedKey, in: history)))
                             .font(.system(size: 11)).foregroundStyle(Color.appMuted)
                     }
@@ -271,7 +288,7 @@ struct MetricDetailView: View {
             Text(title.uppercased()).font(.system(size: 12, weight: .bold))
             Spacer()
             Text(detail).font(.system(size: 11)).foregroundStyle(Color.appMuted).multilineTextAlignment(.trailing)
-        }.padding(8).background(Color.appSurface, in: RoundedRectangle(cornerRadius: 15)).contentShape(Rectangle())
+        }.padding(8).background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 15)).contentShape(Rectangle())
     }
     private func clockRange(_ start: Int, _ end: Int) -> String {
         let a = Date(timeIntervalSince1970: TimeInterval(start)).formatted(date: .omitted, time: .shortened)
@@ -380,7 +397,7 @@ struct WeeklyMetricChart: View {
                                         .position(x: x, y: height - barHeight / 2)
                                 }
                             } else {
-                                Circle().fill(Color.appSurface).frame(width: 7, height: 7)
+                                Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                     .overlay(Circle().stroke(strainBlue, lineWidth: 2)).position(x: x, y: height - barHeight)
                             }
                             Text(metric.text(value)).font(.system(size: 10, weight: .semibold)).monospacedDigit()

@@ -65,8 +65,8 @@ struct Panel<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppLayout.cardInset)
-        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, AppLayout.cardSpacing)
     }
 }
@@ -86,7 +86,7 @@ struct CTABox<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .overlay(alignment: .leading) {
             Rectangle().fill(Color.appAccent).frame(width: 3)
         }
@@ -242,7 +242,7 @@ struct SplitBar: View {
         }
         .frame(height: 11)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 }
 
@@ -420,7 +420,7 @@ struct BedWakeChart: View {
                     let isLast = highlightLast && idx == spans.count - 1
                     RoundedRectangle(cornerRadius: 4)
                         .fill(isLast ? Color.appSleep : Color.appRaised)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                         .frame(width: barW, height: max(bottom - top, 2))
                         .position(x: slot * (CGFloat(idx) + 0.5), y: (top + bottom) / 2)
                 }
@@ -513,8 +513,8 @@ struct MetricRow: View {
         }
         .padding(.horizontal, AppLayout.cardInset)
         .padding(.vertical, 16)
-        .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 }
@@ -553,8 +553,8 @@ struct MetricTile: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(13)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 }
 
@@ -581,8 +581,8 @@ struct StatCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 }
 

@@ -37,7 +37,7 @@ struct LiveSessionView: View {
                                 .foregroundStyle(Color.appFG)
                                 .frame(maxWidth: .infinity, minHeight: 42)
                                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                         }
                         .buttonStyle(.plain)
                         Hint(store.band.status.title)

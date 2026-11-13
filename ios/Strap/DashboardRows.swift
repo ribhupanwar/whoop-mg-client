@@ -234,8 +234,8 @@ struct DashboardRows: View {
                 }
                 .padding(.horizontal, AppLayout.cardInset)
                 .padding(.vertical, 16)
-                .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(Color.appSurface))
-                .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine, lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
+                .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
@@ -289,8 +289,8 @@ struct DashboardRows: View {
                 }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 13).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.appLine, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 13).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 8)

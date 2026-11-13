@@ -131,8 +131,8 @@ struct HealthHubView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
@@ -204,8 +204,8 @@ struct HealthHubView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)

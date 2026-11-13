@@ -155,7 +155,7 @@ struct HomeView: View {
                 Image(systemName: "flame.fill").foregroundStyle(Color.orange)
                 Text("\(store.recordedDayCount)").font(.system(size: 11, weight: .bold))
             }.padding(.horizontal, 8).padding(.vertical, 7)
-                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: 10))
+                .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
                 .accessibilityLabel("\(store.recordedDayCount) recorded days")
 
             Spacer()
@@ -348,7 +348,7 @@ struct HomeView: View {
                         .foregroundStyle(Color.appGood)
                         .frame(width: 26, height: 26)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     Text(demo ? "1" : "\(store.recordedDayCount)")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.appMuted)
@@ -462,7 +462,7 @@ struct HomeView: View {
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state)
                         .font(.system(size: 12, weight: .semibold))
@@ -476,8 +476,8 @@ struct HomeView: View {
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: My Day
@@ -509,7 +509,7 @@ struct HomeView: View {
                 .background(
                     LinearGradient(colors: [Color(hex: 0x392F59), Color(hex: 0x214856)], startPoint: .leading, endPoint: .trailing)
                 )
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
@@ -741,7 +741,7 @@ struct HomeView: View {
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, minHeight: 42)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -864,7 +864,7 @@ struct HomeView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 }
             }
             .padding(.bottom, 9)

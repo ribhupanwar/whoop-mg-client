@@ -38,7 +38,7 @@ struct CombinedLoadChart: View {
                         let x = left + slot * (CGFloat(index) + 0.5)
                         if let value = day.value(.strain) {
                             let y = plotH * CGFloat(1 - value / 21)
-                            Circle().fill(Color.appSurface).frame(width: 7, height: 7)
+                            Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(Color.appAccent, lineWidth: 2)).position(x: x, y: y)
                             Text(DetailMetric.strain.text(value)).font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(Color.appAccent).position(x: x, y: min(plotH - 3, y + 12))
@@ -46,7 +46,7 @@ struct CombinedLoadChart: View {
                         if let value = day.recovery {
                             let y = plotH * CGFloat(1 - value / 100)
                             let color = DetailMetric.recovery.color(value)
-                            Circle().fill(Color.appSurface).frame(width: 7, height: 7)
+                            Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(color, lineWidth: 2)).position(x: x, y: y)
                             Text(DetailMetric.recovery.text(value)).font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(color).position(x: x, y: max(6, y - 13))

@@ -69,7 +69,7 @@ struct TrainView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             fieldRow(label: "Max HR (bpm)") {
                 TextField("190", text: $maxText)
@@ -82,7 +82,7 @@ struct TrainView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             Hint("Resting HR seeds from your Settings override, else the band's last measured quiet window, else 72 bpm. Max HR defaults to the age estimate 208 − 0.7 × age (age \(store.settings.age) → \(String(format: "%.0f", Karvonen.agePredictedMaxHR(age: store.settings.age))) bpm). An age formula is only a population guess — replace it with a max you have actually seen in a hard session. Both fields recompute the zones live.")
         }
@@ -98,8 +98,8 @@ struct TrainView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 

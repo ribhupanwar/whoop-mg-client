@@ -845,7 +845,7 @@ struct SleepAnalysisView: View {
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -855,8 +855,8 @@ private extension SleepStage {
     var color: Color {
         switch self {
         case .wake: return Color(red: 0.78, green: 0.79, blue: 0.80)
-        case .light: return Color(red: 0.65, green: 0.61, blue: 0.92)
-        case .deep: return Color(red: 0.93, green: 0.39, blue: 0.86)
+        case .light: return Color(hex: 0xABA4EE)
+        case .deep: return Color(hex: 0xED84F6)
         case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
         }
     }

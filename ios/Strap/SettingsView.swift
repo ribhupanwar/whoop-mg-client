@@ -124,7 +124,7 @@ struct SettingsView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 profileOK { store.settings.ageConfirmed = true }
                 }
             }
@@ -159,7 +159,7 @@ struct SettingsView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     .onChange(of: weightText) { _, text in
                         store.settings.weightKG = Self.parsedNumber(text)
                     }
@@ -179,7 +179,7 @@ struct SettingsView: View {
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     .onChange(of: heightText) { _, text in
                         store.settings.heightCM = Self.parsedNumber(text)
                     }
@@ -200,7 +200,7 @@ struct SettingsView: View {
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
-        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .accessibilityLabel("Confirm profile value")
     }
 
@@ -243,7 +243,7 @@ struct SettingsView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 10)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
 
             HStack(spacing: 12) {
                 Button(store.band.isFindingBands ? "Searching…" : "Find another band") {
@@ -399,7 +399,7 @@ struct SettingsView: View {
                 .padding(.vertical, 6)
                 .padding(.horizontal, 8)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .padding(.bottom, 8)
     }
@@ -597,7 +597,7 @@ struct SettingsView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 }

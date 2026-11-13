@@ -29,7 +29,7 @@ struct DashboardCustomizeSheet: View {
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
-                            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appLine, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 14)
@@ -74,15 +74,15 @@ struct DashboardCustomizeSheet: View {
                         .foregroundStyle(hidden ? Color.appWarn : Color.appAccent)
                         .frame(width: 34, height: 34)
                         .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(hidden ? "Show \(row.title)" : "Hide \(row.title)")
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 8)
     }
 
@@ -95,7 +95,7 @@ struct DashboardCustomizeSheet: View {
                 .foregroundStyle(disabled ? Color.appLine : Color.appFG)
                 .frame(width: 34, height: 34)
                 .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(disabled)
