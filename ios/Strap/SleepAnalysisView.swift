@@ -453,7 +453,7 @@ struct SleepAnalysisView: View {
                 }
                 if let observed = staging.hrObservedSeconds,
                    let window = staging.hrWindowSeconds, window > 0 {
-                    let gap = CoachFormat.duration(Double(staging.longestHRGapSeconds ?? 0) / 60.0)
+                    let gap = CoachFormat.duration(Double(staging.longestHRGapSeconds ?? 0) / 3600.0)
                     details.append("HR recorded for \(observed) of \(window) seconds; longest HR gap \(gap).")
                 }
                 let detail = details.joined(separator: " ")
