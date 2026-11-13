@@ -58,15 +58,16 @@ struct SettingsView: View {
                             failures.append("Archive has too many CSV files (limit 1000)")
                             break
                         }
-                        if entry.uncompressedSize > maxCSVBytes {
+                        let declaredBytes = UInt64(entry.uncompressedSize)
+                        if declaredBytes > maxCSVBytes {
                             failures.append("\(name): exceeds 50 MB limit")
                             continue
                         }
-                        guard totalCSVBytes <= maxArchiveBytes - entry.uncompressedSize else {
+                        guard totalCSVBytes <= maxArchiveBytes - declaredBytes else {
                             failures.append("Archive exceeds 100 MB cumulative CSV limit")
                             break
                         }
-                        totalCSVBytes += entry.uncompressedSize
+                        totalCSVBytes += declaredBytes
                         do {
                             var data = Data()
                             _ = try archive.extract(entry) { chunk in
