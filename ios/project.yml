@@ -51,6 +51,7 @@ targets:
           - ProximaNova-LightIt.ttf
           - DINPro-Regular.ttf
           - DINPro-Light.ttf
+          - DINPro-Bold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
