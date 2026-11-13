@@ -27,15 +27,6 @@ final class AppStore: ObservableObject {
         defaults.set(Array(hiddenDetectedStarts).sorted(), forKey: "strap.activities.hiddenStarts.v1")
     }
 
-    /// Persisted user dismissals prevent auto-detection duplicates returning after sync.
-    @Published private(set) var hiddenDetectedStarts: Set<Int> =
-        Set(UserDefaults.standard.array(forKey: "strap.activities.hiddenStarts.v1") as? [Int] ?? [])
-
-    func hideDetectedActivity(startUnix: Int) {
-        hiddenDetectedStarts.insert(startUnix)
-        defaults.set(Array(hiddenDetectedStarts).sorted(), forKey: "strap.activities.hiddenStarts.v1")
-    }
-
     let band = BandLink()
     /// Optional Apple Health export. OFF until the toggle in Settings asks.
     let health = HealthKitBridge()
@@ -234,7 +225,6 @@ final class AppStore: ObservableObject {
         let merged = (band.summary?.activities ?? []) + detectedBandActivities
         return merged
             .filter { JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix))) == dateKey }
-            .filter { !hiddenDetectedStarts.contains($0.startUnix) }
             .filter { !hiddenDetectedStarts.contains($0.startUnix) }
             .filter { seen.insert($0.startUnix).inserted }
             .sorted { $0.startUnix < $1.startUnix }
