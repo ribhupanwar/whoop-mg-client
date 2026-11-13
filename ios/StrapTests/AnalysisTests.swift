@@ -814,6 +814,6 @@ final class DailyMetricQualityTests: XCTestCase {
         XCTAssertNil(day.lnRMSSD)
         XCTAssertEqual(day.hrvWindowSeconds, 0)
         XCTAssertFalse(day.sleepDurationReliable ?? true)
-        XCTAssertNotNil(day.strain)
+        XCTAssertNil(day.strain, "Exercise load still needs its own quiet awake reference")
     }
 }
