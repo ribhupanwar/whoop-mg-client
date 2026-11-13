@@ -447,9 +447,16 @@ struct SleepAnalysisView: View {
                 }
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
             } else if let staging, let reason = staging.reason {
-                let detail = staging.unclassifiedMinutes.map {
-                    "\(reason). \(CoachFormat.duration($0 / 60.0)) of this window remains unclassified."
-                } ?? reason
+                var details = [reason]
+                if let minutes = staging.unclassifiedMinutes, minutes > 0 {
+                    details.append("\(CoachFormat.duration(minutes / 60.0)) of this window remains unclassified.")
+                }
+                if let observed = staging.hrObservedSeconds,
+                   let window = staging.hrWindowSeconds, window > 0 {
+                    let gap = CoachFormat.duration(Double(staging.longestHRGapSeconds ?? 0) / 60.0)
+                    details.append("HR recorded for \(observed) of \(window) seconds; longest HR gap \(gap).")
+                }
+                let detail = details.joined(separator: " ")
                 VStack(alignment: .leading, spacing: 10) {
                     EmptyState(title: "Stages unavailable", detail: detail)
                     if let minutes = staging.unclassifiedMinutes, minutes > 0 {
