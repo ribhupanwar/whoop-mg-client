@@ -65,8 +65,8 @@ final class HistoricalArchiveTests: XCTestCase {
         ])
 
         XCTAssertEqual(samples.count, 2)
-        XCTAssertEqual(samples.map(\\.unix), [1_762_800_000, 1_762_800_001])
-        XCTAssertEqual(samples.map(\\.heartRate), [63, 64])
+        XCTAssertEqual(samples.map { $0.unix }, [1_762_800_000, 1_762_800_001])
+        XCTAssertEqual(samples.map { $0.heartRate }, [63, 64])
     }
 
 }
