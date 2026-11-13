@@ -132,7 +132,36 @@ enum SleepReport {
         )
     }
 
-    // MARK: - Composite
+    // MARK: - Canonical session report
+
+    /// Production reports use the exact same staged session as Home and Recovery.
+    /// Do not score an incomplete night or infer wake from a movement fraction.
+    static func analyze(
+        samples: [V18Sample], session: SleepSession, needHours: Double,
+        nights: [NightSpan], sleepBaseline: Baseline?
+    ) -> SleepAnalysis? {
+        guard let asleep = session.asleepHours, let efficiency = session.efficiencyPct,
+              needHours.isFinite, needHours > 0 else { return nil }
+        let consistencyResult = consistency(nights: nights)
+        let period = SleepPeriod(
+            startUnix: session.startUnix, endUnix: session.endUnix - 1,
+            quietFraction: efficiency / 100, meanHR: 0, wakeEvents: session.movementBouts
+        )
+        let stress = stressSplit(samples: samples, periods: [period], baseline: sleepBaseline)
+        let hoursPct = min(100, 100 * asleep / needHours)
+        var components = [hoursPct, efficiency]
+        if let pct = consistencyResult.pct { components.append(pct) }
+        if let high = stress.highPct { components.append(100 - high) }
+        return SleepAnalysis(
+            hours: asleep, needHours: needHours,
+            hoursVsNeededPct: hoursPct, efficiencyPct: efficiency,
+            wakeEvents: session.movementBouts,
+            consistencyPct: consistencyResult.pct, consistencyNights: consistencyResult.nights,
+            stress: stress, performancePct: Stats.mean(components)
+        )
+    }
+
+    // MARK: - Legacy reference composite (not used by the app pipeline)
 
     /// Equal-weight mean of whichever components are available. WHOOP's
     /// weighting is proprietary; this is our own composite.

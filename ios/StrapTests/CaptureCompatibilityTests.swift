@@ -51,6 +51,7 @@ final class CaptureCompatibilityTests: XCTestCase {
         object.removeValue(forKey: "awakeStress")
         object.removeValue(forKey: "outsideWorkoutStress")
         object.removeValue(forKey: "stressSeries")
+        object.removeValue(forKey: "sleepSessions")
         let old = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(CaptureSummary.self, from: old)
@@ -65,5 +66,21 @@ final class CaptureCompatibilityTests: XCTestCase {
         XCTAssertNil(decoded.awakeStress)
         XCTAssertNil(decoded.outsideWorkoutStress)
         XCTAssertNil(decoded.stressSeries)
+        XCTAssertNil(decoded.sleepSessions)
+    }
+
+    func testOldDayDurationIsNotMarkedReliable() throws {
+        let day = DayMetrics(
+            dateKey: "2026-11-12", state: "sleep", restingHR: nil, lnRMSSD: nil,
+            hrvWindowSeconds: 0, sleepHours: 7.4, sleepStartUnix: 1_800_000_000,
+            sleepEndUnix: 1_800_028_800, strain: nil, steps: nil,
+            sleepDurationReliable: true
+        )
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(day)) as? [String: Any])
+        object.removeValue(forKey: "sleepDurationReliable")
+        let old = try JSONSerialization.data(withJSONObject: object)
+        let decoded = try JSONDecoder().decode(DayMetrics.self, from: old)
+        XCTAssertNil(decoded.sleepDurationReliable)
+        XCTAssertEqual(decoded.sleepHours, day.sleepHours)
     }
 }

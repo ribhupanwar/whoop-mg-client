@@ -70,93 +70,59 @@ enum SleepStager {
                 wakeMinutes: 0, epochs: 0, hrCoverage: 0, reason: "empty sleep window"
             )
         }
-        let firstEpoch = ((start + epochS - 1) / epochS) * epochS
-        let gridEpochs = max(0, (end - firstEpoch + epochS - 1) / epochS)
-        guard gridEpochs > 0 else {
-            return SleepStaging(
-                segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: 0, hrCoverage: 0,
-                reason: "sleep window shorter than one \(epochS) s epoch"
-            )
-        }
-
-        let ordered = samples.sorted { $0.unix < $1.unix }
-        let padLo = start - 360
-        let padHi = end + 420
-
-        var hrSum: [Int: Double] = [:]
-        var hrCount: [Int: Int] = [:]
-        var gx: [Int: Double] = [:]
-        var gy: [Int: Double] = [:]
-        var gz: [Int: Double] = [:]
-        var gCount: [Int: Int] = [:]
-        var rrBySecond: [Int: [Double]] = [:]
-
-        for sample in ordered where sample.unix >= padLo && sample.unix < padHi {
-            let second = sample.unix
-            if sample.heartRate > 0 {
-                hrSum[second, default: 0] += Double(sample.heartRate)
-                hrCount[second, default: 0] += 1
+        // Match the physiological HR gate used by sleep detection and resting HRV.
+        // One timestamp contributes at most one worn second, regardless of replay.
+        var records: [Int: V18Sample] = [:]
+        for sample in samples where sample.unix >= start && sample.unix < end {
+            guard sample.wearing, (35...220).contains(sample.heartRate) else { continue }
+            if let previous = records[sample.unix], !preferRecord(sample, over: previous) {
+                continue
             }
-            if let x = sample.gravityXG, let y = sample.gravityYG, let z = sample.gravityZG {
-                gx[second, default: 0] += x
-                gy[second, default: 0] += y
-                gz[second, default: 0] += z
-                gCount[second, default: 0] += 1
-            }
-            for rr in sample.rrIntervalsMS where rr >= 300 && rr <= 2000 {
-                rrBySecond[second, default: []].append(Double(rr))
-            }
+            records[sample.unix] = sample
         }
 
         var secHR: [Int: Double] = [:]
-        for (second, total) in hrSum {
-            secHR[second] = total / Double(hrCount[second] ?? 1)
-        }
         var secGravity: [Int: (Double, Double, Double)] = [:]
-        for (second, count) in gCount {
-            secGravity[second] = (
-                (gx[second] ?? 0) / Double(count),
-                (gy[second] ?? 0) / Double(count),
-                (gz[second] ?? 0) / Double(count)
-            )
+        var rrBySecond: [Int: [Double]] = [:]
+        for (second, sample) in records {
+            secHR[second] = Double(sample.heartRate)
+            secGravity[second] = finiteGravity(sample)
+            rrBySecond[second] = validRR(sample)
         }
 
         let epochs = features(
             start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
         )
-        let hrEpochs = epochs.filter { $0.hr != nil }.count
-        let coverage = Double(hrEpochs) / Double(gridEpochs)
+        let coverage = Double(secHR.count) / Double(end - start)
+        let validEpochCount = epochs.filter { $0.hr != nil }.count
         guard coverage >= minHRCoverage else {
             let percent = Int((coverage * 100).rounded())
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, epochs: validEpochCount, hrCoverage: coverage,
                 reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
             )
         }
 
-        let labels = stageEpochs(epochs)
+        let labels = labelsForValidRuns(epochs)
         guard labels.count == epochs.count else {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
-                wakeMinutes: 0, epochs: epochs.count, hrCoverage: coverage,
+                wakeMinutes: 0, epochs: validEpochCount, hrCoverage: coverage,
                 reason: "staging produced no labels"
             )
         }
 
         var segments: [SleepStageSegment] = []
         for (index, epoch) in epochs.enumerated() {
-            let stage = labels[index]
-            let segmentStart = index == 0 ? start : epoch.start
-            let segmentEnd = index == epochs.count - 1 ? end : epochs[index + 1].start
-            if let last = segments.last, last.stage == stage {
+            guard let stage = labels[index] else { continue }
+            if let last = segments.last, last.stage == stage, last.endUnix == epoch.start {
                 segments[segments.count - 1] = SleepStageSegment(
-                    startUnix: last.startUnix, endUnix: segmentEnd, stage: stage
+                    startUnix: last.startUnix, endUnix: epoch.end, stage: stage
                 )
             } else {
                 segments.append(
-                    SleepStageSegment(startUnix: segmentStart, endUnix: segmentEnd, stage: stage)
+                    SleepStageSegment(startUnix: epoch.start, endUnix: epoch.end, stage: stage)
                 )
             }
         }
@@ -176,15 +142,51 @@ enum SleepStager {
 
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
-            remMinutes: rem, wakeMinutes: wake, epochs: epochs.count,
+            remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
             hrCoverage: coverage, reason: nil
         )
     }
 
     // MARK: - Features
 
+    private static func validRR(_ sample: V18Sample) -> [Double] {
+        sample.rrIntervalsMS.filter { (Int(rrMinMS)...Int(rrMaxMS)).contains($0) }.map { Double($0) }
+    }
+
+    private static func finiteGravity(_ sample: V18Sample) -> (Double, Double, Double)? {
+        guard let x = sample.gravityXG, let y = sample.gravityYG, let z = sample.gravityZG,
+              x.isFinite, y.isFinite, z.isFinite else { return nil }
+        return (x, y, z)
+    }
+
+    /// Select one whole packet, rather than averaging HR or concatenating replayed beats.
+    private static func preferRecord(_ sample: V18Sample, over previous: V18Sample) -> Bool {
+        let rr = validRR(sample)
+        let oldRR = validRR(previous)
+        if rr.count != oldRR.count { return rr.count > oldRR.count }
+        let gravity = finiteGravity(sample)
+        let oldGravity = finiteGravity(previous)
+        if (gravity != nil) != (oldGravity != nil) { return gravity != nil }
+        if sample.header.subsecQ15 != previous.header.subsecQ15 {
+            return sample.header.subsecQ15 < previous.header.subsecQ15
+        }
+        if sample.header.recordIndex != previous.header.recordIndex {
+            return sample.header.recordIndex < previous.header.recordIndex
+        }
+        if sample.heartRate != previous.heartRate { return sample.heartRate < previous.heartRate }
+        // A payload tie-break selects a packet; the beat order inside it is unchanged.
+        if rr != oldRR { return rr.lexicographicallyPrecedes(oldRR) }
+        if let a = gravity, let b = oldGravity {
+            if a.0 != b.0 { return a.0 < b.0 }
+            if a.1 != b.1 { return a.1 < b.1 }
+            if a.2 != b.2 { return a.2 < b.2 }
+        }
+        return false
+    }
+
     private struct RawFeature {
         let start: Int
+        let end: Int
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
@@ -198,6 +200,7 @@ enum SleepStager {
 
     private struct Epoch {
         let start: Int
+        let end: Int
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
@@ -216,14 +219,13 @@ enum SleepStager {
         secGravity: [Int: (Double, Double, Double)],
         rrBySecond: [Int: [Double]]
     ) -> [Epoch] {
-        let span = Double(max(1, end - start))
-        let first = ((start + epochS - 1) / epochS) * epochS
+        let span = Double(end - start)
 
         func windowStd(_ lo: Int, _ hi: Int) -> Double? {
             var sum = 0.0
             var squares = 0.0
             var count = 0
-            for second in lo..<hi {
+            for second in max(start, lo)..<min(end, hi) {
                 guard let value = secHR[second] else { continue }
                 sum += value
                 squares += value * value
@@ -237,55 +239,58 @@ enum SleepStager {
         var raws: [RawFeature] = []
         var allJerks: [Double] = []
 
-        var epochStart = first
-        while epochStart < end {
-            var hrs: [Double] = []
-            var gravity: [(Double, Double, Double)] = []
-            for second in epochStart..<(epochStart + epochS) {
-                if let value = secHR[second] { hrs.append(value) }
-                if let point = secGravity[second] { gravity.append(point) }
-            }
-            if hrs.isEmpty && gravity.isEmpty {
-                epochStart += epochS
-                continue
-            }
+        // Keep the absolute 30-second grid, clipping both boundary epochs.
+        var gridStart = start - ((start % epochS + epochS) % epochS)
+        while gridStart < end {
+            let epochStart = max(start, gridStart)
+            let epochEnd = min(end, gridStart + epochS)
+            let hrs = (epochStart..<epochEnd).compactMap { secHR[$0] }
+            let valid = Double(hrs.count) / Double(epochEnd - epochStart) >= minHRCoverage
 
             var jerks: [Double] = []
-            if gravity.count >= 2 {
-                for index in 1..<gravity.count {
-                    let a = gravity[index - 1]
-                    let b = gravity[index]
+            if valid {
+                for second in epochStart..<epochEnd {
+                    // Missing seconds are not consecutive motion observations.
+                    guard second > epochStart,
+                          let a = secGravity[second - 1], let b = secGravity[second] else { continue }
                     let dx = a.0 - b.0
                     let dy = a.1 - b.1
                     let dz = a.2 - b.2
-                    jerks.append(sqrt(dx * dx + dy * dy + dz * dz))
+                    let jerk = sqrt(dx * dx + dy * dy + dz * dz)
+                    if jerk.isFinite { jerks.append(jerk) }
                 }
+                allJerks.append(contentsOf: jerks)
             }
-            allJerks.append(contentsOf: jerks)
 
             var beats: [(t: Double, rr: Double)] = []
-            for second in (epochStart - 90)..<(epochStart + 120) {
-                guard let values = rrBySecond[second] else { continue }
-                for rr in values {
-                    beats.append((t: Double(second), rr: min(max(rr, rrMinMS), rrMaxMS)))
+            if valid {
+                for second in max(start, epochStart - 90)..<min(end, epochEnd + 90) {
+                    guard let values = rrBySecond[second], !values.isEmpty else { continue }
+                    // Subsecond beat times are unavailable: distribute the packet's
+                    // beats within its second in their original acquisition order.
+                    for (index, rr) in values.enumerated() {
+                        beats.append((t: Double(second) + Double(index) / Double(values.count), rr: rr))
+                    }
                 }
             }
 
+            let midpoint = (Double(epochStart) + Double(epochEnd)) / 2 - Double(start)
             raws.append(
                 RawFeature(
                     start: epochStart,
-                    hr: hrs.isEmpty ? nil : Stats.mean(hrs),
-                    hrVar: windowStd(epochStart - 150, epochStart + epochS + 150),
-                    hrFlat11: windowStd(epochStart - 330, epochStart + epochS + 360),
+                    end: epochEnd,
+                    hr: valid ? Stats.mean(hrs) : nil,
+                    hrVar: valid ? windowStd(epochStart - 150, epochEnd + 150) : nil,
+                    hrFlat11: valid ? windowStd(epochStart - 330, epochEnd + 360) : nil,
                     jerks: jerks,
-                    gapCount: max(1, gravity.count - 1),
+                    gapCount: max(1, jerks.count),
                     jerkMax: jerks.max() ?? 0,
-                    respReg: respRegularity(beats),
-                    clock: Double(epochStart + 15 - start) / span,
-                    minutes: Double(epochStart + 15 - start) / 60.0
+                    respReg: valid ? respRegularity(beats) : nil,
+                    clock: midpoint / span,
+                    minutes: midpoint / 60.0
                 )
             )
-            epochStart += epochS
+            gridStart += epochS
         }
 
         let jerkScale: Double
@@ -301,6 +306,7 @@ enum SleepStager {
             let moves = raw.jerks.filter { $0 > moveThreshold }.count
             return Epoch(
                 start: raw.start,
+                end: raw.end,
                 hr: raw.hr,
                 hrVar: raw.hrVar,
                 hrFlat11: raw.hrFlat11,
@@ -317,8 +323,8 @@ enum SleepStager {
     /// Peakedness of RSA power in 0.15-0.40 Hz over a 4 Hz resampled tachogram.
     private static func respRegularity(_ beats: [(t: Double, rr: Double)]) -> Double? {
         guard beats.count >= minBeatsPerEpoch else { return nil }
-        let sorted = beats.sorted { $0.t != $1.t ? $0.t < $1.t : $0.rr < $1.rr }
-        guard let first = sorted.first, let last = sorted.last else { return nil }
+        // The caller supplies chronological seconds and original within-packet order.
+        guard let first = beats.first, let last = beats.last else { return nil }
         let t0 = first.t
         let t1 = last.t
         guard t1 > t0 else { return nil }
@@ -331,11 +337,11 @@ enum SleepStager {
         var segment = 0
         for index in 0..<count {
             let time = t0 + step * Double(index)
-            while segment < sorted.count - 2 && sorted[segment + 1].t < time {
+            while segment < beats.count - 2 && beats[segment + 1].t < time {
                 segment += 1
             }
-            let a = sorted[segment]
-            let b = sorted[segment + 1]
+            let a = beats[segment]
+            let b = beats[segment + 1]
             if b.t <= a.t {
                 grid[index] = a.rr
             } else {
@@ -480,13 +486,36 @@ enum SleepStager {
         return nil
     }
 
-    private static func stageEpochs(_ epochs: [Epoch]) -> [SleepStage] {
+    private static func labelsForValidRuns(_ epochs: [Epoch]) -> [SleepStage?] {
+        let population = epochs.filter { $0.hr != nil }
+        var labels = [SleepStage?](repeating: nil, count: epochs.count)
+        var index = 0
+        while index < epochs.count {
+            guard epochs[index].hr != nil else {
+                index += 1
+                continue
+            }
+            let first = index
+            index += 1
+            while index < epochs.count, epochs[index].hr != nil,
+                  epochs[index - 1].end == epochs[index].start {
+                index += 1
+            }
+            let runLabels = stageEpochs(Array(epochs[first..<index]), population: population)
+            for (offset, label) in runLabels.enumerated() { labels[first + offset] = label }
+        }
+        return labels
+    }
+
+    private static func stageEpochs(_ epochs: [Epoch], population: [Epoch]) -> [SleepStage] {
         guard !epochs.isEmpty else { return [] }
-        let zHR = zScorer(epochs.map { $0.hr })
-        let zVar = zScorer(epochs.map { $0.hrVar })
-        let zMove = zScorer(epochs.map { Optional($0.moveFrac) })
-        let zResp = zScorer(epochs.map { $0.respReg })
-        let flatSorted = epochs.compactMap { $0.hrFlat11 }.sorted()
+        // Normalize against valid epochs in this window, but run both HMM passes
+        // and sustained-onset detection separately on either side of every hole.
+        let zHR = zScorer(population.map { $0.hr })
+        let zVar = zScorer(population.map { $0.hrVar })
+        let zMove = zScorer(population.map { Optional($0.moveFrac) })
+        let zResp = zScorer(population.map { $0.respReg })
+        let flatSorted = population.compactMap { $0.hrFlat11 }.sorted()
 
         var emissions: [[SleepStage: Double]] = []
         for epoch in epochs {

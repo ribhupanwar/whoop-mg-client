@@ -100,6 +100,15 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastLiveSession: LiveSessionSummary?
     @Published private(set) var summary: CaptureSummary?
     @Published private(set) var lastSleepAnalysis: SleepAnalysis?
+    @Published private(set) var isAnalyzingHistory = false
+    private var metricsRequest = 0
+    private let analysisQueue = DispatchQueue(label: "strap.history.analysis", qos: .userInitiated)
+
+    var latestSleepSession: SleepSession? {
+        guard !isAnalyzingHistory, let session = summary?.latestSleepSession,
+              session.version == SleepSession.algorithmVersion else { return nil }
+        return session
+    }
     @Published private(set) var days: [DayMetrics] = []
     @Published private(set) var drainStats = DrainStats()
     @Published private(set) var lastCapturePath: String?
@@ -316,45 +325,77 @@ final class BandLink: NSObject, ObservableObject {
         let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
         guard lastRecalculationSettings != settingsKey else { return }
         lastRecalculationSettings = settingsKey
-        // Startup safety: do not synchronously analyze the entire retained
-        // BLE archive on the SwiftUI/main thread. The cached summary and
-        // daily metrics were restored in init(); the next history sync will
-        // refresh them. Explicit recalculateRetainedMetrics() remains
-        // available for an intentional recalculation.
+        // Migrate old results and refresh changed settings off the main thread.
+        // The versioned session replaces all legacy quiet-fraction totals together.
+        recalculateRetainedMetrics()
     }
 
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
     func recalculateRetainedMetrics() {
-        guard !retainedHistoricalSamples.isEmpty else { return }
-        let fresh = CaptureSummary.make(
-            samples: retainedHistoricalSamples, sex: sex, maxHR: maxHR,
-            awakeBaseline: awakeBaseline
-        )
-        summary = fresh
-        persist(fresh)
-        merge(DailyAnalysis.metrics(
-            from: retainedHistoricalSamples, sex: sex, maxHR: maxHR
-        ))
-        if !fresh.sleepPeriods.isEmpty {
-            let analysis = SleepReport.analyze(
-                samples: retainedHistoricalSamples,
-                periods: fresh.sleepPeriods,
-                needHours: needHours,
-                nights: recentNights,
-                sleepBaseline: sleepBaseline
+        lastSleepAnalysis = nil
+        UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+        metricsRequest += 1
+        guard !retainedHistoricalSamples.isEmpty else {
+            var cached = summary
+            cached?.sleepSessions = nil
+            summary = cached
+            isAnalyzingHistory = false
+            return
+        }
+        let request = metricsRequest
+        isAnalyzingHistory = true
+        let samples = retainedHistoricalSamples
+        let sexSnapshot = sex
+        let maxSnapshot = maxHR
+        let needSnapshot = needHours
+        let baselineSnapshot = awakeBaseline
+        let daysSnapshot = days
+        let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
+            as? [String: [Int]] ?? [:]
+        analysisQueue.async { [weak self] in
+            let fresh = CaptureSummary.make(
+                samples: samples, sex: sexSnapshot, maxHR: maxSnapshot,
+                awakeBaseline: baselineSnapshot, sleepCorrections: corrections
             )
-            lastSleepAnalysis = analysis
-            if let analysis, let data = try? JSONEncoder().encode(analysis) {
-                UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
-            } else {
-                UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+            let freshDays = DailyAnalysis.metrics(
+                from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
+                sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions
+            )
+            var byDay: [String: DayMetrics] = [:]
+            for day in daysSnapshot { byDay[day.dateKey] = day }
+            for day in freshDays {
+                if let previous = byDay[day.dateKey], previous.sleepStartUnix != nil,
+                   !DailyAnalysis.replacesSleep(previous: previous, fresh: day,
+                                                coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix) {
+                    continue
+                }
+                byDay[day.dateKey] = day
             }
-        } else {
-            // A new archive with no detected night must not keep displaying
-            // the previous capture's sleep report.
-            lastSleepAnalysis = nil
-            UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+            let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
+            let nights = Array(allDays.suffix(14)).compactMap(\.night)
+            let sleepBaseline = DailyAnalysis.baseline(
+                from: Array(allDays.filter { $0.state == "sleep" }.suffix(30))
+            )
+            let report = fresh.latestSleepSession.flatMap {
+                SleepReport.analyze(
+                    samples: samples, session: $0, needHours: needSnapshot,
+                    nights: nights, sleepBaseline: sleepBaseline
+                )
+            }
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.metricsRequest == request else { return }
+                self.summary = fresh
+                self.merge(freshDays, coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix)
+                self.lastSleepAnalysis = report
+                self.persist(fresh)
+                if let report, let data = try? JSONEncoder().encode(report) {
+                    UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
+                } else {
+                    UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+                }
+                self.isAnalyzingHistory = false
+            }
         }
     }
 
@@ -385,33 +426,18 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Corrected sleep durations affect Recovery immediately; original
     /// physiological samples remain unchanged for HRV/RHR provenance.
-    var lastNightHours: Double? {
-        guard let periods = summary?.sleepPeriods else { return nil }
-        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        // Manual corrections define the sleep window, but awake periods must
-        // still be excluded when no correction is present.
-        // The Home card represents the latest sleep session, not the sum of
-        // every detected nap/session in the retained multi-day capture.
-        guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
-        let corrected = overrides[String(period.startUnix)]
-        if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-            let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
-            return correctedHours * min(1.0, max(0.0, period.quietFraction))
-        }
-        if let stage = summary?.sleepStaging,
-           summary?.sleepPeriods.last?.startUnix == period.startUnix,
-           stage.reason == nil {
-            return stage.asleepMinutes / 60.0
-        }
-        return period.hours * min(1.0, max(0.0, period.quietFraction))
-    }
+    var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
     func notifySleepCorrectionChanged() {
-        objectWillChange.send()
+        recalculateRetainedMetrics()
     }
 
     var recovery: RecoveryResult {
-        Recovery.score(
+        if isAnalyzingHistory {
+            return RecoveryResult(score: nil, reason: "Recalculating retained history",
+                                  hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
+        }
+        return Recovery.score(
             lnRMSSD: summary?.hrv.lnRMSSD,
             rhr: summary?.restingHeartRate,
             sleepHours: lastNightHours,
@@ -436,7 +462,8 @@ final class BandLink: NSObject, ObservableObject {
                     lnRMSSD: old.lnRMSSD ?? log(row.hrvMS),
                     hrvWindowSeconds: old.hrvWindowSeconds,
                     sleepHours: old.sleepHours, sleepStartUnix: old.sleepStartUnix,
-                    sleepEndUnix: old.sleepEndUnix, strain: old.strain, steps: old.steps
+                    sleepEndUnix: old.sleepEndUnix, strain: old.strain, steps: old.steps,
+                    sleepDurationReliable: old.sleepDurationReliable
                 )
             } else {
                 byDate[row.dateKey] = DayMetrics(
@@ -1069,34 +1096,9 @@ final class BandLink: NSObject, ObservableObject {
             return
         }
         guard let combined = mergeHistoricalArchive(samples) else { return }
-        let fresh = CaptureSummary.make(
-            samples: combined, sex: sex, maxHR: maxHR, awakeBaseline: awakeBaseline
-        )
-        // Preserve previously validated recovery if merged data lacks a quiet window.
-        let previousHasRestMetrics = summary?.hrv.rmssdMS != nil || summary?.restingHeartRate != nil
-        let freshHasRestMetrics = fresh.hrv.rmssdMS != nil || fresh.restingHeartRate != nil
-        let preservePrevious = previousHasRestMetrics && !freshHasRestMetrics
-        if !preservePrevious {
-            summary = fresh
-            persist(fresh)
-            lastHistoryRecordCount = combined.count
-            UserDefaults.standard.set(combined.count, forKey: Keys.retainedHistoryCount)
-        }
-        merge(DailyAnalysis.metrics(from: combined, sex: sex, maxHR: maxHR))
-
-        if !preservePrevious && !fresh.sleepPeriods.isEmpty {
-            let analysis = SleepReport.analyze(
-                samples: combined,
-                periods: fresh.sleepPeriods,
-                needHours: needHours,
-                nights: recentNights,
-                sleepBaseline: sleepBaseline
-            )
-            lastSleepAnalysis = analysis
-            if let analysis, let data = try? JSONEncoder().encode(analysis) {
-                UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
-            }
-        }
+        lastHistoryRecordCount = combined.count
+        UserDefaults.standard.set(combined.count, forKey: Keys.retainedHistoryCount)
+        recalculateRetainedMetrics()
         lastMessage = "History sync: \(reason). Captured \(samples.count) records, \(drainAcks) ACKs. \(historyQuality). \(reason == "explicit completion" ? "" : "History may be incomplete; retry sync.")"
     }
 
@@ -1106,7 +1108,7 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
-    private func merge(_ fresh: [DayMetrics]) {
+    private func merge(_ fresh: [DayMetrics], coverageStart: Int? = nil, coverageEnd: Int? = nil) {
         guard !fresh.isEmpty else { return }
         var map = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
         // A short subsequent capture must not erase a fuller day's steps.
@@ -1117,6 +1119,9 @@ final class BandLink: NSObject, ObservableObject {
                 map[day.dateKey] = day
                 continue
             }
+            let replacesSleep = DailyAnalysis.replacesSleep(
+                previous: previous, fresh: day, coverageStart: coverageStart, coverageEnd: coverageEnd
+            )
             map[day.dateKey] = DayMetrics(
                 dateKey: day.dateKey,
                 state: day.state == "sleep" ? day.state : previous.state,
@@ -1125,9 +1130,9 @@ final class BandLink: NSObject, ObservableObject {
                 hrvWindowSeconds: max(day.hrvWindowSeconds, previous.hrvWindowSeconds),
                 // Recomputed sleep is authoritative when a detected night is present.
                 // A max() merge would permanently preserve the older inflated value.
-                sleepHours: day.sleepStartUnix != nil ? day.sleepHours : previous.sleepHours,
-                sleepStartUnix: day.sleepStartUnix ?? previous.sleepStartUnix,
-                sleepEndUnix: day.sleepEndUnix ?? previous.sleepEndUnix,
+                sleepHours: replacesSleep ? day.sleepHours : previous.sleepHours,
+                sleepStartUnix: replacesSleep ? day.sleepStartUnix : previous.sleepStartUnix,
+                sleepEndUnix: replacesSleep ? day.sleepEndUnix : previous.sleepEndUnix,
                 // Strain is a recomputed score, not an additive counter.
                 // Keeping the historical maximum permanently locks in an
                 // overestimated value after HR/sleep quality improves.
@@ -1136,7 +1141,8 @@ final class BandLink: NSObject, ObservableObject {
                 strain: day.strain.flatMap { $0.isFinite && (0...21).contains($0) ? $0 : nil }
                     ?? previous.strain,
                 steps: day.steps == nil && previous.steps == nil ? nil :
-                    max(day.steps ?? 0, previous.steps ?? 0)
+                    max(day.steps ?? 0, previous.steps ?? 0),
+                sleepDurationReliable: replacesSleep ? day.sleepDurationReliable : previous.sleepDurationReliable
             )
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }

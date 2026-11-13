@@ -16,6 +16,8 @@ struct SleepAnalysisView: View {
         demo ? nil : store.band.lastSleepAnalysis
     }
 
+    private var session: SleepSession? { demo ? nil : store.band.latestSleepSession }
+
     private var periods: [SleepPeriod] {
         demo ? [] : (store.band.summary?.sleepPeriods ?? [])
     }
@@ -64,7 +66,7 @@ struct SleepAnalysisView: View {
                         Button("Save") {
                             saveSleepCorrection()
                         }
-                        .disabled(correctedSleepEnd <= correctedSleepStart)
+                        .disabled(correctedSleepEnd <= correctedSleepStart || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
                 }
             }
@@ -80,7 +82,8 @@ struct SleepAnalysisView: View {
     }
 
     private func saveSleepCorrection() {
-        guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart else { return }
+        guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart,
+              correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400 else { return }
         var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
         corrections[String(period.startUnix)] = [
             Int(correctedSleepStart.timeIntervalSince1970),
@@ -123,10 +126,11 @@ struct SleepAnalysisView: View {
         if demo {
             return "Sample: 66% of your needed sleep last night."
         }
+        if store.band.isAnalyzingHistory { return "Recalculating the saved night…" }
         guard let analysis else {
-            return "needs an overnight capture"
+            return session?.durationReason ?? "needs an overnight capture"
         }
-        return "\(String(format: "%.1f", analysis.hours)) h of \(String(format: "%.1f", analysis.needHours)) h needed, from the last stored capture."
+        return "\(CoachFormat.duration(analysis.hours)) estimated asleep of \(CoachFormat.duration(analysis.needHours)) base need. Local score, not WHOOP's score."
     }
 
     // MARK: Components
@@ -181,60 +185,11 @@ struct SleepAnalysisView: View {
 
     // MARK: Last night
 
-    // A staged sleep window is the only source that can reconcile the
-    // hypnogram with the asleep/awake summary. Never mix it with the
-    // detector's independent quiet-fraction estimate.
-    private var reconciledStaging: SleepStaging? {
-        guard let staging, staging.stageable else { return nil }
-        let total = staging.asleepMinutes + staging.wakeMinutes
-        guard total > 0, let period = editablePeriod else { return nil }
-        let periodMinutes = Double(period.durationS) / 60.0
-        guard abs(total - periodMinutes) <= 2.0 else { return nil }
-        return staging
-    }
-
-    // A manual time correction must be reflected throughout this screen,
-    // not only in the Home recovery input. Staging remains tied to its
-    // original measured epochs and must not be stretched to the edit.
-    private var editedSleepWindowHours: Double? {
-        guard let period = editablePeriod else { return nil }
-        let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        guard let times = corrections[String(period.startUnix)],
-              times.count == 2, times[1] > times[0] else { return nil }
-        return Double(times[1] - times[0]) / 3600.0
-    }
-
-    private var lastNightHours: Double? {
-        if editedSleepWindowHours != nil { return store.band.lastNightHours }
-        if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
-        return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
-    }
-
-    private var asleepHours: Double? {
-        lastNightHours
-    }
-
-    // Use the same asleep duration for the summary and the hours-needed
-    // gauge. SleepDetect periods include brief awake intervals (time in bed).
-    private var reconciledHoursVsNeededPct: Double? {
-        guard let asleepHours, let need = analysis?.needHours, need > 0 else { return nil }
-        return min(100.0, max(0.0, 100.0 * asleepHours / need))
-    }
-
-    private var reconciledEfficiencyPct: Double? {
-        guard let asleepHours, let awakeHours,
-              asleepHours + awakeHours > 0 else { return nil }
-        return 100.0 * asleepHours / (asleepHours + awakeHours)
-    }
-
-    private var awakeHours: Double? {
-        if let editedSleepWindowHours, let asleepHours {
-            return max(0, editedSleepWindowHours - asleepHours)
-        }
-        if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
-        guard let analysis, let asleepHours else { return nil }
-        return max(0, analysis.hours - asleepHours)
-    }
+    private var lastNightHours: Double? { session?.asleepHours }
+    private var asleepHours: Double? { session?.asleepHours }
+    private var awakeHours: Double? { session?.awakeHours }
+    private var reconciledHoursVsNeededPct: Double? { analysis?.hoursVsNeededPct }
+    private var reconciledEfficiencyPct: Double? { session?.efficiencyPct }
 
     private var editablePeriod: SleepPeriod? {
         // Match BandLink.lastNightHours: use the most recently ended sleep, not the longest retained period.
@@ -244,9 +199,9 @@ struct SleepAnalysisView: View {
     private func openSleepEditor() {
         guard let period = editablePeriod else { return }
         let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        let times = corrections[String(period.startUnix)]
+        let times = SleepCorrectionStore.times(for: period, overrides: corrections)
         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? (period.endUnix + 1)))
         showSleepEditor = true
     }
 
@@ -289,18 +244,10 @@ struct SleepAnalysisView: View {
                     xLabels: ["00:26", "07:33"]
                 )
                 .padding(.bottom, 4)
-            } else if let series = store.band.summary?.heartRateSeries, series.count >= 2 {
-                LineChart(
-                    values: series,
-                    color: .appAccent,
-                    minY: series.min().map { floor($0) - 2 },
-                    maxY: series.max().map { ceil($0) + 2 },
-                    height: 120,
-                    yLabels: seriesLabels(series),
-                    xLabels: captureLabels
-                )
-                .padding(.bottom, 4)
-                Text("Per-minute means across the stored capture.")
+            } else if let session, !session.heartRate.isEmpty {
+                SleepHeartRateChart(session: session)
+                    .padding(.bottom, 4)
+                Text("Per-minute HR within this sleep window. Gaps mean missing data.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 8)
@@ -321,13 +268,26 @@ struct SleepAnalysisView: View {
                 splitValue(demo ? "1:07" : awakeHours.map(CoachFormat.duration) ?? "—", label: "awake")
             }
             .padding(.bottom, 10)
+            if !demo, let session {
+                HStack {
+                    Text("Time in bed \(CoachFormat.duration(session.timeInBedHours))")
+                    Spacer()
+                    if session.unclassifiedHours > 0 {
+                        Text("Unknown \(CoachFormat.duration(session.unclassifiedHours))")
+                    }
+                }
+                .font(.system(size: 11))
+                .foregroundStyle(Color.appMuted)
+                .padding(.bottom, 8)
+                if let reason = session.durationReason { Hint(reason + " Missing time is not awake time.") }
+            }
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Wake events")
+                    Text("Movement bouts")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("movement events")
+                    Text("not verified awakenings")
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.appMuted)
                 }
@@ -340,8 +300,7 @@ struct SleepAnalysisView: View {
     }
 
     private var wakeEventText: String {
-        guard !periods.isEmpty else { return "—" }
-        return "\(periods.reduce(0) { $0 + $1.wakeEvents })"
+        session.map { "\($0.movementBouts)" } ?? "—"
     }
 
     private var lastNightSegments: [SplitBar.Segment] {
@@ -352,31 +311,14 @@ struct SleepAnalysisView: View {
                 SplitBar.Segment(fraction: SampleData.awakeMinutes / total, color: .appWarn)
             ]
         }
-        if let asleepHours, let awakeHours, asleepHours + awakeHours > 0 {
-            let fraction = min(max(asleepHours / (asleepHours + awakeHours), 0), 1)
+        if let session, session.timeInBedHours > 0 {
             return [
-                SplitBar.Segment(fraction: fraction, color: .appSleep),
-                SplitBar.Segment(fraction: 1.0 - fraction, color: .appWarn)
+                SplitBar.Segment(fraction: session.classifiedAsleepHours / session.timeInBedHours, color: .appSleep),
+                SplitBar.Segment(fraction: session.classifiedAwakeHours / session.timeInBedHours, color: .appWarn),
+                SplitBar.Segment(fraction: session.unclassifiedHours / session.timeInBedHours, color: .appRaised)
             ]
         }
         return [SplitBar.Segment(fraction: 1.0, color: .appRaised)]
-    }
-
-    private var captureLabels: [String] {
-        guard let summary = store.band.summary,
-              let first = summary.firstUnix, let last = summary.lastUnix else { return [] }
-        return [clock(first), clock(last)]
-    }
-
-    private func seriesLabels(_ values: [Double]) -> [String] {
-        guard let max = values.max(), let min = values.min() else { return [] }
-        let top = ceil(max) + 2
-        let bottom = floor(min) - 2
-        return [
-            "\(Int(top))",
-            "\(Int((top + bottom) / 2))",
-            "\(Int(bottom))"
-        ]
     }
 
     private func clock(_ unix: Int) -> String {
@@ -404,7 +346,7 @@ struct SleepAnalysisView: View {
     // MARK: Sleep stages
 
     private var staging: SleepStaging? {
-        demo ? nil : store.band.summary?.sleepStaging
+        session?.staging
     }
 
     private var demoStageMinutes: [SleepStage: Double] {
@@ -420,29 +362,31 @@ struct SleepAnalysisView: View {
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
             } else if let staging, staging.stageable {
-                if editedSleepWindowHours != nil {
-                    Hint("Original capture stage estimates shown for comparison. The manually edited sleep window is different; these stage durations have not been recalculated.")
+                if session?.isEdited == true {
+                    Hint("Recalculated from retained sensor data for your edited bed/wake times.")
                 }
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
-                if let first = staging.segments.first, let last = staging.segments.last {
+                if let session {
                     HStack(alignment: .top, spacing: 8) {
                         StageHypnogram(
                             segments: staging.segments,
-                            startUnix: first.startUnix,
-                            endUnix: last.endUnix
+                            startUnix: session.startUnix,
+                            endUnix: session.endUnix
                         )
                     }
                     .padding(.vertical, 12)
                 }
-                Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
+                if let session {
+                    Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
+                }
             } else if let staging, let reason = staging.reason {
-                EmptyState(title: "Stages unavailable", detail: reason)
+                EmptyState(title: "Stages unavailable", detail: reason + ". Missing data is not assigned a sleep stage.")
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
                 EmptyState(
                     title: "not staged yet",
-                    detail: "This saved capture predates staging. Drain the band again to stage its sleep window."
+                    detail: store.band.isAnalyzingHistory ? "Recalculating retained sensor data…" : "No retained sensor data is available for this window."
                 )
             } else {
                 EmptyState(
@@ -474,18 +418,19 @@ struct SleepAnalysisView: View {
     }
 
     private func splitSegments(_ minutes: [SleepStage: Double]) -> [SplitBar.Segment] {
-        let total = max(1, minutes.values.reduce(0, +))
-        return [SleepStage.wake, .light, .deep, .rem].map { stage in
-            SplitBar.Segment(
-                fraction: (minutes[stage] ?? 0) / total,
-                color: stage.color
-            )
+        let total = max(1, session.map { $0.timeInBedHours * 60 } ?? minutes.values.reduce(0, +))
+        var result = [SleepStage.wake, .light, .deep, .rem].map { stage in
+            SplitBar.Segment(fraction: (minutes[stage] ?? 0) / total, color: stage.color)
         }
+        if let session, session.unclassifiedHours > 0 {
+            result.append(SplitBar.Segment(fraction: session.unclassifiedHours * 60 / total, color: .appRaised))
+        }
+        return result
     }
 
     // WHOOP-style stacked stage distribution, rather than four compressed columns.
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
-        let total = max(1.0, minutes.values.reduce(0, +))
+        let total = max(1.0, session.map { $0.timeInBedHours * 60 } ?? minutes.values.reduce(0, +))
         return VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("DURATION")
@@ -523,6 +468,15 @@ struct SleepAnalysisView: View {
                     }
                     .frame(height: 12)
                 }
+            }
+            if let session, session.unclassifiedHours > 0 {
+                HStack {
+                    Text("UNCLASSIFIED")
+                        .foregroundStyle(Color.appMuted)
+                    Spacer()
+                    Text(CoachFormat.duration(session.unclassifiedHours))
+                }
+                .font(.system(size: 12, weight: .medium))
             }
             let restorative = (minutes[.deep] ?? 0) + (minutes[.rem] ?? 0)
             HStack {
@@ -569,11 +523,17 @@ struct SleepAnalysisView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
             .padding(.bottom, 10)
-            SectionTitle("Where the need comes from")
+            SectionTitle("Next night's plan — separate from last night's score")
             needRow("Base need", demo: SampleData.needBase, live: CoachFormat.duration(store.settings.sleepNeedHours))
-            needRow("Sleep debt", demo: SampleData.needDebt, live: debt.map { "+" + CoachFormat.duration($0) } ?? "—")
+            needRow("Debt allowance (max 2 h)", demo: SampleData.needDebt, live: debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
             needRow("Tomorrow's plan", demo: SampleData.needTomorrow, live: "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
-            Hint("Our local need model: base + running debt (capped at 2 h) + tomorrow's allowance. Debt starts counting from your first recorded night.")
+            needRow("Next-night target", demo: SampleData.needTotal, live: CoachFormat.duration(
+                SleepCoach.recommendation(
+                    baseNeedHours: store.settings.sleepNeedHours, intent: store.settings.sleepIntent,
+                    debtHours: debt, wakeMinutes: store.settings.wakeTimeMinutes
+                ).needHours
+            ))
+            Hint("The score above compares last night's estimated asleep time with your base need. The future target adds a capped debt allowance and tomorrow's plan; incomplete nights never create debt.")
         }
     }
 

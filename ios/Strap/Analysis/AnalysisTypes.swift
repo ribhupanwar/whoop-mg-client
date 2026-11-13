@@ -292,11 +292,18 @@ struct DayMetrics: Identifiable, Equatable, Codable {
     let sleepEndUnix: Int?
     let strain: Double?
     let steps: Int?
+    /// nil means a legacy quiet-fraction total, not verified by this version.
+    var sleepDurationReliable: Bool? = nil
 
     var id: String { dateKey }
 
+    var reliableSleepHours: Double? {
+        guard sleepDurationReliable == true, sleepHours.isFinite, sleepHours >= 0 else { return nil }
+        return sleepHours
+    }
+
     var night: NightSpan? {
         guard let start = sleepStartUnix, let end = sleepEndUnix else { return nil }
-        return NightSpan(startUnix: start, endUnix: end)
+        return NightSpan(startUnix: start, endUnix: end + 1)
     }
 }

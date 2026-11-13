@@ -33,7 +33,7 @@ struct DashboardView: View {
             HStack(spacing: 10) {
                 analyticsStat("RECORDED DAYS", "\(recentDays.count)/\(trendWindow)")
                 analyticsStat("HRV + RHR", "\(recentDays.filter { $0.lnRMSSD != nil && $0.restingHR != nil }.count) days")
-                analyticsStat("SLEEP", "\(recentDays.filter { $0.sleepHours > 0 }.count) nights")
+                analyticsStat("SLEEP", "\(recentDays.filter { $0.reliableSleepHours != nil }.count) nights")
             }
             .padding(.top, 10)
             if !store.hasRecoveryBaseline {
@@ -96,7 +96,7 @@ struct DashboardView: View {
     }
 
     private var sleepShortfallText: String {
-        let nights = lastSevenDays.compactMap { $0.sleepHours > 0 ? $0.sleepHours : nil }
+        let nights = lastSevenDays.compactMap { $0.reliableSleepHours }
         guard !nights.isEmpty else { return "—" }
         let missing = nights.reduce(0) { $0 + max(0, store.settings.sleepNeedHours - $1) }
         return String(format: "%.1f h", missing)
@@ -114,7 +114,7 @@ struct DashboardView: View {
     }
 
     private var averageSleepText: String {
-        let values = lastSevenDays.compactMap { $0.sleepHours > 0 ? $0.sleepHours : nil }
+        let values = lastSevenDays.compactMap { $0.reliableSleepHours }
         guard !values.isEmpty else { return "—" }
         return String(format: "%.1f h", values.reduce(0, +) / Double(values.count))
     }
@@ -233,7 +233,7 @@ struct DashboardView: View {
             trendChart(
                 title: "SLEEP",
                 unit: "hours",
-                values: recentDays.map { $0.sleepHours > 0 ? $0.sleepHours : nil },
+                values: recentDays.map { $0.reliableSleepHours },
                 color: .appSleep,
                 upper: max(10, store.settings.sleepNeedHours + 2)
             )
@@ -263,7 +263,7 @@ struct DashboardView: View {
             let result = Recovery.score(
                 lnRMSSD: day.lnRMSSD,
                 rhr: day.restingHR,
-                sleepHours: day.sleepHours > 0 ? day.sleepHours : nil,
+                sleepHours: day.reliableSleepHours,
                 sleepNeedHours: store.settings.sleepNeedHours,
                 baseline: baseline
             )
@@ -359,9 +359,9 @@ struct DashboardView: View {
             weeklyRecoveryCard(
                 title: "SLEEP PERFORMANCE",
                 values: recentDays.map {
-                    $0.sleepHours > 0
-                        ? min(100, $0.sleepHours / max(1, store.settings.sleepNeedHours) * 100)
-                        : nil
+                    $0.reliableSleepHours.map {
+                        min(100, $0 / max(1, store.settings.sleepNeedHours) * 100)
+                    }
                 },
                 unit: "%",
                 color: .appSleep,

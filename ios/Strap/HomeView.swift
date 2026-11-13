@@ -17,8 +17,9 @@ struct HomeView: View {
     @State private var showSleepEditor = false
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
-    @State private var sleepCorrections: [String: [Int]] =
-        UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+    private var sleepCorrections: [String: [Int]] {
+        UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+    }
 
     private var demo: Bool { store.isPreview }
 
@@ -90,17 +91,19 @@ struct HomeView: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
                             if correctedSleepEnd > correctedSleepStart,
+                               correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400,
                                let period = latestSleepPeriod {
-                                sleepCorrections[String(period.startUnix)] = [
+                                var corrections = sleepCorrections
+                                corrections[String(period.startUnix)] = [
                                     Int(correctedSleepStart.timeIntervalSince1970),
                                     Int(correctedSleepEnd.timeIntervalSince1970)
                                 ]
-                                UserDefaults.standard.set(sleepCorrections, forKey: "strap.sleep.time.corrections.v1")
+                                UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
                                 store.band.notifySleepCorrectionChanged()
                             }
                             showSleepEditor = false
                         }
-                        .disabled(correctedSleepEnd <= correctedSleepStart)
+                        .disabled(correctedSleepEnd <= correctedSleepStart || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
                 }
             }
@@ -208,7 +211,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: .appGood
+                    color: recoveryScore.map { $0 >= 67 ? Color.appGood : ($0 >= 34 ? Color.appWarn : Color.appHigh) } ?? .appMuted
                     )
                 }
                 .buttonStyle(.plain)
@@ -326,8 +329,13 @@ struct HomeView: View {
         if let reason = store.band.recovery.reason {
             return "\(reason). Each history capture adds its own days; baselines need a week of them."
         }
-        if let sleep = store.band.lastSleepAnalysis {
-            return "Last night: \(CoachFormat.duration(sleep.hours)) of sleep, \(Int(sleep.hoursVsNeededPct.rounded()))% of need. \(sleep.wakeEvents) movement bursts ended inside it."
+        if store.band.isAnalyzingHistory { return "Updating the saved sleep window and its metrics…" }
+        if let session = store.band.latestSleepSession {
+            if let hours = session.asleepHours {
+                let pct = Int((min(1, hours / max(0.1, store.settings.sleepNeedHours)) * 100).rounded())
+                return "Last night: \(CoachFormat.duration(hours)) estimated asleep, \(pct)% of base need. \(session.movementBouts) movement bouts (not verified awakenings)."
+            }
+            return "\(CoachFormat.duration(session.timeInBedHours)) in bed. Full sleep duration is unknown; missing data is not counted as awake or added to sleep debt."
         }
         if let summary = store.lastCapture {
             let hrv = summary.hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "no steady R-R window"
@@ -500,9 +508,9 @@ struct HomeView: View {
                     Spacer()
                     Button("Edit sleep time") {
                         guard let period = latestSleepPeriod else { return }
-                        let times = sleepCorrections[String(period.startUnix)]
+                        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
                         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
-                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
+                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? (period.endUnix + 1)))
                         showSleepEditor = true
                     }
                     .font(.system(size: 11))
@@ -741,25 +749,17 @@ struct HomeView: View {
     }
 
     private var lastNightText: String {
-        // Keep the displayed duration consistent with an edited start/end.
-        // This is elapsed time in the edited window, not measured time asleep.
-        if let period = latestSleepPeriod,
-           let corrected = sleepCorrections[String(period.startUnix)],
-           corrected.count == 2, corrected[1] > corrected[0] {
-            return CoachFormat.duration(Double(corrected[1] - corrected[0]) / 3600.0)
-        }
-        guard let hours = store.band.lastNightHours else { return "—" }
-        return CoachFormat.duration(hours)
+        store.band.lastNightHours.map(CoachFormat.duration) ?? "—"
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.max(by: { $0.durationS < $1.durationS })
+        store.lastCapture?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private var sleepTimesText: String {
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
-        let times = sleepCorrections[String(period.startUnix)]
-        return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? period.endUnix, includeDay: false))"
+        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
+        return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? (period.endUnix + 1), includeDay: false))"
     }
 
     private static func sleepClock(_ unix: Int, includeDay: Bool) -> String {

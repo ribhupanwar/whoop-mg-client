@@ -92,7 +92,8 @@ final class AppStore: ObservableObject {
     /// sleep debt stays unknown instead of zero.
     var recordedNights: [RecordedNight] {
         band.days.compactMap { day in
-            guard day.sleepHours > 0 else { return nil }
+            guard !band.isAnalyzingHistory, day.sleepDurationReliable == true,
+                  day.sleepHours.isFinite, day.sleepHours >= 0 else { return nil }
             return RecordedNight(
                 dateKey: day.dateKey,
                 neededHours: settings.sleepNeedHours,

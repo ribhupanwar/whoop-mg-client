@@ -24,6 +24,10 @@ struct CaptureSummary: Codable, Equatable {
     /// captures stored before staging existed; a refusal arrives as a reason,
     /// not as fabricated light sleep.
     let sleepStaging: SleepStaging?
+    /// Versioned, window-bound results; nil on older saved captures.
+    var sleepSessions: [SleepSession]? = nil
+
+    var latestSleepSession: SleepSession? { sleepSessions?.last }
     let activities: [ActivitySession]
     /// Awake 5-minute stress share against the awake baseline. nil when the
     /// capture predates the baseline or the field (older persisted summary).
@@ -58,7 +62,8 @@ struct CaptureSummary: Codable, Equatable {
         samples: [V18Sample],
         sex: Sex,
         maxHR: Double?,
-        awakeBaseline: Baseline? = nil
+        awakeBaseline: Baseline? = nil,
+        sleepCorrections: [String: [Int]] = [:]
     ) -> CaptureSummary {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return .empty }
@@ -99,9 +104,8 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let staging = periods.last.map {
-            SleepStager.stage(samples: ordered, period: $0)
-        }
+        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections)
+        let staging = sessions.last?.staging
         let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
         let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
@@ -127,6 +131,7 @@ struct CaptureSummary: Codable, Equatable {
             spo2: Recovery.spo2Summary(ordered),
             sleepPeriods: periods,
             sleepStaging: staging,
+            sleepSessions: sessions,
             activities: activities,
             awakeStress: StressWindows.share(
                 samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
@@ -151,7 +156,9 @@ enum DailyAnalysis {
         from samples: [V18Sample],
         sex: Sex,
         maxHR: Double?,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        sleepCorrections: [String: [Int]] = [:],
+        analyzedSleepSessions: [SleepSession]? = nil
     ) -> [DayMetrics] {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
@@ -162,6 +169,9 @@ enum DailyAnalysis {
             byDay[JournalStore.dayKey(for: date, calendar: calendar), default: []].append(sample)
         }
         let periods = SleepDetect.detect(ordered)
+        let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
+            samples: ordered, periods: periods, overrides: sleepCorrections
+        )
 
         var result: [DayMetrics] = []
         for (key, daySamples) in byDay {
@@ -204,20 +214,15 @@ enum DailyAnalysis {
             }()
             let nightlyLnRMSSD = weightedHRV.map { log($0) }
             let nightlyWindowSeconds = sessions.reduce(0) { $0 + $1.window }
-            // SleepPeriod spans include brief awake gaps. Daily totals and
-            // Home must count estimated asleep time, not time in bed.
-            // Match SleepReport's quiet-fraction-based awake exclusion.
-            let sleepHours = dayPeriods.reduce(0.0) { total, period in
-                // Prefer stage-derived awake subtraction when staging passes
-                // quality checks. Otherwise use the conservative quiet-time
-                // estimate rather than counting the entire bed interval.
-                let stage = SleepStager.stage(samples: ordered, period: period)
-                if stage.reason == nil {
-                    return total + stage.asleepMinutes / 60.0
-                }
-                return total + period.hours * min(1.0, max(0.0, period.quietFraction))
+            let daySleep = sleepSessions.filter {
+                JournalStore.dayKey(
+                    for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)),
+                    calendar: calendar
+                ) == key
             }
-            let longest = dayPeriods.max { $0.durationS < $1.durationS }
+            let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
+            let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
+            let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
             var strain: Double?
             if let maxHR, let resting, maxHR > resting {
                 let awakeDaySamples = daySamples.filter { sample in
@@ -233,19 +238,32 @@ enum DailyAnalysis {
             result.append(
                 DayMetrics(
                     dateKey: key,
-                    state: sleepHours >= 3 ? "sleep" : "awake",
+                    state: daySleep.isEmpty ? "awake" : "sleep",
                     restingHR: resting,
                     lnRMSSD: nightlyLnRMSSD,
                     hrvWindowSeconds: nightlyWindowSeconds,
                     sleepHours: sleepHours,
                     sleepStartUnix: longest?.startUnix,
-                    sleepEndUnix: longest?.endUnix,
+                    sleepEndUnix: longest.map { $0.endUnix - 1 },
                     strain: strain,
-                    steps: steps
+                    steps: steps,
+                    sleepDurationReliable: sleepReliable
                 )
             )
         }
         return result.sorted { $0.dateKey < $1.dateKey }
+    }
+
+    /// Absence of sleep in a rolling partial archive must not erase a verified
+    /// night outside that archive. A newly analyzed session is authoritative.
+    static func replacesSleep(
+        previous: DayMetrics, fresh: DayMetrics, coverageStart: Int?, coverageEnd: Int?
+    ) -> Bool {
+        guard fresh.sleepDurationReliable != nil else { return false }
+        if fresh.sleepStartUnix != nil { return true }
+        guard let first = coverageStart, let last = coverageEnd,
+              let start = previous.sleepStartUnix, let end = previous.sleepEndUnix else { return false }
+        return first <= start && end <= last
     }
 
     /// Baseline from paired daily values. Days without both resting HR and
