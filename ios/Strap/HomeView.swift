@@ -91,7 +91,7 @@ struct HomeView: View {
                         Button("Save") {
                             if correctedSleepEnd > correctedSleepStart,
                                let period = latestSleepPeriod {
-                                sleepCorrections[String(period.startUnix)] = [
+                                sleepCorrections[SleepCorrectionStore.key(for: period)] = [
                                     Int(correctedSleepStart.timeIntervalSince1970),
                                     Int(correctedSleepEnd.timeIntervalSince1970)
                                 ]
@@ -208,7 +208,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: .appGood
+                    color: recoveryScore.map { $0 >= 67 ? Color.appGood : ($0 >= 34 ? Color.appWarn : Color.appHigh) } ?? .appMuted
                     )
                 }
                 .buttonStyle(.plain)
@@ -500,7 +500,7 @@ struct HomeView: View {
                     Spacer()
                     Button("Edit sleep time") {
                         guard let period = latestSleepPeriod else { return }
-                        let times = sleepCorrections[String(period.startUnix)]
+                        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
                         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
                         correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
                         showSleepEditor = true
@@ -765,7 +765,7 @@ struct HomeView: View {
 
     private var sleepTimesText: String {
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
-        let times = sleepCorrections[String(period.startUnix)]
+        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
         return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? period.endUnix, includeDay: false))"
     }
 

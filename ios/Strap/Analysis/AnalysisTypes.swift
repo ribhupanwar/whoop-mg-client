@@ -83,6 +83,24 @@ struct SleepPeriod: Codable, Equatable {
     var hours: Double { Double(durationS) / 3600.0 }
 }
 
+
+
+/// Stable wake-day key keeps user-edited sleep boundaries attached when detection trims onset.
+enum SleepCorrectionStore {
+    static func key(for period: SleepPeriod, timeZone: TimeZone = .current) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let wakeDate = Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+        return "wake-day-\(formatter.string(from: wakeDate))"
+    }
+
+    static func times(for period: SleepPeriod, overrides: [String: [Int]], timeZone: TimeZone = .current) -> [Int]? {
+        overrides[key(for: period, timeZone: timeZone)] ?? overrides[String(period.startUnix)]
+    }
+}
+
 /// One bedtime-to-waketime span, used by the consistency rule.
 struct NightSpan: Codable, Equatable {
     let startUnix: Int

@@ -121,12 +121,9 @@ enum SleepDetect {
             }
 
             let quietSeconds = quiet[start..<end].filter { $0 }.count
-            var wakeEvents = 0
-            if end > start + 1 {
-                for second in (start + 1)..<end where !quiet[second] && quiet[second - 1] {
-                    wakeEvents += 1
-                }
-            }
+            let wakeEvents = movementBoutCount(
+                quiet: Array(quiet[start..<end]), unix: run.map(\.unix)
+            )
             periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
@@ -138,6 +135,31 @@ enum SleepDetect {
             )
         }
         return periods
+    }
+
+    /// Counts coarse motion bouts, never individual movement samples or verified awakenings.
+    /// A bout needs 30 seconds of observed motion; gaps up to 20 seconds are coalesced.
+    static func movementBoutCount(quiet: [Bool], unix: [Int], minimumDurationS: Int = 30, gapToleranceS: Int = 20) -> Int {
+        guard quiet.count == unix.count else { return 0 }
+        var bouts = 0
+        var start: Int?
+        var lastMovement: Int?
+        func closeBout() {
+            if let start, let lastMovement, lastMovement - start + 1 >= minimumDurationS { bouts += 1 }
+        }
+        for (index, timestamp) in unix.enumerated() {
+            if !quiet[index] {
+                if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
+                    closeBout(); start = nil; lastMovement = nil
+                }
+                if start == nil { start = timestamp }
+                lastMovement = timestamp
+            } else if let previousMovement = lastMovement, timestamp - previousMovement > gapToleranceS {
+                closeBout(); start = nil; lastMovement = nil
+            }
+        }
+        closeBout()
+        return bouts
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {

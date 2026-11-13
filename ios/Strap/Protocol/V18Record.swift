@@ -198,3 +198,32 @@ enum V18Decoder {
         return (value * scale).rounded() / scale
     }
 }
+
+
+/// Non-lossy identity and deduplication for archived WHOOP history records.
+enum HistoricalArchive {
+    static func deduplicated(_ samples: [V18Sample]) -> [V18Sample] {
+        var byTimestamp: [UInt64: V18Sample] = [:]
+        for sample in samples {
+            let key = UInt64(sample.header.unix) * 32_768 + UInt64(max(0, sample.header.subsecQ15))
+            if let current = byTimestamp[key] {
+                if quality(sample) > quality(current) { byTimestamp[key] = sample }
+            } else {
+                byTimestamp[key] = sample
+            }
+        }
+        return byTimestamp.values.sorted {
+            $0.header.timestamp == $1.header.timestamp
+                ? $0.header.recordIndex < $1.header.recordIndex
+                : $0.header.timestamp < $1.header.timestamp
+        }
+    }
+
+    private static func quality(_ sample: V18Sample) -> Int {
+        (sample.wearing ? 1_000_000 : 0)
+            + sample.rrIntervalsMS.count * 100
+            + (sample.dynamicAccelG == nil ? 0 : 10)
+            + [sample.gravityXG, sample.gravityYG, sample.gravityZG].compactMap { $0 }.count
+            + (sample.stepCounter == nil ? 0 : 1)
+    }
+}

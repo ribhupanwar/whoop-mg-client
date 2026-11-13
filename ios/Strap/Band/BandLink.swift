@@ -211,27 +211,9 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
-        // Older archives may contain duplicate timestamps. Never crash during reload.
-        var bySecond: [Int: V18Sample] = [:]
-        for sample in retainedHistoricalSamples {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
-        for sample in incoming {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
-        let ordered = bySecond.values.sorted { $0.unix < $1.unix }
+        // Deduplicate exact Q15 timestamps only. Record indices can be reused,
+        // and separate sub-second records in one second are valid history.
+        let ordered = HistoricalArchive.deduplicated(retainedHistoricalSamples + incoming)
         let cutoff = (ordered.last?.unix ?? 0) - 72 * 3600
         let merged = ordered.filter { $0.unix >= cutoff }
         do {
@@ -394,7 +376,7 @@ final class BandLink: NSObject, ObservableObject {
         // The Home card represents the latest sleep session, not the sum of
         // every detected nap/session in the retained multi-day capture.
         guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
-        let corrected = overrides[String(period.startUnix)]
+        let corrected = SleepCorrectionStore.times(for: period, overrides: overrides)
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
             // Only measured restaging may supply asleep time for an edited night.
             // A historical quiet fraction is not valid over a new interval.
@@ -422,7 +404,7 @@ final class BandLink: NSObject, ObservableObject {
         lastSleepAnalysis = nil // Do not show stale performance after a correction.
         guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        guard let times = overrides[String(period.startUnix)], times.count == 2,
+        guard let times = SleepCorrectionStore.times(for: period, overrides: overrides), times.count == 2,
               times[1] > times[0], !retainedHistoricalSamples.isEmpty else { return }
         let corrected = SleepPeriod(
             startUnix: times[0], endUnix: times[1] - 1,

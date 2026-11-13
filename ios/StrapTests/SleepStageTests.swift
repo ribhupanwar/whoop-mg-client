@@ -120,6 +120,36 @@ final class SleepStageTests: XCTestCase {
         XCTAssertTrue(staging.reason?.contains("heart rate covers 0%") == true)
     }
 
+    func testMovementSamplesAreCoalescedIntoOneBout() {
+        let quiet = Array(repeating: true, count: 20) + Array(repeating: false, count: 120) + Array(repeating: true, count: 20)
+        let unix = Array(0..<quiet.count)
+        XCTAssertEqual(SleepDetect.movementBoutCount(quiet: quiet, unix: unix), 1)
+    }
+
+    func testShortMotionNoiseDoesNotBecomeAwakening() {
+        var quiet = Array(repeating: true, count: 120)
+        for start in stride(from: 10, to: 100, by: 10) { quiet[start] = false }
+        XCTAssertEqual(SleepDetect.movementBoutCount(quiet: quiet, unix: Array(0..<quiet.count)), 0)
+    }
+
+    func testManualWindowSurvivesDetectorOnsetChangeByWakeDay() {
+        let calendar = Calendar(identifier: .gregorian)
+        let zone = TimeZone(secondsFromGMT: 0)!
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = zone
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        let start = Int(formatter.date(from: "2026-11-05 22:18")!.timeIntervalSince1970)
+        let end = Int(formatter.date(from: "2026-11-06 06:30")!.timeIntervalSince1970)
+        let original = SleepPeriod(startUnix: start - 600, endUnix: end, quietFraction: 0.8, meanHR: 55, wakeEvents: 0)
+        let restaged = SleepPeriod(startUnix: start, endUnix: end, quietFraction: 0.8, meanHR: 55, wakeEvents: 0)
+        let manualTimes = [start, end]
+        let saved = [SleepCorrectionStore.key(for: original, timeZone: zone): manualTimes]
+        XCTAssertEqual(end - start, 8 * 3600 + 12 * 60)
+        XCTAssertEqual(SleepCorrectionStore.times(for: restaged, overrides: saved, timeZone: zone), manualTimes)
+        _ = calendar
+    }
+
     func testShortWindowRefuses() {
         let period = SleepPeriod(
             startUnix: 100, endUnix: 110, quietFraction: 1, meanHR: 50, wakeEvents: 0

@@ -326,10 +326,10 @@ struct SleepAnalysisView: View {
 
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Wake events")
+                    Text("Movement bouts")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("movement events")
+                    Text("not verified awakenings")
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.appMuted)
                 }
