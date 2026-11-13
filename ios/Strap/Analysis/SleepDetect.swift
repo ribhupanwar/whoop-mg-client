@@ -107,6 +107,21 @@ enum SleepDetect {
                     continue
                 }
             }
+            // Do not let a single long, motionless recording swallow an
+            // entire day of HR. A candidate needs positive sleep evidence
+            // throughout its span when band states are available. In
+            // particular, reject periods with a sustained waking onset.
+            // Missing states are not silently interpreted as sleep.
+            if stateRows.count >= 300 {
+                let positiveFraction = Double(declaredSleepRows) / Double(stateRows.count)
+                if positiveFraction < 0.20 { continue }
+                let firstWindow = run.filter { $0.unix < run[0].unix + 30 * 60 }
+                let earlyKnown = firstWindow.filter { $0.sleepState != nil }
+                if earlyKnown.count >= 120 {
+                    let earlySleep = earlyKnown.filter { $0.sleepState == 2 }.count
+                    if earlySleep * 5 < earlyKnown.count { continue }
+                }
+            }
             // If the signal is a constant zero/default, abstain entirely.
             // A reliable veto needs at least five minutes of actual state
             // observations, with "up" occupying most of the period and no
