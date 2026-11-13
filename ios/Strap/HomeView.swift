@@ -257,8 +257,9 @@ struct HomeView: View {
     private var strain: Double? {
         // Keep the Home ring consistent with the daily Strain History bar.
         let today = JournalStore.dayKey(for: Date())
+        // Never substitute a capture-wide score for today's day score:
+        // it may include a different date or an invalid sleep exclusion.
         return store.band.days.first(where: { $0.dateKey == today })?.strain
-            ?? store.lastCapture?.strain
     }
 
     private var batteryText: String {
