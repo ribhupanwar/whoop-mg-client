@@ -78,12 +78,12 @@ enum SleepDetect {
                       resting <= activeMedian * 0.95 else { continue }
             }
 
-            // WHOOP v18 inner[73] bits 4–5 encode a coarse band
-            // wake(0)/still(1)/sleep(2)/up(3) state. It is NOT a sleep
-            // stage or a definitive physiological measurement. Only use
-            // sustained, positively identified "up" to veto a candidate;
-            // do not require state=2, because the band's state lags onset
-            // and may be absent/overridden on some firmware.
+            // WHOOP v18 inner[73] bits 4–5 encode the coarse band state:
+            // wake(0)/still(1)/sleep(2)/up(3). This is corroborating evidence,
+            // not a sleep stage or physiological measurement. When present for
+            // most valid worn seconds, require a minimum amount of state=2;
+            // state=1 alone must not turn low-HR phone use into sleep. When the
+            // field is absent or sparse, retain the HR/motion fallback.
             let stateRows = run.filter { $0.sleepState != nil && $0.wearing && (35...220).contains($0.heartRate) }
             let upRows = stateRows.filter { $0.sleepState == 3 }.count
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
