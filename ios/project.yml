@@ -40,6 +40,17 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        # Fonts are copied from Strap/Fonts by XcodeGen when licensed assets
+        # are supplied. Keep registration explicit for CoreText/UIKit.
+        UIAppFonts:
+          - ProximaNova-Regular.ttf
+          - ProximaNova-Bold.ttf
+          - ProximaNova-Light.ttf
+          - ProximaNova-RegularIt.ttf
+          - ProximaNova-BoldIt.ttf
+          - ProximaNova-LightIt.ttf
+          - DINPro-Regular.ttf
+          - DINPro-Light.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
