@@ -236,14 +236,16 @@ final class RestingHrvTests: XCTestCase {
 
 final class StrainTests: XCTestCase {
     func testMaleTrimpOverOneMinute() {
-        let rows = stretch(0, 60, hr: 150, accel: 0.0)
+        let rows = stretch(0, 300, hr: 60, accel: 0.01)
+            + stretch(300, 60, hr: 150, accel: 0.5)
         let value = Hrv.trimp(rows, maxHR: 180, restingHR: 60, sex: .male)!
         // 60 * (1/60) * 0.75 * 0.64 * exp(1.92 * 0.75)
         XCTAssertEqual(value, 2.0259, accuracy: 0.0001)
     }
 
     func testFemaleTrimpIsHigherAtTheSameEffort() {
-        let rows = stretch(0, 60, hr: 150, accel: 0.0)
+        let rows = stretch(0, 300, hr: 60, accel: 0.01)
+            + stretch(300, 60, hr: 150, accel: 0.5)
         let male = Hrv.trimp(rows, maxHR: 180, restingHR: 60, sex: .male)!
         let female = Hrv.trimp(rows, maxHR: 180, restingHR: 60, sex: .female)!
         XCTAssertGreaterThan(female, male)
