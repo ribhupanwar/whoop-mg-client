@@ -298,6 +298,29 @@ struct SleepAnalysisView: View {
                     xLabels: ["00:26", "07:33"]
                 )
                 .padding(.bottom, 4)
+            } else if store.band.summary?.heartRateTimeline != nil {
+                if sleepHeartRatePoints.count >= 2 {
+                    let values = sleepHeartRatePoints.map(\.bpm)
+                    LineChart(
+                        values: values,
+                        color: .appAccent,
+                        minY: values.min().map { floor($0) - 2 },
+                        maxY: values.max().map { ceil($0) + 2 },
+                        height: 120,
+                        yLabels: seriesLabels(values),
+                        xLabels: sleepWindowClockLabels
+                    )
+                    .padding(.bottom, 4)
+                    Text("Recorded per-minute heart rate inside the selected sleep window. Gaps are not filled.")
+                        .font(.system(size: 10.5))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 8)
+                } else {
+                    Text("No recorded heart-rate points inside this sleep window.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.vertical, 24)
+                }
             } else if let series = store.band.summary?.heartRateSeries, series.count >= 2 {
                 LineChart(
                     values: series,
@@ -309,7 +332,7 @@ struct SleepAnalysisView: View {
                     xLabels: captureLabels
                 )
                 .padding(.bottom, 4)
-                Text("Per-minute means across the stored capture.")
+                Text("Older saved capture has no point timestamps; this is the full capture.")
                     .font(.system(size: 10.5))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 8)
@@ -371,6 +394,25 @@ struct SleepAnalysisView: View {
         return [SplitBar.Segment(fraction: 1.0, color: .appRaised)]
     }
 
+    private var sleepWindowTimes: [Int]? {
+        guard let period = editablePeriod else { return nil }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        let times = SleepCorrectionStore.times(for: period, overrides: overrides) ?? [period.startUnix, period.endUnix]
+        guard times.count == 2, times[1] > times[0] else { return nil }
+        return times
+    }
+
+    private var sleepHeartRatePoints: [HeartRatePoint] {
+        guard let points = store.band.summary?.heartRateTimeline,
+              let times = sleepWindowTimes else { return [] }
+        return points.filter { $0.unix >= times[0] && $0.unix <= times[1] }
+    }
+
+    private var sleepWindowClockLabels: [String] {
+        guard let times = sleepWindowTimes else { return [] }
+        return [clock12(times[0]), clock12(times[1])]
+    }
+
     private var captureLabels: [String] {
         guard let summary = store.band.summary,
               let first = summary.firstUnix, let last = summary.lastUnix else { return [] }
@@ -395,6 +437,14 @@ struct SleepAnalysisView: View {
         formatter.locale = Locale.current
         formatter.timeZone = .current
         formatter.dateFormat = "HH:mm"
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+    }
+
+    private func clock12(_ unix: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale.current
+        formatter.timeZone = .current
+        formatter.dateFormat = "h:mm a"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 

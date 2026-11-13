@@ -40,6 +40,15 @@ final class CaptureCompatibilityTests: XCTestCase {
         return CaptureSummary.make(samples: samples, sex: .male, maxHR: 190)
     }
 
+    func testSummaryCarriesTimestampedMinuteHeartRate() {
+        let original = summary()
+        let timeline = original.heartRateTimeline ?? []
+        XCTAssertEqual(timeline.count, 10)
+        XCTAssertEqual(timeline.first?.unix, (1_700_000_000 / 60) * 60)
+        XCTAssertEqual(timeline.first?.bpm ?? 0, 60, accuracy: 0.001)
+        XCTAssertEqual(original.heartRateSeries, timeline.map(\.bpm))
+    }
+
     func testSummaryWithoutStressFieldsStillDecodes() throws {
         let original = summary()
         let data = try JSONEncoder().encode(original)
@@ -48,9 +57,11 @@ final class CaptureCompatibilityTests: XCTestCase {
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
         XCTAssertNotNil(object["awakeStress"], "new summaries should carry the daytime split")
+        XCTAssertNotNil(object["heartRateTimeline"], "new summaries should preserve HR timestamps")
         object.removeValue(forKey: "awakeStress")
         object.removeValue(forKey: "outsideWorkoutStress")
         object.removeValue(forKey: "stressSeries")
+        object.removeValue(forKey: "heartRateTimeline")
         let old = try JSONSerialization.data(withJSONObject: object)
 
         let decoded = try JSONDecoder().decode(CaptureSummary.self, from: old)
@@ -65,5 +76,6 @@ final class CaptureCompatibilityTests: XCTestCase {
         XCTAssertNil(decoded.awakeStress)
         XCTAssertNil(decoded.outsideWorkoutStress)
         XCTAssertNil(decoded.stressSeries)
+        XCTAssertNil(decoded.heartRateTimeline)
     }
 }

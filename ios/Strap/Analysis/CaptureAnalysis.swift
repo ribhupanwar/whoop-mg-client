@@ -1,5 +1,12 @@
 import Foundation
 
+/// A per-minute heart-rate mean tied to its original timestamp so sleep charts
+/// can show the actual edited sleep window without compressing missing minutes.
+struct HeartRatePoint: Codable, Equatable {
+    let unix: Int
+    let bpm: Double
+}
+
 /// Everything the UI can show from one captured sample window. Computed once
 /// per capture so screens read plain values instead of re-deriving metrics.
 struct CaptureSummary: Codable, Equatable {
@@ -14,6 +21,8 @@ struct CaptureSummary: Codable, Equatable {
     let heartRateMean: Double?
     /// Per-minute means of on-wrist heart rate, in chronological order.
     let heartRateSeries: [Double]
+    /// Optional for backwards compatibility with summaries saved by older builds.
+    let heartRateTimeline: [HeartRatePoint]?
     let restingHeartRate: Double?
     let hrv: HrvResult
     let hrvWindowSeconds: Int
@@ -44,7 +53,7 @@ struct CaptureSummary: Codable, Equatable {
     static let empty = CaptureSummary(
         sampleCount: 0, wearingCount: 0, firstUnix: nil, lastUnix: nil,
         spanSeconds: 0, lastHeartRate: nil, heartRateMin: nil, heartRateMax: nil,
-        heartRateMean: nil, heartRateSeries: [], restingHeartRate: nil,
+        heartRateMean: nil, heartRateSeries: [], heartRateTimeline: [], restingHeartRate: nil,
         hrv: .empty, hrvWindowSeconds: 0,
         respiration: RespRate(breathsPerMinute: nil, reason: nil, beats: 0, windows: 0),
         spo2: Spo2Summary(pct: nil, readings: 0, saturated: 0, diagnostic: 0, reason: nil),
@@ -80,7 +89,11 @@ struct CaptureSummary: Codable, Equatable {
         for sample in wearing {
             minuteBuckets[sample.unix / 60, default: []].append(Double(sample.heartRate))
         }
-        let series = minuteBuckets.keys.sorted().map { Stats.mean(minuteBuckets[$0]!) }
+        let heartRateTimeline = minuteBuckets.keys.sorted().compactMap { minute -> HeartRatePoint? in
+            guard let values = minuteBuckets[minute], !values.isEmpty else { return nil }
+            return HeartRatePoint(unix: minute * 60, bpm: Stats.mean(values))
+        }
+        let series = heartRateTimeline.map(\.bpm)
 
         let resting = Hrv.restingHeartRate(ordered)
         let restingWindow = Hrv.restingHRV(ordered)
@@ -120,6 +133,7 @@ struct CaptureSummary: Codable, Equatable {
             heartRateMax: heartRates.max().map { Int($0) },
             heartRateMean: heartRates.isEmpty ? nil : Stats.mean(heartRates),
             heartRateSeries: series,
+            heartRateTimeline: heartRateTimeline,
             restingHeartRate: resting,
             hrv: restingWindow.result,
             hrvWindowSeconds: restingWindow.windowSeconds,
