@@ -1,16 +1,35 @@
 import SwiftUI
 
 
-// MARK: - Typography fallback
-// Proxima Nova and DIN require separately licensed font assets for app embedding.
-// Never assume a web font or reverse-engineered bundle is distributable.
+// MARK: - Typography
+// Fonts are intentionally not bundled in this commit. When the user's licensed
+// app-embeddable font files are installed and registered in UIAppFonts, these
+// PostScript names activate automatically; otherwise system fonts remain safe.
 enum StrapTypography {
+    private static func weightName(_ weight: Font.Weight) -> String {
+        if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
+        if weight == .semibold { return "Semibold" }
+        if weight == .medium { return "Medium" }
+        if weight == .light || weight == .ultraLight { return "Light" }
+        return "Regular"
+    }
+
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        .system(size: size, weight: weight, design: .default)
+        let variant = weightName(weight)
+        let names = ["ProximaNova-\(variant)", "ProximaNova\(variant)", "Proxima Nova \(variant)"]
+        for name in names where UIFont(name: name, size: size) != nil {
+            return .custom(name, size: size)
+        }
+        return .system(size: size, weight: weight, design: .default)
     }
 
     static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
-        .system(size: size, weight: weight, design: .default).monospacedDigit()
+        let variant = weightName(weight)
+        let names = ["DINPro-\(variant)", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
+        for name in names where UIFont(name: name, size: size) != nil {
+            return .custom(name, size: size).monospacedDigit()
+        }
+        return .system(size: size, weight: weight, design: .default).monospacedDigit()
     }
 }
 
@@ -484,11 +503,11 @@ struct MetricRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 15))
+                .font(StrapTypography.body(15))
                 .foregroundStyle(Color.appMuted)
                 .frame(width: 20)
             Text(title.uppercased())
-                .font(.system(size: 10.5, weight: .semibold))
+                .font(StrapTypography.body(10.5, weight: .semibold))
                 .tracking(0.6)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -497,14 +516,14 @@ struct MetricRow: View {
             VStack(alignment: .trailing, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(value)
-                        .font(.system(size: valueFontSize, weight: .semibold, design: .rounded))
+                        .font(StrapTypography.metric(valueFontSize))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .foregroundStyle(Color.appFG)
                     if let unit {
                         Text(unit)
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                     }
                     if let trendUp, let trendFavourable {
@@ -517,7 +536,7 @@ struct MetricRow: View {
                 }
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 10))
+                        .font(StrapTypography.metric(10, weight: .regular))
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
                         .lineLimit(1)
