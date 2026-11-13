@@ -237,7 +237,8 @@ struct SleepAnalysisView: View {
     }
 
     private var editablePeriod: SleepPeriod? {
-        periods.max(by: { $0.durationS < $1.durationS })
+        // Match BandLink.lastNightHours: use the most recently ended sleep, not the longest retained period.
+        periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private func openSleepEditor() {
