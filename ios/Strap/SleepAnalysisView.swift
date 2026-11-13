@@ -94,7 +94,7 @@ struct SleepAnalysisView: View {
     // MARK: Performance ring
 
     private var performancePct: Double? {
-        demo ? Double(SampleData.sleepPerformance) : analysis?.performancePct
+        demo ? Double(SampleData.sleepPerformance) : (editedSleepWindowHours != nil ? nil : analysis?.performancePct)
     }
 
     private var performancePanel: some View {
@@ -188,7 +188,7 @@ struct SleepAnalysisView: View {
         guard let staging, staging.stageable else { return nil }
         let total = staging.asleepMinutes + staging.wakeMinutes
         guard total > 0, let period = editablePeriod else { return nil }
-        let periodMinutes = Double(period.durationS) / 60.0
+        let periodMinutes = editedSleepWindowHours.map { $0 * 60.0 } ?? Double(period.durationS) / 60.0
         guard abs(total - periodMinutes) <= 2.0 else { return nil }
         return staging
     }
@@ -404,7 +404,7 @@ struct SleepAnalysisView: View {
     // MARK: Sleep stages
 
     private var staging: SleepStaging? {
-        demo ? nil : store.band.summary?.sleepStaging
+        demo ? nil : (editedSleepWindowHours != nil ? store.band.correctedSleepStaging : store.band.summary?.sleepStaging)
     }
 
     private var demoStageMinutes: [SleepStage: Double] {
@@ -421,7 +421,7 @@ struct SleepAnalysisView: View {
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
             } else if let staging, staging.stageable {
                 if editedSleepWindowHours != nil {
-                    Hint("Original capture stage estimates shown for comparison. The manually edited sleep window is different; these stage durations have not been recalculated.")
+                    Hint("Stages recalculated from retained sensor samples for the edited sleep window.")
                 }
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
