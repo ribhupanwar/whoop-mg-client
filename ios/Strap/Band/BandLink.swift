@@ -419,6 +419,7 @@ final class BandLink: NSObject, ObservableObject {
         correctedStageRequest += 1
         let request = correctedStageRequest
         correctedSleepStaging = nil
+        lastSleepAnalysis = nil // Do not show stale performance after a correction.
         guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
         guard let times = overrides[String(period.startUnix)], times.count == 2,
@@ -430,14 +431,38 @@ final class BandLink: NSObject, ObservableObject {
         )
         // Copy only this night's records; never hand the full archive to the
         // background task or repeatedly score it from SwiftUI body getters.
-        let nightSamples = retainedHistoricalSamples.filter {
-            $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
-        }
+        // Snapshot the array (copy-on-write) on main, then filter and score
+        // off-main. Filtering the full archive on main can freeze Home.
+        let archiveSnapshot = retainedHistoricalSamples
+        let requiredHours = needHours
+        let priorNights = recentNights
+        let baselineSnapshot = sleepBaseline
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let nightSamples = archiveSnapshot.filter {
+                $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
+            }
             let result = SleepStager.stage(samples: nightSamples, period: corrected)
+            let report: SleepAnalysis?
+            if result.stageable {
+                let fraction = min(1.0, max(0.0,
+                    result.asleepMinutes * 60.0 / Double(max(1, corrected.durationS))))
+                let measuredPeriod = SleepPeriod(
+                    startUnix: corrected.startUnix, endUnix: corrected.endUnix,
+                    quietFraction: fraction, meanHR: corrected.meanHR,
+                    wakeEvents: corrected.wakeEvents
+                )
+                report = SleepReport.analyze(
+                    samples: nightSamples, periods: [measuredPeriod],
+                    needHours: requiredHours, nights: priorNights,
+                    sleepBaseline: baselineSnapshot
+                )
+            } else {
+                report = nil
+            }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.correctedStageRequest == request else { return }
                 self.correctedSleepStaging = result
+                self.lastSleepAnalysis = report
             }
         }
     }

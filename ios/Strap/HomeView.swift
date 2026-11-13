@@ -534,6 +534,26 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .contextMenu {
+                            if row.id.hasPrefix("band-"),
+                               let start = Int(row.id.dropFirst("band-".count)) {
+                                Button(role: .destructive) {
+                                    store.hideDetectedActivity(startUnix: start)
+                                } label: {
+                                    Label("Delete activity", systemImage: "trash")
+                                }
+                            }
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                            if row.id.hasPrefix("band-"),
+                               let start = Int(row.id.dropFirst("band-".count)) {
+                                Button(role: .destructive) {
+                                    store.hideDetectedActivity(startUnix: start)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
+                        }
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
@@ -741,13 +761,8 @@ struct HomeView: View {
     }
 
     private var lastNightText: String {
-        // Keep the displayed duration consistent with an edited start/end.
-        // This is elapsed time in the edited window, not measured time asleep.
-        if let period = latestSleepPeriod,
-           let corrected = sleepCorrections[String(period.startUnix)],
-           corrected.count == 2, corrected[1] > corrected[0] {
-            return CoachFormat.duration(Double(corrected[1] - corrected[0]) / 3600.0)
-        }
+        // Display measured asleep time (Light + Deep + REM), never the
+        // manually edited bed-to-wake window which includes awake minutes.
         guard let hours = store.band.lastNightHours else { return "—" }
         return CoachFormat.duration(hours)
     }
