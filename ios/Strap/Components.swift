@@ -25,7 +25,7 @@ enum StrapTypography {
 
     static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
         let variant = weightName(weight)
-        let names = ["DINPro-\(variant)", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
+        let names = ["DINPro-\(variant)", "DINPro-Regular", "DINPro-Light", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
         for name in names where UIFont(name: name, size: size) != nil {
             return .custom(name, size: size).monospacedDigit()
         }
