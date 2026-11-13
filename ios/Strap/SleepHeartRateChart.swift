@@ -22,6 +22,13 @@ struct SleepHeartRateChart: View {
                 GeometryReader { geometry in
                     ZStack {
                         Path { path in
+                            for x in [CGFloat.zero, geometry.size.width] {
+                                path.move(to: CGPoint(x: x, y: 0))
+                                path.addLine(to: CGPoint(x: x, y: geometry.size.height))
+                            }
+                        }
+                        .stroke(Color.appMuted.opacity(0.6), style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                        Path { path in
                             for fraction in [0.0, 0.5, 1.0] {
                                 let y = geometry.size.height * CGFloat(fraction)
                                 path.move(to: CGPoint(x: 0, y: y))
@@ -42,10 +49,10 @@ struct SleepHeartRateChart: View {
                                 }
                                 previous = point.unix
                             }
-                        }.stroke(Color.appAccent, lineWidth: 1.5)
+                        }.stroke(Color.appSleep, lineWidth: 1.2)
                     }
                 }
-            }.frame(height: 120)
+            }.frame(height: 150)
             HStack {
                 Text(clock(session.startUnix))
                 Spacer()

@@ -31,13 +31,23 @@ enum SleepDiagnostics {
             if segmentIndex < segments.count, segments[segmentIndex].startUnix <= sample.unix {
                 stage = segments[segmentIndex].stage.rawValue
             } else { stage = "" }
-            let fields = [
-                String(session.startUnix), String(session.endUnix), String(session.version), String(sample.unix),
-                String(sample.header.recordIndex), String(sample.header.subsecQ15), String(sample.heartRate),
-                sample.rrIntervalsMS.map(String.init).joined(separator: "|"),
-                number(sample.dynamicAccelG), number(sample.gravityXG), number(sample.gravityYG), number(sample.gravityZG),
-                sample.sleepState.map(String.init) ?? "", sample.hrQualityFlags.map(String.init) ?? "", stage
-            ]
+            var fields: [String] = []
+            fields.reserveCapacity(15)
+            fields.append(String(session.startUnix))
+            fields.append(String(session.endUnix))
+            fields.append(String(session.version))
+            fields.append(String(sample.unix))
+            fields.append(String(sample.header.recordIndex))
+            fields.append(String(sample.header.subsecQ15))
+            fields.append(String(sample.heartRate))
+            fields.append(sample.rrIntervalsMS.map { String($0) }.joined(separator: "|"))
+            fields.append(number(sample.dynamicAccelG))
+            fields.append(number(sample.gravityXG))
+            fields.append(number(sample.gravityYG))
+            fields.append(number(sample.gravityZG))
+            fields.append(sample.sleepState.map { String($0) } ?? "")
+            fields.append(sample.hrQualityFlags.map { String($0) } ?? "")
+            fields.append(stage)
             result += fields.joined(separator: ",") + "\n"
         }
         return result
