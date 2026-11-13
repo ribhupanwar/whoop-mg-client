@@ -93,8 +93,17 @@ enum SleepDetect {
             // unless the band positively reports sustained sleep evidence.
             // This conservative gate may leave early bedtimes unclassified.
             if (18..<22).contains(startHour) {
+                // Positive sleep states appearing hours after the quiet
+                // window begins do NOT validate its original onset.
+                let onsetEnd = run[0].unix + 15 * 60
+                let onsetStates = run.filter {
+                    $0.unix <= onsetEnd && $0.sleepState != nil
+                }
+                let onsetSleep = onsetStates.filter { $0.sleepState == 2 }.count
                 guard declaredSleepRows >= 300,
-                      declaredSleepRows * 5 >= max(1, stateRows.count) else {
+                      declaredSleepRows * 5 >= max(1, stateRows.count),
+                      onsetStates.count >= 120,
+                      onsetSleep * 2 >= onsetStates.count else {
                     continue
                 }
             }
