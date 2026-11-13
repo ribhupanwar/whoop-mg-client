@@ -286,11 +286,18 @@ enum WhoopWorkoutImport {
 /// UserDefaults-backed activity log. Manual entries, measured live sessions
 /// and band-detected sessions are stored separately so none can be mistaken
 /// for another.
+private struct DeletedDetectedActivity: Codable, Equatable {
+    let startUnix: Int
+    let endUnix: Int
+    let deletedAtUnix: Int
+}
+
 final class ActivityStore {
     private let defaults: UserDefaults
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
     private let detectedKey = "strap.detected.activities.v1"
+    private let deletedDetectedKey = "strap.detected.activities.deleted.v1"
     private let whoopKey = "strap.whoop.official.workouts.v1"
 
     init(defaults: UserDefaults = .standard) {
@@ -340,6 +347,13 @@ final class ActivityStore {
         }
     }
 
+    func deleteLive(id: UUID) {
+        let items = liveActivities().filter { $0.id != id }
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: liveKey)
+        }
+    }
+
     func whoopWorkouts() -> [WhoopWorkout] {
         guard let data = defaults.data(forKey: whoopKey),
               let saved = try? JSONDecoder().decode([WhoopWorkout].self, from: data) else {
@@ -363,7 +377,46 @@ final class ActivityStore {
               let saved = try? JSONDecoder().decode([ActivitySession].self, from: data) else {
             return []
         }
-        return saved.sorted { $0.startUnix < $1.startUnix }
+        return saved.filter { !isDetectedDeleted($0) }.sorted { $0.startUnix < $1.startUnix }
+    }
+
+    /// Hides a deleted band session across replays whose boundaries shift slightly.
+    func isDetectedDeleted(_ session: ActivitySession) -> Bool {
+        deletedDetectedSessions().contains { Self.matches(session, deletion: $0) }
+    }
+
+    func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
+        var deletions = deletedDetectedSessions()
+        if !deletions.contains(where: { Self.matches(session, deletion: $0) }) {
+            deletions.append(DeletedDetectedActivity(
+                startUnix: session.startUnix, endUnix: session.endUnix,
+                deletedAtUnix: Int(now.timeIntervalSince1970)
+            ))
+        }
+        if let data = try? JSONEncoder().encode(deletions) {
+            defaults.set(data, forKey: deletedDetectedKey)
+        }
+        let remaining = detectedActivities().filter { !Self.matches($0, deletion: DeletedDetectedActivity(
+            startUnix: session.startUnix, endUnix: session.endUnix,
+            deletedAtUnix: Int(now.timeIntervalSince1970)
+        )) }
+        if let data = try? JSONEncoder().encode(remaining) {
+            defaults.set(data, forKey: detectedKey)
+        }
+    }
+
+    private func deletedDetectedSessions() -> [DeletedDetectedActivity] {
+        guard let data = defaults.data(forKey: deletedDetectedKey),
+              let saved = try? JSONDecoder().decode([DeletedDetectedActivity].self, from: data) else {
+            return []
+        }
+        return saved
+    }
+
+    private static func matches(_ session: ActivitySession, deletion: DeletedDetectedActivity) -> Bool {
+        let shared = min(session.endUnix, deletion.endUnix) - max(session.startUnix, deletion.startUnix) + 1
+        let shorter = min(session.durationS, deletion.endUnix - deletion.startUnix + 1)
+        return shared > 0 && shorter > 0 && Double(shared) >= Double(shorter) * 0.5
     }
 
     /// Keeps one row per real session. The band replays overlapping history,
@@ -374,7 +427,7 @@ final class ActivityStore {
         // Replayed history can contain several overlapping variants of the
         // same workout. Deduplicate across both existing and incoming rows,
         // not just the first match; repeat until transitive overlaps collapse.
-        var items = detectedActivities() + sessions
+        var items = detectedActivities() + sessions.filter { !isDetectedDeleted($0) }
         var changed = true
         while changed {
             changed = false

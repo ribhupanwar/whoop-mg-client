@@ -84,23 +84,36 @@ enum SleepStager {
         var secHR: [Int: Double] = [:]
         var secGravity: [Int: (Double, Double, Double)] = [:]
         var rrBySecond: [Int: [Double]] = [:]
+        var bandStateBySecond: [Int: Int] = [:]
         for (second, sample) in records {
             secHR[second] = Double(sample.heartRate)
             secGravity[second] = finiteGravity(sample)
             rrBySecond[second] = validRR(sample)
+            if let state = sample.sleepState, (0...3).contains(state) {
+                bandStateBySecond[second] = state
+            }
         }
 
         let epochs = features(
-            start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
+            start: start, end: end, secHR: secHR, secGravity: secGravity,
+            rrBySecond: rrBySecond, bandStateBySecond: bandStateBySecond
         )
         let coverage = Double(secHR.count) / Double(end - start)
         let validEpochCount = epochs.filter { $0.hr != nil }.count
-        guard coverage >= minHRCoverage else {
-            let percent = Int((coverage * 100).rounded())
+        let coveragePercent = Int((coverage * 100).rounded())
+        let coverageReason = coverage < minHRCoverage
+            ? "heart rate covers \(coveragePercent)% of the sleep window; full-night scoring needs at least 50%"
+            : nil
+        // Keep the full-night quality threshold for sleep score/recovery. When
+        // enough complete 30-second epochs exist, retain stages for those
+        // observed intervals and leave every other epoch as a gap. This mirrors
+        // partial-window behavior without inventing stages in missing sensor time.
+        let minimumPartialEpochs = 120 // one hour of independently valid epochs
+        if coverageReason != nil && validEpochCount < minimumPartialEpochs {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
                 wakeMinutes: 0, epochs: validEpochCount, hrCoverage: coverage,
-                reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
+                reason: coverageReason
             )
         }
 
@@ -115,7 +128,17 @@ enum SleepStager {
 
         var segments: [SleepStageSegment] = []
         for (index, epoch) in epochs.enumerated() {
-            guard let stage = labels[index] else { continue }
+            let stage: SleepStage?
+            switch epoch.bandState {
+            case 0, 3:
+                stage = .wake
+            case 1, -1:
+                // "Still" and a mixed state transition cannot establish sleep.
+                stage = nil
+            default:
+                stage = labels[index]
+            }
+            guard let stage else { continue }
             if let last = segments.last, last.stage == stage, last.endUnix == epoch.start {
                 segments[segments.count - 1] = SleepStageSegment(
                     startUnix: last.startUnix, endUnix: epoch.end, stage: stage
@@ -143,7 +166,8 @@ enum SleepStager {
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
             remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
-            hrCoverage: coverage, reason: nil
+            hrCoverage: coverage,
+            reason: coverageReason ?? (segments.isEmpty ? "no sleep epochs were confirmed in this window" : nil)
         )
     }
 
@@ -194,6 +218,7 @@ enum SleepStager {
         let gapCount: Int
         let jerkMax: Double
         let respReg: Double?
+        let bandState: Int?
         let clock: Double
         let minutes: Double
     }
@@ -207,6 +232,7 @@ enum SleepStager {
         let moveFrac: Double
         let jerkMax: Double
         let respReg: Double?
+        let bandState: Int?
         let clock: Double
         let jerkScale: Double
         let minutes: Double
@@ -217,7 +243,8 @@ enum SleepStager {
         end: Int,
         secHR: [Int: Double],
         secGravity: [Int: (Double, Double, Double)],
-        rrBySecond: [Int: [Double]]
+        rrBySecond: [Int: [Double]],
+        bandStateBySecond: [Int: Int]
     ) -> [Epoch] {
         let span = Double(end - start)
 
@@ -246,6 +273,18 @@ enum SleepStager {
             let epochEnd = min(end, gridStart + epochS)
             let hrs = (epochStart..<epochEnd).compactMap { secHR[$0] }
             let valid = Double(hrs.count) / Double(epochEnd - epochStart) >= minHRCoverage
+            let observedStates = (epochStart..<epochEnd).compactMap { bandStateBySecond[$0] }
+            let bandState: Int?
+            if Double(observedStates.count) / Double(epochEnd - epochStart) >= minHRCoverage {
+                let counts = (0...3).map { value in observedStates.filter { $0 == value }.count }
+                let dominant = counts.indices.max { counts[$0] < counts[$1] } ?? 0
+                // A mixed epoch is an observed transition, not permission to
+                // fall back to guessed physiology. Reserve -1 for unclassified;
+                // nil means the band field was absent and physiology may be used.
+                bandState = counts[dominant] * 5 >= observedStates.count * 3 ? dominant : -1
+            } else {
+                bandState = nil
+            }
 
             var jerks: [Double] = []
             if valid {
@@ -286,6 +325,7 @@ enum SleepStager {
                     gapCount: max(1, jerks.count),
                     jerkMax: jerks.max() ?? 0,
                     respReg: valid ? respRegularity(beats) : nil,
+                    bandState: valid ? bandState : nil,
                     clock: midpoint / span,
                     minutes: midpoint / 60.0
                 )
@@ -313,6 +353,7 @@ enum SleepStager {
                 moveFrac: Double(moves) / Double(raw.gapCount),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
+                bandState: raw.bandState,
                 clock: raw.clock,
                 jerkScale: jerkScale,
                 minutes: raw.minutes

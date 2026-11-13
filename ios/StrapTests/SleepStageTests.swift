@@ -11,7 +11,8 @@ private func stageSample(
     rr: [Int] = [],
     gravity: (Double, Double, Double)? = (0, 0, 1),
     recordIndex: UInt32 = 0,
-    subsecQ15: Int = 0
+    subsecQ15: Int = 0,
+    sleepState: Int? = nil
 ) -> V18Sample {
     V18Sample(
         header: BandRecordHeader(
@@ -22,7 +23,7 @@ private func stageSample(
         gravityXG: gravity?.0, gravityYG: gravity?.1, gravityZG: gravity?.2,
         stepCounter: nil, stepCadence: nil, activityClass: nil,
         skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
-        sleepStateByte: nil, sleepState: nil, cardiacFlags: nil, hrQualityFlags: nil,
+        sleepStateByte: sleepState.map { $0 << 4 }, sleepState: sleepState, cardiacFlags: nil, hrQualityFlags: nil,
         spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
         signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
     )
@@ -98,6 +99,29 @@ final class SleepStageTests: XCTestCase {
         XCTAssertGreaterThan(staging.lightMinutes, staging.deepMinutes)
         XCTAssertGreaterThan(staging.restorativeMinutes, 0)
         XCTAssertEqual(staging.asleepMinutes + staging.wakeMinutes, staging.totalMinutes, accuracy: 0.001)
+    }
+
+    func testBandStateKeepsStillAndMixedEpochsUnclassified() {
+        let period = stageWindow(seconds: 150)
+        let samples = (0..<150).map { offset -> V18Sample in
+            let state: Int
+            switch offset / 30 {
+            case 0: state = 0       // wake
+            case 1: state = 3       // up
+            case 2: state = 1       // still in bed, not proven asleep
+            case 3: state = 2       // coarse band sleep confirmation
+            default: state = offset % 30 < 15 ? 1 : 2 // ambiguous transition
+            }
+            return stageSample(unix: alignedBase + offset, sleepState: state)
+        }
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        // Wake/up are counted awake; still and mixed state intervals stay blank.
+        assertTotals(staging, period: period, classifiedSeconds: 90)
+        XCTAssertEqual(staging.wakeMinutes, 1.0, accuracy: 1e-9)
+        XCTAssertFalse(staging.segments.contains { $0.startUnix < alignedBase + 90 && $0.endUnix > alignedBase + 60 })
+        XCTAssertTrue(staging.segments.contains { $0.startUnix < alignedBase + 120 && $0.endUnix > alignedBase + 90 })
+        assertHole(staging, start: alignedBase + 120, end: alignedBase + 150)
     }
 
     func testTotalsMatchSegments() {
@@ -257,6 +281,23 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(refused.hrCoverage, 59.0 / 120.0, accuracy: 1e-12)
         XCTAssertFalse(refused.stageable)
         XCTAssertTrue(refused.segments.isEmpty)
+    }
+
+    func test43PercentCoverageKeepsOnlyObservedEpochStages() {
+        let observedSeconds = 211 * 60 - 10 // ends on the detector's absolute 30-second grid
+        let period = stageWindow(start: base, seconds: 492 * 60) // manually edited 8 h 12 min
+        let (recorded, _) = makeNight(minutes: 211)
+        let samples = Array(recorded.prefix(observedSeconds))
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertEqual(staging.hrCoverage, Double(observedSeconds) / Double(period.durationS), accuracy: 1e-12)
+        XCTAssertEqual(Int((staging.hrCoverage * 100).rounded()), 43)
+        XCTAssertFalse(staging.stageable, "partial evidence must not unlock a full-night score")
+        XCTAssertTrue(staging.reason?.contains("full-night scoring") == true)
+        XCTAssertGreaterThanOrEqual(staging.epochs, 120)
+        XCTAssertFalse(staging.segments.isEmpty)
+        assertTotals(staging, period: period, classifiedSeconds: observedSeconds)
+        XCTAssertTrue(staging.segments.allSatisfy { $0.endUnix <= base + observedSeconds })
     }
 
     func testAnEpochBelowHalfCoverageIsNotLightOrWake() {

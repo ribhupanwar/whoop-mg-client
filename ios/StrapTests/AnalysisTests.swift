@@ -349,11 +349,9 @@ final class ActivityDetectTests: XCTestCase {
         XCTAssertEqual(sessions[0].kind, "cardio")
     }
 
-    func testGaitLabelsRunWithoutStepData() {
-        let rows = stream(0, 1200, hr: 150, accel: 0.4, gait: 2, withSteps: false)
-        let sessions = ActivityDetect.detect(rows)
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions[0].kind, "run")
+    func testUnverifiedGaitAloneDoesNotCreateActivityWithoutSteps() {
+        let rows = stream(0, 1200, hr: 70, accel: 0.4, gait: 2, withSteps: false)
+        XCTAssertTrue(ActivityDetect.detect(rows).isEmpty)
     }
 
     func testArmMotionWhileStillIsNotASession() {
@@ -422,10 +420,12 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
-    func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
+    func testBandStillRejectsLyingStillEvenWithLowHr() {
         var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        // A phone-use / lying-still interval can lower HR and motion. The band's
+        // sustained "still" state must keep it from becoming detected sleep.
         rows += (600..<4200).map {
-            makeSample($0, hr: 100, accel: 0.02, sleepState: 1)
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 1)
         }
         rows += stretch(4200, 600, hr: 100, accel: 0.5)
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)

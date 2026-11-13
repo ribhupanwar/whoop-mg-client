@@ -542,11 +542,25 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteActivityRow(row)
+                            } label: {
+                                Label("Delete Activity", systemImage: "trash")
+                            }
+                        }
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    deleteActivityRow(row)
+                                } label: {
+                                    Label("Delete Activity", systemImage: "trash")
+                                }
+                            }
                     }
                     if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")
@@ -560,7 +574,7 @@ struct HomeView: View {
             .padding(.bottom, 10)
 
             if !demo {
-                Text("Run, walk and gym sessions auto-detect from the band's gait readout, step counter and heart rate — anything sustained 5+ minutes appears here after each capture and stays in the log. Lifting load has to be entered by hand; the band never sees it.")
+                Text("Run, walk and cardio sessions auto-detect from sustained step-counter movement or an elevated heart rate. Short bursts are filtered; detected sessions appear after capture and stay in the log. Lifting load has to be entered by hand; the band does not measure it.")
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .lineSpacing(3)
@@ -644,6 +658,19 @@ struct HomeView: View {
                 detail: activity.summary,
                 startUnix: nil
             )
+        }
+    }
+
+    private func deleteActivityRow(_ row: ActivityRowModel) {
+        if row.id.hasPrefix("band-"), let start = Int(row.id.dropFirst("band-".count)),
+           let session = store.detectedActivities(on: selectedDayKey).first(where: { $0.startUnix == start }) {
+            store.deleteDetectedActivity(session)
+        } else if row.id.hasPrefix("live-"),
+                  let id = UUID(uuidString: String(row.id.dropFirst("live-".count))) {
+            store.deleteLiveActivity(id: id)
+        } else if row.id.hasPrefix("manual-"),
+                  let id = UUID(uuidString: String(row.id.dropFirst("manual-".count))) {
+            store.deleteActivity(id: id)
         }
     }
 

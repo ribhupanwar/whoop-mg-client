@@ -78,16 +78,29 @@ enum SleepDetect {
                       resting <= activeMedian * 0.95 else { continue }
             }
 
-            // WHOOP v18 inner[73] bits 4–5 encode a coarse band
-            // wake(0)/still(1)/sleep(2)/up(3) state. It is NOT a sleep
-            // stage or a definitive physiological measurement. Only use
-            // sustained, positively identified "up" to veto a candidate;
-            // do not require state=2, because the band's state lags onset
-            // and may be absent/overridden on some firmware.
-            let stateRows = run.filter { $0.sleepState != nil }
+            // WHOOP v18 inner[73] bits 4–5 encode the coarse band state:
+            // wake(0)/still(1)/sleep(2)/up(3). This is corroborating evidence,
+            // not a sleep stage or physiological measurement. When present for
+            // most valid worn seconds, require a minimum amount of state=2;
+            // state=1 alone must not turn low-HR phone use into sleep. When the
+            // field is absent or sparse, retain the HR/motion fallback.
+            let stateRows = run.filter { $0.sleepState != nil && $0.wearing && (35...220).contains($0.heartRate) }
             let upRows = stateRows.filter { $0.sleepState == 3 }.count
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
             let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
+            let wornSecondSet = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix))
+            let stateSeconds = Set(stateRows.map(\.unix))
+            let stateCoverage = wornSecondSet.isEmpty ? 0 : Double(stateSeconds.count) / Double(wornSecondSet.count)
+            // Gen5 v18 carries the band's own coarse envelope (0 wake, 1 still,
+            // 2 asleep, 3 up). When it is present for most worn seconds, require
+            // at least 15 minutes of recorded asleep state before accepting a
+            // long quiet/low-HR candidate. This rejects lying still/phone use
+            // without treating missing state data as awake or inventing sleep.
+            if stateCoverage >= 0.60 {
+                let asleepSeconds = Set(stateRows.filter { $0.sleepState == 2 }.map(\.unix)).count
+                let minimumBandEvidence = min(15 * 60, max(1, duration / 4))
+                guard asleepSeconds >= minimumBandEvidence else { continue }
+            }
             // Early-evening quiet while reading or using a phone can last
             // hours and lower HR. Do not label pre-22:00 stillness as sleep
             // unless the band positively reports sustained sleep evidence.

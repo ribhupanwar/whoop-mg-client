@@ -224,18 +224,14 @@ final class BandLink: NSObject, ObservableObject {
         var bySecond: [Int: V18Sample] = [:]
         for sample in retainedHistoricalSamples {
             if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
+                if HistoricalRecordSelection.prefers(sample, over: old) { bySecond[sample.unix] = sample }
             } else {
                 bySecond[sample.unix] = sample
             }
         }
         for sample in incoming {
             if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
+                if HistoricalRecordSelection.prefers(sample, over: old) { bySecond[sample.unix] = sample }
             } else {
                 bySecond[sample.unix] = sample
             }
