@@ -506,6 +506,7 @@ struct MetricRow: View {
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
                         .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: 160, alignment: .trailing)
                 }
             }
             .layoutPriority(1)
