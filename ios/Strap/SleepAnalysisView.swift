@@ -474,7 +474,7 @@ struct SleepAnalysisView: View {
 
     private func splitSegments(_ minutes: [SleepStage: Double]) -> [SplitBar.Segment] {
         let total = max(1, minutes.values.reduce(0, +))
-        return [SleepStage.deep, .light, .rem, .wake].map { stage in
+        return [SleepStage.wake, .light, .deep, .rem].map { stage in
             SplitBar.Segment(
                 fraction: (minutes[stage] ?? 0) / total,
                 color: stage.color
@@ -489,7 +489,7 @@ struct SleepAnalysisView: View {
                     Text(CoachFormat.duration((minutes[stage] ?? 0) / 60.0))
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(stage.color)
-                    Text(stage.title.lowercased())
+                    Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
                         .font(.system(size: 10))
                         .foregroundStyle(Color.appMuted)
                 }
@@ -799,10 +799,10 @@ struct SleepAnalysisView: View {
 private extension SleepStage {
     var color: Color {
         switch self {
-        case .wake: return .appWarn
-        case .light: return .appAccent
-        case .deep: return .appSleep
-        case .rem: return .appGood
+        case .wake: return Color(red: 0.78, green: 0.79, blue: 0.80)
+        case .light: return Color(red: 0.65, green: 0.61, blue: 0.92)
+        case .deep: return Color(red: 0.93, green: 0.39, blue: 0.86)
+        case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
         }
     }
 }
