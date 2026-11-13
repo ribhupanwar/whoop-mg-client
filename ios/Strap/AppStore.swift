@@ -225,7 +225,11 @@ final class AppStore: ObservableObject {
         let merged = (band.summary?.activities ?? []) + detectedBandActivities
         return merged
             .filter { JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix))) == dateKey }
-            .filter { !hiddenDetectedStarts.contains($0.startUnix) }
+            // Detector boundaries can shift slightly after a partial sync.
+            // Keep a user deletion attached to the same session across re-imports.
+            .filter { session in
+                !hiddenDetectedStarts.contains(where: { abs($0 - session.startUnix) <= 300 })
+            }
             .filter { seen.insert($0.startUnix).inserted }
             .sorted { $0.startUnix < $1.startUnix }
     }

@@ -36,7 +36,7 @@ final class HistoricalArchiveTests: XCTestCase {
         }
         let samples = HistoricalArchive.deduplicated([sample(7, 0, 0), sample(7, 0, 63), sample(7, 16_384, 64)])
         XCTAssertEqual(samples.count, 2)
-        XCTAssertEqual(samples.map(\\.heartRate), [63, 64])
+        XCTAssertEqual(samples.map(\.heartRate), [63, 64])
         XCTAssertEqual(samples.map { $0.header.subsecQ15 }, [0, 16_384])
     }
 

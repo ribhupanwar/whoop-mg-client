@@ -314,11 +314,14 @@ final class BandLink: NSObject, ObservableObject {
             samples: retainedHistoricalSamples, sex: sex, maxHR: maxHR,
             awakeBaseline: awakeBaseline
         )
-        summary = fresh
-        persist(fresh)
         merge(DailyAnalysis.metrics(
             from: retainedHistoricalSamples, sex: sex, maxHR: maxHR
         ))
+        // A detector regression or partial archive must not erase a previously
+        // validated night during settings migration or refresh.
+        if fresh.sleepPeriods.isEmpty, summary?.sleepPeriods.isEmpty == false { return }
+        summary = fresh
+        persist(fresh)
         if !fresh.sleepPeriods.isEmpty {
             let analysis = SleepReport.analyze(
                 samples: retainedHistoricalSamples,
@@ -1121,7 +1124,9 @@ final class BandLink: NSObject, ObservableObject {
         // Preserve previously validated recovery if merged data lacks a quiet window.
         let previousHasRestMetrics = summary?.hrv.rmssdMS != nil || summary?.restingHeartRate != nil
         let freshHasRestMetrics = fresh.hrv.rmssdMS != nil || fresh.restingHeartRate != nil
-        let preservePrevious = previousHasRestMetrics && !freshHasRestMetrics
+        let previousHasSleep = summary?.sleepPeriods.isEmpty == false
+        let preservePrevious = (previousHasRestMetrics && !freshHasRestMetrics)
+            || (previousHasSleep && fresh.sleepPeriods.isEmpty)
         if !preservePrevious {
             summary = fresh
             persist(fresh)

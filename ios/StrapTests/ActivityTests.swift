@@ -222,6 +222,11 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(sessions.first?.steps, 716)
     }
 
+    func testStaleGaitAndOneStepDoesNotCreateActivity() {
+        let samples = (0..<360).map { sample($0, hr: 75, steps: 1, gait: 1) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+    }
+
     func testFastSteppingIsLabelledARun() {
         let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3, gait: nil) }
         XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
