@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 
 
 // MARK: - Typography
@@ -6,6 +7,14 @@ import SwiftUI
 // app-embeddable font files are installed and registered in UIAppFonts, these
 // PostScript names activate automatically; otherwise system fonts remain safe.
 enum StrapTypography {
+    private static let registered: Bool = {
+        let names = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light", "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt", "DINPro-Regular", "DINPro-Light"]
+        for name in names {
+            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts") ?? Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
+            CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+        }
+        return true
+    }()
     private static func weightName(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
         if weight == .semibold { return "Semibold" }
@@ -15,6 +24,7 @@ enum StrapTypography {
     }
 
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        _ = registered
         let variant = weightName(weight)
         let names = ["ProximaNova-\(variant)", "ProximaNova\(variant)", "Proxima Nova \(variant)"]
         for name in names where UIFont(name: name, size: size) != nil {
@@ -24,6 +34,7 @@ enum StrapTypography {
     }
 
     static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        _ = registered
         let variant = weightName(weight)
         let names = ["DINPro-\(variant)", "DINPro-Regular", "DINPro-Light", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
         for name in names where UIFont(name: name, size: size) != nil {
