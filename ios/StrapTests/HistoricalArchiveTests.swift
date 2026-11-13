@@ -46,4 +46,27 @@ final class HistoricalArchiveTests: XCTestCase {
         frame[1] = 26
         XCTAssertNil(V18Decoder.decode(frame))
     }
+    func testArchiveRetainsDifferentTimestampsWhenRecordIndexIsReused() {
+        func sample(_ index: UInt32, _ unix: UInt32, _ hr: Int) -> V18Sample {
+            V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0, recordIndex: index, unix: unix, subsecQ15: 0),
+                heartRate: hr, rrIntervalsMS: [900], dynamicAccelG: 0.02, gravityXG: nil, gravityYG: nil,
+                gravityZG: nil, stepCounter: nil, stepCadence: nil, activityClass: nil,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil, sleepStateByte: nil, sleepState: nil,
+                cardiacFlags: nil, hrQualityFlags: nil, spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent, signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            )
+        }
+
+        let samples = HistoricalArchive.deduplicated([
+            sample(42, 1_762_800_000, 63),
+            sample(42, 1_762_800_001, 64),
+            sample(42, 1_762_800_001, 0)
+        ])
+
+        XCTAssertEqual(samples.count, 2)
+        XCTAssertEqual(samples.map(\\.unix), [1_762_800_000, 1_762_800_001])
+        XCTAssertEqual(samples.map(\\.heartRate), [63, 64])
+    }
+
 }
