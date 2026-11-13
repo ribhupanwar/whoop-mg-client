@@ -84,14 +84,19 @@ enum SleepStager {
         var secHR: [Int: Double] = [:]
         var secGravity: [Int: (Double, Double, Double)] = [:]
         var rrBySecond: [Int: [Double]] = [:]
+        var bandStateBySecond: [Int: Int] = [:]
         for (second, sample) in records {
             secHR[second] = Double(sample.heartRate)
             secGravity[second] = finiteGravity(sample)
             rrBySecond[second] = validRR(sample)
+            if let state = sample.sleepState, (0...3).contains(state) {
+                bandStateBySecond[second] = state
+            }
         }
 
         let epochs = features(
-            start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
+            start: start, end: end, secHR: secHR, secGravity: secGravity,
+            rrBySecond: rrBySecond, bandStateBySecond: bandStateBySecond
         )
         let coverage = Double(secHR.count) / Double(end - start)
         let validEpochCount = epochs.filter { $0.hr != nil }.count
@@ -123,7 +128,19 @@ enum SleepStager {
 
         var segments: [SleepStageSegment] = []
         for (index, epoch) in epochs.enumerated() {
-            guard let stage = labels[index] else { continue }
+            let stage: SleepStage?
+            switch epoch.bandState {
+            case 0, 3:
+                stage = .wake
+            case 1:
+                // The strap only reports "still", not asleep. Keep these
+                // epochs unclassified until it reports sleep or physiology
+                // has no reliable band-state observation for that epoch.
+                stage = nil
+            default:
+                stage = labels[index]
+            }
+            guard let stage else { continue }
             if let last = segments.last, last.stage == stage, last.endUnix == epoch.start {
                 segments[segments.count - 1] = SleepStageSegment(
                     startUnix: last.startUnix, endUnix: epoch.end, stage: stage
@@ -151,7 +168,8 @@ enum SleepStager {
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
             remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
-            hrCoverage: coverage, reason: coverageReason
+            hrCoverage: coverage,
+            reason: coverageReason ?? (segments.isEmpty ? "no sleep epochs were confirmed in this window" : nil)
         )
     }
 
@@ -202,6 +220,7 @@ enum SleepStager {
         let gapCount: Int
         let jerkMax: Double
         let respReg: Double?
+        let bandState: Int?
         let clock: Double
         let minutes: Double
     }
@@ -215,6 +234,7 @@ enum SleepStager {
         let moveFrac: Double
         let jerkMax: Double
         let respReg: Double?
+        let bandState: Int?
         let clock: Double
         let jerkScale: Double
         let minutes: Double
@@ -225,7 +245,8 @@ enum SleepStager {
         end: Int,
         secHR: [Int: Double],
         secGravity: [Int: (Double, Double, Double)],
-        rrBySecond: [Int: [Double]]
+        rrBySecond: [Int: [Double]],
+        bandStateBySecond: [Int: Int]
     ) -> [Epoch] {
         let span = Double(end - start)
 
@@ -254,6 +275,15 @@ enum SleepStager {
             let epochEnd = min(end, gridStart + epochS)
             let hrs = (epochStart..<epochEnd).compactMap { secHR[$0] }
             let valid = Double(hrs.count) / Double(epochEnd - epochStart) >= minHRCoverage
+            let observedStates = (epochStart..<epochEnd).compactMap { bandStateBySecond[$0] }
+            let bandState: Int?
+            if Double(observedStates.count) / Double(epochEnd - epochStart) >= minHRCoverage {
+                let counts = (0...3).map { value in observedStates.filter { $0 == value }.count }
+                let dominant = counts.indices.max { counts[$0] < counts[$1] } ?? 0
+                bandState = counts[dominant] * 5 >= observedStates.count * 3 ? dominant : nil
+            } else {
+                bandState = nil
+            }
 
             var jerks: [Double] = []
             if valid {
@@ -294,6 +324,7 @@ enum SleepStager {
                     gapCount: max(1, jerks.count),
                     jerkMax: jerks.max() ?? 0,
                     respReg: valid ? respRegularity(beats) : nil,
+                    bandState: valid ? bandState : nil,
                     clock: midpoint / span,
                     minutes: midpoint / 60.0
                 )
@@ -321,6 +352,7 @@ enum SleepStager {
                 moveFrac: Double(moves) / Double(raw.gapCount),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
+                bandState: raw.bandState,
                 clock: raw.clock,
                 jerkScale: jerkScale,
                 minutes: raw.minutes
