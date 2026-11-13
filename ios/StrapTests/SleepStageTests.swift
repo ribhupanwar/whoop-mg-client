@@ -260,9 +260,10 @@ final class SleepStageTests: XCTestCase {
     }
 
     func test43PercentCoverageKeepsOnlyObservedEpochStages() {
-        let observedSeconds = 211 * 60
+        let observedSeconds = 211 * 60 - 10 // ends on the detector's absolute 30-second grid
         let period = stageWindow(start: base, seconds: 492 * 60) // manually edited 8 h 12 min
-        let (samples, _) = makeNight(minutes: observedSeconds / 60)
+        let (recorded, _) = makeNight(minutes: 211)
+        let samples = Array(recorded.prefix(observedSeconds))
         let staging = SleepStager.stage(samples: samples, period: period)
 
         XCTAssertEqual(staging.hrCoverage, Double(observedSeconds) / Double(period.durationS), accuracy: 1e-12)
