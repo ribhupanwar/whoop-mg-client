@@ -105,7 +105,7 @@ struct RootView: View {
                     Button { tab = item } label: {
                         VStack(spacing: 4) {
                             Image(systemName: item.icon).font(.system(size: 19, weight: .medium))
-                            Text(item.label).font(StrapTypography.body(10, weight: .regular))
+                            Text(item.label).font(StrapTypography.body(11, weight: .regular))
                         }
                         .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity).frame(height: 52)

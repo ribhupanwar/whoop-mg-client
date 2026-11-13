@@ -327,7 +327,7 @@ struct DashboardView: View {
                                 Text(item.date.formatted(.dateTime.weekday(.abbreviated)))
                                 Text(item.date.formatted(.dateTime.day()))
                             }
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(10, weight: .regular))
                             .foregroundStyle(Color.appMuted)
                             .position(x: x, y: 184)
                         }
@@ -397,7 +397,7 @@ struct DashboardView: View {
                     VStack(spacing: 4) {
                         if index < values.count, let value = values[index], value.isFinite {
                             Text(String(format: unit == "%" ? "%.0f%%" : "%.0f", value))
-                                .font(.system(size: 9, weight: .medium))
+                                .font(StrapTypography.metric(11, weight: .bold))
                                 .foregroundStyle(color)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
@@ -413,7 +413,7 @@ struct DashboardView: View {
                                 .frame(height: 3)
                         }
                         Text(String(day.dateKey.suffix(2)))
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(10, weight: .regular))
                             .foregroundStyle(Color.appMuted)
                     }
                     .frame(maxWidth: .infinity)
@@ -425,7 +425,7 @@ struct DashboardView: View {
                 .foregroundStyle(Color.appMuted)
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(LinearGradient.appCard))
     }
 
     private var strainTrend: some View {
@@ -437,7 +437,7 @@ struct DashboardView: View {
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Text("0–21")
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11, weight: .regular))
                     .foregroundStyle(Color.appMuted)
             }
             let history = strainHistory

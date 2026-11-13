@@ -535,14 +535,14 @@ struct HomeView: View {
 
     private var activitiesCard: some View {
         Panel {
-            CardHead(title: "Today's activities", trailing: "⤢")
+            CardHead(title: "TODAY'S ACTIVITIES", trailing: "⤢")
 
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
                         Image(systemName: "moon.fill").font(.system(size: 12))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(StrapTypography.metric(17, weight: .bold))
                     }
                     .foregroundStyle(Color(hex: 0x0D1219))
                     .padding(.horizontal, 12)
@@ -550,18 +550,18 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 9).fill(Color.appSleep))
 
                     Text("SLEEP")
-                        .font(.system(size: 12, weight: .medium))
+                        .font(StrapTypography.body(13, weight: .semibold))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(.system(size: 10.5))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+                .background(RoundedRectangle(cornerRadius: 13).fill(Color.appRaised))
             }
             .buttonStyle(.plain)
             .contextMenu {
