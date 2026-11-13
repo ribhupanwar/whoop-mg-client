@@ -160,13 +160,14 @@ final class ActivityStoreTests: XCTestCase {
     }
 
     func testDeleteDetectedActivityPersistsAndSuppressesShiftedSyncReplay() {
-        let now = Date(timeIntervalSince1970: TimeInterval(start + 10_000))
-        let original = session(start: start, end: start + 600)
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch + 10_000))
+        let original = session(start: epoch, end: epoch + 600)
         store.mergeDetected([original], now: now)
         store.deleteDetected(original, now: now)
         XCTAssertTrue(store.detectedActivities().isEmpty)
 
-        let shiftedReplay = session(start: start + 10, end: start + 610)
+        let shiftedReplay = session(start: epoch + 10, end: epoch + 610)
         store.mergeDetected([shiftedReplay], now: now)
         XCTAssertTrue(store.detectedActivities().isEmpty)
 
