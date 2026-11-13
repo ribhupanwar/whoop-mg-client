@@ -323,6 +323,19 @@ enum Hrv {
         for sample in valid where unique.last?.unix != sample.unix {
             unique.append(sample)
         }
+        // Price effort ABOVE the user's observed quiet-waking HR reserve.
+        // Ordinary sedentary wear must not accumulate exercise strain.
+        // Abstain when we cannot establish a reliable quiet baseline.
+        let quietHR = unique.filter {
+            guard let accel = $0.dynamicAccelG else { return false }
+            return accel <= restingQuietAccelG
+        }.map { Double($0.heartRate) }
+        guard quietHR.count >= 300 else { return nil }
+        let quietBaseline = Stats.median(quietHR)
+        guard let baselineRatio = hrReserveRatio(
+            quietBaseline, resting: restingHR, maximum: maxHR
+        ) else { return nil }
+        let baselineLoad = baselineRatio * coefficients.k1 * exp(coefficients.k2 * baselineRatio)
         var total = 0.0
         for index in unique.indices {
             let sample = unique[index]
@@ -338,7 +351,8 @@ enum Hrv {
             } else {
                 seconds = 1
             }
-            total += (Double(seconds) / 60.0) * ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
+            let gross = ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
+            total += (Double(seconds) / 60.0) * max(0, gross - baselineLoad)
         }
         return total
     }
