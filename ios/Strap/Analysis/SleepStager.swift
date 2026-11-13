@@ -201,7 +201,7 @@ enum SleepStager {
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
-        let moveFrac: Double
+        let moveFrac: Double?
         let jerkMax: Double
         let respReg: Double?
         let clock: Double
@@ -304,7 +304,7 @@ enum SleepStager {
                 hr: raw.hr,
                 hrVar: raw.hrVar,
                 hrFlat11: raw.hrFlat11,
-                moveFrac: Double(moves) / Double(raw.gapCount),
+                moveFrac: raw.jerks.isEmpty ? nil : Double(moves) / Double(raw.gapCount),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
                 clock: raw.clock,
@@ -396,7 +396,7 @@ enum SleepStager {
     }
 
     private static func motionQuiescent(_ epoch: Epoch) -> Bool {
-        epoch.moveFrac <= 0 && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
+        (epoch.moveFrac.map { $0 <= 0 } ?? false) && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
     }
 
     private static func remGuard(_ minutesSinceOnset: Double) -> Double {
@@ -484,7 +484,7 @@ enum SleepStager {
         guard !epochs.isEmpty else { return [] }
         let zHR = zScorer(epochs.map { $0.hr })
         let zVar = zScorer(epochs.map { $0.hrVar })
-        let zMove = zScorer(epochs.map { Optional($0.moveFrac) })
+        let zMove = zScorer(epochs.map { $0.moveFrac })
         let zResp = zScorer(epochs.map { $0.respReg })
         let flatSorted = epochs.compactMap { $0.hrFlat11 }.sorted()
 

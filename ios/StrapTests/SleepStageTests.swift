@@ -9,7 +9,8 @@ private func makeNight(
     hr: Double = 53,
     bursts: [(Int, Int)] = [],
     breathing: Bool = true,
-    heartRateOverride: Int? = nil
+    heartRateOverride: Int? = nil,
+    motion: Bool = true
 ) -> ([V18Sample], SleepPeriod) {
     var samples: [V18Sample] = []
     let seconds = minutes * 60
@@ -34,10 +35,10 @@ private func makeNight(
                 ),
                 heartRate: heartRateOverride ?? Int(rate.rounded()),
                 rrIntervalsMS: rr,
-                dynamicAccelG: 0.02,
-                gravityXG: gravity.0,
-                gravityYG: gravity.1,
-                gravityZG: gravity.2,
+                dynamicAccelG: motion ? 0.02 : nil,
+                gravityXG: motion ? gravity.0 : nil,
+                gravityYG: motion ? gravity.1 : nil,
+                gravityZG: motion ? gravity.2 : nil,
                 stepCounter: nil,
                 stepCadence: nil,
                 activityClass: nil,
@@ -150,6 +151,13 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), restaged.hours * restaged.quietFraction, accuracy: 0.001)
         XCTAssertLessThan(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), Double(end - start) / 3600.0)
         _ = calendar
+    }
+
+    func testMissingMotionIsUnknownRatherThanInventedStillness() {
+        let (samples, period) = makeNight(motion: false)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertTrue(staging.stageable)
+        XCTAssertEqual(staging.totalMinutes, 60, accuracy: 0.001)
     }
 
     func testShortWindowRefuses() {
