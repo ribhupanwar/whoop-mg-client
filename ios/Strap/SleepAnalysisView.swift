@@ -193,7 +193,19 @@ struct SleepAnalysisView: View {
         return staging
     }
 
+    // A manual time correction must be reflected throughout this screen,
+    // not only in the Home recovery input. Staging remains tied to its
+    // original measured epochs and must not be stretched to the edit.
+    private var editedSleepWindowHours: Double? {
+        guard let period = editablePeriod else { return nil }
+        let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        guard let times = corrections[String(period.startUnix)],
+              times.count == 2, times[1] > times[0] else { return nil }
+        return Double(times[1] - times[0]) / 3600.0
+    }
+
     private var lastNightHours: Double? {
+        if editedSleepWindowHours != nil { return store.band.lastNightHours }
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
     }
@@ -216,6 +228,9 @@ struct SleepAnalysisView: View {
     }
 
     private var awakeHours: Double? {
+        if let editedSleepWindowHours, let asleepHours {
+            return max(0, editedSleepWindowHours - asleepHours)
+        }
         if let reconciledStaging { return reconciledStaging.wakeMinutes / 60.0 }
         guard let analysis, let asleepHours else { return nil }
         return max(0, analysis.hours - asleepHours)
@@ -403,6 +418,8 @@ struct SleepAnalysisView: View {
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
+            } else if editedSleepWindowHours != nil {
+                EmptyState(title: "Stages from original capture", detail: "Sleep times were manually corrected. The old stage timeline no longer matches the edited window; recapture to recompute stages.")
             } else if let staging, staging.stageable {
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
