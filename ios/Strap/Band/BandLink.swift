@@ -227,7 +227,7 @@ final class BandLink: NSObject, ObservableObject {
             return nil
         }
     }
-    private var seenRecordIndices: Set<UInt32> = []
+    private var seenRecordTimestamps: Set<UInt64> = []
     private var drainFrames = 0
     private var historicalRecordFrames = 0
     private var drainAcks = 0
@@ -1036,7 +1036,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startCaptureFile() {
         capturedSamples = []
-        seenRecordIndices = []
+        seenRecordTimestamps = []
         drainFrames = 0
         drainAcks = 0
         drainStats = DrainStats()
@@ -1078,11 +1078,9 @@ final class BandLink: NSObject, ObservableObject {
         captureWriter?.close()
         captureWriter = nil
 
-        let samples = capturedSamples.sorted {
-            $0.unix != $1.unix
-                ? $0.unix < $1.unix
-                : $0.header.recordIndex < $1.header.recordIndex
-        }
+        // Only exact Q15 timestamps are duplicates: record indices may be reused,
+        // and multiple records within one second are valid history.
+        let samples = HistoricalArchive.deduplicated(capturedSamples)
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
@@ -1278,7 +1276,12 @@ final class BandLink: NSObject, ObservableObject {
                 historyUndecodableFrames += 1
                 return
             }
-            if seenRecordIndices.insert(sample.header.recordIndex).inserted {
+            // Record indices can be reused by the band. Count RR diagnostics once
+            // per exact Q15 timestamp, but retain every decoded frame until drain
+            // completion so exact-timestamp duplicates can keep the best payload.
+            let timestampKey = UInt64(sample.header.unix) * 32_768
+                + UInt64(max(0, sample.header.subsecQ15))
+            if seenRecordTimestamps.insert(timestampKey).inserted {
                 if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
                 let declared = Int(inner[15])
                 if declared <= 4 {
@@ -1288,8 +1291,8 @@ final class BandLink: NSObject, ObservableObject {
                 } else {
                     historyRRRejected += 1 // malformed count byte
                 }
-                capturedSamples.append(sample)
             }
+            capturedSamples.append(sample)
         } else if type == BandPacket.metadata, inner.count >= 3 {
             if inner[2] == BandPacket.historyEnd, inner.count >= 21 {
                 // WHOOP 5: eight-byte end_data token at absolute frame[21:29].
