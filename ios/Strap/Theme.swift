@@ -20,6 +20,8 @@ extension Color {
     static let appMuted = Color(red: 0.57, green: 0.68, blue: 0.77)
     static let appLine = Color(red: 0.12, green: 0.31, blue: 0.43).opacity(0.62)
     static let appAccent = Color(red: 0.12, green: 0.78, blue: 0.88)
+    static let appCustomizeStart = Color(red: 0.93, green: 0.39, blue: 0.86)
+    static let appCustomizeEnd = Color(red: 0.65, green: 0.28, blue: 0.87)
     static let appGood = Color(hex: 0x4ADE80)
     static let appWarn = Color(hex: 0xE0A33A)
     static let appHigh = Color(hex: 0xFF6B5E)

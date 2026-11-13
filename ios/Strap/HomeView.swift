@@ -163,9 +163,9 @@ struct HomeView: View {
                 Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
-                Image(systemName: "battery.100")
+                Image(systemName: batterySymbol)
                     .font(.system(size: 14))
-                    .foregroundStyle(demo ? Color.appGood : Color.appMuted)
+                    .foregroundStyle(batteryColor)
             }
 
             NavigationLink(value: Route.settings) {
@@ -265,6 +265,28 @@ struct HomeView: View {
         // Never substitute a capture-wide score for today's day score:
         // it may include a different date or an invalid sleep exclusion.
         return store.band.days.first(where: { $0.dateKey == today })?.strain
+    }
+
+    private var displayedBattery: Int? {
+        demo ? SampleData.batteryPercent : store.band.batteryPercent
+    }
+
+    private var batterySymbol: String {
+        guard let percent = displayedBattery else { return "battery.0" }
+        switch percent {
+        case 88...: return "battery.100"
+        case 63...: return "battery.75"
+        case 38...: return "battery.50"
+        case 13...: return "battery.25"
+        default: return "battery.0"
+        }
+    }
+
+    private var batteryColor: Color {
+        guard let percent = displayedBattery else { return .appMuted }
+        if percent <= 10 { return .appHigh }
+        if percent <= 20 { return .appWarn }
+        return .appMuted
     }
 
     private var batteryText: String {
@@ -870,7 +892,7 @@ struct HomeView: View {
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: 7).fill(
-                                LinearGradient(colors: [SleepStage.deep.color, SleepStage.rem.color],
+                                LinearGradient(colors: [Color.appCustomizeStart, Color.appCustomizeEnd],
                                                startPoint: .leading, endPoint: .trailing)
                             )
                         )
