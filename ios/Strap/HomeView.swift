@@ -508,9 +508,10 @@ struct HomeView: View {
                     Spacer()
                     Button("Edit sleep time") {
                         guard let period = latestSleepPeriod else { return }
+                        let session = store.band.latestSleepSession
                         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-                        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
-                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? (period.endUnix + 1)))
+                        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
+                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
                         showSleepEditor = true
                     }
                     .font(.system(size: 11))
@@ -753,10 +754,19 @@ struct HomeView: View {
     }
 
     private var latestSleepPeriod: SleepPeriod? {
-        store.lastCapture?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix })
+        guard !store.band.isAnalyzingHistory else { return nil }
+        let periods = store.lastCapture?.sleepPeriods ?? []
+        if let session = store.band.latestSleepSession {
+            return periods.first { $0.startUnix == session.sourceStartUnix }
+        }
+        return periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private var sleepTimesText: String {
+        if let session = store.band.latestSleepSession {
+            return "\(Self.sleepClock(session.startUnix, includeDay: true))\n\(Self.sleepClock(session.endUnix, includeDay: false))"
+        }
+        if store.band.isAnalyzingHistory { return "Updating…" }
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
         return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? (period.endUnix + 1), includeDay: false))"

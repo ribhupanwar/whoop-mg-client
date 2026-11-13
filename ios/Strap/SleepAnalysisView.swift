@@ -192,16 +192,20 @@ struct SleepAnalysisView: View {
     private var reconciledEfficiencyPct: Double? { session?.efficiencyPct }
 
     private var editablePeriod: SleepPeriod? {
-        // Match BandLink.lastNightHours: use the most recently ended sleep, not the longest retained period.
-        periods.max(by: { $0.endUnix < $1.endUnix })
+        guard !store.band.isAnalyzingHistory else { return nil }
+        // A corrected session may replace several detector fragments; edit its source, not the last fragment.
+        if let session {
+            return periods.first { $0.startUnix == session.sourceStartUnix }
+        }
+        return periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
     private func openSleepEditor() {
         guard let period = editablePeriod else { return }
         let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
         let times = SleepCorrectionStore.times(for: period, overrides: corrections)
-        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? (period.endUnix + 1)))
+        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
         showSleepEditor = true
     }
 
