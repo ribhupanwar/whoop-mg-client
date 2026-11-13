@@ -10,7 +10,9 @@ private func makeNight(
     bursts: [(Int, Int)] = [],
     breathing: Bool = true,
     heartRateOverride: Int? = nil,
-    motion: Bool = true
+    hrAvailableMinutes: Int? = nil,
+    motion: Bool = true,
+    bandWakeMinutes: (Int, Int)? = nil
 ) -> ([V18Sample], SleepPeriod) {
     var samples: [V18Sample] = []
     let seconds = minutes * 60
@@ -27,13 +29,17 @@ private func makeNight(
             rate = 88
         }
         let rr = breathing ? [Int(1000 + 45 * sin(2 * Double.pi * Double(second) / 4.0))] : []
+        let state = bandWakeMinutes.map { range in
+            range.0 * 60 <= second && second < range.1 * 60 ? 0 : 2
+        }
+        let measuredHR = heartRateOverride ?? ((hrAvailableMinutes.map { second < $0 * 60 } ?? true) ? Int(rate.rounded()) : 0)
         samples.append(
             V18Sample(
                 header: BandRecordHeader(
                     version: 18, flags: 0x80, recordIndex: UInt32(second),
                     unix: UInt32(base + second), subsecQ15: 0
                 ),
-                heartRate: heartRateOverride ?? Int(rate.rounded()),
+                heartRate: measuredHR,
                 rrIntervalsMS: rr,
                 dynamicAccelG: motion ? 0.02 : nil,
                 gravityXG: motion ? gravity.0 : nil,
@@ -45,8 +51,8 @@ private func makeNight(
                 skinTempC: nil,
                 tempAux1C: nil,
                 tempAux2C: nil,
-                sleepStateByte: nil,
-                sleepState: nil,
+                sleepStateByte: state,
+                sleepState: state,
                 cardiacFlags: nil,
                 hrQualityFlags: nil,
                 spo2CandidateRaw: nil,
@@ -112,13 +118,40 @@ final class SleepStageTests: XCTestCase {
         XCTAssertTrue(staging.segments.contains { $0.stage == .wake })
     }
 
+    func testBandWakeStatePreservesAwakePhoneUseInsideSleepWindow() {
+        let (samples, period) = makeNight(bandWakeMinutes: (20, 26))
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertTrue(staging.stageable)
+        XCTAssertGreaterThanOrEqual(staging.wakeMinutes, 5, accuracy: 0.5)
+        XCTAssertTrue(staging.segments.contains { $0.stage == .wake })
+    }
+
     func testMissingHeartRateRefusesToInventStages() {
         let (samples, period) = makeNight(heartRateOverride: 0)
         let staging = SleepStager.stage(samples: samples, period: period)
         XCTAssertFalse(staging.stageable)
         XCTAssertTrue(staging.segments.isEmpty)
-        XCTAssertEqual(staging.totalMinutes, 0)
+        XCTAssertEqual(staging.totalMinutes, 60, accuracy: 0.001)
+        XCTAssertEqual(staging.unclassifiedMinutes ?? 0, 60, accuracy: 0.001)
         XCTAssertTrue(staging.reason?.contains("heart rate covers 0%") == true)
+    }
+
+    func testBriefMovementDoesNotRemoveWholeSleepTime() {
+        var quiet = Array(repeating: true, count: 600)
+        for second in 120..<180 { quiet[second] = false }
+        XCTAssertEqual(SleepDetect.estimatedAsleepFraction(quiet: quiet, unix: Array(0..<600)), 1, accuracy: 0.001)
+    }
+
+    func testSustainedPhoneMotionCountsAsAwake() {
+        var quiet = Array(repeating: true, count: 600)
+        for second in 120..<300 { quiet[second] = false }
+        XCTAssertEqual(SleepDetect.estimatedAsleepFraction(quiet: quiet, unix: Array(0..<600)), 0.7, accuracy: 0.01)
+    }
+
+    func testReliableBandWakeStateCountsStillPhoneUseAsAwake() {
+        let unix = Array(0..<3600)
+        let states = unix.map { second in Optional((1200..<1500).contains(second) ? 0 : 2) }
+        XCTAssertEqual(SleepDetect.estimatedAsleepFraction(quiet: Array(repeating: true, count: 3600), unix: unix, sleepStates: states), 55.0 / 60.0, accuracy: 0.001)
     }
 
     func testMovementSamplesAreCoalescedIntoOneBout() {
@@ -151,6 +184,15 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), restaged.hours * restaged.quietFraction, accuracy: 0.001)
         XCTAssertLessThan(SleepCorrectionStore.estimatedAsleepHours(period: restaged, editedTimes: manualTimes), Double(end - start) / 3600.0)
         _ = calendar
+    }
+
+    func testFortyThreePercentCoverageLeavesWholeWindowUnclassified() {
+        let (samples, period) = makeNight(hrAvailableMinutes: 26)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertFalse(staging.stageable)
+        XCTAssertTrue(staging.reason?.contains("43%") == true)
+        XCTAssertEqual(staging.unclassifiedMinutes ?? 0, 60, accuracy: 0.001)
+        XCTAssertEqual(staging.totalMinutes, 60, accuracy: 0.001)
     }
 
     func testMissingMotionIsUnknownRatherThanInventedStillness() {
