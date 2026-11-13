@@ -205,6 +205,7 @@ struct SleepAnalysisView: View {
     }
 
     private var lastNightHours: Double? {
+        // The same corrected asleep duration powers the Home recovery input.
         if editedSleepWindowHours != nil { return store.band.lastNightHours }
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
@@ -421,8 +422,8 @@ struct SleepAnalysisView: View {
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
             } else if let staging, staging.stageable {
                 if editedSleepWindowHours != nil {
-                    Hint("Original capture stage estimates shown for comparison. The manually edited sleep window is different; these stage durations have not been recalculated.")
-                }
+                    EmptyState(title: "Stages need recalculation", detail: "The original stage epochs cover a different time window. Re-stage the corrected interval from raw sensor samples before showing durations or restorative sleep.")
+                } else {
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
@@ -437,6 +438,7 @@ struct SleepAnalysisView: View {
                     .padding(.vertical, 12)
                 }
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
+                }
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason)
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
@@ -455,6 +457,7 @@ struct SleepAnalysisView: View {
 
     private var stagingTrailing: String {
         if demo { return "sample" }
+        if editedSleepWindowHours != nil { return "—" }
         guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
         let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
         return String(format: "%.0f%% restorative", pct)
