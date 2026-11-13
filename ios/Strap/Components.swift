@@ -1,5 +1,19 @@
 import SwiftUI
 
+
+// MARK: - Typography fallback
+// Proxima Nova and DIN require separately licensed font assets for app embedding.
+// Never assume a web font or reverse-engineered bundle is distributable.
+enum StrapTypography {
+    static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .default)
+    }
+
+    static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+        .system(size: size, weight: weight, design: .default).monospacedDigit()
+    }
+}
+
 // MARK: - Screen scaffolding
 
 /// Scrollable dark screen. Shows the sample-data banner on every screen
@@ -14,7 +28,7 @@ struct Screen<Content: View>: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
+            LazyVStack(alignment: .leading, spacing: 0) {
                 if store.isPreview {
                     DemoBanner()
                 }
@@ -24,6 +38,7 @@ struct Screen<Content: View>: View {
             .padding(.top, 12)
             .padding(.bottom, 28)
         }
+        .scrollIndicators(.hidden)
         .background(
             LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
                            startPoint: .topLeading, endPoint: .bottomTrailing)

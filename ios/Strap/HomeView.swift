@@ -67,7 +67,16 @@ struct HomeView: View {
             }
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
-            .background(Color.appCanvasTop.opacity(0.98))
+            .background {
+                if #available(iOS 26.0, *) {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Color.appCanvasTop.opacity(0.70))
+                        .ignoresSafeArea(edges: .top)
+                } else {
+                    Color.appCanvasTop.opacity(0.98)
+                }
+            }
         }
         .refreshable {
             if store.band.isConnected {
