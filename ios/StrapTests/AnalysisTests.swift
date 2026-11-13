@@ -420,10 +420,12 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
-    func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
+    func testBandStillRejectsLyingStillEvenWithLowHr() {
         var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        // A phone-use / lying-still interval can lower HR and motion. The band's
+        // sustained "still" state must keep it from becoming detected sleep.
         rows += (600..<4200).map {
-            makeSample($0, hr: 100, accel: 0.02, sleepState: 1)
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 1)
         }
         rows += stretch(4200, 600, hr: 100, accel: 0.5)
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
