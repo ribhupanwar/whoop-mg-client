@@ -64,7 +64,8 @@ enum ActivityDetect {
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
-            locomotion = gait == gaitWalk || gait == gaitRun || recentSteps
+            // The raw gait byte is not verified; it cannot open an activity by itself.
+            locomotion = recentSteps
             let elevated: Bool
             if let baseline = baselines[index] {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
@@ -102,7 +103,7 @@ enum ActivityDetect {
                 ActivitySession(
                     startUnix: run[0].unix,
                     endUnix: run[run.count - 1].unix,
-                    kind: kind(runTicks: runTicks, walkTicks: walkTicks, spm: spm, hasSteps: hasSteps),
+                    kind: kind(spm: spm, hasSteps: hasSteps),
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
@@ -140,10 +141,7 @@ enum ActivityDetect {
         return result
     }
 
-    static func kind(runTicks: Int, walkTicks: Int, spm: [Double], hasSteps: Bool) -> String {
-        if runTicks > 0 || walkTicks > 0 {
-            return runTicks > walkTicks ? "run" : "walk"
-        }
+    static func kind(spm: [Double], hasSteps: Bool) -> String {
         if !spm.isEmpty {
             let median = Stats.median(spm)
             if median >= runSPM { return "run" }

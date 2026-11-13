@@ -542,11 +542,25 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                deleteActivityRow(row)
+                            } label: {
+                                Label("Delete Activity", systemImage: "trash")
+                            }
+                        }
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            .contextMenu {
+                                Button(role: .destructive) {
+                                    deleteActivityRow(row)
+                                } label: {
+                                    Label("Delete Activity", systemImage: "trash")
+                                }
+                            }
                     }
                     if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")
@@ -644,6 +658,19 @@ struct HomeView: View {
                 detail: activity.summary,
                 startUnix: nil
             )
+        }
+    }
+
+    private func deleteActivityRow(_ row: ActivityRowModel) {
+        if row.id.hasPrefix("band-"), let start = Int(row.id.dropFirst("band-".count)),
+           let session = store.detectedActivities(on: selectedDayKey).first(where: { $0.startUnix == start }) {
+            store.deleteDetectedActivity(session)
+        } else if row.id.hasPrefix("live-"),
+                  let id = UUID(uuidString: String(row.id.dropFirst("live-".count))) {
+            store.deleteLiveActivity(id: id)
+        } else if row.id.hasPrefix("manual-"),
+                  let id = UUID(uuidString: String(row.id.dropFirst("manual-".count))) {
+            store.deleteActivity(id: id)
         }
     }
 

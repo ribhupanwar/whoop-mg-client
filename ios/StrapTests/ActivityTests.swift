@@ -159,6 +159,32 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(store.detectedActivities().count, 1)
     }
 
+    func testDeleteDetectedActivityPersistsAndSuppressesShiftedSyncReplay() {
+        let now = Date(timeIntervalSince1970: TimeInterval(start + 10_000))
+        let original = session(start: start, end: start + 600)
+        store.mergeDetected([original], now: now)
+        store.deleteDetected(original, now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+
+        let shiftedReplay = session(start: start + 10, end: start + 610)
+        store.mergeDetected([shiftedReplay], now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+
+        let relaunched = ActivityStore(defaults: defaults)
+        XCTAssertTrue(relaunched.detectedActivities().isEmpty)
+    }
+
+    func testDeleteLiveActivityPersists() {
+        let record = LiveActivityRecord(
+            id: UUID(), startedUnix: 1_800_000_000, endedUnix: 1_800_000_600,
+            meanHR: 120, maxHR: 150, zoneSeconds: []
+        )
+        store.saveLive(record)
+        store.deleteLive(id: record.id)
+        XCTAssertTrue(store.liveActivities().isEmpty)
+        XCTAssertTrue(ActivityStore(defaults: defaults).liveActivities().isEmpty)
+    }
+
     func testOverlappingDetectionKeepsTheLongerOne() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let start = Int(now.timeIntervalSince1970) - 3_600
@@ -212,6 +238,18 @@ final class StepDrivenDetectTests: XCTestCase {
     /// rate is undefined on the first tick, so the session starts one second in.
     private func walk(seconds: Int = 360) -> [V18Sample] {
         (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2, gait: nil) }
+    }
+
+    func testPersistentUnverifiedGaitWithoutStepsCannotCreateActivity() {
+        let samples = (0..<600).map { sample($0, hr: 75, steps: 0, gait: ActivityDetect.gaitWalk) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+    }
+
+    func testSingleStepWithPersistentGaitCannotCreateActivity() {
+        let samples = (0..<600).map { second in
+            sample(second, hr: 75, steps: second >= 120 ? 1 : 0, gait: ActivityDetect.gaitWalk)
+        }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
     }
 
     func testFiveMinuteWalkIsDetectedWithoutAGaitByte() {
