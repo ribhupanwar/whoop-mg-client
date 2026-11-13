@@ -32,6 +32,7 @@ enum Route: Hashable {
     case sleepCoach
     case sleepAnalysis
     case settings
+    case dataQuality
 }
 
 struct RootView: View {
@@ -159,6 +160,7 @@ extension View {
             case .sleepCoach: SleepCoachView()
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
+            case .dataQuality: DataQualityView()
             }
         }
     }

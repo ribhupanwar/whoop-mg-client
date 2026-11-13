@@ -75,6 +75,10 @@ struct MoreView: View {
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
+                    NavigationLink(value: Route.dataQuality) {
+                        moreRow("Data quality & diagnostics", icon: "waveform.path.ecg")
+                    }
+                    .buttonStyle(.plain)
                     NavigationLink(value: Route.settings) {
                         moreRow("Health permissions & app information", icon: "lock.shield")
                     }
