@@ -299,19 +299,18 @@ struct SleepAnalysisView: View {
                 )
                 .padding(.bottom, 4)
             } else if store.band.summary?.heartRateTimeline != nil {
-                if sleepHeartRatePoints.count >= 2 {
-                    let values = sleepHeartRatePoints.map(\.bpm)
-                    LineChart(
-                        values: values,
+                if sleepHeartRatePoints.count >= 2, let times = sleepWindowTimes {
+                    TimedLineChart(
+                        points: sleepHeartRatePoints,
+                        windowStartUnix: times[0],
+                        windowEndUnix: times[1],
                         color: .appAccent,
-                        minY: values.min().map { floor($0) - 2 },
-                        maxY: values.max().map { ceil($0) + 2 },
                         height: 120,
-                        yLabels: seriesLabels(values),
+                        yLabels: seriesLabels(sleepHeartRatePoints.map(\.bpm)),
                         xLabels: sleepWindowClockLabels
                     )
                     .padding(.bottom, 4)
-                    Text("Recorded per-minute heart rate inside the selected sleep window. Gaps are not filled.")
+                    Text("Recorded HR in the selected sleep window. Gaps over two minutes remain blank.")
                         .font(.system(size: 10.5))
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 8)

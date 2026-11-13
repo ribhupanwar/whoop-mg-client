@@ -682,3 +682,93 @@ struct StressGauge: View {
         }
     }
 }
+
+/// A time-scaled HR chart. Long gaps stay visually empty rather than being
+/// compressed into a continuous line between the remaining sensor readings.
+struct TimedLineChart: View {
+    let points: [HeartRatePoint]
+    let windowStartUnix: Int
+    let windowEndUnix: Int
+    var color: Color = .appAccent
+    var height: CGFloat = 120
+    var yLabels: [String] = []
+    var xLabels: [String] = []
+    var maxConnectedGapSeconds: Int = 120
+
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            let values = points.map(\.bpm)
+            let lo = (values.min() ?? 0) - 2
+            let hi = (values.max() ?? 1) + 2
+            let range = max(hi - lo, 0.0001)
+            let leftPad: CGFloat = yLabels.isEmpty ? 0 : 26
+            let bottomPad: CGFloat = xLabels.isEmpty ? 0 : 14
+            let plotW = max(w - leftPad, 1)
+            let plotH = max(h - bottomPad, 1)
+            let gridFractions: [CGFloat] = yLabels.isEmpty
+                ? [0, 0.5, 1]
+                : yLabels.indices.map { CGFloat($0) / CGFloat(max(yLabels.count - 1, 1)) }
+
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(gridFractions.enumerated()), id: \.offset) { _, fraction in
+                    Path { p in
+                        let y = plotH * fraction
+                        p.move(to: CGPoint(x: leftPad, y: y))
+                        p.addLine(to: CGPoint(x: w, y: y))
+                    }
+                    .stroke(Color.appLine, lineWidth: 1)
+                }
+                if points.count > 1, windowEndUnix > windowStartUnix {
+                    timeScaledPath(
+                        points: points, start: windowStartUnix, end: windowEndUnix,
+                        left: leftPad, width: plotW, height: plotH,
+                        low: lo, range: range, maxGap: maxConnectedGapSeconds
+                    )
+                    .stroke(color, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+                }
+                ForEach(Array(yLabels.enumerated()), id: \.offset) { idx, label in
+                    Text(label)
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.appMuted)
+                        .position(
+                            x: leftPad / 2,
+                            y: plotH * CGFloat(idx) / CGFloat(max(yLabels.count - 1, 1))
+                        )
+                }
+                ForEach(Array(xLabels.enumerated()), id: \.offset) { idx, label in
+                    Text(label)
+                        .font(.system(size: 9))
+                        .foregroundStyle(Color.appMuted)
+                        .position(
+                            x: leftPad + plotW * CGFloat(idx) / CGFloat(max(xLabels.count - 1, 1)),
+                            y: h - 7
+                        )
+                }
+            }
+        }
+        .frame(height: height)
+    }
+
+    private func timeScaledPath(
+        points: [HeartRatePoint], start: Int, end: Int,
+        left: CGFloat, width: CGFloat, height: CGFloat,
+        low: Double, range: Double, maxGap: Int
+    ) -> Path {
+        var path = Path()
+        var previous: HeartRatePoint?
+        for point in points.sorted(by: { $0.unix < $1.unix }) {
+            let x = left + width * CGFloat(point.unix - start) / CGFloat(end - start)
+            let bpm = min(max(point.bpm, low), low + range)
+            let y = height * (1 - CGFloat((bpm - low) / range))
+            if let previous, point.unix - previous.unix <= maxGap {
+                path.addLine(to: CGPoint(x: x, y: y))
+            } else {
+                path.move(to: CGPoint(x: x, y: y))
+            }
+            previous = point
+        }
+        return path
+    }
+}
