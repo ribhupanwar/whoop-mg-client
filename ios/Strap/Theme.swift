@@ -13,11 +13,11 @@ extension Color {
         )
     }
 
-    static let appCanvasTop = Color(hex: 0x242A2F)
-    static let appBG = Color(hex: 0x171B1E)
-    static let appSurface = Color(hex: 0x2C3033)
-    static let appRaised = Color(hex: 0x3C4145)
-    static let appFG = Color(hex: 0xEEF1F5)
+    static let appCanvasTop = Color(hex: 0x22282D)
+    static let appBG = Color(hex: 0x151A1E)
+    static let appSurface = Color(hex: 0x292E32)
+    static let appRaised = Color(hex: 0x343A3F)
+    static let appFG = Color(hex: 0xF4F5F7)
     static let appMuted = Color(hex: 0xA3A8AE)
     static let appLine = Color(hex: 0x596166).opacity(0.45)
     static let appAccent = Color(hex: 0x178ED9)
@@ -36,13 +36,13 @@ enum AppLayout {
     static let cardInset: CGFloat = 15
     static let cardRadius: CGFloat = 15
     static let cardSpacing: CGFloat = 12
-    static let metricRadius: CGFloat = 13
+    static let metricRadius: CGFloat = 14
 }
 
 /// Subtle gray card shading shared by every tab and detail page.
 extension LinearGradient {
     static var appCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x32373B), .appSurface],
+        LinearGradient(colors: [Color(hex: 0x30363B), .appSurface],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }

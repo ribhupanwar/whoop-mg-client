@@ -238,7 +238,7 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, AppLayout.cardInset)
-                .frame(height: 58)
+                .frame(height: 60)
                 .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
                 .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
@@ -263,7 +263,7 @@ struct DashboardRows: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("STRESS MONITOR")
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(StrapTypography.body(12, weight: .semibold))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()

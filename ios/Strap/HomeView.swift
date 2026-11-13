@@ -928,14 +928,14 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("My Dashboard")
-                    .font(.system(size: 23, weight: .semibold, design: .rounded))
+                    .font(StrapTypography.body(24, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Button {
                     showDashboardCustomize = true
                 } label: {
                     Label("CUSTOMIZE", systemImage: "slider.horizontal.3")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(StrapTypography.body(11, weight: .semibold))
                         .tracking(0.7)
                         .foregroundStyle(Color.appFG)
                         .padding(.horizontal, 11)
@@ -975,12 +975,12 @@ struct HomeView: View {
 
     private var planCard: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("My Plan").font(.system(size: 23, weight: .semibold))
+            Text("My Plan").font(StrapTypography.body(24, weight: .bold))
             Button(action: openPlan) {
                 Panel {
                     HStack(spacing: 18) {
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("Build Your Best Self").font(.system(size: 17, weight: .semibold))
+                            Text("Build Your Best Self").font(StrapTypography.body(18, weight: .bold))
                             Text("Set goals, track progress, and build a consistent routine.").font(.system(size: 12)).foregroundStyle(Color.appMuted)
                             Label("EXPLORE PLANS", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
                         }

@@ -500,7 +500,7 @@ struct ChartLegend: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 21
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 24
     let icon: String
     let title: String
     let value: String
@@ -513,12 +513,12 @@ struct MetricRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(StrapTypography.body(15))
+                .font(.system(size: 17, weight: .regular))
                 .foregroundStyle(Color.appMuted)
                 .frame(width: 20)
             Text(title.uppercased())
-                .font(StrapTypography.body(10.5, weight: .semibold))
-                .tracking(0.6)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .tracking(0.75)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
@@ -546,7 +546,7 @@ struct MetricRow: View {
                 }
                 if let detail {
                     Text(detail)
-                        .font(StrapTypography.metric(10, weight: .regular))
+                        .font(StrapTypography.metric(11, weight: .regular))
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
                         .lineLimit(1)
@@ -557,7 +557,7 @@ struct MetricRow: View {
             .layoutPriority(1)
         }
         .padding(.horizontal, AppLayout.cardInset)
-        .frame(height: 58)
+        .frame(height: 60)
         .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
         .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
