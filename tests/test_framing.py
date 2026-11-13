@@ -113,6 +113,23 @@ class TestReassembler(unittest.TestCase):
         self.assertEqual(len(out), 1)
         self.assertEqual(reasm.dropped_bytes, 3)
 
+    def test_bad_header_does_not_hold_following_good_frame(self):
+        good = build_frame(b"\\x28\\x00\\x01", GEN5_PROFILE)
+        bad = bytearray(build_frame(b"\\x30\\x00\\x02", GEN5_PROFILE))
+        # A CRC-invalid header advertises a much longer body.
+        bad[2:4] = (32000).to_bytes(2, "little")
+        reasm = FrameReassembler(GEN5_PROFILE)
+        self.assertEqual(reasm.feed(bytes(bad) + good), [pad_inner(b"\\x28\\x00\\x01")])
+        self.assertGreaterEqual(reasm.bad_frames, 1)
+
+    def test_corrupt_payload_does_not_swallow_next_frame(self):
+        bad = bytearray(build_frame(b"\\x30\\x00\\x02", GEN5_PROFILE))
+        bad[-1] ^= 0x01
+        good = build_frame(b"\\x28\\x00\\x03", GEN5_PROFILE)
+        reasm = FrameReassembler(GEN5_PROFILE)
+        self.assertEqual(reasm.feed(bytes(bad) + good), [pad_inner(b"\\x28\\x00\\x03")])
+        self.assertGreaterEqual(reasm.bad_frames, 1)
+
     def test_truncated_frame_stays_pending(self):
         frame = build_frame(b"\x28\x00\x01", GEN5_PROFILE)
         reasm = FrameReassembler(GEN5_PROFILE)
