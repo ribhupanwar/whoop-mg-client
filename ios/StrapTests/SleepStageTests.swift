@@ -213,6 +213,9 @@ final class SleepStageTests: XCTestCase {
         XCTAssertTrue(staging.reason?.contains("43%") == true)
         XCTAssertEqual(staging.unclassifiedMinutes ?? 0, 60, accuracy: 0.001)
         XCTAssertEqual(staging.totalMinutes, 60, accuracy: 0.001)
+        XCTAssertEqual(staging.hrObservedSeconds, 26 * 60)
+        XCTAssertEqual(staging.hrWindowSeconds, 60 * 60)
+        XCTAssertEqual(staging.longestHRGapSeconds, 34 * 60)
     }
 
     func testMissingMotionIsUnknownRatherThanInventedStillness() {
