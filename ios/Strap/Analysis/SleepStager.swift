@@ -132,10 +132,8 @@ enum SleepStager {
             switch epoch.bandState {
             case 0, 3:
                 stage = .wake
-            case 1:
-                // The strap only reports "still", not asleep. Keep these
-                // epochs unclassified until it reports sleep or physiology
-                // has no reliable band-state observation for that epoch.
+            case 1, -1:
+                // "Still" and a mixed state transition cannot establish sleep.
                 stage = nil
             default:
                 stage = labels[index]
@@ -280,7 +278,10 @@ enum SleepStager {
             if Double(observedStates.count) / Double(epochEnd - epochStart) >= minHRCoverage {
                 let counts = (0...3).map { value in observedStates.filter { $0 == value }.count }
                 let dominant = counts.indices.max { counts[$0] < counts[$1] } ?? 0
-                bandState = counts[dominant] * 5 >= observedStates.count * 3 ? dominant : nil
+                // A mixed epoch is an observed transition, not permission to
+                // fall back to guessed physiology. Reserve -1 for unclassified;
+                // nil means the band field was absent and physiology may be used.
+                bandState = counts[dominant] * 5 >= observedStates.count * 3 ? dominant : -1
             } else {
                 bandState = nil
             }
