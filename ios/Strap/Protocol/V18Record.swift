@@ -36,8 +36,10 @@ struct V18Sample: Equatable, Codable {
     let tempAux1C: Double?
     let tempAux2C: Double?
     let sleepStateByte: Int?
-    /// Bits 4-5 of the sleep-state byte. The enum is NOT established, so it is
-    /// reported but never named or used to decide sleep.
+    /// Bits 4-5 of the v18 sleep-state byte: 0 wake, 1 still, 2 asleep, 3 up.
+    /// Cross-checked against the clean-room Woop/NOOP decoder notes and
+    /// OpenStrap's persisted band-state schema. This is a coarse band envelope,
+    /// not a sleep stage; consumers use it only as corroborating evidence.
     let sleepState: Int?
     let cardiacFlags: Int?
     let hrQualityFlags: Int?
