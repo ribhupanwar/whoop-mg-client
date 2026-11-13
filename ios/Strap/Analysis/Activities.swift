@@ -2,13 +2,11 @@ import Foundation
 
 /// Automatic run/walk/workout detection ported from `whoop/activity.py`.
 ///
-/// Session start/stop uses the HR-only detector (baseline = median HR 5-15 min
-/// old, start at max(100, baseline+20) sustained 4 min, minimum 5 min). Gait
-/// or a sustained step rate also opens a session, so a walk counts without a
-/// start tap. The gait byte reads 0 still / 1 walk / 2 run, but the enum is
-/// not vendor-verified, so a label always combines gait, steps and HR rather
-/// than trusting the byte alone. Steps/min comes from the step counter, never
-/// the cadence byte, which reads 97-108 even while sitting still.
+/// A session opens from sustained measured step-counter motion or a sustained
+/// heart-rate rise (baseline = median HR 5-15 min old, start at max(100,
+/// baseline+20) for 4 min; minimum session 5 min). The raw gait byte is not
+/// vendor-verified and cannot open a session. Steps/min comes from step-counter
+/// deltas, never the cadence byte, which can read 97-108 while sitting still.
 enum ActivityDetect {
     static let baselineMinAgeS = 300
     static let baselineMaxAgeS = 900
@@ -64,7 +62,8 @@ enum ActivityDetect {
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
-            locomotion = gait == gaitWalk || gait == gaitRun || recentSteps
+            // The raw gait byte is not verified; it cannot open an activity by itself.
+            locomotion = recentSteps
             let elevated: Bool
             if let baseline = baselines[index] {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
@@ -85,7 +84,10 @@ enum ActivityDetect {
                 continue
             }
             let start = index
-            while index < ordered.count && closed[index] { index += 1 }
+            while index < ordered.count && closed[index] {
+                if index > start && ordered[index].unix - ordered[index - 1].unix - 1 > gapToleranceS { break }
+                index += 1
+            }
             let end = index
             let run = Array(ordered[start..<end])
 
@@ -102,7 +104,7 @@ enum ActivityDetect {
                 ActivitySession(
                     startUnix: run[0].unix,
                     endUnix: run[run.count - 1].unix,
-                    kind: kind(runTicks: runTicks, walkTicks: walkTicks, spm: spm, hasSteps: hasSteps),
+                    kind: kind(spm: spm, hasSteps: hasSteps),
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
@@ -140,10 +142,7 @@ enum ActivityDetect {
         return result
     }
 
-    static func kind(runTicks: Int, walkTicks: Int, spm: [Double], hasSteps: Bool) -> String {
-        if runTicks > 0 || walkTicks > 0 {
-            return runTicks > walkTicks ? "run" : "walk"
-        }
+    static func kind(spm: [Double], hasSteps: Bool) -> String {
         if !spm.isEmpty {
             let median = Stats.median(spm)
             if median >= runSPM { return "run" }

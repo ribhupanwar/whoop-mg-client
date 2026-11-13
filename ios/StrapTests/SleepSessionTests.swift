@@ -34,6 +34,31 @@ final class SleepSessionTests: XCTestCase {
                             startUnix: start, endUnix: end, staging: staging,
                             heartRate: [], movementBouts: 29, isEdited: true, sourceEndUnix: end)
     }
+    func testDiagnosticCSVUsesEditedBoundsAndDoesNotFillMissingSeconds() throws {
+        let rows = [1700, 1800, 1801, 2000, 3000].map { sample(start + $0) }
+        let edited = SleepSession.make(samples: rows, period: period(3600),
+                                       correctedTimes: [start + 1800, start + 3000])
+        let csv = try SleepDiagnostics.csv(samples: rows, session: edited)
+        let lines = csv.split(separator: "\n")
+        XCTAssertEqual(lines.count, 4, "Header plus only three observed in-window samples")
+        let values = lines.dropFirst().map { $0.split(separator: ",", omittingEmptySubsequences: false) }
+        XCTAssertTrue(values.allSatisfy { $0.count == 15 })
+        XCTAssertEqual(values.map { Int($0[3])! }, [start + 1800, start + 1801, start + 2000])
+        XCTAssertTrue(values.allSatisfy { $0[7].isEmpty }, "Missing R-R stays empty")
+        XCTAssertThrowsError(try SleepDiagnostics.csv(samples: [], session: edited))
+    }
+
+    func testDiagnosticExportWritesAReadableLocalCSV() throws {
+        let rows = (0..<60).map { sample(start + $0) }
+        let session = SleepSession.make(samples: rows, period: period(60))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = try SleepDiagnostics.write(samples: rows, session: session, directory: directory)
+        XCTAssertEqual(try String(contentsOf: url, encoding: .utf8),
+                       try SleepDiagnostics.csv(samples: rows, session: session))
+        XCTAssertEqual(url.pathExtension, "csv")
+    }
+
     func testOneTotalDrivesAsleepEfficiencyAndReportWithoutDoubleSubtraction() throws {
         let session = knownNight()
         XCTAssertEqual(try XCTUnwrap(session.asleepHours), 7.75, accuracy: 1e-9)

@@ -159,6 +159,56 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(store.detectedActivities().count, 1)
     }
 
+    func testDeleteDetectedActivityPersistsAndSuppressesShiftedSyncReplay() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch + 10_000))
+        let original = session(start: epoch, end: epoch + 600)
+        store.mergeDetected([original], now: now)
+        store.deleteDetected(original, now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+
+        let shiftedReplay = session(start: epoch + 10, end: epoch + 610)
+        store.mergeDetected([shiftedReplay], now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+
+        let relaunched = ActivityStore(defaults: defaults)
+        XCTAssertTrue(relaunched.detectedActivities().isEmpty)
+    }
+
+    func testDeleteLiveActivityPersists() {
+        let record = LiveActivityRecord(
+            dateKey: "2026-11-10", startedUnix: 1_800_000_000,
+            endedUnix: 1_800_000_600, meanHR: 120, maxHR: 150, beats: 80,
+            hrv: .empty, zoneSeconds: []
+        )
+        store.saveLive(record)
+        store.deleteLive(id: record.id)
+        XCTAssertTrue(store.liveActivities().isEmpty)
+        XCTAssertTrue(ActivityStore(defaults: defaults).liveActivities().isEmpty)
+    }
+
+    func testDeletedDetectionDoesNotHideAnAdjacentRealActivity() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch + 10000))
+        let original = session(start: epoch, end: epoch + 600)
+        let adjacent = session(start: epoch + 601, end: epoch + 1201)
+        store.mergeDetected([original, adjacent], now: now)
+        store.deleteDetected(original, now: now)
+        store.mergeDetected([original, adjacent], now: now)
+        XCTAssertEqual(store.detectedActivities(), [adjacent])
+    }
+
+    func testSavingSameLiveSessionDoesNotDuplicateTheRowOrZoneTotals() {
+        let record = LiveActivityRecord(
+            dateKey: "2026-11-10", startedUnix: 1_800_000_000,
+            endedUnix: 1_800_000_600, meanHR: 120, maxHR: 150, beats: 80,
+            hrv: .empty, zoneSeconds: [600]
+        )
+        store.saveLive(record)
+        store.saveLive(record)
+        XCTAssertEqual(store.liveActivities().count, 1)
+    }
+
     func testOverlappingDetectionKeepsTheLongerOne() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let start = Int(now.timeIntervalSince1970) - 3_600
@@ -212,6 +262,17 @@ final class StepDrivenDetectTests: XCTestCase {
     /// rate is undefined on the first tick, so the session starts one second in.
     private func walk(seconds: Int = 360) -> [V18Sample] {
         (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2, gait: nil) }
+    }
+
+    func testGaitWithoutMeasuredStepsCannotCreateActivity() {
+        let samples = (0..<600).map { sample($0, hr: 75, steps: 0, gait: ActivityDetect.gaitWalk) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+    }
+
+    func testMissingHourDoesNotJoinTwoShortWalksIntoOneWorkout() {
+        var samples = walk(seconds: 120)
+        samples += (0..<120).map { sample(3600 + $0, hr: 75, steps: 240 + $0 * 2, gait: nil) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
     }
 
     func testFiveMinuteWalkIsDetectedWithoutAGaitByte() {

@@ -131,6 +131,16 @@ final class AppStore: ObservableObject {
         manualActivities = activities.manualActivities()
     }
 
+    func deleteLiveActivity(id: UUID) {
+        activities.deleteLive(id: id)
+        liveActivities = activities.liveActivities()
+    }
+
+    func deleteDetectedActivity(_ session: ActivitySession) {
+        activities.deleteDetected(session)
+        detectedBandActivities = activities.detectedActivities()
+    }
+
     func addLiveSession(_ record: LiveActivityRecord) {
         activities.saveLive(record)
         liveActivities = activities.liveActivities()
@@ -216,6 +226,7 @@ final class AppStore: ObservableObject {
         var seen = Set<Int>()
         let merged = (band.summary?.activities ?? []) + detectedBandActivities
         return merged
+            .filter { !activities.isDetectedDeleted($0) }
             .filter { JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.startUnix))) == dateKey }
             .filter { seen.insert($0.startUnix).inserted }
             .sorted { $0.startUnix < $1.startUnix }
