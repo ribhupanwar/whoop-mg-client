@@ -316,6 +316,7 @@ final class BandLink: NSObject, ObservableObject {
         let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
         guard lastRecalculationSettings != settingsKey else { return }
         lastRecalculationSettings = settingsKey
+        scheduleCorrectedSleepRestaging()
         // Startup safety: do not synchronously analyze the entire retained
         // BLE archive on the SwiftUI/main thread. The cached summary and
         // daily metrics were restored in init(); the next history sync will
@@ -408,22 +409,41 @@ final class BandLink: NSObject, ObservableObject {
         return period.hours * min(1.0, max(0.0, period.quietFraction))
     }
 
-    /// Re-stage the manually corrected night from retained raw samples.
-    /// Never stretch the original stage proportions to fit a new window.
-    var correctedSleepStaging: SleepStaging? {
-        guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
+    // A computed SwiftUI property must never restage a multi-hour raw archive.
+    // The previous implementation ran trigonometric stage scoring on the
+    // main thread during AttributeGraph updates and could trip 0x8BADF00D.
+    @Published private(set) var correctedSleepStaging: SleepStaging?
+    private var correctedStageRequest = 0
+
+    private func scheduleCorrectedSleepRestaging() {
+        correctedStageRequest += 1
+        let request = correctedStageRequest
+        correctedSleepStaging = nil
+        guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return }
         let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
         guard let times = overrides[String(period.startUnix)], times.count == 2,
-              times[1] > times[0], !retainedHistoricalSamples.isEmpty else { return nil }
+              times[1] > times[0], !retainedHistoricalSamples.isEmpty else { return }
         let corrected = SleepPeriod(
             startUnix: times[0], endUnix: times[1] - 1,
             quietFraction: period.quietFraction, meanHR: period.meanHR,
             wakeEvents: period.wakeEvents
         )
-        return SleepStager.stage(samples: retainedHistoricalSamples, period: corrected)
+        // Copy only this night's records; never hand the full archive to the
+        // background task or repeatedly score it from SwiftUI body getters.
+        let nightSamples = retainedHistoricalSamples.filter {
+            $0.unix >= corrected.startUnix && $0.unix <= corrected.endUnix
+        }
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let result = SleepStager.stage(samples: nightSamples, period: corrected)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.correctedStageRequest == request else { return }
+                self.correctedSleepStaging = result
+            }
+        }
     }
 
     func notifySleepCorrectionChanged() {
+        scheduleCorrectedSleepRestaging()
         objectWillChange.send()
     }
 
