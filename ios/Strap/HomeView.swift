@@ -28,7 +28,7 @@ struct HomeView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 Text("STRAP")
-                    .font(.system(size: 22, weight: .light)).tracking(4)
+                    .font(StrapTypography.body(20, weight: .bold)).tracking(2)
                     .frame(maxWidth: .infinity).padding(.vertical, 14)
                 ringTrio
                     .background(GeometryReader { geometry in

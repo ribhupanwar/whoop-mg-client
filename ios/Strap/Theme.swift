@@ -33,16 +33,16 @@ extension Color {
 /// Shared geometry keeps cards and metric rows aligned across tabs.
 enum AppLayout {
     static let screenInset: CGFloat = 16
-    static let cardInset: CGFloat = 15
+    static let cardInset: CGFloat = 16
     static let cardRadius: CGFloat = 15
     static let cardSpacing: CGFloat = 12
-    static let metricRadius: CGFloat = 14
+    static let metricRadius: CGFloat = 15
 }
 
 /// Subtle gray card shading shared by every tab and detail page.
 extension LinearGradient {
     static var appCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x30363B), .appSurface],
+        LinearGradient(colors: [Color(hex: 0x32383D), Color(hex: 0x282D31)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }
