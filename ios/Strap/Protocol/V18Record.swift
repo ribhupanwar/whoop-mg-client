@@ -53,6 +53,26 @@ struct V18Sample: Equatable, Codable {
     var wearing: Bool { heartRate > 0 }
 }
 
+/// Stable choice when replayed history contains multiple records in one second.
+/// Preserve a usable HR value before preferring richer auxiliary channels.
+enum HistoricalRecordSelection {
+    static func prefers(_ candidate: V18Sample, over current: V18Sample) -> Bool {
+        let candidateHRValid = (35...220).contains(candidate.heartRate)
+        let currentHRValid = (35...220).contains(current.heartRate)
+        if candidateHRValid != currentHRValid { return candidateHRValid }
+        if candidate.rrIntervalsMS.count != current.rrIntervalsMS.count {
+            return candidate.rrIntervalsMS.count > current.rrIntervalsMS.count
+        }
+        let candidateHasMotion = candidate.dynamicAccelG != nil
+        let currentHasMotion = current.dynamicAccelG != nil
+        if candidateHasMotion != currentHasMotion { return candidateHasMotion }
+        if candidate.header.recordIndex != current.header.recordIndex {
+            return candidate.header.recordIndex < current.header.recordIndex
+        }
+        return false
+    }
+}
+
 enum V18Decoder {
     static let version = 18
     static let minReadable = 109

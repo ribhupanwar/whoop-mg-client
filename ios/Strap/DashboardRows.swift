@@ -102,22 +102,8 @@ struct DashboardRows: View {
 
     private var summary: CaptureSummary? { store.lastCapture }
 
-    // A small/fragmented capture can produce a plausible but misleading RMSSD.
-    // Never display it as a validated dashboard HRV.
-    private var hrvReady: Bool {
-        guard let summary else { return false }
-        return summary.hrvWindowSeconds >= 300
-            && summary.hrv.nnBeats >= 200
-            && summary.hrv.rmssdMS.map { $0.isFinite && (5...300).contains($0) } == true
-    }
-
     private var latestNightHRV: Double? {
-        guard let day = store.band.days
-            .filter({ $0.sleepHours > 0 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
-            .sorted(by: { $0.dateKey > $1.dateKey }).first,
-              let ln = day.lnRMSSD else { return nil }
-        let value = exp(ln)
-        return value.isFinite && (5...300).contains(value) ? value : nil
+        DailyAnalysis.latestNightHRV(from: store.band.days)
     }
 
     private var hrvText: String {

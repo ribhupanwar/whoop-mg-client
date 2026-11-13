@@ -81,6 +81,15 @@ final class FrameReassembler {
                 droppedBytes += 1
                 continue
             }
+            // Validate the header before trusting its length. A corrupt length
+            // otherwise stalls backfill until tens of thousands of bytes arrive.
+            let headerCRC = UInt16(buffer[6]) | (UInt16(buffer[7]) << 8)
+            guard BandChecksums.crc16Modbus(buffer[0..<6]) == headerCRC else {
+                buffer.removeFirst()
+                droppedBytes += 1
+                badFrames += 1
+                continue
+            }
             guard let declared = Gen5Frame.declaredLength(buffer) else { break }
             let total = Gen5Frame.headerLength + declared
             if declared < 4 || total > 65_535 {
@@ -90,10 +99,14 @@ final class FrameReassembler {
             }
             if buffer.count < total { break }
             let candidate = Array(buffer[0..<total])
-            buffer.removeFirst(total)
             if let inner = Gen5Frame.parse(candidate) {
+                buffer.removeFirst(total)
                 frames.append(inner)
             } else {
+                // A dropped BLE fragment can place the next valid frame inside
+                // this declared span. Do not discard that following frame.
+                buffer.removeFirst()
+                droppedBytes += 1
                 badFrames += 1
             }
         }

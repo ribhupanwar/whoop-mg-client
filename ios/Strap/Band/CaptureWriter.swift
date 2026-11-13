@@ -10,6 +10,7 @@ final class CaptureWriter {
     private let started = Date()
     private let queue = DispatchQueue(label: "com.ribhupanwar.strap.capture")
     private var isClosed = false
+    private var writeFailed = false
 
     init?() {
         let manager = FileManager.default
@@ -23,7 +24,7 @@ final class CaptureWriter {
         formatter.timeZone = TimeZone.current
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         let url = directory.appendingPathComponent(
-            "capture-\(formatter.string(from: Date())).jsonl"
+            "capture-\(formatter.string(from: Date()))-\(UUID().uuidString).jsonl"
         )
         guard manager.createFile(atPath: url.path, contents: nil),
               let handle = try? FileHandle(forWritingTo: url) else { return nil }
@@ -52,7 +53,7 @@ final class CaptureWriter {
     /// HISTORY_END trim cursor. A failed sync must not release strap history.
     func flushToDisk() -> Bool {
         queue.sync {
-            guard !isClosed else { return false }
+            guard !isClosed, !writeFailed else { return false }
             do {
                 try handle.synchronize()
                 return true
@@ -77,8 +78,10 @@ final class CaptureWriter {
     private func record(_ object: [String: Any]) {
         guard let data = try? JSONSerialization.data(withJSONObject: object) else { return }
         let line = data + Data([0x0A])
-        queue.async { [handle] in
-            try? handle.write(contentsOf: line)
+        queue.async { [self] in
+            guard !isClosed else { writeFailed = true; return }
+            do { try handle.write(contentsOf: line) }
+            catch { writeFailed = true }
         }
     }
 

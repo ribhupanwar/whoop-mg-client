@@ -220,26 +220,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
-        // Older archives may contain duplicate timestamps. Never crash during reload.
-        var bySecond: [Int: V18Sample] = [:]
-        for sample in retainedHistoricalSamples {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
-        for sample in incoming {
-            if let old = bySecond[sample.unix] {
-                let oldScore = old.rrIntervalsMS.count * 10 + (old.dynamicAccelG == nil ? 0 : 1)
-                let newScore = sample.rrIntervalsMS.count * 10 + (sample.dynamicAccelG == nil ? 0 : 1)
-                if newScore > oldScore { bySecond[sample.unix] = sample }
-            } else {
-                bySecond[sample.unix] = sample
-            }
-        }
+        let bySecond = HistoricalCaptureRecovery.merged(retainedHistoricalSamples + incoming)
         let ordered = bySecond.values.sorted { $0.unix < $1.unix }
         let cutoff = (ordered.last?.unix ?? 0) - 72 * 3600
         let merged = ordered.filter { $0.unix >= cutoff }
@@ -310,6 +291,23 @@ final class BandLink: NSObject, ObservableObject {
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
         central = CBCentralManager(delegate: self, queue: nil,
             options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
+        recoverSavedCaptures()
+    }
+
+    /// Raw chunks are saved before the strap's trim ACK. Recover them after
+    /// an app interruption or a decoder update, before relying on old summaries.
+    private func recoverSavedCaptures() {
+        let directory = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("captures", isDirectory: true)
+        analysisQueue.async { [weak self] in
+            let recovered = HistoricalCaptureRecovery.read(directory: directory)
+            DispatchQueue.main.async { [weak self] in
+                guard let self, !recovered.isEmpty,
+                      let merged = self.mergeHistoricalArchive(recovered) else { return }
+                self.lastHistoryRecordCount = merged.count
+                self.recalculateRetainedMetrics()
+            }
+        }
     }
 
     // MARK: - Settings
@@ -440,8 +438,8 @@ final class BandLink: NSObject, ObservableObject {
         Recovery.stressIndex(lnRMSSD: summary?.hrv.lnRMSSD, baseline: awakeBaseline)
     }
 
-    /// Corrected sleep durations affect Recovery immediately; original
-    /// physiological samples remain unchanged for HRV/RHR provenance.
+    /// Corrected bounds select the sensor samples used for nightly metrics;
+    /// neither the heart rates nor R-R measurements are modified.
     var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
     func notifySleepCorrectionChanged() {
@@ -453,9 +451,15 @@ final class BandLink: NSObject, ObservableObject {
             return RecoveryResult(score: nil, reason: "Recalculating retained history",
                                   hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
         }
+        // Bind HRV/RHR to the displayed night, never the longest quiet run
+        // anywhere in the multi-day archive (which may be a different day).
+        let nightKey = latestSleepSession.map {
+            JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)))
+        }
+        let night = days.first { $0.dateKey == nightKey }
         return Recovery.score(
-            lnRMSSD: summary?.hrv.lnRMSSD,
-            rhr: summary?.restingHeartRate,
+            lnRMSSD: night?.lnRMSSD,
+            rhr: night?.restingHR,
             sleepHours: lastNightHours,
             sleepNeedHours: needHours,
             baseline: baseline
@@ -1277,6 +1281,9 @@ final class BandLink: NSObject, ObservableObject {
                     lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
                     return
                 }
+                // Also persist decoded records before permitting the strap to
+                // advance its cursor; app termination must not lose this chunk.
+                guard mergeHistoricalArchive(capturedSamples) != nil else { return }
                 enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
                 drainAcks += 1
                 lastFrameAt = Date()

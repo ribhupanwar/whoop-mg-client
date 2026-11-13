@@ -106,6 +106,25 @@ final class ProtocolTests: XCTestCase {
         }
     }
 
+    func testCorruptLengthCannotStallFollowingValidFrame() {
+        var corrupt = Gen5Frame.build([0x28, 0, 1])
+        corrupt[2] = 0x00; corrupt[3] = 0xF0 // invalid CRC with a huge length
+        let inner: [UInt8] = [0x2F, 18, 0, 1]
+        let reassembler = FrameReassembler()
+        XCTAssertEqual(reassembler.feed(corrupt + Gen5Frame.build(inner)), [inner])
+        XCTAssertEqual(reassembler.pending, 0)
+    }
+
+    func testDroppedPayloadDoesNotConsumeFollowingFrame() {
+        let first = Gen5Frame.build([UInt8](repeating: 42, count: 112))
+        let inner: [UInt8] = [0x2F, 18, 0, 1]
+        let reassembler = FrameReassembler()
+        let truncated = Array(first.prefix(30))
+        let following = Gen5Frame.build(inner)
+        let padding = [UInt8](repeating: 0, count: 112)
+        XCTAssertEqual(reassembler.feed(truncated + following + padding), [inner])
+    }
+
     func testMultipleFramesInOneChunk() {
         let first = Gen5Frame.build([0x28, 0x00, 0x01])
         let second = Gen5Frame.build([0x30, 0x00, 0x02])

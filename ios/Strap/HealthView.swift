@@ -206,13 +206,7 @@ struct HealthView: View {
     // Use the same validated overnight HRV source as the Home dashboard.
     // A daytime capture must not overwrite the night's recovery metric.
     private var latestNightHRV: Double? {
-        guard let day = store.band.days
-            .filter({ $0.sleepHours >= 3 && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
-            .sorted(by: { $0.dateKey > $1.dateKey })
-            .first,
-              let ln = day.lnRMSSD else { return nil }
-        let rmssd = exp(ln)
-        return rmssd.isFinite && (5...300).contains(rmssd) ? rmssd : nil
+        DailyAnalysis.latestNightHRV(from: store.band.days)
     }
 
 

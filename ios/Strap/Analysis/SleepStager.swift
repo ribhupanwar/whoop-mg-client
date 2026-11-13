@@ -95,12 +95,17 @@ enum SleepStager {
         )
         let coverage = Double(secHR.count) / Double(end - start)
         let validEpochCount = epochs.filter { $0.hr != nil }.count
-        guard coverage >= minHRCoverage else {
-            let percent = Int((coverage * 100).rounded())
+        let percent = Int((coverage * 100).rounded())
+        let coverageReason = coverage < minHRCoverage
+            ? "heart rate covers \(percent)% of the sleep window; full-night scoring needs at least 50%"
+            : nil
+        // Retain measured epochs in a partial night; never label missing time.
+        // A minimum hour of valid epochs is needed for a partial hypnogram.
+        if coverageReason != nil && validEpochCount < 120 {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
                 wakeMinutes: 0, epochs: validEpochCount, hrCoverage: coverage,
-                reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
+                reason: coverageReason
             )
         }
 
@@ -143,7 +148,7 @@ enum SleepStager {
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
             remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
-            hrCoverage: coverage, reason: nil
+            hrCoverage: coverage, reason: coverageReason
         )
     }
 

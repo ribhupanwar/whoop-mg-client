@@ -36,7 +36,6 @@ struct SleepAnalysisView: View {
                 performancePanel
                 componentsPanel
                 lastNightPanel
-                stagingPanel
                 needPanel
                 consistencyPanel
                 stressDetailPanel
@@ -300,6 +299,11 @@ struct SleepAnalysisView: View {
                     .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(Color.appFG)
             }
+
+            Divider()
+                .overlay(Color.appLine)
+                .padding(.vertical, 14)
+            stagingPanel
         }
     }
 
@@ -358,14 +362,14 @@ struct SleepAnalysisView: View {
     }
 
     private var stagingPanel: some View {
-        Panel {
+        VStack(alignment: .leading, spacing: 0) {
             CardHead(title: "Sleep stages", trailing: stagingTrailing)
             if demo {
                 SplitBar(segments: splitSegments(demoStageMinutes))
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
-            } else if let staging, staging.stageable {
+            } else if let staging, !staging.segments.isEmpty {
                 if session?.isEdited == true {
                     Hint("Recalculated from retained sensor data for your edited bed/wake times.")
                 }
@@ -385,6 +389,9 @@ struct SleepAnalysisView: View {
                 if let session {
                     Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
                 }
+                if let reason = staging.reason {
+                    Hint("Partial stages only. \(reason). Missing intervals remain unclassified; the full-night sleep score is withheld.")
+                }
             } else if let staging, let reason = staging.reason {
                 EmptyState(title: "Stages unavailable", detail: reason + ". Missing data is not assigned a sleep stage.")
             } else if let summary = store.band.summary, !summary.sleepPeriods.isEmpty {
@@ -398,12 +405,27 @@ struct SleepAnalysisView: View {
                     detail: "Stages appear once a capture covers a detected sleep window long enough to score."
                 )
             }
+            if !demo, let session, !session.isComplete {
+                Button {
+                    if store.band.isConnected { store.band.readHistory() }
+                    else { store.connectBand() }
+                } label: {
+                    Label(store.band.status == .draining ? "Syncing sleep history…" : "Sync sleep history",
+                          systemImage: "arrow.clockwise")
+                }
+                .disabled(store.band.status == .draining || store.band.status == .authenticating)
+                .padding(.top, 10)
+                Hint("Keep the strap nearby while syncing. Saved raw captures are recovered automatically when the app opens. Time the strap did not record cannot be reconstructed.")
+            }
         }
     }
 
     private var stagingTrailing: String {
         if demo { return "sample" }
-        guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
+        guard let staging, !staging.segments.isEmpty, staging.asleepMinutes > 0 else { return "—" }
+        if staging.reason != nil {
+            return "Partial · \(Int((staging.hrCoverage * 100).rounded()))% HR"
+        }
         let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
         return String(format: "%.0f%% restorative", pct)
     }
