@@ -214,16 +214,17 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? String(format: "%.1f", SampleData.vo2) : vo2Text)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: 23, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
                         .foregroundStyle(Color.appFG)
                     Text("›")
                         .font(.system(size: 15))
                         .foregroundStyle(Color.appMuted)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 13)
-                .background(RoundedRectangle(cornerRadius: 13).fill(Color.appSurface))
-                .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.appLine, lineWidth: 1))
+                .padding(.horizontal, AppLayout.cardInset)
+                .padding(.vertical, 16)
+                .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(Color.appSurface))
+                .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine, lineWidth: 1))
             }
             .buttonStyle(.plain)
 
@@ -231,7 +232,7 @@ struct DashboardRows: View {
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, AppLayout.cardInset)
                 .padding(.top, 4)
 
             if showVO2Detail {
@@ -239,7 +240,7 @@ struct DashboardRows: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Color.appMuted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, 14)
+                    .padding(.horizontal, AppLayout.cardInset)
                     .padding(.top, 4)
             }
         }

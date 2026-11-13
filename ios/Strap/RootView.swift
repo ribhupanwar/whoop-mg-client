@@ -75,6 +75,8 @@ struct RootView: View {
             .tabItem { Label(AppTab.more.label, systemImage: AppTab.more.icon) }
             .tag(AppTab.more)
         }
+        .toolbarBackground(Color.appSurface, for: .tabBar)
+        .toolbarBackground(.visible, for: .tabBar)
         .tint(.appAccent)
         .environmentObject(store)
         .preferredColorScheme(.dark)

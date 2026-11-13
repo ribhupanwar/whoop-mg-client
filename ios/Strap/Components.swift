@@ -20,11 +20,15 @@ struct Screen<Content: View>: View {
                 }
                 content
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 8)
+            .padding(.horizontal, AppLayout.screenInset)
+            .padding(.top, 14)
             .padding(.bottom, 28)
         }
-        .background(Color.appBG.ignoresSafeArea())
+        .background(
+            LinearGradient(colors: [Color.appSurface, Color.appBG],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                .ignoresSafeArea()
+        )
     }
 }
 
@@ -60,10 +64,10 @@ struct Panel<Content: View>: View {
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
-        .padding(.bottom, 11)
+        .padding(AppLayout.cardInset)
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(Color.appSurface))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine, lineWidth: 1))
+        .padding(.bottom, AppLayout.cardSpacing)
     }
 }
 
@@ -189,7 +193,10 @@ struct RingView: View {
                     .rotationEffect(.degrees(-90))
             }
             Text(centerText)
-                .font(.system(size: centerFont, weight: .medium))
+                .font(.system(size: centerFont, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .minimumScaleFactor(0.75)
+                .lineLimit(1)
                 .foregroundStyle(Color.appFG)
         }
         .padding(lineWidth / 2)
@@ -449,6 +456,7 @@ struct ChartLegend: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 23
     let icon: String
     let title: String
     let value: String
@@ -459,20 +467,25 @@ struct MetricRow: View {
     var trendFavourable: Bool? = nil
 
     var body: some View {
-        HStack(spacing: 11) {
+        HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 17))
                 .foregroundStyle(Color.appMuted)
                 .frame(width: 22)
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .medium))
+                .font(.system(size: 12, weight: .semibold))
                 .tracking(0.7)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .trailing, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(value)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(.system(size: valueFontSize, weight: .semibold, design: .rounded))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .foregroundStyle(Color.appFG)
                     if let unit {
                         Text(unit)
@@ -480,7 +493,7 @@ struct MetricRow: View {
                             .foregroundStyle(Color.appMuted)
                     }
                     if let trendUp, let trendFavourable {
-                        Image(systemName: trendUp ? "triangle.fill" : "triangle.fill")
+                        Image(systemName: "triangle.fill")
                             .font(.system(size: 7, weight: .bold))
                             .rotationEffect(.degrees(trendUp ? 0 : 180))
                             .foregroundStyle(trendFavourable ? Color.appGood : Color.appWarn)
@@ -489,18 +502,19 @@ struct MetricRow: View {
                 }
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
                         .fixedSize(horizontal: false, vertical: true)
                 }
             }
+            .layoutPriority(1)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 13)
-        .background(RoundedRectangle(cornerRadius: 13).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.appLine, lineWidth: 1))
-        .padding(.bottom, 8)
+        .padding(.horizontal, AppLayout.cardInset)
+        .padding(.vertical, 16)
+        .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(Color.appSurface))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine, lineWidth: 1))
+        .padding(.bottom, 10)
     }
 }
 

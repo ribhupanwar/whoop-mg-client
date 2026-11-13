@@ -29,13 +29,13 @@ struct HomeView: View {
                 topBar
                 titleBlock
                 ringTrio
+                dashboardSection
                 insightCard
                 monitorDuo
                 myDayOutlook
                 activitiesCard
                 tonightCard
                 journalCard
-                dashboardSection
             }
         }
         .refreshable {
@@ -181,7 +181,7 @@ struct HomeView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Home")
-                .font(.system(size: 24, weight: .medium))
+                .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.appFG)
             Text(subtitle)
                 .font(.system(size: 12))
@@ -228,7 +228,10 @@ struct HomeView: View {
                 Hint(trioHint)
             }
         }
-        .padding(.bottom, 12)
+        .padding(AppLayout.cardInset)
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(Color.appSurface))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine, lineWidth: 1))
+        .padding(.bottom, AppLayout.cardSpacing)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -853,20 +856,24 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("My Dashboard")
-                    .font(.system(size: 19, weight: .medium))
+                    .font(.system(size: 23, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Button {
                     showDashboardCustomize = true
                 } label: {
-                    Text("CUSTOMIZE ✎")
-                        .font(.system(size: 10, weight: .medium))
+                    Label("CUSTOMIZE", systemImage: "slider.horizontal.3")
+                        .font(.system(size: 10, weight: .semibold))
                         .tracking(0.7)
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine, lineWidth: 1))
+                        .foregroundStyle(Color.appFG)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7).fill(
+                                LinearGradient(colors: [SleepStage.deep.color, SleepStage.rem.color],
+                                               startPoint: .leading, endPoint: .trailing)
+                            )
+                        )
                 }
                 .buttonStyle(.plain)
             }
