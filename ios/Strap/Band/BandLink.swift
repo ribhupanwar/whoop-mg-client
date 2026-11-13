@@ -395,8 +395,10 @@ final class BandLink: NSObject, ObservableObject {
         guard let period = periods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
         let corrected = overrides[String(period.startUnix)]
         if let corrected, corrected.count == 2, corrected[1] > corrected[0] {
-            let correctedHours = Double(corrected[1] - corrected[0]) / 3600.0
-            return correctedHours * min(1.0, max(0.0, period.quietFraction))
+            // Only measured restaging may supply asleep time for an edited night.
+            // A historical quiet fraction is not valid over a new interval.
+            guard let staged = correctedSleepStaging, staged.stageable else { return nil }
+            return staged.asleepMinutes / 60.0
         }
         if let stage = summary?.sleepStaging,
            summary?.sleepPeriods.last?.startUnix == period.startUnix,
@@ -404,6 +406,21 @@ final class BandLink: NSObject, ObservableObject {
             return stage.asleepMinutes / 60.0
         }
         return period.hours * min(1.0, max(0.0, period.quietFraction))
+    }
+
+    /// Re-stage the manually corrected night from retained raw samples.
+    /// Never stretch the original stage proportions to fit a new window.
+    var correctedSleepStaging: SleepStaging? {
+        guard let period = summary?.sleepPeriods.max(by: { $0.endUnix < $1.endUnix }) else { return nil }
+        let overrides = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        guard let times = overrides[String(period.startUnix)], times.count == 2,
+              times[1] > times[0], !retainedHistoricalSamples.isEmpty else { return nil }
+        let corrected = SleepPeriod(
+            startUnix: times[0], endUnix: times[1] - 1,
+            quietFraction: period.quietFraction, meanHR: period.meanHR,
+            wakeEvents: period.wakeEvents
+        )
+        return SleepStager.stage(samples: retainedHistoricalSamples, period: corrected)
     }
 
     func notifySleepCorrectionChanged() {
