@@ -127,11 +127,18 @@ enum SleepStager {
         )
         let hrEpochs = epochs.filter { $0.hr != nil }.count
         let coverage = Double(hrEpochs) / Double(gridEpochs)
+        let hrSeconds = secHR.keys.filter { $0 >= start && $0 < end }.sorted()
+        let hrWindowSeconds = max(0, end - start)
+        let longestMissingHRGap = longestMissingGap(
+            start: start, end: end, observed: hrSeconds
+        )
         guard coverage >= minHRCoverage else {
             let percent = Int((coverage * 100).rounded())
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
                 wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+                longestHRGapSeconds: longestMissingHRGap,
                 epochs: epochs.count, hrCoverage: coverage,
                 reason: "heart rate covers \(percent)% of the sleep window; staging needs at least 50%"
             )
@@ -142,6 +149,8 @@ enum SleepStager {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
                 wakeMinutes: 0, unclassifiedMinutes: Double(end - start) / 60.0,
+                hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+                longestHRGapSeconds: longestMissingHRGap,
                 epochs: epochs.count, hrCoverage: coverage,
                 reason: "staging produced no labels"
             )
@@ -203,8 +212,21 @@ enum SleepStager {
         return SleepStaging(
             segments: segments, deepMinutes: deep, lightMinutes: light,
             remMinutes: rem, wakeMinutes: wake, unclassifiedMinutes: unclassified,
+            hrObservedSeconds: hrSeconds.count, hrWindowSeconds: hrWindowSeconds,
+            longestHRGapSeconds: longestMissingHRGap,
             epochs: epochs.count, hrCoverage: coverage, reason: nil
         )
+    }
+
+    private static func longestMissingGap(start: Int, end: Int, observed: [Int]) -> Int {
+        guard end > start else { return 0 }
+        var previous = start - 1
+        var longest = 0
+        for second in observed {
+            longest = max(longest, second - previous - 1)
+            previous = second
+        }
+        return max(longest, end - previous - 1)
     }
 
     // MARK: - Features
