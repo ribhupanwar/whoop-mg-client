@@ -223,7 +223,11 @@ struct SleepCoachView: View {
                     .font(.footnote)
                     .foregroundStyle(Color.appGood)
             }
-            Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")
+            Text(WakeAlarm.bandHapticStatus)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Color.appWarn)
+                .fixedSize(horizontal: false, vertical: true)
+            Hint("The current alarm schedules an iPhone notification only. A wrist alarm and Test Vibration will be enabled only after a verified band BLE haptic command and device test.")
         }
     }
 
