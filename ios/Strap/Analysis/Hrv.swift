@@ -221,7 +221,7 @@ enum Hrv {
         return "Validated quiet HRV available"
     }
 
-    /// HRV from the longest verified-quiet contiguous run, and its length.
+    /// HRV from the longest usable verified-quiet run, and its length.
     ///
     /// RMSSD is only interpretable at rest. Pooling a capture lets motion
     /// artefacts in a plausible R-R range inflate it, and the NN filter cannot
@@ -239,10 +239,13 @@ enum Hrv {
             }
             .sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
-        guard let longest = runs.max(by: { $0.count < $1.count }) else {
-            return (.empty, 0)
+        // A longer quiet run can contain no R-R data at all. Try each run in
+        // duration order instead of letting that run hide a valid measurement.
+        for run in runs.sorted(by: { $0.count > $1.count }) {
+            let result = fromSamples(run)
+            if result.rmssdMS != nil { return (result, run.count) }
         }
-        return (fromSamples(longest), longest.count)
+        return (.empty, 0)
     }
 
     /// Lowest sustained heart rate across a quiet window, in bpm.

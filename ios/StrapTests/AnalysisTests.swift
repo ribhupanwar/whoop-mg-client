@@ -201,6 +201,22 @@ final class RestingHrvTests: XCTestCase {
         XCTAssertEqual(result.result.meanRRMS!, 710.0, accuracy: 1e-6)
     }
 
+    func testLongerQuietWindowWithoutRRDoesNotHideUsableWindow() throws {
+        let rows = stretch(0, 900, hr: 60, accel: 0.01)
+            + stretch(1200, 300, hr: 60, accel: 0.01, rr: [990, 1010])
+        let result = Hrv.restingHRV(rows, minWindowS: 300)
+        XCTAssertEqual(result.windowSeconds, 300)
+        XCTAssertEqual(try XCTUnwrap(result.result.rmssdMS), 20, accuracy: 1e-9)
+    }
+
+    func testShortUsableWindowCannotBorrowDurationFromLongEmptyWindow() {
+        let rows = stretch(0, 900, hr: 60, accel: 0.01)
+            + stretch(1200, 120, hr: 60, accel: 0.01, rr: [990, 1010])
+        let result = Hrv.restingHRV(rows, minWindowS: 300)
+        XCTAssertEqual(result.windowSeconds, 0)
+        XCTAssertNil(result.result.rmssdMS)
+    }
+
     func testGapSplitsTheRun() {
         var rows = stretch(0, 100, hr: 70, accel: 0.01, rr: [800, 810])
         rows += stretch(500, 100, hr: 70, accel: 0.01, rr: [800, 810])
@@ -475,6 +491,14 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
+    func testMissingHoursDoNotJoinTwoShortQuietFragmentsIntoSleep() {
+        let rows = stretch(0, 600, hr: 100, accel: 0.5)
+            + stretch(600, 1800, hr: 60, accel: 0.02)
+            + stretch(12000, 1800, hr: 60, accel: 0.02)
+            + stretch(13800, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
     func testNoActiveSecondsMeansNoReference() {
         XCTAssertTrue(SleepDetect.detect(stretch(0, 3600, hr: 60, accel: 0.02)).isEmpty)
     }
@@ -735,5 +759,37 @@ final class RespirationTests: XCTestCase {
         let estimate = Respiration.estimate(stretch(0, 3, hr: 67, accel: 0.01, rr: [900]))
         XCTAssertFalse(estimate.available)
         XCTAssertEqual(estimate.beats, 3)
+    }
+}
+
+final class DailyMetricQualityTests: XCTestCase {
+    func testAwakeTrainingLoadDoesNotRequireDetectedSleepOrRR() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let rows = stretch(0, 600, hr: 60, accel: 0.01)
+            + stretch(600, 600, hr: 150, accel: 0.5)
+        let days = DailyAnalysis.metrics(from: rows, sex: .male, maxHR: 180, calendar: calendar)
+        let day = try XCTUnwrap(days.first)
+        XCTAssertNil(day.restingHR, "Daytime rest is not a nightly recovery measurement")
+        XCTAssertNil(day.lnRMSSD)
+        XCTAssertGreaterThan(try XCTUnwrap(day.strain), 0)
+    }
+
+    func testNightlyRestingHRSurvivesMissingRRAndIncompleteStaging() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += stretch(600, 1800, hr: 60, accel: 0.01)
+        rows += stretch(2520, 1800, hr: 60, accel: 0.01)
+        rows += stretch(4320, 600, hr: 100, accel: 0.5)
+        let day = try XCTUnwrap(DailyAnalysis.metrics(
+            from: rows, sex: .male, maxHR: 180, calendar: calendar
+        ).first)
+        XCTAssertEqual(day.state, "sleep")
+        XCTAssertEqual(try XCTUnwrap(day.restingHR), 60, accuracy: 1e-9)
+        XCTAssertNil(day.lnRMSSD)
+        XCTAssertEqual(day.hrvWindowSeconds, 0)
+        XCTAssertFalse(day.sleepDurationReliable ?? true)
+        XCTAssertNotNil(day.strain)
     }
 }

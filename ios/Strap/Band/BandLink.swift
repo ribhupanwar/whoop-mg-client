@@ -453,9 +453,15 @@ final class BandLink: NSObject, ObservableObject {
             return RecoveryResult(score: nil, reason: "Recalculating retained history",
                                   hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
         }
+        // Bind HRV/RHR to the displayed night, never the longest quiet run
+        // anywhere in the multi-day archive (which may be a different day).
+        let nightKey = latestSleepSession.map {
+            JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)))
+        }
+        let night = days.first { $0.dateKey == nightKey }
         return Recovery.score(
-            lnRMSSD: summary?.hrv.lnRMSSD,
-            rhr: summary?.restingHeartRate,
+            lnRMSSD: night?.lnRMSSD,
+            rhr: night?.restingHR,
             sleepHours: lastNightHours,
             sleepNeedHours: needHours,
             baseline: baseline

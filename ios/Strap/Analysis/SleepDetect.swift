@@ -47,7 +47,14 @@ enum SleepDetect {
                 continue
             }
             let start = index
-            while index < ordered.count && closed[index] { index += 1 }
+            while index < ordered.count && closed[index] {
+                // No samples means no evidence of quiet. A gap longer than
+                // the movement tolerance must split the candidate night.
+                if index > start && ordered[index].unix - ordered[index - 1].unix > gapToleranceS {
+                    break
+                }
+                index += 1
+            }
             let end = index
             let run = Array(ordered[start..<end])
             let duration = run[run.count - 1].unix - run[0].unix + 1

@@ -198,15 +198,14 @@ enum DailyAnalysis {
                         $0.wearing && (35...220).contains($0.heartRate)
                     }.map(\.unix)).count
                     guard validSeconds >= 300 else { return nil }
-                    let result = Hrv.restingHRV(segment)
+                    let result = Hrv.restingHRV(segment, minWindowS: 300)
                     let rhr = Hrv.restingHeartRate(segment, windowS: 300)
                     return (period: period, hrv: result.result,
                             window: result.windowSeconds, rhr: rhr)
                 }
-            // Use the median of validated sleep-session resting HR estimates.
-            // The absolute minimum is sensitive to a single anomalously low night segment.
-            let restingValues = sessions.compactMap(\.rhr).filter { $0.isFinite && $0 > 0 }
-            let resting = restingValues.isEmpty ? nil : Stats.median(restingValues)
+            // Use the primary (longest) sleep session, so a low-HR nap cannot
+            // change the overnight reference. RHR does not require R-R beats.
+            let resting = sessions.max { $0.period.durationS < $1.period.durationS }?.rhr
             let weightedHRV: Double? = {
                 let values = sessions.compactMap { session -> (Double, Double)? in
                     guard let rmssd = session.hrv.rmssdMS,
@@ -230,15 +229,18 @@ enum DailyAnalysis {
             let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
             let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
             let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
+            // Training load needs a measured resting reference, not sleep stages
+            // or R-R intervals. A verified five-minute daytime rest can supply it.
+            let strainResting = resting ?? Hrv.restingHeartRate(daySamples, windowS: 300)
             var strain: Double?
-            if let maxHR, let resting, maxHR > resting {
+            if let maxHR, let strainResting, maxHR > strainResting {
                 let awakeDaySamples = daySamples.filter { sample in
                     // Sleep assigned to the day it ends can begin yesterday.
                     // Exclude all overlapping sleep windows, not only today's.
                     !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
                 }
                 strain = Hrv.strainScore(
-                    Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: resting, sex: sex)
+                    Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: strainResting, sex: sex)
                 )
             }
             let steps = StepCounter.total(daySamples)
