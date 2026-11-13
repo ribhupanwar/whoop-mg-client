@@ -456,7 +456,7 @@ struct ChartLegend: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 23
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 21
     let icon: String
     let title: String
     let value: String
@@ -467,18 +467,18 @@ struct MetricRow: View {
     var trendFavourable: Bool? = nil
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 10) {
             Image(systemName: icon)
-                .font(.system(size: 17))
+                .font(.system(size: 15))
                 .foregroundStyle(Color.appMuted)
-                .frame(width: 22)
+                .frame(width: 20)
             Text(title.uppercased())
-                .font(.system(size: 12, weight: .semibold))
-                .tracking(0.7)
+                .font(.system(size: 10.5, weight: .semibold))
+                .tracking(0.6)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .lineLimit(2)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
             VStack(alignment: .trailing, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(value)
@@ -502,20 +502,22 @@ struct MetricRow: View {
                 }
                 if let detail {
                     Text(detail)
-                        .font(.system(size: 12))
+                        .font(.system(size: 10))
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: 160, alignment: .trailing)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .frame(maxWidth: 95, alignment: .trailing)
                 }
             }
             .layoutPriority(1)
         }
         .padding(.horizontal, AppLayout.cardInset)
-        .padding(.vertical, 16)
+        .frame(height: 58)
         .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
         .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
+        .accessibilityElement(children: .combine)
     }
 }
 

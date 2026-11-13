@@ -41,7 +41,7 @@ struct DashboardRows: View {
                 title: "Heart rate variability",
                 value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
                 unit: (demo || latestNightHRV != nil) ? "ms" : nil,
-                detail: demo ? "\(SampleData.hrvCompare) · sample" : hrvDetail,
+                detail: demo ? "\(SampleData.hrvCompare)" : compactComparison(hrvDetail),
                 detailColor: .appMuted,
                 trendUp: demo ? true : hrvTrendUp,
                 trendFavourable: demo ? true : hrvTrendUp
@@ -51,7 +51,7 @@ struct DashboardRows: View {
                 icon: "heart.fill",
                 title: "Resting heart rate",
                 value: demo ? String(format: "%.0f", SampleData.rhr) : rhrText,
-                detail: demo ? "\(SampleData.rhrCompare) · sample" : rhrDetail,
+                detail: demo ? "\(SampleData.rhrCompare)" : compactComparison(rhrDetail),
                 detailColor: .appMuted,
                 trendUp: demo ? true : rhrTrendUp,
                 trendFavourable: demo ? false : rhrTrendUp.map { !$0 }
@@ -61,7 +61,7 @@ struct DashboardRows: View {
                 icon: "figure.walk",
                 title: "Steps",
                 value: demo ? SampleData.steps.formatted() : stepsText,
-                detail: demo ? "▼ \(SampleData.stepsCompare.formatted()) · sample" : stepsDetail,
+                detail: demo ? SampleData.stepsCompare.formatted() : nil,
                 detailColor: demo ? .appWarn : .appMuted
             )
         case .zonesLow:
@@ -69,7 +69,7 @@ struct DashboardRows: View {
                 icon: "clock",
                 title: "HR zones 1–3 · weekly",
                 value: demo ? SampleData.zones13 : zoneText(high: false),
-                detail: demo ? "▲ \(SampleData.zones13Compare) · sample" : zoneDetail,
+                detail: demo ? SampleData.zones13Compare : nil,
                 detailColor: demo ? .appGood : .appMuted
             )
         case .zonesHigh:
@@ -77,12 +77,12 @@ struct DashboardRows: View {
                 icon: "bolt.fill",
                 title: "HR zones 4–5 · weekly",
                 value: demo ? SampleData.zones45 : zoneText(high: true),
-                detail: demo ? "▼ \(SampleData.zones45Compare) · sample" : zoneDetail,
+                detail: demo ? SampleData.zones45Compare : nil,
                 detailColor: demo ? .appWarn : .appMuted
             )
         case .strength:
             MetricRow(icon: "dumbbell", title: "Strength activity time",
-                      value: strengthText, detail: "today · self-reported duration", detailColor: .appMuted)
+                      value: strengthText, detail: nil, detailColor: .appMuted)
         case .vo2Max:
             vo2Block
         case .calories:
@@ -91,9 +91,7 @@ struct DashboardRows: View {
                 title: "Calories",
                 value: demo ? SampleData.calories.formatted() : caloriesValue,
                 unit: (demo == false && store.captureActiveKcal != nil) ? "kcal" : nil,
-                detail: demo
-                    ? "▼ \(SampleData.caloriesCompare.formatted()) · sample"
-                    : store.caloriesDetail,
+                detail: demo ? SampleData.caloriesCompare.formatted() : nil,
                 detailColor: demo ? .appWarn : .appMuted
             )
         case .stress:
@@ -120,6 +118,13 @@ struct DashboardRows: View {
             return "\(norm)"
         }
         return "overnight reading"
+    }
+
+    /// Compact dashboard uses numerical comparisons only; long provenance stays in detail views.
+    private func compactComparison(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.allSatisfy({ $0.isNumber || $0 == "." || $0 == "-" }) else { return nil }
+        return trimmed
     }
 
     private var hrvTrendUp: Bool? {
@@ -216,16 +221,16 @@ struct DashboardRows: View {
             } label: {
                 HStack(spacing: 11) {
                     Image(systemName: "drop.fill")
-                        .font(.system(size: 17))
+                        .font(.system(size: 15))
                         .foregroundStyle(Color.appMuted)
-                        .frame(width: 22)
+                        .frame(width: 20)
                     Text("VO₂ MAX")
-                        .font(.system(size: 11, weight: .medium))
-                        .tracking(0.7)
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .tracking(0.6)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? String(format: "%.1f", SampleData.vo2) : vo2Text)
-                        .font(.system(size: 23, weight: .semibold, design: .rounded))
+                        .font(.system(size: 21, weight: .semibold))
                         .monospacedDigit()
                         .foregroundStyle(Color.appFG)
                     Text("›")
@@ -233,18 +238,11 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, AppLayout.cardInset)
-                .padding(.vertical, 16)
+                .frame(height: 58)
                 .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
                 .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             .buttonStyle(.plain)
-
-            Text(demo ? "Uth 2004 · sample" : (store.vo2Basis ?? "needs a measured resting HR — Uth 2004 (15.3 × HRmax/HRrest)"))
-                .font(.system(size: 11))
-                .foregroundStyle(Color.appMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, AppLayout.cardInset)
-                .padding(.top, 4)
 
             if showVO2Detail {
                 Text(vo2Detail)
@@ -255,7 +253,7 @@ struct DashboardRows: View {
                     .padding(.top, 4)
             }
         }
-        .padding(.bottom, 8)
+        .padding(.bottom, 10)
     }
 
     // MARK: Stress monitor row
