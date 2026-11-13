@@ -340,6 +340,13 @@ final class ActivityStore {
         }
     }
 
+    func deleteLive(id: UUID) {
+        let items = liveActivities().filter { $0.id != id }
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: liveKey)
+        }
+    }
+
     func whoopWorkouts() -> [WhoopWorkout] {
         guard let data = defaults.data(forKey: whoopKey),
               let saved = try? JSONDecoder().decode([WhoopWorkout].self, from: data) else {

@@ -142,6 +142,17 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertTrue(store.manualActivities().isEmpty, "a measured session must not look self-reported")
     }
 
+    func testLiveSessionsCanBeDeletedPersistently() {
+        let record = LiveActivityRecord(
+            dateKey: "2026-11-10", startedUnix: 1_700_000_000,
+            endedUnix: 1_700_000_600, meanHR: 120, maxHR: 145, beats: 70,
+            hrv: .empty, zoneSeconds: [30, 120, 100, 30, 0]
+        )
+        store.saveLive(record)
+        store.deleteLive(id: record.id)
+        XCTAssertTrue(store.liveActivities().isEmpty)
+    }
+
     // MARK: Band-detected sessions
 
     private func session(start: Int, end: Int, steps: Int = 500) -> ActivitySession {
@@ -224,6 +235,13 @@ final class StepDrivenDetectTests: XCTestCase {
 
     func testStaleGaitAndOneStepDoesNotCreateActivity() {
         let samples = (0..<360).map { sample($0, hr: 75, steps: 1, gait: 1) }
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+    }
+
+    func testOneStepTransientDoesNotCreateActivity() {
+        let samples = (0..<360).map { index in
+            sample(index, hr: 75, steps: index < 180 ? 0 : 1, gait: 1)
+        }
         XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
     }
 

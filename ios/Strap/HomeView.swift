@@ -542,15 +542,33 @@ struct HomeView: View {
                                 } label: {
                                     Label("Delete activity", systemImage: "trash")
                                 }
+                            } else if row.id.hasPrefix("live-"),
+                                      let id = UUID(uuidString: String(row.id.dropFirst("live-".count))) {
+                                Button(role: .destructive) {
+                                    store.deleteLiveActivity(id: id)
+                                } label: {
+                                    Label("Delete activity", systemImage: "trash")
+                                }
                             }
                         }
                         .contentShape(Rectangle())
+                        .accessibilityHint("Long press to delete this activity")
 
                     }
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            .contextMenu {
+                                if let id = UUID(uuidString: String(row.id.dropFirst("manual-".count))) {
+                                    Button(role: .destructive) {
+                                        store.deleteActivity(id: id)
+                                    } label: {
+                                        Label("Delete activity", systemImage: "trash")
+                                    }
+                                }
+                            }
+                            .accessibilityHint("Long press to delete this activity")
                     }
                     if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")

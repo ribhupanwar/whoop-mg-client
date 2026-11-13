@@ -139,6 +139,11 @@ final class AppStore: ObservableObject {
         manualActivities = activities.manualActivities()
     }
 
+    func deleteLiveActivity(id: UUID) {
+        activities.deleteLive(id: id)
+        liveActivities = activities.liveActivities()
+    }
+
     func addLiveSession(_ record: LiveActivityRecord) {
         activities.saveLive(record)
         liveActivities = activities.liveActivities()
