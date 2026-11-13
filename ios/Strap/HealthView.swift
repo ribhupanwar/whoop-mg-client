@@ -113,7 +113,7 @@ struct HealthView: View {
                 if let staging = capture.sleepStaging,
                    let observed = staging.hrObservedSeconds,
                    let window = staging.hrWindowSeconds, window > 0 {
-                    let longestGap = CoachFormat.duration(Double(staging.longestHRGapSeconds ?? 0) / 60.0)
+                    let longestGap = CoachFormat.duration(Double(staging.longestHRGapSeconds ?? 0) / 3600.0)
                     Text("Latest sleep HR: \(observed)/\(window)s · longest gap \(longestGap)")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.appMuted)
