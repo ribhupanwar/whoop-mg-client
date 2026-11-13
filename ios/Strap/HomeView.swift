@@ -520,7 +520,7 @@ struct HomeView: View {
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            activityCard(row)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -587,6 +587,8 @@ struct HomeView: View {
         let name: String
         let detail: String
         let startUnix: Int?
+        let endUnix: Int?
+        let metricLabel: String?
     }
 
     private var timedRows: [ActivityRowModel] {
@@ -618,8 +620,10 @@ struct HomeView: View {
                 id: key,
                 icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(steps)\(heart)\(kcal)",
-                startUnix: session.startUnix
+                detail: "\(minutes) min\(steps)\(heart)\(kcal)",
+                startUnix: session.startUnix,
+                endUnix: session.endUnix,
+                metricLabel: "\(minutes)m"
             )
         }
     }
@@ -633,8 +637,10 @@ struct HomeView: View {
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
-                startUnix: record.startedUnix
+                detail: "\(minutes) min\(heart)\(kcal)",
+                startUnix: record.startedUnix,
+                endUnix: record.endedUnix,
+                metricLabel: "\(minutes)m"
             )
         }
     }
@@ -646,7 +652,9 @@ struct HomeView: View {
                 icon: activity.kind.icon,
                 name: "\(activity.name) · logged",
                 detail: activity.summary,
-                startUnix: nil
+                startUnix: nil,
+                endUnix: nil,
+                metricLabel: nil
             )
         }
     }
@@ -678,6 +686,57 @@ struct HomeView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
+    }
+
+    private func activityCard(_ row: ActivityRowModel) -> some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: row.icon)
+                    .font(.system(size: 19, weight: .medium))
+                Text(row.metricLabel ?? "—")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .monospacedDigit()
+            }
+            .foregroundStyle(Color.white)
+            .frame(width: 88, height: 54)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appAccent))
+
+            Text(row.name.replacingOccurrences(of: " · band", with: "").uppercased())
+                .font(.system(size: 12, weight: .semibold))
+                .tracking(0.5)
+                .foregroundStyle(Color.appFG)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+
+            Spacer(minLength: 4)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                Text(row.startUnix.map(Self.clockTime) ?? "—")
+                Text(row.endUnix.map(Self.clockTime) ?? "")
+            }
+            .font(.system(size: 11, weight: .medium))
+            .monospacedDigit()
+            .foregroundStyle(Color.appMuted)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 15).fill(Color.appRaised))
+        .overlay(alignment: .bottomLeading) {
+            Text(row.detail)
+                .font(.system(size: 9))
+                .foregroundStyle(Color.appMuted)
+                .lineLimit(1)
+                .padding(.leading, 108)
+                .padding(.bottom, 2)
+                .hidden()
+        }
+    }
+
+    private static func clockTime(_ unix: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
