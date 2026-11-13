@@ -42,20 +42,39 @@ struct SettingsView: View {
                 if url.pathExtension.lowercased() == "zip" {
                     let archive = try Archive(url: url, accessMode: .read)
                     var importedDays = 0
+                    let maxArchiveBytes: UInt64 = 100_000_000
+                    let maxCSVBytes: UInt64 = 50_000_000
+                    var totalCSVBytes: UInt64 = 0
+                    var csvEntries = 0
                     var supplementalCounts: [String] = []
                     var recognizedFiles: [String] = []
                     var failures: [String] = []
                     for entry in archive where entry.type == .file {
                         let name = (entry.path as NSString).lastPathComponent.lowercased()
                         guard name.hasSuffix(".csv") else { continue }
-                        // ZIPFoundation extracts to memory: no archive paths are written.
-                        if entry.uncompressedSize > 50_000_000 {
+                        // Bound cumulative extraction before allocating any CSV buffers.
+                        csvEntries += 1
+                        if csvEntries > 1000 {
+                            failures.append("Archive has too many CSV files (limit 1000)")
+                            break
+                        }
+                        if entry.uncompressedSize > maxCSVBytes {
                             failures.append("\(name): exceeds 50 MB limit")
                             continue
                         }
+                        guard totalCSVBytes <= maxArchiveBytes - entry.uncompressedSize else {
+                            failures.append("Archive exceeds 100 MB cumulative CSV limit")
+                            break
+                        }
+                        totalCSVBytes += entry.uncompressedSize
                         do {
                             var data = Data()
-                            _ = try archive.extract(entry) { chunk in data.append(chunk) }
+                            _ = try archive.extract(entry) { chunk in
+                                guard data.count <= Int(maxCSVBytes) - chunk.count else {
+                                    throw WhoopImportSafetyError.extractionLimit
+                                }
+                                data.append(chunk)
+                            }
                             recognizedFiles.append(name)
                             if name.contains("physiological") || name.contains("cycle") {
                                 let rows = try WhoopCSVImport.parse(data)
@@ -79,6 +98,10 @@ struct SettingsView: View {
                         "Not imported: " + failures.joined(separator: "; ")
                     whoopImportStatus = "ZIP: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days · \(supplementalCounts.joined(separator: ", ")). \(outcome) Supplemental rows are stored locally; activity/Recovery mapping pending."
                 } else {
+                    let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
+                    guard (attrs[.size] as? NSNumber)?.uint64Value ?? UInt64.max <= 50_000_000 else {
+                        throw WhoopImportSafetyError.extractionLimit
+                    }
                     let data = try Data(contentsOf: url)
                     let name = url.lastPathComponent.lowercased()
                     let category: String? = name.contains("journal") ? "journal_entries" :
@@ -600,4 +623,8 @@ struct SettingsView: View {
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
+}
+private enum WhoopImportSafetyError: LocalizedError {
+    case extractionLimit
+    var errorDescription: String? { "WHOOP import exceeds the safe 50 MB per-file limit." }
 }

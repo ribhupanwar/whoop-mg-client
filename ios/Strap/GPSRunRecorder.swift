@@ -104,14 +104,20 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
                                 accuracyMeters: $0.horizontalAccuracy)
                 }
             )
-            history.save(record)
+            guard history.save(record) else {
+                status = "Run finished, but saving failed. Keep the app open and check device storage."
+                return
+            }
             savedRuns = history.all()
         }
         status = String(format: "Finished · %.2f km · %d seconds", distanceMeters / 1000, elapsedSeconds)
     }
 
     func deleteRun(id: UUID) {
-        history.delete(id: id)
+        guard history.delete(id: id) else {
+            status = "Could not delete saved run. Please try again."
+            return
+        }
         savedRuns = history.all()
     }
 

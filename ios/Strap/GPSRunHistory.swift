@@ -70,15 +70,17 @@ final class GPSRunHistory {
         }
     }
 
-    func save(_ record: GPSRunRecord) {
+    @discardableResult
+    func save(_ record: GPSRunRecord) -> Bool {
         var runs = all()
         if let index = runs.firstIndex(where: { $0.id == record.id }) {
             runs[index] = record
         } else { runs.append(record) }
-        _ = persist(runs)
+        return persist(runs)
     }
 
-    func delete(id: UUID) {
-        _ = persist(all().filter { $0.id != id })
+    @discardableResult
+    func delete(id: UUID) -> Bool {
+        return persist(all().filter { $0.id != id })
     }
 }
