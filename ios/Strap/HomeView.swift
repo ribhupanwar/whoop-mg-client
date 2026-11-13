@@ -24,7 +24,9 @@ struct HomeView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 0) {
+            // Avoid eagerly evaluating the full dashboard and all of its
+            // computed metric cards on every BLE-published SwiftUI update.
+            LazyVStack(alignment: .leading, spacing: 0) {
                 topBar
                 titleBlock
                 ringTrio
