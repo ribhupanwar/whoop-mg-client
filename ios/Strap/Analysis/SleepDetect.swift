@@ -92,34 +92,15 @@ enum SleepDetect {
             // hours and lower HR. Do not label pre-22:00 stillness as sleep
             // unless the band positively reports sustained sleep evidence.
             // This conservative gate may leave early bedtimes unclassified.
-            if (18..<22).contains(startHour) {
-                // Positive sleep states appearing hours after the quiet
-                // window begins do NOT validate its original onset.
-                let onsetEnd = run[0].unix + 15 * 60
-                let onsetStates = run.filter {
-                    $0.unix <= onsetEnd && $0.sleepState != nil
-                }
-                let onsetSleep = onsetStates.filter { $0.sleepState == 2 }.count
-                guard declaredSleepRows >= 300,
-                      declaredSleepRows * 5 >= max(1, stateRows.count),
-                      onsetStates.count >= 120,
-                      onsetSleep * 2 >= onsetStates.count else {
-                    continue
-                }
-            }
-            // Do not let a single long, motionless recording swallow an
-            // entire day of HR. A candidate needs positive sleep evidence
-            // throughout its span when band states are available. In
-            // particular, reject periods with a sustained waking onset.
-            // Missing states are not silently interpreted as sleep.
-            if stateRows.count >= 300 {
-                let positiveFraction = Double(declaredSleepRows) / Double(stateRows.count)
-                if positiveFraction < 0.20 { continue }
-                let firstWindow = run.filter { $0.unix < run[0].unix + 30 * 60 }
-                let earlyKnown = firstWindow.filter { $0.sleepState != nil }
-                if earlyKnown.count >= 120 {
-                    let earlySleep = earlyKnown.filter { $0.sleepState == 2 }.count
-                    if earlySleep * 5 < earlyKnown.count { continue }
+            // A long pre-bed quiet period can precede true sleep. Do not
+            // discard the whole overnight window when onset is ambiguous;
+            // trim the false early onset to the first sustained band sleep
+            // declaration instead. Keep the rest of the night available.
+            var verifiedStart = run[0].unix
+            if (18..<22).contains(startHour) && stateRows.count >= 300 {
+                let sleepRows = run.filter { $0.sleepState == 2 }
+                if let first = sleepRows.first, first.unix > verifiedStart {
+                    verifiedStart = first.unix
                 }
             }
             // If the signal is a constant zero/default, abstain entirely.
@@ -142,7 +123,7 @@ enum SleepDetect {
             }
             periods.append(
                 SleepPeriod(
-                    startUnix: run[0].unix,
+                    startUnix: verifiedStart,
                     endUnix: run[run.count - 1].unix,
                     quietFraction: Double(quietSeconds) / Double(run.count),
                     meanHR: Stats.mean(runHRs),
