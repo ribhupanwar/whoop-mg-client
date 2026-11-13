@@ -82,10 +82,14 @@ struct SleepAnalysisView: View {
     private func saveSleepCorrection() {
         guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart else { return }
         var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        corrections[String(period.startUnix)] = [
+        let times = [
             Int(correctedSleepStart.timeIntervalSince1970),
             Int(correctedSleepEnd.timeIntervalSince1970)
         ]
+        // Wake-day identity survives detector onset changes after a refresh.
+        corrections[SleepCorrectionStore.key(for: period)] = times
+        // Keep the old start-time entry for builds that still read legacy keys.
+        corrections[String(period.startUnix)] = times
         UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
         store.band.notifySleepCorrectionChanged()
         showSleepEditor = false
@@ -188,7 +192,7 @@ struct SleepAnalysisView: View {
     // detector's independent quiet-fraction estimate.
     private var reconciledStaging: SleepStaging? {
         guard let staging, staging.stageable else { return nil }
-        let total = staging.asleepMinutes + staging.wakeMinutes
+        let total = staging.totalMinutes
         guard total > 0, let period = editablePeriod else { return nil }
         let periodMinutes = editedSleepWindowHours.map { $0 * 60.0 } ?? Double(period.durationS) / 60.0
         guard abs(total - periodMinutes) <= 2.0 else { return nil }
@@ -201,7 +205,7 @@ struct SleepAnalysisView: View {
     private var editedSleepWindowHours: Double? {
         guard let period = editablePeriod else { return nil }
         let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        guard let times = corrections[String(period.startUnix)],
+        guard let times = SleepCorrectionStore.times(for: period, overrides: corrections),
               times.count == 2, times[1] > times[0] else { return nil }
         return Double(times[1] - times[0]) / 3600.0
     }
@@ -246,7 +250,7 @@ struct SleepAnalysisView: View {
     private func openSleepEditor() {
         guard let period = editablePeriod else { return }
         let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        let times = corrections[String(period.startUnix)]
+        let times = SleepCorrectionStore.times(for: period, overrides: corrections)
         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? period.startUnix))
         correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? period.endUnix))
         showSleepEditor = true
@@ -440,7 +444,10 @@ struct SleepAnalysisView: View {
                 }
                 Hint("Window \(clock(staging.segments.first?.startUnix ?? 0))–\(clock((staging.segments.last?.endUnix ?? 1) - 1)). 30-second epochs from on-wrist HR, its variability, movement and R-R breathing regularity, smoothed with an HMM. An approximation, not PSG-validated — \(staging.epochs) epochs scored, \(Int((staging.hrCoverage * 100).rounded()))% HR coverage. Treat the shape as a hint, not a clinical reading.")
             } else if let staging, let reason = staging.reason {
-                EmptyState(title: "Stages unavailable", detail: reason)
+                let detail = staging.unclassifiedMinutes.map {
+                    "\(reason). \(CoachFormat.duration($0 / 60.0)) of this window remains unclassified."
+                } ?? reason
+                EmptyState(title: "Stages unavailable", detail: detail)
             } else if editedSleepWindowHours != nil {
                 EmptyState(
                     title: "Recalculating corrected sleep",
@@ -472,7 +479,8 @@ struct SleepAnalysisView: View {
             .deep: staging.deepMinutes,
             .light: staging.lightMinutes,
             .rem: staging.remMinutes,
-            .wake: staging.wakeMinutes
+            .wake: staging.wakeMinutes,
+            .unclassified: staging.unclassifiedMinutes ?? 0
         ]
     }
 
@@ -482,7 +490,7 @@ struct SleepAnalysisView: View {
 
     private func splitSegments(_ minutes: [SleepStage: Double]) -> [SplitBar.Segment] {
         let total = max(1, minutes.values.reduce(0, +))
-        return [SleepStage.wake, .light, .deep, .rem].map { stage in
+        return [SleepStage.wake, .light, .deep, .rem, .unclassified].map { stage in
             SplitBar.Segment(
                 fraction: (minutes[stage] ?? 0) / total,
                 color: stage.color
@@ -503,7 +511,7 @@ struct SleepAnalysisView: View {
                 Text(CoachFormat.duration(total / 60.0))
                     .font(.system(size: 16, weight: .semibold))
             }
-            ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
+            ForEach([SleepStage.wake, .light, .deep, .rem, .unclassified]) { stage in
                 let value = minutes[stage] ?? 0
                 let fraction = min(1.0, max(0.0, value / total))
                 VStack(alignment: .leading, spacing: 7) {
@@ -852,6 +860,7 @@ private extension SleepStage {
         case .light: return Color(red: 0.65, green: 0.61, blue: 0.92)
         case .deep: return Color(red: 0.93, green: 0.39, blue: 0.86)
         case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
+        case .unclassified: return Color.appMuted
         }
     }
 }
@@ -863,7 +872,7 @@ private struct StageHypnogram: View {
     let startUnix: Int
     let endUnix: Int
 
-    private let rows: [SleepStage] = [.wake, .rem, .light, .deep]
+    private let rows: [SleepStage] = [.wake, .rem, .light, .deep, .unclassified]
     private let rowHeight: CGFloat = 18
     private let barHeight: CGFloat = 7
 
