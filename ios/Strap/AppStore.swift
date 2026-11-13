@@ -45,6 +45,11 @@ final class AppStore: ObservableObject {
         self.manualActivities = activities.manualActivities()
         self.liveActivities = activities.liveActivities()
         self.detectedBandActivities = activities.detectedActivities()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--design-preview") {
+            self.settings.designPreview = true
+        }
+        #endif
         band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
         bandCancellable = band.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()

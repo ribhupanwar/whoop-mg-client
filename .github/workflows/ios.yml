@@ -63,6 +63,31 @@ jobs:
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
+      - name: Render native design previews
+        run: |
+          set -euo pipefail
+          SIM_ID=$(xcrun simctl list devices booted --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next(v["udid"] for values in d.values() for v in values if v.get("state")=="Booted"))')
+          xcrun simctl install "$SIM_ID" build/Build/Products/Debug-iphonesimulator/Strap.app
+          mkdir -p "$RUNNER_TEMP/ui-previews"
+          for screen in home sleep recovery strain health train plan more; do
+            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview "--preview-$screen"
+            sleep 3
+            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/$screen.png"
+          done
+          for metric in recovery hrv rhr respiration sleepPerformance strain zonesLow zonesHigh steps calories strength; do
+            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview --preview-recovery "--preview-chart=$metric"
+            sleep 3
+            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/chart-$metric.png"
+          done
+
+      - name: Upload native UI previews
+        uses: actions/upload-artifact@v4
+        with:
+          name: Strap-native-UI-previews
+          path: ${{ runner.temp }}/ui-previews/*.png
+
       - name: Archive and package SideStore-ready ad-hoc signed IPA
         run: |
           set -uo pipefail

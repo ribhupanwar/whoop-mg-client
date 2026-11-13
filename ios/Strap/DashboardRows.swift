@@ -80,6 +80,9 @@ struct DashboardRows: View {
                 detail: demo ? "▼ \(SampleData.zones45Compare) · sample" : zoneDetail,
                 detailColor: demo ? .appWarn : .appMuted
             )
+        case .strength:
+            MetricRow(icon: "dumbbell", title: "Strength activity time",
+                      value: strengthText, detail: "today · self-reported duration", detailColor: .appMuted)
         case .vo2Max:
             vo2Block
         case .calories:
@@ -170,6 +173,14 @@ struct DashboardRows: View {
         let hasZones = !store.liveActivities.isEmpty
             && store.liveActivities.contains { !$0.zoneSeconds.isEmpty }
         return hasZones ? "last 7 days · measured sessions" : "run a live session"
+    }
+
+    private var strengthText: String {
+        if demo { return "0:40" }
+        let key = JournalStore.dayKey(for: Date())
+        let logs = store.manualActivities(on: key).filter { $0.kind.usesSets }
+        guard !logs.isEmpty, logs.allSatisfy({ $0.minutes > 0 }) else { return "—" }
+        return ActivityFormat.clock(minutes: logs.reduce(0.0) { $0 + Double($1.minutes) })
     }
 
     private var vo2Text: String {
@@ -270,14 +281,12 @@ struct DashboardRows: View {
                         .tracking(0.5)
                         .foregroundStyle(demo ? Color.appAccent : Color.appFG)
                 }
-                LineChart(
-                    values: demo ? SampleData.stressMiniSeries : [],
-                    color: .appAccent,
-                    minY: 0,
-                    maxY: 3,
-                    height: 46,
-                    yLabels: ["3.0", "0.0"]
-                )
+                if demo {
+                    LineChart(values: SampleData.stressMiniSeries, color: .appAccent, minY: 0, maxY: 3,
+                              height: 150, yLabels: ["3.0", "2.0", "1.0", "0.0"])
+                } else {
+                    RecordedStressChart(points: summary?.stressSeries ?? [])
+                }
             }
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 13).fill(Color.appSurface))

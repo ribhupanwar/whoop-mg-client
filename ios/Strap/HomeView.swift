@@ -7,6 +7,7 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     let openPlan: () -> Void
 
+    @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var showLiveSession = false
@@ -26,17 +27,42 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                topBar
-                titleBlock
+                Text("STRAP")
+                    .font(.system(size: 22, weight: .light)).tracking(4)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
                 ringTrio
-                dashboardSection
-                insightCard
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: HomeHeroPosition.self,
+                            value: geometry.frame(in: .named("home-scroll")).maxY)
+                    })
                 monitorDuo
                 myDayOutlook
-                activitiesCard
                 tonightCard
+                activitiesCard
                 journalCard
+                planCard
+                dashboardSection
+                CombinedLoadChart()
+                discoverSection
             }
+        }
+        .coordinateSpace(name: "home-scroll")
+        .onPreferenceChange(HomeHeroPosition.self) { value in
+            if !compactScores && value < 0 { compactScores = true }
+            else if compactScores && value > 80 { compactScores = false }
+        }
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                topBar
+                if dayOffset != 0 {
+                    Text("Activity history · scores show the latest recorded day")
+                        .font(.system(size: 9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
+                }
+                if compactScores { compactRingRow }
+            }
+            .padding(.horizontal, AppLayout.screenInset)
+            .padding(.top, 8)
+            .background(Color.appCanvasTop.opacity(0.98))
         }
         .refreshable {
             if store.band.isConnected {
@@ -119,13 +145,18 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle().strokeBorder(Color.appMuted, lineWidth: 1.5)
-                Image(systemName: "person.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.appMuted)
-            }
-            .frame(width: 30, height: 30)
+            NavigationLink(value: Route.settings) {
+                Image(systemName: "person.fill").font(.system(size: 17))
+                    .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
+                    .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
+            }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
+            HStack(spacing: 4) {
+                Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                Text("\(store.recordedDayCount)").font(.system(size: 11, weight: .bold))
+            }.padding(.horizontal, 8).padding(.vertical, 7)
+                .background(Color.appSurface, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("\(store.recordedDayCount) recorded days")
 
             Spacer()
 
@@ -168,12 +199,6 @@ struct HomeView: View {
                     .foregroundStyle(batteryColor)
             }
 
-            NavigationLink(value: Route.settings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color.appMuted)
-                    .frame(width: 32, height: 32)
-            }
         }
         .padding(.bottom, 10)
     }
@@ -210,7 +235,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: recoveryScore.map { $0 >= 67 ? Color.appGood : ($0 >= 34 ? Color.appWarn : Color.appHigh) } ?? .appMuted
+                    color: DetailMetric.recovery.color(recoveryScore)
                     )
                 }
                 .buttonStyle(.plain)
@@ -224,14 +249,9 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if !demo {
-                Hint(trioHint)
-            }
+            if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
-        .padding(AppLayout.cardInset)
-        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine, lineWidth: 1))
-        .padding(.bottom, AppLayout.cardSpacing)
+        .padding(.bottom, 20)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -251,10 +271,8 @@ struct HomeView: View {
     }
 
     private var sleepPercent: Int? {
-        guard let hours = store.band.lastNightHours else { return nil }
-        let need = store.settings.sleepNeedHours
-        guard need > 0 else { return nil }
-        return Int((min(hours / need, 1.0) * 100).rounded())
+        guard let score = store.band.lastSleepAnalysis?.performancePct, score.isFinite else { return nil }
+        return Int(min(100, max(0, score)).rounded())
     }
 
     private var recoveryScore: Double? { store.band.recovery.score }
@@ -296,7 +314,7 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
         VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 8, size: 96, centerText: text)
+            RingView(progress: progress, color: color, lineWidth: 6, size: 82, centerText: text)
             Text(label)
                 .font(.system(size: 10.5, weight: .medium))
                 .tracking(0.9)
@@ -466,15 +484,21 @@ struct HomeView: View {
 
     private var myDayOutlook: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("My Day")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(Color.appFG)
+            HStack {
+                Text("My Day").font(.system(size: 23, weight: .semibold)).foregroundStyle(Color.appFG)
+                Spacer()
+                Button { showLogger = true } label: {
+                    Image(systemName: "plus").font(.system(size: 21, weight: .medium))
+                        .foregroundStyle(Color.appBG).frame(width: 36, height: 36)
+                        .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
+                }.buttonStyle(.plain).accessibilityLabel("Add activity")
+            }
             Button(action: openPlan) {
                 HStack(spacing: 10) {
-                    Image(systemName: "sun.max")
+                    Image(systemName: "moon")
                         .font(.system(size: 16))
                         .foregroundStyle(Color.appWarn)
-                    Text("Your Daily Outlook")
+                    Text("Your Day in Review")
                         .font(.system(size: 13))
                         .foregroundStyle(Color.appFG)
                     Spacer()
@@ -483,7 +507,7 @@ struct HomeView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color.appRaised, Color.appSurface], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color(hex: 0x392F59), Color(hex: 0x214856)], startPoint: .leading, endPoint: .trailing)
                 )
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -712,22 +736,17 @@ struct HomeView: View {
     }
 
     private func activityRow(icon: String, name: String, detail: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(Color.appMuted)
-                .frame(width: 20)
-            Text(name)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.appFG)
-            Spacer()
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.appMuted)
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(.system(size: 25, weight: .medium))
+                .foregroundStyle(Color.appFG).frame(width: 64, height: 48)
+                .background(Color.appAccent, in: RoundedRectangle(cornerRadius: 9))
+            Text(name.uppercased()).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.appFG)
+            Spacer(minLength: 8)
+            Text(detail).font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
+                .multilineTextAlignment(.trailing).frame(maxWidth: 140)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -789,6 +808,15 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
+            NavigationLink(value: Route.sleepCoach) {
+                Label("EDIT ALARM", systemImage: "pencil")
+                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
+            }.buttonStyle(.plain).padding(.top, 14)
+            Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
             Hint("Bedtime is worked back from your wake time, sleep need, tomorrow's intent and accumulated sleep debt. Open the coach to change the wake time or intent; debt starts counting from your first recorded night.")
         }
     }
@@ -854,6 +882,27 @@ struct HomeView: View {
             }
             .padding(.bottom, 9)
 
+            HStack(spacing: 0) {
+                ForEach(0..<7) { offset in
+                    let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) ?? Date()
+                    let key = JournalStore.dayKey(for: date)
+                    NavigationLink(value: Route.journal) {
+                        VStack(spacing: 9) {
+                            Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                                .font(.system(size: 9, weight: .semibold))
+                            Image(systemName: store.journalEntries[key] == nil ? "circle" : "checkmark.circle.fill")
+                                .font(.system(size: 20, weight: .light))
+                        }.foregroundStyle(store.journalEntries[key] == nil ? Color.appMuted : Color.appGood)
+                            .frame(maxWidth: .infinity)
+                    }.buttonStyle(.plain)
+                }
+            }.padding(.vertical, 14)
+            NavigationLink(value: Route.journal) {
+                Label("BEHAVIOR INSIGHTS", systemImage: "lightbulb")
+                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
+            }.buttonStyle(.plain)
             Text(journalStateText)
                 .font(.system(size: 11))
                 .foregroundStyle(Color.appMuted)
@@ -906,6 +955,67 @@ struct HomeView: View {
         }
     }
 
+    private var compactRingRow: some View {
+        HStack(spacing: 16) {
+            compactRing("SLEEP", route: .sleepAnalysis, progress: sleepPercent.map { Double($0) / 100 }, color: .appSleep)
+            compactRing("RECOVERY", route: .recovery, progress: recoveryScore.map { $0 / 100 }, color: DetailMetric.recovery.color(recoveryScore))
+            compactRing("STRAIN", route: .strain, progress: strain.map { $0 / 21 }, color: .appAccent)
+        }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
+        NavigationLink(value: route) {
+            HStack(spacing: 6) {
+                RingView(progress: progress, color: color, lineWidth: 2, size: 20, centerText: "")
+                Text(title).font(.system(size: 9, weight: .bold)).tracking(0.5)
+            }.foregroundStyle(Color.appFG)
+        }.buttonStyle(.plain)
+    }
+
+    private var planCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("My Plan").font(.system(size: 23, weight: .semibold))
+            Button(action: openPlan) {
+                Panel {
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Build Your Best Self").font(.system(size: 17, weight: .semibold))
+                            Text("Set goals, track progress, and build a consistent routine.").font(.system(size: 12)).foregroundStyle(Color.appMuted)
+                            Label("EXPLORE PLANS", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
+                        }
+                        Image(systemName: "figure.strengthtraining.traditional").font(.system(size: 52, weight: .light)).foregroundStyle(Color.appGood)
+                    }.foregroundStyle(Color.appFG)
+                }
+            }.buttonStyle(.plain)
+        }.padding(.top, 10)
+    }
+
+    private var discoverSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Discover More").font(.system(size: 23, weight: .semibold))
+            NavigationLink(value: Route.health) {
+                Panel { discoveryRow("Understand your health", detail: "Explore recorded measurements and their quality.", icon: "heart.text.square") }
+            }.buttonStyle(.plain)
+            NavigationLink(value: Route.settings) {
+                Panel { discoveryRow("Your band & data", detail: "Manage history sync, your profile and recorded sources.", icon: "applewatch") }
+            }.buttonStyle(.plain)
+            NavigationLink(value: Route.sleepAnalysis) {
+                Panel { discoveryRow("Explore your sleep data", detail: "Review a night and export its recorded sensor channels.", icon: "moon.stars") }
+            }.buttonStyle(.plain)
+        }.padding(.top, 12)
+    }
+
+    private func discoveryRow(_ title: String, detail: String, icon: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon).font(.system(size: 36, weight: .light)).foregroundStyle(Color.appAccent).frame(width: 54)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Color.appFG)
+                Text(detail).font(.system(size: 12)).foregroundStyle(Color.appMuted)
+                Label("EXPLORE", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
+            }
+        }
+    }
+
     // MARK: Day navigation helpers
 
     private var shiftedDate: Date {
@@ -938,4 +1048,9 @@ struct HomeView: View {
         formatter.dateFormat = "EEEE d MMMM"
         return formatter
     }()
+}
+
+private struct HomeHeroPosition: PreferenceKey {
+    static var defaultValue: CGFloat = 200
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }

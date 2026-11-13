@@ -13,27 +13,28 @@ extension Color {
         )
     }
 
-    static let appBG = Color(red: 0.018, green: 0.035, blue: 0.065)
-    static let appSurface = Color(red: 0.035, green: 0.075, blue: 0.12)
-    static let appRaised = Color(red: 0.08, green: 0.16, blue: 0.23)
+    static let appCanvasTop = Color(hex: 0x243138)
+    static let appBG = Color(hex: 0x11191D)
+    static let appSurface = Color(hex: 0x2B3135)
+    static let appRaised = Color(hex: 0x3D4448)
     static let appFG = Color(hex: 0xEEF1F5)
-    static let appMuted = Color(red: 0.57, green: 0.68, blue: 0.77)
-    static let appLine = Color(red: 0.12, green: 0.31, blue: 0.43).opacity(0.62)
-    static let appAccent = Color(red: 0.12, green: 0.78, blue: 0.88)
+    static let appMuted = Color(hex: 0x9BA4AA)
+    static let appLine = Color(hex: 0x596166).opacity(0.45)
+    static let appAccent = Color(hex: 0x009FEE)
     static let appCustomizeStart = Color(red: 0.93, green: 0.39, blue: 0.86)
     static let appCustomizeEnd = Color(red: 0.65, green: 0.28, blue: 0.87)
     static let appGood = Color(hex: 0x4ADE80)
     static let appWarn = Color(hex: 0xE0A33A)
     static let appHigh = Color(hex: 0xFF6B5E)
-    static let appSleep = Color(hex: 0x9DB4CC)
+    static let appSleep = Color(hex: 0x86AABE)
     static let appGoodChipBG = Color(hex: 0x16261B)
     static let appDemoFlagBG = Color(hex: 0x2A2114)
 }
 /// Shared geometry keeps cards and metric rows aligned across tabs.
 enum AppLayout {
-    static let screenInset: CGFloat = 18
+    static let screenInset: CGFloat = 14
     static let cardInset: CGFloat = 16
-    static let cardRadius: CGFloat = 22
+    static let cardRadius: CGFloat = 16
     static let cardSpacing: CGFloat = 14
-    static let metricRadius: CGFloat = 16
+    static let metricRadius: CGFloat = 14
 }

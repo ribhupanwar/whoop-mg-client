@@ -27,6 +27,7 @@ enum DashboardRow: String, Codable, CaseIterable, Identifiable {
     case steps
     case zonesLow
     case zonesHigh
+    case strength
     case vo2Max
     case calories
     case stress
@@ -40,6 +41,7 @@ enum DashboardRow: String, Codable, CaseIterable, Identifiable {
         case .steps: return "Steps"
         case .zonesLow: return "HR zones 1–3 · weekly"
         case .zonesHigh: return "HR zones 4–5 · weekly"
+        case .strength: return "Strength activity time"
         case .vo2Max: return "VO₂ max"
         case .calories: return "Calories"
         case .stress: return "Stress monitor"
@@ -50,6 +52,8 @@ enum DashboardRow: String, Codable, CaseIterable, Identifiable {
     /// appended at the end — so an upgrade shows a new row without losing the
     /// arrangement the wearer already made.
     static func sanitized(order names: [String]) -> [DashboardRow] {
+        let originalDefault = ["hrv", "restingHR", "steps", "zonesLow", "zonesHigh", "vo2Max", "calories", "stress"]
+        if names == originalDefault { return allCases }
         var seen = Set<DashboardRow>()
         var rows: [DashboardRow] = []
         for name in names {

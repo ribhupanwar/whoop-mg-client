@@ -25,7 +25,7 @@ struct Screen<Content: View>: View {
             .padding(.bottom, 28)
         }
         .background(
-            LinearGradient(colors: [Color.appSurface, Color.appBG],
+            LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
                 .ignoresSafeArea()
         )
