@@ -485,6 +485,20 @@ struct DashboardView: View {
                 Hint("No measured daily strain available in this period.")
             }
             Hint("Daily strain from recorded band samples. Missing days are left blank.")
+            if focusedMetric == "strain" {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("STRAIN DIAGNOSTICS")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Color.appFG)
+                    Text(store.band.strainDiagnostics)
+                        .font(.system(size: 11, design: .monospaced))
+                        .foregroundStyle(Color.appMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+            }
         }
         .padding(.top, 12)
     }
