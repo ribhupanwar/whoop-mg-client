@@ -94,7 +94,11 @@ struct SleepAnalysisView: View {
     // MARK: Performance ring
 
     private var performancePct: Double? {
-        demo ? Double(SampleData.sleepPerformance) : analysis?.performancePct
+        // Cached performance was computed for the original detected window.
+        // Never present it as the result of a manual time correction.
+        if demo { return Double(SampleData.sleepPerformance) }
+        if editedSleepWindowHours != nil { return nil }
+        return analysis?.performancePct
     }
 
     private var performancePanel: some View {
@@ -122,6 +126,9 @@ struct SleepAnalysisView: View {
     private var performanceCaption: String {
         if demo {
             return "Sample: 66% of your needed sleep last night."
+        }
+        if editedSleepWindowHours != nil {
+            return "Sleep time edited. Performance score awaits recalculation from the corrected window and retained sensor data."
         }
         guard let analysis else {
             return "needs an overnight capture"
