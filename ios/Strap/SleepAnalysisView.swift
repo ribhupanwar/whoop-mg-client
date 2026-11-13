@@ -405,6 +405,18 @@ struct SleepAnalysisView: View {
                     detail: "Stages appear once a capture covers a detected sleep window long enough to score."
                 )
             }
+            if !demo, let session, !session.isComplete {
+                Button {
+                    if store.band.isConnected { store.band.readHistory() }
+                    else { store.connectBand() }
+                } label: {
+                    Label(store.band.status == .draining ? "Syncing sleep history…" : "Sync sleep history",
+                          systemImage: "arrow.clockwise")
+                }
+                .disabled(store.band.status == .draining || store.band.status == .authenticating)
+                .padding(.top, 10)
+                Hint("Keep the strap nearby while syncing. Saved raw captures are recovered automatically when the app opens. Time the strap did not record cannot be reconstructed.")
+            }
         }
     }
 

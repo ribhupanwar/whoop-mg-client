@@ -763,6 +763,14 @@ final class RespirationTests: XCTestCase {
 }
 
 final class DailyMetricQualityTests: XCTestCase {
+    func testNightlyHRVDoesNotDependOnCompleteSleepStages() throws {
+        let day = DayMetrics(dateKey: "2026-11-13", state: "sleep", restingHR: 67,
+                             lnRMSSD: log(44), hrvWindowSeconds: 300, sleepHours: 0,
+                             sleepStartUnix: 100, sleepEndUnix: 10000,
+                             strain: nil, steps: nil, sleepDurationReliable: false)
+        XCTAssertEqual(try XCTUnwrap(DailyAnalysis.latestNightHRV(from: [day])), 44, accuracy: 1e-9)
+    }
+
     func testEditedWindowAlsoSelectsNightlyBiometrics() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

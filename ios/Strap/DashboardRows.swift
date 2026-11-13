@@ -103,12 +103,7 @@ struct DashboardRows: View {
     private var summary: CaptureSummary? { store.lastCapture }
 
     private var latestNightHRV: Double? {
-        guard let day = store.band.days
-            .filter({ $0.state == "sleep" && $0.hrvWindowSeconds >= 300 && $0.lnRMSSD != nil })
-            .sorted(by: { $0.dateKey > $1.dateKey }).first,
-              let ln = day.lnRMSSD else { return nil }
-        let value = exp(ln)
-        return value.isFinite && value > 0 ? value : nil
+        DailyAnalysis.latestNightHRV(from: store.band.days)
     }
 
     private var hrvText: String {

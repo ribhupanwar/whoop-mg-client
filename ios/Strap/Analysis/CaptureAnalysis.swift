@@ -269,6 +269,18 @@ enum DailyAnalysis {
         return result.sorted { $0.dateKey < $1.dateKey }
     }
 
+    /// Shared by Home and Health. Stage coverage is independent of a validated
+    /// five-minute nightly R-R measurement; missing stages must not hide HRV.
+    static func latestNightHRV(from days: [DayMetrics]) -> Double? {
+        for day in days.sorted(by: { $0.dateKey > $1.dateKey }) {
+            guard day.state == "sleep", day.hrvWindowSeconds >= 300,
+                  let ln = day.lnRMSSD else { continue }
+            let value = exp(ln)
+            if value.isFinite && value > 0 { return value }
+        }
+        return nil
+    }
+
     /// Rolling partial archives cannot replace a saved full night with its tail.
     /// Explicit user edits may change the bounds even when old raw data has expired.
     static func replacesSleep(
