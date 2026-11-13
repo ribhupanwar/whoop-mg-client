@@ -211,7 +211,10 @@ struct SleepAnalysisView: View {
     }
 
     private var lastNightHours: Double? {
-        if editedSleepWindowHours != nil { return store.band.lastNightHours }
+        // Home, Recovery, and Sleep Analysis must all use BandLink's single
+        // latest-night estimate. Multiplying the SleepReport's efficiency by
+        // its window hours again produced a second, much smaller sleep total.
+        if let hours = store.band.lastNightHours { return hours }
         if let reconciledStaging { return reconciledStaging.asleepMinutes / 60.0 }
         return analysis.map { $0.hours * $0.efficiencyPct / 100.0 }
     }
@@ -447,7 +450,24 @@ struct SleepAnalysisView: View {
                 let detail = staging.unclassifiedMinutes.map {
                     "\(reason). \(CoachFormat.duration($0 / 60.0)) of this window remains unclassified."
                 } ?? reason
-                EmptyState(title: "Stages unavailable", detail: detail)
+                VStack(alignment: .leading, spacing: 10) {
+                    EmptyState(title: "Stages unavailable", detail: detail)
+                    if let minutes = staging.unclassifiedMinutes, minutes > 0 {
+                        SplitBar(segments: [
+                            SplitBar.Segment(fraction: 1, color: SleepStage.unclassified.color)
+                        ])
+                        HStack {
+                            Text("UNCLASSIFIED")
+                                .font(.system(size: 10, weight: .semibold))
+                                .tracking(0.8)
+                                .foregroundStyle(Color.appMuted)
+                            Spacer()
+                            Text(CoachFormat.duration(minutes / 60.0))
+                                .font(.system(size: 16, weight: .semibold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                    }
+                }
             } else if editedSleepWindowHours != nil {
                 EmptyState(
                     title: "Recalculating corrected sleep",
