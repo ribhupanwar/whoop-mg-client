@@ -92,7 +92,7 @@ final class SleepSessionTests: XCTestCase {
     }
 
     func testEditedEightHourTwelveMinuteWindowKeepsObservedSleepSeparateFromUnknown() {
-        let observedSeconds = 211 * 60 - 10
+        let observedSeconds = 211 * 60
         let editedEnd = start + 492 * 60
         let samples = (0..<observedSeconds).map { sample(start + $0) }
         let session = SleepSession.make(
