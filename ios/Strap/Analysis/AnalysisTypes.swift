@@ -121,7 +121,7 @@ struct NightSpan: Codable, Equatable {
 
 /// A four-class estimate. Never a PSG reading and never presented as one.
 enum SleepStage: String, Codable, CaseIterable, Identifiable {
-    case wake, light, deep, rem
+    case wake, light, deep, rem, unclassified
 
     var id: String { rawValue }
 
@@ -131,6 +131,7 @@ enum SleepStage: String, Codable, CaseIterable, Identifiable {
         case .light: return "Light"
         case .deep: return "Deep"
         case .rem: return "REM"
+        case .unclassified: return "Unclassified"
         }
     }
 }
@@ -156,6 +157,9 @@ struct SleepStaging: Codable, Equatable {
     let lightMinutes: Double
     let remMinutes: Double
     let wakeMinutes: Double
+    /// Minutes without enough HR, motion or R-R evidence to assign a stage.
+    /// Optional so summaries saved by older builds still decode.
+    var unclassifiedMinutes: Double? = nil
     let epochs: Int
     let hrCoverage: Double
     let reason: String?
@@ -168,7 +172,7 @@ struct SleepStaging: Codable, Equatable {
 
     var asleepMinutes: Double { deepMinutes + lightMinutes + remMinutes }
     var restorativeMinutes: Double { deepMinutes + remMinutes }
-    var totalMinutes: Double { asleepMinutes + wakeMinutes }
+    var totalMinutes: Double { asleepMinutes + wakeMinutes + (unclassifiedMinutes ?? 0) }
 
     func minutes(for stage: SleepStage) -> Double {
         switch stage {
@@ -176,6 +180,7 @@ struct SleepStaging: Codable, Equatable {
         case .light: return lightMinutes
         case .deep: return deepMinutes
         case .rem: return remMinutes
+        case .unclassified: return unclassifiedMinutes ?? 0
         }
     }
 
