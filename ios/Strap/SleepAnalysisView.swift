@@ -418,9 +418,10 @@ struct SleepAnalysisView: View {
                     .padding(.bottom, 10)
                 stageValues(demoStageMinutes)
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
-            } else if editedSleepWindowHours != nil {
-                EmptyState(title: "Stages from original capture", detail: "Sleep times were manually corrected. The old stage timeline no longer matches the edited window; recapture to recompute stages.")
             } else if let staging, staging.stageable {
+                if editedSleepWindowHours != nil {
+                    Hint("Original capture stage estimates shown for comparison. The manually edited sleep window is different; these stage durations have not been recalculated.")
+                }
                 SplitBar(segments: segments(for: staging))
                     .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
@@ -483,7 +484,7 @@ struct SleepAnalysisView: View {
 
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
         HStack(spacing: 8) {
-            ForEach([SleepStage.deep, .light, .rem, .wake]) { stage in
+            ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
                 VStack(alignment: .leading, spacing: 2) {
                     Text(CoachFormat.duration((minutes[stage] ?? 0) / 60.0))
                         .font(.system(size: 15, weight: .medium))
