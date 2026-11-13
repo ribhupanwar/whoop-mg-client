@@ -259,6 +259,22 @@ final class SleepStageTests: XCTestCase {
         XCTAssertTrue(refused.segments.isEmpty)
     }
 
+    func test43PercentCoverageKeepsOnlyObservedEpochStages() {
+        let observedSeconds = 211 * 60
+        let period = stageWindow(start: base, seconds: 492 * 60) // manually edited 8 h 12 min
+        let (samples, _) = makeNight(minutes: observedSeconds / 60)
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertEqual(staging.hrCoverage, Double(observedSeconds) / Double(period.durationS), accuracy: 1e-12)
+        XCTAssertEqual(Int((staging.hrCoverage * 100).rounded()), 43)
+        XCTAssertFalse(staging.stageable, "partial evidence must not unlock a full-night score")
+        XCTAssertTrue(staging.reason?.contains("full-night scoring") == true)
+        XCTAssertGreaterThanOrEqual(staging.epochs, 120)
+        XCTAssertFalse(staging.segments.isEmpty)
+        assertTotals(staging, period: period, classifiedSeconds: observedSeconds)
+        XCTAssertTrue(staging.segments.allSatisfy { $0.endUnix <= base + observedSeconds })
+    }
+
     func testAnEpochBelowHalfCoverageIsNotLightOrWake() {
         let period = stageWindow(seconds: 90)
         let samples = (0..<90).filter { !(44..<60).contains($0) }.map {
