@@ -84,11 +84,11 @@ struct SleepAnalysisView: View {
     private func saveSleepCorrection() {
         guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart,
               correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400 else { return }
-        var corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
-        corrections[String(period.startUnix)] = [
+        let oldCorrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let corrections = SleepCorrectionStore.saving([
             Int(correctedSleepStart.timeIntervalSince1970),
             Int(correctedSleepEnd.timeIntervalSince1970)
-        ]
+        ], for: period, overrides: oldCorrections)
         UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
         store.band.notifySleepCorrectionChanged()
         showSleepEditor = false
@@ -195,7 +195,7 @@ struct SleepAnalysisView: View {
         guard !store.band.isAnalyzingHistory else { return nil }
         // A corrected session may replace several detector fragments; edit its source, not the last fragment.
         if let session {
-            return periods.first { $0.startUnix == session.sourceStartUnix }
+            return periods.first { $0.startUnix == session.sourceStartUnix } ?? session.sourcePeriod
         }
         return periods.max(by: { $0.endUnix < $1.endUnix })
     }

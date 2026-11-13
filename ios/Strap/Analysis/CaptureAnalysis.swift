@@ -23,7 +23,7 @@ struct CaptureSummary: Codable, Equatable {
     /// Four-class estimate for the most recent detected period. Nil on
     /// captures stored before staging existed; a refusal arrives as a reason,
     /// not as fabricated light sleep.
-    let sleepStaging: SleepStaging?
+    var sleepStaging: SleepStaging?
     /// Versioned, window-bound results; nil on older saved captures.
     var sleepSessions: [SleepSession]? = nil
 
@@ -254,15 +254,18 @@ enum DailyAnalysis {
         return result.sorted { $0.dateKey < $1.dateKey }
     }
 
-    /// Absence of sleep in a rolling partial archive must not erase a verified
-    /// night outside that archive. A newly analyzed session is authoritative.
+    /// Rolling partial archives cannot replace a saved full night with its tail.
+    /// Explicit user edits may change the bounds even when old raw data has expired.
     static func replacesSleep(
-        previous: DayMetrics, fresh: DayMetrics, coverageStart: Int?, coverageEnd: Int?
+        previous: DayMetrics, fresh: DayMetrics, coverageStart: Int?, coverageEnd: Int?,
+        isEdited: Bool = false
     ) -> Bool {
         guard fresh.sleepDurationReliable != nil else { return false }
-        if fresh.sleepStartUnix != nil { return true }
-        guard let first = coverageStart, let last = coverageEnd,
-              let start = previous.sleepStartUnix, let end = previous.sleepEndUnix else { return false }
+        if isEdited && fresh.sleepStartUnix != nil { return true }
+        guard let start = previous.sleepStartUnix, let end = previous.sleepEndUnix else {
+            return fresh.sleepStartUnix != nil
+        }
+        guard let first = coverageStart, let last = coverageEnd else { return false }
         return first <= start && end <= last
     }
 

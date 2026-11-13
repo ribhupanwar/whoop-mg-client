@@ -351,23 +351,38 @@ final class BandLink: NSObject, ObservableObject {
         let needSnapshot = needHours
         let baselineSnapshot = awakeBaseline
         let daysSnapshot = days
+        let sessionsSnapshot = summary?.sleepSessions ?? []
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
             as? [String: [Int]] ?? [:]
         analysisQueue.async { [weak self] in
-            let fresh = CaptureSummary.make(
+            var rebuilt = CaptureSummary.make(
                 samples: samples, sex: sexSnapshot, maxHR: maxSnapshot,
                 awakeBaseline: baselineSnapshot, sleepCorrections: corrections
             )
+            rebuilt.sleepSessions = SleepSession.retainingUncovered(
+                previous: sessionsSnapshot, fresh: rebuilt.sleepSessions ?? [],
+                coverageStart: rebuilt.firstUnix, coverageEnd: rebuilt.lastUnix,
+                samples: samples, overrides: corrections
+            )
+            rebuilt.sleepStaging = rebuilt.latestSleepSession?.staging
+            let fresh = rebuilt
             let freshDays = DailyAnalysis.metrics(
                 from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
                 sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions
             )
+            let editedDays = Set(freshDays.filter { day in
+                fresh.sleepSessions?.contains {
+                    $0.isEdited && $0.startUnix == day.sleepStartUnix
+                        && $0.endUnix - 1 == day.sleepEndUnix
+                } ?? false
+            }.map(\.dateKey))
             var byDay: [String: DayMetrics] = [:]
             for day in daysSnapshot { byDay[day.dateKey] = day }
             for day in freshDays {
                 if let previous = byDay[day.dateKey], previous.sleepStartUnix != nil,
                    !DailyAnalysis.replacesSleep(previous: previous, fresh: day,
-                                                coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix) {
+                                                coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix,
+                                                isEdited: editedDays.contains(day.dateKey)) {
                     continue
                 }
                 byDay[day.dateKey] = day
@@ -386,7 +401,8 @@ final class BandLink: NSObject, ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
                 self.summary = fresh
-                self.merge(freshDays, coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix)
+                self.merge(freshDays, coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix,
+                           editedDays: editedDays)
                 self.lastSleepAnalysis = report
                 self.persist(fresh)
                 if let report, let data = try? JSONEncoder().encode(report) {
@@ -1108,7 +1124,10 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
-    private func merge(_ fresh: [DayMetrics], coverageStart: Int? = nil, coverageEnd: Int? = nil) {
+    private func merge(
+        _ fresh: [DayMetrics], coverageStart: Int? = nil, coverageEnd: Int? = nil,
+        editedDays: Set<String> = []
+    ) {
         guard !fresh.isEmpty else { return }
         var map = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
         // A short subsequent capture must not erase a fuller day's steps.
@@ -1120,7 +1139,8 @@ final class BandLink: NSObject, ObservableObject {
                 continue
             }
             let replacesSleep = DailyAnalysis.replacesSleep(
-                previous: previous, fresh: day, coverageStart: coverageStart, coverageEnd: coverageEnd
+                previous: previous, fresh: day, coverageStart: coverageStart, coverageEnd: coverageEnd,
+                isEdited: editedDays.contains(day.dateKey)
             )
             map[day.dateKey] = DayMetrics(
                 dateKey: day.dateKey,

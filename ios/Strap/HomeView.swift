@@ -93,11 +93,10 @@ struct HomeView: View {
                             if correctedSleepEnd > correctedSleepStart,
                                correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400,
                                let period = latestSleepPeriod {
-                                var corrections = sleepCorrections
-                                corrections[String(period.startUnix)] = [
+                                let corrections = SleepCorrectionStore.saving([
                                     Int(correctedSleepStart.timeIntervalSince1970),
                                     Int(correctedSleepEnd.timeIntervalSince1970)
-                                ]
+                                ], for: period, overrides: sleepCorrections)
                                 UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
                                 store.band.notifySleepCorrectionChanged()
                             }
@@ -757,7 +756,7 @@ struct HomeView: View {
         guard !store.band.isAnalyzingHistory else { return nil }
         let periods = store.lastCapture?.sleepPeriods ?? []
         if let session = store.band.latestSleepSession {
-            return periods.first { $0.startUnix == session.sourceStartUnix }
+            return periods.first { $0.startUnix == session.sourceStartUnix } ?? session.sourcePeriod
         }
         return periods.max(by: { $0.endUnix < $1.endUnix })
     }

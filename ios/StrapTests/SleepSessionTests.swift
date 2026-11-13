@@ -32,7 +32,7 @@ final class SleepSessionTests: XCTestCase {
         )
         return SleepSession(version: SleepSession.algorithmVersion, sourceStartUnix: start,
                             startUnix: start, endUnix: end, staging: staging,
-                            heartRate: [], movementBouts: 29, isEdited: true)
+                            heartRate: [], movementBouts: 29, isEdited: true, sourceEndUnix: end)
     }
     func testOneTotalDrivesAsleepEfficiencyAndReportWithoutDoubleSubtraction() throws {
         let session = knownNight()
@@ -140,6 +140,132 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertNil(emptyDay.reliableSleepHours)
         XCTAssertEqual(previous.reliableSleepHours, 7.75)
         XCTAssertEqual(previous.night?.endUnix, start + 8 * 3600)
+    }
+
+    func testDifferingOverlappingCorrectionsNeverCreateTwoNights() {
+        let fragments = [
+            period(3600),
+            SleepPeriod(startUnix: start + 3900, endUnix: start + 7199,
+                        quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        ]
+        let overrides = [
+            String(start): [start, start + 7200],
+            String(start + 3900): [start, start + 6900]
+        ]
+        let sessions = SleepSession.makeAll(samples: [], periods: fragments, overrides: overrides)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.endUnix, start + 6900)
+        XCTAssertEqual(SleepSession.makeAll(samples: [], periods: fragments, overrides: overrides), sessions)
+    }
+
+    func testSavingRecoveredCorrectionRemovesOldAliasesButKeepsAnotherNight() {
+        let shifted = SleepPeriod(startUnix: start + 300, endUnix: start + 7199,
+                                  quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let nextKey = String(start + 86400)
+        let overrides = [
+            String(start): [start, start + 7200],
+            String(start + 3900): [start, start + 6900],
+            nextKey: [start + 86400, start + 93600]
+        ]
+        let times = [start, start + 6600]
+        let saved = SleepCorrectionStore.saving(times, for: shifted, overrides: overrides)
+        XCTAssertEqual(saved.count, 2)
+        XCTAssertEqual(saved[String(shifted.startUnix)], times)
+        XCTAssertNil(saved[String(start)])
+        XCTAssertNil(saved[String(start + 3900)])
+        XCTAssertEqual(saved[nextKey], overrides[nextKey])
+        XCTAssertEqual(SleepCorrectionStore.saving(times, for: shifted, overrides: saved), saved)
+    }
+
+    func testCompleteRetainedTailDoesNotReplaceSavedCanonicalNight() throws {
+        let old = knownNight()
+        let tailStart = start + 5 * 3600
+        let tailPeriod = SleepPeriod(startUnix: tailStart, endUnix: old.endUnix - 1,
+                                     quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let samples = (tailStart..<old.endUnix).map { sample($0) }
+        let tail = SleepSession.make(samples: samples, period: tailPeriod)
+        XCTAssertTrue(tail.isComplete, "The tail can have full HR coverage without being a full night")
+        let retained = SleepSession.retainingUncovered(
+            previous: [old], fresh: [tail], coverageStart: tailStart, coverageEnd: old.endUnix - 1
+        )
+        XCTAssertEqual(retained, [old])
+        XCTAssertEqual(try XCTUnwrap(retained.last?.asleepHours), 7.75, accuracy: 1e-9)
+        let decoded = try JSONDecoder().decode([SleepSession].self, from: JSONEncoder().encode(retained))
+        XCTAssertEqual(decoded, retained)
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [old], fresh: [tail], coverageStart: start, coverageEnd: old.endUnix - 1
+        ), [tail], "Full retained coverage allows authoritative reanalysis")
+        let edited = SleepSession.make(samples: samples, period: tailPeriod,
+                                       correctedTimes: [tailStart, old.endUnix])
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [old], fresh: [edited], coverageStart: tailStart, coverageEnd: old.endUnix - 1
+        ), [edited], "An intentional new window must not be replaced by an old saved window")
+    }
+
+    func testShortenedEditedNightDoesNotRegainExcludedTailAfterTrimming() throws {
+        let source = period(8 * 3600)
+        let old = SleepSession.make(samples: (0..<7200).map { sample(start + $0) },
+                                    period: source, correctedTimes: [start, start + 7200])
+        XCTAssertTrue(old.isComplete)
+        XCTAssertEqual(old.sourcePeriod.startUnix, source.startUnix)
+        XCTAssertEqual(old.sourcePeriod.endUnix, source.endUnix, "Keep the original bounds for re-editing")
+        let tailStart = start + 5 * 3600
+        let samples = (tailStart..<(start + 8 * 3600)).map { sample($0) }
+        let tailPeriod = SleepPeriod(startUnix: tailStart, endUnix: source.endUnix,
+                                     quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let tail = SleepSession.make(samples: samples, period: tailPeriod)
+        let saved = [String(start): [start, start + 7200]]
+        let retained = SleepSession.retainingUncovered(
+            previous: [old], fresh: [tail], coverageStart: tailStart, coverageEnd: source.endUnix,
+            samples: samples, overrides: saved
+        )
+        XCTAssertEqual(retained, [old], "03:00–06:00 must not be re-added after an explicit 02:00 wake edit")
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let daily = DailyAnalysis.metrics(from: samples, sex: .male, maxHR: nil,
+                                          calendar: calendar, analyzedSleepSessions: retained)
+        XCTAssertEqual(daily.reduce(0.0) { $0 + $1.sleepHours }, try XCTUnwrap(old.asleepHours), accuracy: 1e-9)
+
+        let changed = SleepCorrectionStore.saving([start, start + 3600], for: old.sourcePeriod, overrides: saved)
+        let updated = SleepSession.retainingUncovered(
+            previous: retained, fresh: [tail], coverageStart: tailStart, coverageEnd: source.endUnix,
+            samples: samples, overrides: changed
+        )
+        XCTAssertEqual(updated.count, 1)
+        XCTAssertEqual(updated.first?.endUnix, start + 3600)
+        XCTAssertEqual(updated.first?.sourceEndUnix, source.endUnix + 1)
+        XCTAssertNil(updated.first?.asleepHours, "New out-of-archive bounds are unknown, not the stale old total")
+        XCTAssertEqual(updated.first?.sourcePeriod.startUnix, old.sourceStartUnix)
+    }
+
+    func testMissingLegacySourceEndDecodesSafely() throws {
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(knownNight())) as? [String: Any])
+        object.removeValue(forKey: "sourceEndUnix")
+        let decoded = try JSONDecoder().decode(SleepSession.self, from: JSONSerialization.data(withJSONObject: object))
+        XCTAssertNil(decoded.sourceEndUnix)
+        XCTAssertEqual(decoded.sourcePeriod.endUnix, decoded.endUnix - 1)
+    }
+
+    func testDetectedNonemptyTailCannotOverwriteVerifiedDailyDuration() {
+        let previous = DayMetrics(
+            dateKey: "2026-11-12", state: "sleep", restingHR: nil, lnRMSSD: nil,
+            hrvWindowSeconds: 0, sleepHours: 7.75, sleepStartUnix: start,
+            sleepEndUnix: start + 8 * 3600 - 1, strain: nil, steps: nil,
+            sleepDurationReliable: true
+        )
+        let tail = DayMetrics(
+            dateKey: previous.dateKey, state: "sleep", restingHR: nil, lnRMSSD: nil,
+            hrvWindowSeconds: 0, sleepHours: 3, sleepStartUnix: start + 5 * 3600,
+            sleepEndUnix: previous.sleepEndUnix, strain: nil, steps: nil,
+            sleepDurationReliable: true
+        )
+        XCTAssertFalse(DailyAnalysis.replacesSleep(previous: previous, fresh: tail,
+                                                  coverageStart: tail.sleepStartUnix, coverageEnd: tail.sleepEndUnix))
+        XCTAssertTrue(DailyAnalysis.replacesSleep(previous: previous, fresh: tail,
+                                                 coverageStart: start, coverageEnd: tail.sleepEndUnix))
+        XCTAssertTrue(DailyAnalysis.replacesSleep(previous: previous, fresh: tail,
+                                                 coverageStart: tail.sleepStartUnix, coverageEnd: tail.sleepEndUnix,
+                                                 isEdited: true))
     }
 
     func testZeroOrNonfiniteNeedRefusesScore() {
