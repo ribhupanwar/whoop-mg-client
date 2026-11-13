@@ -160,6 +160,12 @@ struct SleepStaging: Codable, Equatable {
     /// Minutes without enough HR, motion or R-R evidence to assign a stage.
     /// Optional so summaries saved by older builds still decode.
     var unclassifiedMinutes: Double? = nil
+    /// Unique in-window seconds containing at least one valid HR sample.
+    var hrObservedSeconds: Int? = nil
+    /// Full analyzed window in seconds; older cached summaries omit this.
+    var hrWindowSeconds: Int? = nil
+    /// Longest run of seconds without an HR sample inside the analyzed window.
+    var longestHRGapSeconds: Int? = nil
     let epochs: Int
     let hrCoverage: Double
     let reason: String?
