@@ -420,10 +420,8 @@ struct SleepAnalysisView: View {
                 Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
             } else if let staging, staging.stageable {
                 if editedSleepWindowHours != nil {
-                    Hint("Original capture stage estimates shown for comparison. The manually edited sleep window is different; these stage durations have not been recalculated.")
+                    Hint("Original capture estimates only — stage window differs from manually edited sleep. Durations and percentages are not recalculated.")
                 }
-                SplitBar(segments: segments(for: staging))
-                    .padding(.bottom, 10)
                 stageValues(stagingMinutes(staging))
                 if let first = staging.segments.first, let last = staging.segments.last {
                     HStack(alignment: .top, spacing: 8) {
@@ -455,8 +453,7 @@ struct SleepAnalysisView: View {
     private var stagingTrailing: String {
         if demo { return "sample" }
         guard let staging, staging.stageable, staging.asleepMinutes > 0 else { return "—" }
-        let pct = staging.restorativeMinutes / staging.asleepMinutes * 100.0
-        return String(format: "%.0f%% restorative", pct)
+        return "Restorative " + CoachFormat.duration(staging.restorativeMinutes / 60.0)
     }
 
     private func stagingMinutes(_ staging: SleepStaging) -> [SleepStage: Double] {
@@ -482,21 +479,50 @@ struct SleepAnalysisView: View {
         }
     }
 
+    // WHOOP-style comparison: the same stage ordering, purple/pink palette,
+    // proportional bars, and explicit source labelling. No WHOOP values copied.
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
-        HStack(spacing: 8) {
+        let total = max(1.0, minutes.values.reduce(0, +))
+        return VStack(alignment: .leading, spacing: 13) {
             ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(CoachFormat.duration((minutes[stage] ?? 0) / 60.0))
-                        .font(.system(size: 15, weight: .medium))
-                        .foregroundStyle(stage.color)
-                    Text(stage.title.lowercased())
-                        .font(.system(size: 10))
-                        .foregroundStyle(Color.appMuted)
+                let value = minutes[stage] ?? 0
+                VStack(alignment: .leading, spacing: 6) {
+                    HStack(spacing: 8) {
+                        Circle().stroke(stage.color, lineWidth: 1.5)
+                            .frame(width: 17, height: 17)
+                        Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(String(format: "%.0f%%", value / total * 100))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(stage.color)
+                        Spacer()
+                        Text(CoachFormat.duration(value / 60.0))
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    GeometryReader { proxy in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.appRaised)
+                            Capsule().fill(stage.color)
+                                .frame(width: max(0, proxy.size.width * CGFloat(value / total)))
+                        }
+                    }
+                    .frame(height: 12)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            let restorative = (minutes[.deep] ?? 0) + (minutes[.rem] ?? 0)
+            HStack {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(Color(red: 0.78, green: 0.27, blue: 0.91))
+                    .frame(width: 11, height: 11)
+                Text("RESTORATIVE SLEEP")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text(CoachFormat.duration(restorative / 60.0))
+                    .font(.system(size: 16, weight: .semibold))
+            }
+            .padding(.top, 8)
         }
-        .padding(.bottom, 4)
+        .padding(.bottom, 6)
     }
 
     // MARK: Hours vs. needed detail
@@ -799,10 +825,10 @@ struct SleepAnalysisView: View {
 private extension SleepStage {
     var color: Color {
         switch self {
-        case .wake: return .appWarn
-        case .light: return .appAccent
-        case .deep: return .appSleep
-        case .rem: return .appGood
+        case .wake: return Color(red: 0.84, green: 0.85, blue: 0.86)
+        case .light: return Color(red: 0.64, green: 0.58, blue: 0.92)
+        case .deep: return Color(red: 0.96, green: 0.47, blue: 0.87)
+        case .rem: return Color(red: 0.64, green: 0.29, blue: 0.88)
         }
     }
 }
