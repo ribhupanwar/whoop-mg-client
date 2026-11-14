@@ -326,7 +326,8 @@ enum Hrv {
     // MARK: - Strain
 
     static func hrReserveRatio(_ hr: Double, resting: Double, maximum: Double) -> Double? {
-        guard maximum > resting else { return nil }
+        guard hr.isFinite, resting.isFinite, maximum.isFinite,
+              resting > 0, maximum > resting else { return nil }
         return max(0.0, min(1.0, (hr - resting) / (maximum - resting)))
     }
 
@@ -399,14 +400,15 @@ enum Hrv {
 
     /// Map TRIMP onto our own local 0-21 scale. Not WHOOP strain.
     static func strainScore(_ trimp: Double?) -> Double? {
-        guard let trimp, trimp >= 0 else { return nil }
+        guard let trimp, trimp.isFinite, trimp >= 0 else { return nil }
         return strainMax * (1.0 - exp(-trimp / strainScaleTrimp))
     }
 
     /// Uth 2004 non-exercise estimate: 15.3 × HRmax / HRrest (ml/kg/min).
     /// Needs a max HR strictly above a positive resting HR.
     static func vo2Max(maxHR: Double, restingHR: Double) -> Double? {
-        guard maxHR > restingHR, restingHR > 0 else { return nil }
+        guard maxHR.isFinite, restingHR.isFinite,
+              maxHR > restingHR, restingHR > 0 else { return nil }
         return 15.3 * maxHR / restingHR
     }
 
