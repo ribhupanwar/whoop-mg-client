@@ -654,6 +654,21 @@ final class SleepReportTests: XCTestCase {
 // MARK: - Recovery, stress and SpO2
 
 final class RecoveryTests: XCTestCase {
+    func testNonFiniteOrInvalidBaselineDoesNotProduceRecovery() {
+        let invalid = Baseline(lnRMSSDMean: .nan, lnRMSSDSD: 0.3,
+                               rhrMean: 55, rhrSD: 3, days: 14)
+        XCTAssertNil(Recovery.score(
+            lnRMSSD: 4, rhr: 55, sleepHours: 8, sleepNeedHours: 8,
+            baseline: invalid
+        ).score)
+        let negativeSD = Baseline(lnRMSSDMean: 4, lnRMSSDSD: -1,
+                                  rhrMean: 55, rhrSD: 3, days: 14)
+        XCTAssertNil(Recovery.score(
+            lnRMSSD: 4, rhr: 55, sleepHours: 8, sleepNeedHours: 8,
+            baseline: negativeSD
+        ).score)
+    }
+
     func testNoBaselineGivesNoScore() {
         let result = Recovery.score(
             lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8, baseline: nil

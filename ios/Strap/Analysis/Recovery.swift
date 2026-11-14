@@ -33,7 +33,10 @@ enum Recovery {
                 hrvComponent: nil, rhrComponent: nil, sleepComponent: nil
             )
         }
-        guard let lnRMSSD, lnRMSSD.isFinite, let rhr, rhr.isFinite, rhr > 0 else {
+        guard let lnRMSSD, lnRMSSD.isFinite, let rhr, rhr.isFinite, rhr > 0,
+              baseline.lnRMSSDMean.isFinite, baseline.lnRMSSDSD.isFinite,
+              baseline.rhrMean.isFinite, baseline.rhrSD.isFinite,
+              baseline.lnRMSSDSD >= 0, baseline.rhrSD >= 0 else {
             return RecoveryResult(
                 score: nil,
                 reason: "needs HRV and resting HR from a rest/sleep window",
