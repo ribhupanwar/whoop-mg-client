@@ -111,7 +111,14 @@ struct SleepSession: Codable, Equatable {
         guard let first = coverageStart, let last = coverageEnd else {
             // Preserve saved nights while accepting genuinely new, non-overlapping
             // sessions. No coverage is not evidence that either night vanished.
-            var retained = previous
+            var retained = previous.map { old -> SleepSession in
+                let corrected = SleepCorrectionStore.times(for: old.sourcePeriod, overrides: overrides)
+                guard let corrected,
+                      corrected[0] != old.startUnix || corrected[1] != old.endUnix else { return old }
+                // A new manual correction must take effect even if the archive
+                // has no samples. The resulting stages remain explicitly unknown.
+                return make(samples: samples, period: old.sourcePeriod, correctedTimes: corrected)
+            }
             for candidate in fresh where !retained.contains(where: {
                 max($0.startUnix, candidate.startUnix) < min($0.endUnix, candidate.endUnix)
             }) {
