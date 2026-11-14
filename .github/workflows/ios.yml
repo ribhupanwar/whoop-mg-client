@@ -3,7 +3,7 @@ name: ios
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, ui/dsta-dashboard-polish]
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
