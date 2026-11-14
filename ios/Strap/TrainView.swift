@@ -63,26 +63,26 @@ struct TrainView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             fieldRow(label: "Max HR (bpm)") {
                 TextField("190", text: $maxText)
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 8)
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             Hint("Resting HR seeds from your Settings override, else the band's last measured quiet window, else 72 bpm. Max HR defaults to the age estimate 208 − 0.7 × age (age \(store.settings.age) → \(String(format: "%.0f", Karvonen.agePredictedMaxHR(age: store.settings.age))) bpm). An age formula is only a population guess — replace it with a max you have actually seen in a hard session. Both fields recompute the zones live.")
         }
@@ -91,15 +91,15 @@ struct TrainView: View {
     private func fieldRow<Control: View>(label: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
             Spacer()
             control()
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 
@@ -112,7 +112,7 @@ struct TrainView: View {
                 Spacer()
                 Text("BPM")
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(StrapTypography.body(10, weight: .medium))
             .tracking(0.6)
             .foregroundStyle(Color.appMuted)
             .padding(.horizontal, 8)
@@ -138,17 +138,17 @@ struct TrainView: View {
                     .fill(zoneColors[index])
                     .frame(width: 7, height: 18)
                 Text("Z\(index + 1)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(Color.appFG)
             }
             .frame(width: 52, alignment: .leading)
 
             Text(Karvonen.uses[index])
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(range)
-                .font(.system(size: 12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .medium))
                 .foregroundStyle(Color.appFG)
         }
         .padding(.horizontal, 8)
@@ -162,10 +162,10 @@ struct TrainView: View {
     private var ctaBox: some View {
         CTABox {
             Text("Most of your running belongs in Z2")
-                .font(.system(size: 13, weight: .medium))
+                .font(StrapTypography.body(13, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text("You run and lift daily, so the trap is drifting into the middle zone every day — hard enough to accumulate fatigue, too easy to drive adaptation. Z2 should feel conversational. Save Z4/Z5 for sessions you planned as hard.")
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -176,7 +176,7 @@ struct TrainView: View {
         Panel {
             SectionTitle("Gym day")
             Text("Lifting barely moves heart rate, so HR-based load alone undercounts a heavy session. Lifts get logged separately as sets × reps × load rather than pretending a HR-derived number captures them.")
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

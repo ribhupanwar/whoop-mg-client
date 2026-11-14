@@ -52,7 +52,7 @@ struct ActivityLoggerView: View {
                 Image(systemName: kind.icon)
                     .foregroundStyle(Color.appAccent)
                 Text(kind.label)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(StrapTypography.body(14, weight: .semibold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Image(systemName: "chevron.down")
@@ -63,7 +63,7 @@ struct ActivityLoggerView: View {
             TextField("Search 60+ activities", text: $activitySearch)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
-                .font(.system(size: 13))
+                .font(StrapTypography.body(13))
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
             ScrollView {
@@ -103,18 +103,18 @@ struct ActivityLoggerView: View {
             row(label: "Name") {
                 TextField(kind.label, text: $name)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
                     .frame(maxWidth: 180)
             }
             Stepper(value: $minutes, in: 1...600, step: 5) {
                 HStack {
                     Text("Duration")
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
                     Text("\(minutes) min")
-                        .font(.system(size: 13, weight: .medium))
+                        .font(StrapTypography.body(13, weight: .medium))
                         .foregroundStyle(Color.appFG)
                 }
             }
@@ -122,11 +122,11 @@ struct ActivityLoggerView: View {
             .padding(.vertical, 4)
             TextField("Notes (optional)", text: $notes, axis: .vertical)
                 .lineLimit(2...5)
-                .font(.system(size: 13))
+                .font(StrapTypography.body(13))
                 .foregroundStyle(Color.appFG)
                 .padding(10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .padding(.top, 6)
         }
     }
@@ -140,7 +140,7 @@ struct ActivityLoggerView: View {
                     sets.append(WorkSet(reps: sets.last?.reps ?? 8, loadKG: sets.last?.loadKG ?? 60.0))
                 } label: {
                     Text("+ ADD SET")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(StrapTypography.body(10, weight: .medium))
                         .tracking(0.6)
                         .foregroundStyle(Color.appAccent)
                 }
@@ -149,12 +149,12 @@ struct ActivityLoggerView: View {
             ForEach($sets) { $set in
                 HStack(spacing: 10) {
                     Text("SET")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(StrapTypography.body(10, weight: .medium))
                         .tracking(0.6)
                         .foregroundStyle(Color.appMuted)
                     Stepper(value: $set.reps, in: 1...100, step: 1) {
                         Text("\(set.reps) reps")
-                            .font(.system(size: 13))
+                            .font(StrapTypography.body(13))
                             .foregroundStyle(Color.appFG)
                     }
                     .tint(.appAccent)
@@ -163,15 +163,15 @@ struct ActivityLoggerView: View {
                         .keyboardType(.decimalPad)
                         .textFieldStyle(.plain)
                         .multilineTextAlignment(.trailing)
-                        .font(.system(size: 14))
+                        .font(StrapTypography.body(14))
                         .foregroundStyle(Color.appFG)
                         .frame(width: 54)
                         .padding(.vertical, 6)
                         .padding(.horizontal, 8)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     Text("kg")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                     if sets.count > 1 {
                         Button {
@@ -201,7 +201,7 @@ struct ActivityLoggerView: View {
     private func row<Control: View>(label: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
             Spacer()
             control()
@@ -209,7 +209,7 @@ struct ActivityLoggerView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 10)
     }
 

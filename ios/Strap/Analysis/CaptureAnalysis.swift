@@ -31,12 +31,12 @@ struct CaptureSummary: Codable, Equatable {
     let activities: [ActivitySession]
     /// Awake 5-minute stress share against the awake baseline. nil when the
     /// capture predates the baseline or the field (older persisted summary).
-    let awakeStress: StressSplit?
+    var awakeStress: StressSplit?
     /// Same, with detected workout windows removed.
-    let outsideWorkoutStress: StressSplit?
+    var outsideWorkoutStress: StressSplit?
     /// Per-window awake stress series for the through-the-day chart. nil until
     /// the awake baseline unlocks or on summaries stored before this field.
-    let stressSeries: [StressPoint]?
+    var stressSeries: [StressPoint]?
     let skinTempMean: Double?
     let skinTempMin: Double?
     let skinTempMax: Double?
@@ -237,13 +237,21 @@ enum DailyAnalysis {
             let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
             // Training load needs a measured resting reference, not sleep stages
             // or R-R intervals. A verified five-minute daytime rest can supply it.
+            let awakeDaySamples = daySamples.filter { sample in
+                !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+            }
+            let awakeWindow = Hrv.restingHRV(awakeDaySamples, minWindowS: 300)
+            let awakeResting = Hrv.restingHeartRate(awakeDaySamples, windowS: 300)
             let strainResting = resting ?? Hrv.restingHeartRate(daySamples, windowS: 300)
             var strain: Double?
+            var zoneSeconds: [Int]?
             if let maxHR, let strainResting, maxHR > strainResting {
-                let awakeDaySamples = daySamples.filter { sample in
-                    // Sleep assigned to the day it ends can begin yesterday.
-                    // Exclude all overlapping sleep windows, not only today's.
-                    !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+                let zoneSamples = awakeDaySamples.filter { $0.wearing && (35...220).contains($0.heartRate) }
+                if !zoneSamples.isEmpty, let zones = Karvonen.zones(restingHR: strainResting, maxHR: maxHR) {
+                    let points = zoneSamples.map {
+                        LiveSample(unix: $0.unix, heartRate: $0.heartRate, rrIntervalsMS: [])
+                    }
+                    zoneSeconds = LiveZones.seconds(samples: points, zones: zones)
                 }
                 strain = Hrv.strainScore(
                     Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: strainResting, sex: sex)
@@ -262,11 +270,24 @@ enum DailyAnalysis {
                     sleepEndUnix: longest.map { $0.endUnix - 1 },
                     strain: strain,
                     steps: steps,
-                    sleepDurationReliable: sleepReliable
+                    sleepDurationReliable: sleepReliable,
+                    zoneSeconds: zoneSeconds,
+                    awakeLnRMSSD: awakeWindow.result.lnRMSSD,
+                    awakeRestingHR: awakeResting
                 )
             )
         }
         return result.sorted { $0.dateKey < $1.dateKey }
+    }
+
+    /// Sleep measurements cannot stand in for an awake-quiet stress baseline.
+    static func awakeBaseline(from days: [DayMetrics]) -> Baseline? {
+        let pairs = days.compactMap { day -> (Double, Double)? in
+            guard let ln = day.awakeLnRMSSD, ln.isFinite,
+                  let rhr = day.awakeRestingHR, rhr.isFinite, rhr > 0 else { return nil }
+            return (ln, rhr)
+        }
+        return Baseline.fromDaily(lnRMSSD: pairs.map { $0.0 }, rhr: pairs.map { $0.1 })
     }
 
     /// Shared by Home and Health. Stage coverage is independent of a validated

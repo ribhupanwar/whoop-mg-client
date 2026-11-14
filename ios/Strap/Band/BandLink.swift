@@ -375,8 +375,8 @@ final class BandLink: NSObject, ObservableObject {
                 samples: samples, overrides: corrections
             )
             rebuilt.sleepStaging = rebuilt.latestSleepSession?.staging
-            let fresh = rebuilt
-            let freshDays = DailyAnalysis.metrics(
+            var fresh = rebuilt
+            var freshDays = DailyAnalysis.metrics(
                 from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
                 sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions
             )
@@ -398,7 +398,18 @@ final class BandLink: NSObject, ObservableObject {
                 byDay[day.dateKey] = day
             }
             let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
-            let nights = Array(allDays.suffix(14)).compactMap(\.night)
+            let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(30)))
+            let sleepWindows = (fresh.sleepSessions ?? []).map { (start: $0.startUnix, end: $0.endUnix - 1) }
+            let excluded = sleepWindows + fresh.activities.map { (start: $0.startUnix, end: $0.endUnix) }
+            fresh.awakeStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
+            fresh.outsideWorkoutStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: excluded)
+            let stressPoints = StressWindows.series(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
+            fresh.stressSeries = stressPoints.isEmpty ? nil : stressPoints
+            // Use the newly analyzed nights for sleep consistency. The
+            // previously persisted day can still describe the pre-edit bounds.
+            let nights = Array(allDays.map { day in
+                freshDays.first(where: { $0.dateKey == day.dateKey }) ?? day
+            }.suffix(14)).compactMap(\.night)
             let sleepBaseline = DailyAnalysis.baseline(
                 from: Array(allDays.filter { $0.state == "sleep" }.suffix(30))
             )
@@ -408,13 +419,31 @@ final class BandLink: NSObject, ObservableObject {
                     nights: nights, sleepBaseline: sleepBaseline
                 )
             }
+            // Persist the same night-bound report used by Sleep Analysis, so
+            // weekly Recovery charts never substitute a different sleep score.
+            for index in freshDays.indices {
+                let day = freshDays[index]
+                guard let session = fresh.sleepSessions?.first(where: {
+                    $0.startUnix == day.sleepStartUnix && $0.endUnix - 1 == day.sleepEndUnix
+                }) else { continue }
+                let segment = samples.filter { session.startUnix <= $0.unix && $0.unix < session.endUnix }
+                freshDays[index].respiratoryRate = Respiration.estimate(segment).breathsPerMinute
+                let datedNights = Array(allDays.map { existing in
+                    freshDays.first(where: { $0.dateKey == existing.dateKey }) ?? existing
+                }.filter { $0.dateKey <= day.dateKey }.suffix(14)).compactMap(\.night)
+                let datedReport = SleepReport.analyze(samples: samples, session: session,
+                    needHours: needSnapshot, nights: datedNights, sleepBaseline: sleepBaseline)
+                freshDays[index].sleepPerformancePct = datedReport?.performancePct
+            }
+            let scoredDays = freshDays
+            let finalFresh = fresh
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
-                self.summary = fresh
-                self.merge(freshDays, coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix,
+                self.summary = finalFresh
+                self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
                            editedDays: editedDays)
                 self.lastSleepAnalysis = report
-                self.persist(fresh)
+                self.persist(finalFresh)
                 if let report, let data = try? JSONEncoder().encode(report) {
                     UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
                 } else {
@@ -433,9 +462,9 @@ final class BandLink: NSObject, ObservableObject {
         DailyAnalysis.baseline(from: Array(days.suffix(30)))
     }
 
-    /// Stress is scored against awake days only: sleep lnRMSSD runs higher.
+    /// Stress uses verified awake-quiet windows; overnight HRV is a separate baseline.
     var awakeBaseline: Baseline? {
-        DailyAnalysis.baseline(from: Array(days.filter { $0.state == "awake" }.suffix(30)))
+        DailyAnalysis.awakeBaseline(from: Array(days.suffix(30)))
     }
 
     var sleepBaseline: Baseline? {
@@ -447,7 +476,13 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     var stress: StressResult {
-        Recovery.stressIndex(lnRMSSD: summary?.hrv.lnRMSSD, baseline: awakeBaseline)
+        guard let baseline = awakeBaseline, baseline.days >= Recovery.minBaselineDays else {
+            return Recovery.stressIndex(lnRMSSD: nil, baseline: awakeBaseline)
+        }
+        guard let point = summary?.stressSeries?.last else {
+            return StressResult(index: nil, reason: "Needs recorded awake R-R windows")
+        }
+        return StressResult(index: point.index, reason: nil)
     }
 
     /// Corrected bounds select the sensor samples used for nightly metrics;
@@ -472,9 +507,9 @@ final class BandLink: NSObject, ObservableObject {
         return Recovery.score(
             lnRMSSD: night?.lnRMSSD,
             rhr: night?.restingHR,
-            sleepHours: lastNightHours,
+            sleepHours: night?.reliableSleepHours,
             sleepNeedHours: needHours,
-            baseline: baseline
+            baseline: DailyAnalysis.baseline(from: Array(days.filter { $0.dateKey < (nightKey ?? "") }.suffix(30)))
         )
     }
 
@@ -495,7 +530,12 @@ final class BandLink: NSObject, ObservableObject {
                     hrvWindowSeconds: old.hrvWindowSeconds,
                     sleepHours: old.sleepHours, sleepStartUnix: old.sleepStartUnix,
                     sleepEndUnix: old.sleepEndUnix, strain: old.strain, steps: old.steps,
-                    sleepDurationReliable: old.sleepDurationReliable
+                    sleepDurationReliable: old.sleepDurationReliable,
+                    respiratoryRate: old.respiratoryRate,
+                    sleepPerformancePct: old.sleepPerformancePct,
+                    zoneSeconds: old.zoneSeconds,
+                    awakeLnRMSSD: old.awakeLnRMSSD,
+                    awakeRestingHR: old.awakeRestingHR
                 )
             } else {
                 byDate[row.dateKey] = DayMetrics(
@@ -1178,7 +1218,12 @@ final class BandLink: NSObject, ObservableObject {
                     ?? previous.strain,
                 steps: day.steps == nil && previous.steps == nil ? nil :
                     max(day.steps ?? 0, previous.steps ?? 0),
-                sleepDurationReliable: replacesSleep ? day.sleepDurationReliable : previous.sleepDurationReliable
+                sleepDurationReliable: replacesSleep ? day.sleepDurationReliable : previous.sleepDurationReliable,
+                respiratoryRate: replacesSleep ? day.respiratoryRate : previous.respiratoryRate,
+                sleepPerformancePct: replacesSleep ? day.sleepPerformancePct : previous.sleepPerformancePct,
+                zoneSeconds: day.zoneSeconds ?? previous.zoneSeconds,
+                awakeLnRMSSD: day.awakeLnRMSSD ?? previous.awakeLnRMSSD,
+                awakeRestingHR: day.awakeRestingHR ?? previous.awakeRestingHR
             )
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }

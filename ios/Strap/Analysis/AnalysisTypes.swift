@@ -294,6 +294,13 @@ struct DayMetrics: Identifiable, Equatable, Codable {
     let steps: Int?
     /// nil means a legacy quiet-fraction total, not verified by this version.
     var sleepDurationReliable: Bool? = nil
+    /// Optional on legacy days; sourced from the canonical night's samples/report.
+    var respiratoryRate: Double? = nil
+    var sleepPerformancePct: Double? = nil
+    /// Recorded awake HR seconds in Karvonen zones 1…5; nil means unavailable.
+    var zoneSeconds: [Int]? = nil
+    var awakeLnRMSSD: Double? = nil
+    var awakeRestingHR: Double? = nil
 
     var id: String { dateKey }
 

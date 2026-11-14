@@ -7,6 +7,7 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     let openPlan: () -> Void
 
+    @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var showLiveSession = false
@@ -26,16 +27,55 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                topBar
-                titleBlock
+                Text("STRAP")
+                    .font(StrapTypography.body(20, weight: .bold)).tracking(2)
+                    .frame(maxWidth: .infinity).padding(.vertical, 14)
                 ringTrio
-                insightCard
+                    .background(GeometryReader { geometry in
+                        Color.clear.preference(key: HomeHeroPosition.self,
+                            value: geometry.frame(in: .named("home-scroll")).maxY)
+                    })
                 monitorDuo
                 myDayOutlook
-                activitiesCard
                 tonightCard
+                activitiesCard
                 journalCard
+                planCard
                 dashboardSection
+                CombinedLoadChart()
+                discoverSection
+            }
+        }
+        .coordinateSpace(name: "home-scroll")
+        .onPreferenceChange(HomeHeroPosition.self) { value in
+            // Hysteresis prevents repeated whole-home re-layout while dragging
+            // near the hero boundary. Do not animate every scroll-position update.
+            let shouldCompact = compactScores ? value < 80 : value < 0
+            guard shouldCompact != compactScores else { return }
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { compactScores = shouldCompact }
+        }
+        .safeAreaInset(edge: .top) {
+            VStack(spacing: 0) {
+                topBar
+                if dayOffset != 0 {
+                    Text("Activity history · scores show the latest recorded day")
+                        .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
+                }
+                if compactScores { compactRingRow }
+            }
+            .padding(.horizontal, AppLayout.screenInset)
+            .padding(.top, 8)
+            .background {
+                if #available(iOS 26.0, *) {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .overlay(Color.appCanvasTop.opacity(0.70))
+                        .ignoresSafeArea(edges: .top)
+                } else {
+                    Color.appCanvasTop.opacity(0.98)
+                }
             }
         }
         .refreshable {
@@ -119,13 +159,18 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            ZStack {
-                Circle().strokeBorder(Color.appMuted, lineWidth: 1.5)
-                Image(systemName: "person.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Color.appMuted)
-            }
-            .frame(width: 30, height: 30)
+            NavigationLink(value: Route.settings) {
+                Image(systemName: "person.fill").font(StrapTypography.body(17))
+                    .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
+                    .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
+            }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
+            HStack(spacing: 4) {
+                Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                Text("\(store.recordedDayCount)").font(StrapTypography.body(11, weight: .bold))
+            }.padding(.horizontal, 8).padding(.vertical, 7)
+                .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
+                .accessibilityLabel("\(store.recordedDayCount) recorded days")
 
             Spacer()
 
@@ -133,14 +178,14 @@ struct HomeView: View {
                 Button {
                     if dayOffset > -6 { dayOffset -= 1 }
                 } label: {
-                    Text("‹").font(.system(size: 16)).frame(width: 32, height: 32)
+                    Text("‹").font(StrapTypography.body(16)).frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset <= -6)
                 .foregroundStyle(dayOffset <= -6 ? Color.appLine : Color.appFG)
 
                 Text(dayLabel)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.9)
                     .foregroundStyle(Color.appFG)
                     .frame(minWidth: 62)
@@ -148,7 +193,7 @@ struct HomeView: View {
                 Button {
                     if dayOffset < 0 { dayOffset += 1 }
                 } label: {
-                    Text("›").font(.system(size: 16)).frame(width: 32, height: 32)
+                    Text("›").font(StrapTypography.body(16)).frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset >= 0)
@@ -161,19 +206,13 @@ struct HomeView: View {
 
             HStack(spacing: 5) {
                 Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
-                Image(systemName: "battery.100")
-                    .font(.system(size: 14))
-                    .foregroundStyle(demo ? Color.appGood : Color.appMuted)
+                Image(systemName: batterySymbol)
+                    .font(StrapTypography.body(14))
+                    .foregroundStyle(batteryColor)
             }
 
-            NavigationLink(value: Route.settings) {
-                Image(systemName: "gearshape")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Color.appMuted)
-                    .frame(width: 32, height: 32)
-            }
         }
         .padding(.bottom, 10)
     }
@@ -181,10 +220,10 @@ struct HomeView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Home")
-                .font(.system(size: 24, weight: .medium))
+                .font(StrapTypography.body(28, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Text(subtitle)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
         }
         .padding(.bottom, 12)
@@ -210,7 +249,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: recoveryScore.map { $0 >= 67 ? Color.appGood : ($0 >= 34 ? Color.appWarn : Color.appHigh) } ?? .appMuted
+                    color: DetailMetric.recovery.color(recoveryScore)
                     )
                 }
                 .buttonStyle(.plain)
@@ -224,11 +263,9 @@ struct HomeView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if !demo {
-                Hint(trioHint)
-            }
+            if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
-        .padding(.bottom, 12)
+        .padding(.bottom, 20)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -248,10 +285,8 @@ struct HomeView: View {
     }
 
     private var sleepPercent: Int? {
-        guard let hours = store.band.lastNightHours else { return nil }
-        let need = store.settings.sleepNeedHours
-        guard need > 0 else { return nil }
-        return Int((min(hours / need, 1.0) * 100).rounded())
+        guard let score = store.band.lastSleepAnalysis?.performancePct, score.isFinite else { return nil }
+        return Int(min(100, max(0, score)).rounded())
     }
 
     private var recoveryScore: Double? { store.band.recovery.score }
@@ -264,6 +299,28 @@ struct HomeView: View {
         return store.band.days.first(where: { $0.dateKey == today })?.strain
     }
 
+    private var displayedBattery: Int? {
+        demo ? SampleData.batteryPercent : store.band.batteryPercent
+    }
+
+    private var batterySymbol: String {
+        guard let percent = displayedBattery else { return "battery.0" }
+        switch percent {
+        case 88...: return "battery.100"
+        case 63...: return "battery.75"
+        case 38...: return "battery.50"
+        case 13...: return "battery.25"
+        default: return "battery.0"
+        }
+    }
+
+    private var batteryColor: Color {
+        guard let percent = displayedBattery else { return .appMuted }
+        if percent <= 10 { return .appHigh }
+        if percent <= 20 { return .appWarn }
+        return .appMuted
+    }
+
     private var batteryText: String {
         guard let battery = store.band.batteryPercent else { return "—" }
         return "\(battery)%"
@@ -271,9 +328,9 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
         VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 8, size: 96, centerText: text)
+            RingView(progress: progress, color: color, lineWidth: 6, size: 82, centerText: text)
             Text(label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(StrapTypography.body(10.5, weight: .medium))
                 .tracking(0.9)
                 .foregroundStyle(Color.appMuted)
         }
@@ -287,12 +344,12 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(demo ? "Elevated HRV" : insightTitle)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(StrapTypography.body(14, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(demo
                          ? "Sample: your HRV is 6% above your usual, which signals strong recovery. A planned threshold run or heavy lift both fit today."
                          : insightBody)
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -301,13 +358,13 @@ struct HomeView: View {
 
                 VStack(spacing: 4) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13))
+                        .font(StrapTypography.body(13))
                         .foregroundStyle(Color.appGood)
                         .frame(width: 26, height: 26)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     Text(demo ? "1" : "\(store.recordedDayCount)")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
             }
@@ -406,61 +463,67 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Text(title.uppercased())
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(0.7)
                     .foregroundStyle(Color.appFG)
                 Spacer()
-                Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
             }
             HStack(spacing: 7) {
                 Text(pill)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(pillColor)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine, lineWidth: 1))
+                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(12, weight: .semibold))
                         .tracking(0.4)
                         .foregroundStyle(stateColor)
                     Text(detail)
-                        .font(.system(size: 10.5))
+                        .font(StrapTypography.body(10.5))
                         .foregroundStyle(Color.appMuted)
                 }
             }
         }
         .padding(13)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: My Day
 
     private var myDayOutlook: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("My Day")
-                .font(.system(size: 19, weight: .medium))
-                .foregroundStyle(Color.appFG)
+            HStack {
+                Text("My Day").font(StrapTypography.body(24, weight: .semibold)).foregroundStyle(Color.appFG)
+                Spacer()
+                Button { showLogger = true } label: {
+                    Image(systemName: "plus").font(StrapTypography.body(21, weight: .medium))
+                        .foregroundStyle(Color.appBG).frame(width: 40, height: 40)
+                        .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
+                }.buttonStyle(.plain).accessibilityLabel("Add activity")
+            }
             Button(action: openPlan) {
                 HStack(spacing: 10) {
-                    Image(systemName: "sun.max")
-                        .font(.system(size: 16))
+                    Image(systemName: "moon")
+                        .font(StrapTypography.body(16))
                         .foregroundStyle(Color.appWarn)
-                    Text("Your Daily Outlook")
-                        .font(.system(size: 13))
+                    Text("Your Day in Review")
+                        .font(StrapTypography.body(14))
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color.appRaised, Color.appSurface], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color(hex: 0x392F59), Color(hex: 0x214856)], startPoint: .leading, endPoint: .trailing)
                 )
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
             }
             .buttonStyle(.plain)
@@ -472,14 +535,14 @@ struct HomeView: View {
 
     private var activitiesCard: some View {
         Panel {
-            CardHead(title: "Today's activities", trailing: "›")
+            CardHead(title: "TODAY'S ACTIVITIES", trailing: "⤢")
 
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
-                        Image(systemName: "moon.fill").font(.system(size: 12))
+                        Image(systemName: "moon.fill").font(StrapTypography.body(12))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(.system(size: 14, weight: .medium))
+                            .font(StrapTypography.metric(17, weight: .bold))
                     }
                     .foregroundStyle(Color(hex: 0x0D1219))
                     .padding(.horizontal, 12)
@@ -487,38 +550,26 @@ struct HomeView: View {
                     .background(RoundedRectangle(cornerRadius: 9).fill(Color.appSleep))
 
                     Text("SLEEP")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(13, weight: .semibold))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(.system(size: 10.5))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+                .background(RoundedRectangle(cornerRadius: 13).fill(Color.appRaised))
             }
             .buttonStyle(.plain)
-            .padding(.bottom, 4)
-            if !demo, latestSleepPeriod != nil {
-                HStack {
-                    Spacer()
-                    Button("Edit sleep time") {
-                        guard let period = latestSleepPeriod else { return }
-                        let session = store.band.latestSleepSession
-                        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-                        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
-                        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
-                        showSleepEditor = true
-                    }
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.appAccent)
+            .contextMenu {
+                if !demo, latestSleepPeriod != nil {
+                    Button("Edit sleep time") { openHomeSleepEditor() }
                 }
-                .padding(.bottom, 8)
             }
-
+            .padding(.bottom, 4)
             VStack(spacing: 8) {
                 if demo {
                     activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
@@ -535,7 +586,7 @@ struct HomeView: View {
                                     correctedKind = ActivityKind(rawValue: correctedLabels[row.id] ?? "") ?? .other
                                 } label: {
                                     Image(systemName: "pencil.circle")
-                                        .font(.system(size: 19))
+                                        .font(StrapTypography.body(19))
                                         .foregroundStyle(Color.appAccent)
                                 }
                                 .accessibilityLabel("Edit activity")
@@ -566,7 +617,7 @@ struct HomeView: View {
                     }
                     if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 8)
@@ -575,23 +626,19 @@ struct HomeView: View {
             }
             .padding(.bottom, 10)
 
-            if !demo {
-                Text("Run, walk and cardio sessions auto-detect from sustained step-counter movement or an elevated heart rate. Short bursts are filtered; detected sessions appear after capture and stay in the log. Lifting load has to be entered by hand; the band does not measure it.")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.appMuted)
-                    .lineSpacing(3)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.bottom, 10)
-            }
-
-            HStack(spacing: 9) {
-                activityButton("+ ADD ACTIVITY") { showLogger = true }
-                activityButton("START ACTIVITY") { showLiveSession = true }
-            }
         }
     }
 
     // MARK: Activity rows
+
+    private func openHomeSleepEditor() {
+        guard let period = latestSleepPeriod else { return }
+        let session = store.band.latestSleepSession
+        let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
+        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
+        showSleepEditor = true
+    }
 
     private struct ActivityRowModel: Identifiable {
         let id: String
@@ -687,33 +734,28 @@ struct HomeView: View {
     }
 
     private func activityRow(icon: String, name: String, detail: String) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15))
-                .foregroundStyle(Color.appMuted)
-                .frame(width: 20)
-            Text(name)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Color.appFG)
-            Spacer()
-            Text(detail)
-                .font(.system(size: 11))
-                .foregroundStyle(Color.appMuted)
+        HStack(spacing: 12) {
+            Image(systemName: icon).font(StrapTypography.body(25, weight: .medium))
+                .foregroundStyle(Color.appFG).frame(width: 64, height: 48)
+                .background(Color.appAccent, in: RoundedRectangle(cornerRadius: 9))
+            Text(name.uppercased()).font(StrapTypography.body(12, weight: .semibold)).foregroundStyle(Color.appFG)
+            Spacer(minLength: 8)
+            Text(detail).font(StrapTypography.body(10.5)).foregroundStyle(Color.appMuted)
+                .multilineTextAlignment(.trailing).frame(maxWidth: 140)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
+        .padding(8)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(StrapTypography.body(11, weight: .medium))
                 .tracking(0.5)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, minHeight: 42)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -724,13 +766,13 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 NavigationLink(value: Route.sleepCoach) {
                     Text("›")
-                        .font(.system(size: 15))
+                        .font(StrapTypography.body(15))
                         .foregroundStyle(Color.appMuted)
                         .frame(width: 32, height: 32)
                 }
@@ -740,10 +782,10 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("RECOMMENDED\nBEDTIME")
-                        .font(.system(size: 9.5))
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                 }
@@ -753,10 +795,10 @@ struct HomeView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("LATEST\nALARM")
-                        .font(.system(size: 9.5))
+                    Text("ALARM ON\nEXACT TIME")
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
@@ -764,7 +806,19 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            Hint("Bedtime is worked back from your wake time, sleep need, tomorrow's intent and accumulated sleep debt. Open the coach to change the wake time or intent; debt starts counting from your first recorded night.")
+            NavigationLink(value: Route.sleepCoach) {
+                Label("EDIT ALARM", systemImage: "pencil")
+                    .font(StrapTypography.body(12, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
+            }.buttonStyle(.plain).padding(.top, 14)
+            Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
+                .font(StrapTypography.body(10, weight: .semibold))
+                .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
+            DisclosureGroup("How bedtime is calculated") {
+                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The alarm is a phone notification.")
+                    .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+            }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }
     }
 
@@ -812,25 +866,46 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("MY JOURNAL")
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 NavigationLink(value: Route.journal) {
                     Text("✎ FILL OUT")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(StrapTypography.body(10, weight: .medium))
                         .tracking(0.7)
                         .foregroundStyle(Color.appFG)
                         .padding(.horizontal, 12)
                         .padding(.vertical, 6)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 }
             }
             .padding(.bottom, 9)
 
+            HStack(spacing: 0) {
+                ForEach(0..<7) { offset in
+                    let date = Calendar.current.date(byAdding: .day, value: offset - 6, to: Date()) ?? Date()
+                    let key = JournalStore.dayKey(for: date)
+                    NavigationLink(value: Route.journal) {
+                        VStack(spacing: 9) {
+                            Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
+                                .font(StrapTypography.body(9, weight: .semibold))
+                            Image(systemName: store.journalEntries[key] == nil ? "circle" : "checkmark.circle.fill")
+                                .font(StrapTypography.body(20, weight: .light))
+                        }.foregroundStyle(store.journalEntries[key] == nil ? Color.appMuted : Color.appGood)
+                            .frame(maxWidth: .infinity)
+                    }.buttonStyle(.plain)
+                }
+            }.padding(.vertical, 14)
+            NavigationLink(value: Route.journal) {
+                Label("BEHAVIOR INSIGHTS", systemImage: "lightbulb")
+                    .font(StrapTypography.body(11, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
+            }.buttonStyle(.plain)
             Text(journalStateText)
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -844,7 +919,7 @@ struct HomeView: View {
         if demo {
             return "Filled · 2 yes · mood Good · sample"
         }
-        return "Not filled today — seven yes/no taps, a mood and a soreness pick."
+        return "Not filled today"
     }
 
     // MARK: Inline dashboard
@@ -853,20 +928,24 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("My Dashboard")
-                    .font(.system(size: 19, weight: .medium))
+                    .font(StrapTypography.body(24, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Button {
                     showDashboardCustomize = true
                 } label: {
-                    Text("CUSTOMIZE ✎")
-                        .font(.system(size: 10, weight: .medium))
+                    Label("CUSTOMIZE", systemImage: "slider.horizontal.3")
+                        .font(StrapTypography.body(11, weight: .semibold))
                         .tracking(0.7)
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color.appLine, lineWidth: 1))
+                        .foregroundStyle(Color.appFG)
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 8)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7).fill(
+                                LinearGradient(colors: [Color.appCustomizeStart, Color.appCustomizeEnd],
+                                               startPoint: .leading, endPoint: .trailing)
+                            )
+                        )
                 }
                 .buttonStyle(.plain)
             }
@@ -874,6 +953,67 @@ struct HomeView: View {
             .padding(.bottom, 10)
 
             DashboardRows()
+        }
+    }
+
+    private var compactRingRow: some View {
+        HStack(spacing: 16) {
+            compactRing("SLEEP", route: .sleepAnalysis, progress: sleepPercent.map { Double($0) / 100 }, color: .appSleep)
+            compactRing("RECOVERY", route: .recovery, progress: recoveryScore.map { $0 / 100 }, color: DetailMetric.recovery.color(recoveryScore))
+            compactRing("STRAIN", route: .strain, progress: strain.map { $0 / 21 }, color: .appAccent)
+        }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
+        NavigationLink(value: route) {
+            HStack(spacing: 6) {
+                RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
+                Text(title).font(StrapTypography.body(11, weight: .semibold)).tracking(0.9)
+            }.foregroundStyle(Color.appFG)
+        }.buttonStyle(.plain)
+    }
+
+    private var planCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("My Plan").font(StrapTypography.body(24, weight: .bold))
+            Button(action: openPlan) {
+                Panel {
+                    HStack(spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Build Your Best Self").font(StrapTypography.body(18, weight: .bold))
+                            Text("Set goals, track progress, and build a consistent routine.").font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                            Label("EXPLORE PLANS", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(Color.appAccent)
+                        }
+                        PlanOrbitView().frame(width: 90, height: 96)
+                    }.foregroundStyle(Color.appFG)
+                }
+            }.buttonStyle(.plain)
+        }.padding(.top, 10)
+    }
+
+    private var discoverSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Discover More").font(StrapTypography.body(23, weight: .semibold))
+            NavigationLink(value: Route.health) {
+                Panel { discoveryRow("Understand your health", detail: "Explore recorded measurements and their quality.", icon: "heart.text.square") }
+            }.buttonStyle(.plain)
+            NavigationLink(value: Route.settings) {
+                Panel { discoveryRow("Your band & data", detail: "Manage history sync, your profile and recorded sources.", icon: "applewatch") }
+            }.buttonStyle(.plain)
+            NavigationLink(value: Route.sleepAnalysis) {
+                Panel { discoveryRow("Explore your sleep data", detail: "Review a night and export its recorded sensor channels.", icon: "moon.stars") }
+            }.buttonStyle(.plain)
+        }.padding(.top, 12)
+    }
+
+    private func discoveryRow(_ title: String, detail: String, icon: String) -> some View {
+        HStack(spacing: 16) {
+            Image(systemName: icon).font(StrapTypography.body(36, weight: .light)).foregroundStyle(Color.appAccent).frame(width: 54)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(title).font(StrapTypography.body(16, weight: .semibold)).foregroundStyle(Color.appFG)
+                Text(detail).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                Label("EXPLORE", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(Color.appAccent)
+            }
         }
     }
 
@@ -909,4 +1049,27 @@ struct HomeView: View {
         formatter.dateFormat = "EEEE d MMMM"
         return formatter
     }()
+}
+
+private struct HomeHeroPosition: PreferenceKey {
+    static var defaultValue: CGFloat = 200
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+
+private struct PlanOrbitView: View {
+    private let symbols = ["moon.stars", "heart", "figure.strengthtraining.traditional", "book.closed"]
+    private let positions: [CGPoint] = [CGPoint(x: 62, y: 24), CGPoint(x: 23, y: 39), CGPoint(x: 34, y: 77), CGPoint(x: 75, y: 67)]
+    var body: some View {
+        ZStack {
+            ForEach(0..<4) { index in
+                ZStack {
+                    Circle().stroke(Color.appMuted.opacity(0.2), lineWidth: 2)
+                    Circle().trim(from: 0.05, to: index == 0 ? 0.8 : 0.5)
+                        .stroke(Color.appGood, style: StrokeStyle(lineWidth: 2, lineCap: .round)).rotationEffect(.degrees(-90))
+                    Image(systemName: symbols[index]).font(.system(size: index == 0 ? 18 : 12)).foregroundStyle(Color.appMuted)
+                }.frame(width: index == 0 ? 46 : 30, height: index == 0 ? 46 : 30).position(positions[index])
+            }
+        }.accessibilityHidden(true)
+    }
 }

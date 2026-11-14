@@ -112,8 +112,7 @@ final class HealthKitBridge: ObservableObject {
     func export(_ session: ActivitySession) async {
         guard state == .ready, session.endUnix > session.startUnix else { return }
         let id = Self.externalID(startUnix: session.startUnix)
-        let alreadySaved = await exists(id)
-        guard !alreadySaved else { return }
+        guard let alreadySaved = await exists(id), !alreadySaved else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(session.startUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(session.endUnix + 1))
         var metadata: [String: Any] = [
@@ -133,8 +132,7 @@ final class HealthKitBridge: ObservableObject {
     func export(live record: LiveActivityRecord) async {
         guard state == .ready else { return }
         let id = Self.externalID(startUnix: record.startedUnix)
-        let alreadySaved = await exists(id)
-        guard !alreadySaved else { return }
+        guard let alreadySaved = await exists(id), !alreadySaved else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(record.startedUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(record.endedUnix))
         guard end > start else { return }
@@ -173,8 +171,8 @@ final class HealthKitBridge: ObservableObject {
     }
 
     /// Health has no built-in dedupe, so the external UUID is queried first.
-    private func exists(_ id: String) async -> Bool {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+    private func exists(_ id: String) async -> Bool? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Bool?, Never>) in
             let predicate = HKQuery.predicateForObjects(
                 withMetadataKey: HKMetadataKeyExternalUUID,
                 operatorType: .equalTo,
@@ -185,8 +183,8 @@ final class HealthKitBridge: ObservableObject {
                 predicate: predicate,
                 limit: 1,
                 sortDescriptors: nil
-            ) { _, samples, _ in
-                continuation.resume(returning: samples?.isEmpty == false)
+            ) { _, samples, error in
+                continuation.resume(returning: error == nil ? samples?.isEmpty == false : nil)
             }
             store.execute(query)
         }

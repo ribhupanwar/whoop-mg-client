@@ -40,13 +40,29 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        # Fonts are copied from Strap/Fonts by XcodeGen when licensed assets
+        # are supplied. Keep registration explicit for CoreText/UIKit.
+        UIAppFonts:
+          - ProximaNova-Regular.ttf
+          - ProximaNova-Bold.ttf
+          - ProximaNova-Light.ttf
+          - ProximaNova-RegularIt.ttf
+          - ProximaNova-BoldIt.ttf
+          - ProximaNova-LightIt.ttf
+          - proxima-nova-medium.ttf
+          - proxima-nova-semibold.ttf
+          - DINPro-Regular.ttf
+          - DINPro-Light.ttf
+          - DINPro-Bold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."
+        NSLocationWhenInUseUsageDescription: "Strap records your running route and distance using iPhone GPS when you start a run."
         NSHealthShareUsageDescription: "Strap can read Apple Health activity, heart rate, sleep and fitness data to compare with band measurements. Reading is optional."
         NSHealthUpdateUsageDescription: "Optional: saves measured workouts and, when supported and validated, band-derived heart rate, steps, sleep and fitness metrics to Apple Health."
         UIBackgroundModes:
           - bluetooth-central
+          - location
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap

@@ -219,7 +219,7 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(decoded, retained)
         XCTAssertEqual(SleepSession.retainingUncovered(
             previous: [old], fresh: [tail], coverageStart: start, coverageEnd: old.endUnix - 1
-        ), [tail], "Full retained coverage allows authoritative reanalysis")
+        ), [old], "Full archive replay must preserve a manually edited canonical night")
         let edited = SleepSession.make(samples: samples, period: tailPeriod,
                                        correctedTimes: [tailStart, old.endUnix])
         XCTAssertEqual(SleepSession.retainingUncovered(
@@ -298,6 +298,33 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertTrue(DailyAnalysis.replacesSleep(previous: previous, fresh: tail,
                                                  coverageStart: tail.sleepStartUnix, coverageEnd: tail.sleepEndUnix,
                                                  isEdited: true))
+    }
+
+    func testTerminalUpFollowedByUnknownStateTrimsSleepEnd() {
+        // Regression for 2026-11-14 archive: sleep(2), sustained up(3),
+        // then terminal state 0. The trailing zero must not hide the up run.
+        let base = start
+        var rows: [V18Sample] = []
+        rows.reserveCapacity(8 * 3600)
+        for second in 0..<(8 * 3600) {
+            let unix = base + second
+            let state: Int = second < 6 * 3600 ? 2 : (second < 7 * 3600 ? 3 : 0)
+            let isQuiet = second < 6 * 3600
+            rows.append(V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
+                heartRate: isQuiet ? 55 : 90, rrIntervalsMS: [],
+                dynamicAccelG: isQuiet ? 0.01 : 0.12,
+                gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: nil, sleepState: state, cardiacFlags: nil, hrQualityFlags: nil,
+                spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
+                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            ))
+        }
+        let periods = SleepDetect.detect(rows, gapToleranceS: 7200)
+        XCTAssertTrue(periods.contains { $0.endUnix <= base + 6 * 3600 },
+                      "Terminal state 0 must not conceal sustained up(3) wake")
     }
 
     func testZeroOrNonfiniteNeedRefusesScore() {

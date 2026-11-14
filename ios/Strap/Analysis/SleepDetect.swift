@@ -133,19 +133,62 @@ enum SleepDetect {
                 continue
             }
 
-            let quietSeconds = quiet[start..<end].filter { $0 }.count
-            var wakeEvents = 0
-            if end > start + 1 {
-                for second in (start + 1)..<end where !quiet[second] && quiet[second - 1] {
-                    wakeEvents += 1
+            // A prolonged, explicitly reported band-up tail is wakefulness,
+            // even when the wearer remains physically still. Trim at its onset
+            // rather than extending the night's end on a later archive replay.
+            // Do not infer wake from missing or ambiguous band states.
+            var verifiedEnd = run[run.count - 1].unix
+            // A terminal band state 0 means no positive sleep declaration,
+            // not that an earlier sustained up(3) run has disappeared.
+            // Skip only a short contiguous terminal 0 suffix, then require
+            // at least five minutes of explicit up(3) before trimming.
+            // This handles archive tails like 3 -> 0 without treating a
+            // transient mid-night up(3) interval as final wake-up.
+            var upStart: Int? = nil
+            var nextUnix: Int? = nil
+            var trailingUnknownSeconds = 0
+            var upSeconds = 0
+            for sample in run.reversed() {
+                guard sample.wearing, (35...220).contains(sample.heartRate),
+                      nextUnix.map({ $0 - sample.unix <= 2 }) ?? true else { break }
+                if sample.sleepState == 0 && upSeconds == 0 {
+                    trailingUnknownSeconds += nextUnix.map { $0 - sample.unix } ?? 1
+                    if trailingUnknownSeconds > 30 * 60 { break }
+                } else if sample.sleepState == 3 {
+                    upStart = sample.unix
+                    upSeconds += nextUnix.map { $0 - sample.unix } ?? 1
+                } else {
+                    break
                 }
+                nextUnix = sample.unix
+            }
+            if let upStart, upSeconds >= 300 {
+                verifiedEnd = upStart - 1
+            }
+            guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
+
+            // Metrics must describe the verified interval, not the discarded
+            // awake tail or a trimmed pre-bed onset.
+            let verifiedIndices = (start..<end).filter {
+                ordered[$0].unix >= verifiedStart && ordered[$0].unix <= verifiedEnd
+            }
+            let quietSeconds = verifiedIndices.filter { quiet[$0] }.count
+            let verifiedHRs = verifiedIndices.compactMap { index -> Double? in
+                let row = ordered[index]
+                return row.wearing && (35...220).contains(row.heartRate)
+                    ? Double(row.heartRate) : nil
+            }
+            var wakeEvents = 0
+            for (offset, index) in verifiedIndices.enumerated() where offset > 0 {
+                let previous = verifiedIndices[offset - 1]
+                if !quiet[index] && quiet[previous] { wakeEvents += 1 }
             }
             periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
-                    endUnix: run[run.count - 1].unix,
-                    quietFraction: Double(quietSeconds) / Double(run.count),
-                    meanHR: Stats.mean(runHRs),
+                    endUnix: verifiedEnd,
+                    quietFraction: Double(quietSeconds) / Double(max(1, verifiedIndices.count)),
+                    meanHR: Stats.mean(verifiedHRs),
                     wakeEvents: wakeEvents
                 )
             )

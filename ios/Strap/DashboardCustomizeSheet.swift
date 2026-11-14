@@ -23,13 +23,13 @@ struct DashboardCustomizeSheet: View {
                         store.resetDashboardLayout()
                     } label: {
                         Text("RESET TO DEFAULT ORDER")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(StrapTypography.body(11, weight: .medium))
                             .tracking(0.7)
                             .foregroundStyle(Color.appAccent)
                             .frame(maxWidth: .infinity)
                             .padding(.vertical, 12)
                             .background(RoundedRectangle(cornerRadius: 11).fill(Color.appRaised))
-                            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appLine, lineWidth: 1))
+                            .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .padding(.top, 14)
@@ -54,11 +54,11 @@ struct DashboardCustomizeSheet: View {
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title.uppercased())
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.7)
                     .foregroundStyle(hidden ? Color.appMuted : Color.appFG)
                 Text(hidden ? "Hidden" : "Shown")
-                    .font(.system(size: 10.5))
+                    .font(StrapTypography.body(10.5))
                     .foregroundStyle(hidden ? Color.appWarn : Color.appGood)
             }
             Spacer()
@@ -74,15 +74,15 @@ struct DashboardCustomizeSheet: View {
                         .foregroundStyle(hidden ? Color.appWarn : Color.appAccent)
                         .frame(width: 34, height: 34)
                         .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
-                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(hidden ? "Show \(row.title)" : "Hide \(row.title)")
             }
         }
         .padding(12)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appSurface))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, 8)
     }
 
@@ -95,7 +95,7 @@ struct DashboardCustomizeSheet: View {
                 .foregroundStyle(disabled ? Color.appLine : Color.appFG)
                 .frame(width: 34, height: 34)
                 .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .disabled(disabled)

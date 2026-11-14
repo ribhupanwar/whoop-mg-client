@@ -16,7 +16,7 @@ struct SleepHeartRateChart: View {
                     Spacer()
                     Text(String(format: "%.0f", low))
                 }
-                .font(.system(size: 9))
+                .font(StrapTypography.body(9))
                 .foregroundStyle(Color.appMuted)
                 .frame(width: 25)
                 GeometryReader { geometry in
@@ -58,7 +58,7 @@ struct SleepHeartRateChart: View {
                 Spacer()
                 Text(clock(session.endUnix))
             }
-            .font(.system(size: 9))
+            .font(StrapTypography.body(9))
             .foregroundStyle(Color.appMuted)
         }
         .accessibilityElement(children: .ignore)

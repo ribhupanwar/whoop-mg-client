@@ -90,6 +90,31 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
 // MARK: - HRV
 
 final class HrvTests: XCTestCase {
+    func testReplayOfIdenticalSecondDoesNotInflateHRV() {
+        let original = (0..<90).map { second in
+            makeSample(1000 + second, hr: 65, accel: 0.01,
+                       rr: second.isMultiple(of: 2) ? [800, 810] : [805, 795])
+        }
+        let once = Hrv.fromSamples(original)
+        let replayed = Hrv.fromSamples(original + original)
+        XCTAssertEqual(replayed.beats, once.beats)
+        XCTAssertEqual(replayed.nnBeats, once.nnBeats)
+        XCTAssertEqual(replayed.rmssdMS!, once.rmssdMS!, accuracy: 0.00001)
+    }
+
+    func testReplayPrefersMoreCompleteSecond() {
+        let full = (0..<90).map { second in
+            makeSample(2000 + second, hr: 65, accel: 0.01, rr: [800, 805])
+        }
+        let truncated = (0..<90).map { second in
+            makeSample(2000 + second, hr: 65, accel: 0.01, rr: [800])
+        }
+        let expected = Hrv.fromSamples(full)
+        let combined = Hrv.fromSamples(truncated + full)
+        XCTAssertEqual(combined.beats, expected.beats)
+        XCTAssertEqual(combined.rmssdMS!, expected.rmssdMS!, accuracy: 0.00001)
+    }
+
     func testCleanSeriesPassesThrough() {
         let series: [Double] = [800, 810, 795, 805, 800]
         XCTAssertEqual(Hrv.nnIntervals(series), series)
@@ -296,6 +321,30 @@ final class StrainTests: XCTestCase {
 // MARK: - Activity detection
 
 final class ActivityDetectTests: XCTestCase {
+    func testInvalidHeartRateDoesNotDistortActivity() {
+        var rows = rest()
+        rows += stream(900, 1200, hr: 150, accel: 0.4,
+                       spm: 160, gait: 2, step0: 100)
+        rows += coolDown(2100)
+        let expected = ActivityDetect.detect(rows)
+        let corrupt = (0..<300).map {
+            makeSample(900 + $0, hr: 0, accel: 0.4, steps: 100 + $0 * 2, gait: 2)
+        }
+        XCTAssertEqual(ActivityDetect.detect(rows + corrupt), expected)
+    }
+
+
+    func testHistoricalReplayDoesNotChangeDetectedActivity() {
+        var rows = rest()
+        rows += stream(900, 1200, hr: 150, accel: 0.4,
+                       spm: 160, gait: 2, step0: 100)
+        rows += coolDown(2100)
+        let expected = ActivityDetect.detect(rows)
+        let replayed = ActivityDetect.detect(rows + rows)
+        XCTAssertEqual(replayed, expected)
+    }
+
+
     func testRunDetectedAndLabelledFromGait() {
         var rows = rest()
         rows += stream(900, 1200, hr: 150, accel: 0.4, spm: 160, gait: 2, step0: 100)
@@ -459,6 +508,48 @@ final class SleepDetectTests: XCTestCase {
         }
         rows += stretch(4200, 600, hr: 100, accel: 0.5)
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
+    func testSustainedBandUpTrimsQuietWakeTail() {
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (4200..<4800).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 3)
+        }
+        rows += stretch(4800, 600, hr: 100, accel: 0.5)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(periods.first?.endUnix, 4199)
+    }
+
+    func testOvernightBandUpThenSleepThenFinalUpAndUnknownTail() {
+        // Observed 14 Nov archive pattern: up -> sleep -> up -> unknown.
+        // The earlier up interval is not the final wake; terminal 0 must
+        // not erase a sustained, later up confirmation.
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (4200..<4800).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 3)
+        }
+        rows += (4800..<8400).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (8400..<9000).map {
+            makeSample($0, hr: 65, accel: 0.02, sleepState: 3)
+        }
+        rows += (9000..<9300).map {
+            makeSample($0, hr: 70, accel: 0.02, sleepState: 0)
+        }
+        rows += stretch(9300, 600, hr: 100, accel: 0.5)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(periods.first?.startUnix, 600)
+        XCTAssertEqual(periods.first?.endUnix, 8399)
+        XCTAssertEqual(periods.first?.meanHR ?? 0, 60, accuracy: 0.01)
     }
 
     func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
@@ -629,6 +720,21 @@ final class SleepReportTests: XCTestCase {
 // MARK: - Recovery, stress and SpO2
 
 final class RecoveryTests: XCTestCase {
+    func testNonFiniteOrInvalidBaselineDoesNotProduceRecovery() {
+        let invalid = Baseline(lnRMSSDMean: .nan, lnRMSSDSD: 0.3,
+                               rhrMean: 55, rhrSD: 3, days: 14)
+        XCTAssertNil(Recovery.score(
+            lnRMSSD: 4, rhr: 55, sleepHours: 8, sleepNeedHours: 8,
+            baseline: invalid
+        ).score)
+        let negativeSD = Baseline(lnRMSSDMean: 4, lnRMSSDSD: -1,
+                                  rhrMean: 55, rhrSD: 3, days: 14)
+        XCTAssertNil(Recovery.score(
+            lnRMSSD: 4, rhr: 55, sleepHours: 8, sleepNeedHours: 8,
+            baseline: negativeSD
+        ).score)
+    }
+
     func testNoBaselineGivesNoScore() {
         let result = Recovery.score(
             lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8, baseline: nil
@@ -840,3 +946,35 @@ final class DailyMetricQualityTests: XCTestCase {
         XCTAssertNil(day.strain, "Exercise load still needs its own quiet awake reference")
     }
 }
+
+
+final class CaloriesCoverageTests: XCTestCase {
+    func testLongGapDoesNotBillUnobservedWorkoutMinutes() {
+        let inputs: [(unix: Int, bpm: Double)] = [(0, 150), (300, 150)]
+        let result = Calories.activeKcalTimestamped(
+            heartRates: inputs, restingHR: 55, maxHR: 190,
+            weightKg: 70, heightCm: 175, age: 35, sex: .male
+        )
+        let thirtySeconds = Calories.activeKcalTimestamped(
+            heartRates: [(0, 150), (30, 150)], restingHR: 55, maxHR: 190,
+            weightKg: 70, heightCm: 175, age: 35, sex: .male
+        )
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result!, thirtySeconds!, accuracy: 0.001)
+    }
+
+    func testDuplicateTimestampAddsNoCalories() {
+        let original: [(unix: Int, bpm: Double)] = [(0, 150), (10, 150)]
+        let repeated: [(unix: Int, bpm: Double)] = original + [(unix: 0, bpm: 150), (unix: 10, bpm: 150)]
+        let args = (restingHR: 55.0, maxHR: 190.0, weightKg: 70.0,
+                    heightCm: 175.0, age: 35.0)
+        let a = Calories.activeKcalTimestamped(
+            heartRates: original, restingHR: args.restingHR, maxHR: args.maxHR,
+            weightKg: args.weightKg, heightCm: args.heightCm, age: args.age, sex: .male)
+        let b = Calories.activeKcalTimestamped(
+            heartRates: repeated, restingHR: args.restingHR, maxHR: args.maxHR,
+            weightKg: args.weightKg, heightCm: args.heightCm, age: args.age, sex: .male)
+        XCTAssertEqual(a!, b!, accuracy: 0.001)
+    }
+}
+

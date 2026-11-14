@@ -36,10 +36,10 @@ struct SleepAnalysisView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                lastNightPanel
-                needPanel
                 performancePanel
                 componentsPanel
+                lastNightPanel
+                needPanel
                 consistencyPanel
                 stressDetailPanel
                 weeklyPanel
@@ -77,7 +77,7 @@ struct SleepAnalysisView: View {
             Button("Cancel", role: .cancel) {}
             Button("End Sleep") { saveSleepCorrection() }
         } message: {
-            Text("End this sleep session at the selected Wake Time? You can edit the time later.")
+            Text("Set the sleep end to the selected time? This updates the sleep window and recalculates available metrics. You can edit it later.")
         }
         .navigationTitle("Sleep analysis")
         .navigationBarTitleDisplayMode(.inline)
@@ -117,7 +117,7 @@ struct SleepAnalysisView: View {
             .padding(.vertical, 8)
 
             Text(performanceCaption)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, alignment: .center)
@@ -168,17 +168,17 @@ struct SleepAnalysisView: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Text(percent.map { String(format: "%.0f%%", $0) } ?? "—")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(percent == nil ? Color.appMuted : Color.appFG)
             }
             MiniProgress(fraction: percent.map { min(max($0 / 100.0, 0), 1) }, color: color)
             if !demo && percent == nil {
                 Text(waiting)
-                    .font(.system(size: 10.5))
+                    .font(StrapTypography.body(10.5))
                     .foregroundStyle(Color.appMuted)
             }
         }
@@ -211,17 +211,38 @@ struct SleepAnalysisView: View {
         showSleepEditor = true
     }
 
+    private var canEndSleepNow: Bool {
+        guard let period = editablePeriod else { return false }
+        let now = Date().timeIntervalSince1970
+        // End Now is for an active/recently detected window only. Older nights must be edited explicitly.
+        return now >= Double(period.startUnix) && now - Double(period.endUnix) <= 15 * 60
+            && now - Double(period.startUnix) <= 86400
+    }
+
+    private func requestEndSleepNow() {
+        guard canEndSleepNow, let period = editablePeriod else { return }
+        let now = Date()
+        let start = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? period.startUnix))
+        guard now > start, now.timeIntervalSince(start) <= 86400 else {
+            openSleepEditor()
+            return
+        }
+        correctedSleepStart = start
+        correctedSleepEnd = now
+        confirmEndSleep = true
+    }
+
     private var lastNightPanel: some View {
         Panel {
             HStack {
                 Text("Last night's sleep")
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(StrapTypography.body(17, weight: .semibold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 if !demo, editablePeriod != nil {
                     Button(action: openSleepEditor) {
                         Label("EDIT", systemImage: "pencil")
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(StrapTypography.body(12, weight: .semibold))
                     }
                     .foregroundStyle(Color.appAccent)
                 }
@@ -229,15 +250,28 @@ struct SleepAnalysisView: View {
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(demo ? SampleData.sleepHours : lastNightHours.map(CoachFormat.duration) ?? "—")
-                    .font(.system(size: 30, weight: .medium))
+                    .font(StrapTypography.body(30, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text("HOURS OF SLEEP")
-                    .font(.system(size: 9.5))
+                    .font(StrapTypography.body(9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
                 Spacer()
             }
             .padding(.bottom, 8)
+
+            if !demo, canEndSleepNow {
+                Button(action: requestEndSleepNow) {
+                    Label("END SLEEP NOW", systemImage: "stop.circle")
+                        .font(StrapTypography.body(12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.appSleep)
+                .accessibilityHint("Confirm ending the current sleep at the present time")
+                .padding(.bottom, 12)
+            }
 
             if demo {
                 LineChart(
@@ -254,7 +288,7 @@ struct SleepAnalysisView: View {
                 SleepHeartRateChart(session: session)
                     .padding(.bottom, 4)
                 Text("Per-minute HR within this sleep window. Gaps mean missing data.")
-                    .font(.system(size: 10.5))
+                    .font(StrapTypography.body(10.5))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 8)
             } else {
@@ -288,7 +322,7 @@ struct SleepAnalysisView: View {
                             Text("Unknown \(CoachFormat.duration(session.unclassifiedHours))")
                         }
                     }
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 8)
                     if let reason = session.durationReason { Hint(reason + " Missing time is not awake time.") }
@@ -297,20 +331,20 @@ struct SleepAnalysisView: View {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Movement bouts")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(StrapTypography.body(12, weight: .medium))
                             .foregroundStyle(Color.appFG)
                         Text("not verified awakenings")
-                            .font(.system(size: 10.5))
+                            .font(StrapTypography.body(10.5))
                             .foregroundStyle(Color.appMuted)
                     }
                     Spacer()
                     Text(demo ? "\(SampleData.wakeEvents)" : wakeEventText)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(StrapTypography.body(20, weight: .medium))
                         .foregroundStyle(Color.appFG)
                 }
 
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(StrapTypography.body(12, weight: .medium))
             .tint(Color.appMuted)
             .padding(.top, 14)
         }
@@ -351,10 +385,10 @@ struct SleepAnalysisView: View {
     private func splitValue(_ value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 15, weight: .medium))
+                .font(StrapTypography.body(15, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text(label)
-                .font(.system(size: 10))
+                .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -389,7 +423,7 @@ struct SleepAnalysisView: View {
                             endUnix: session.endUnix
                         )
                     }
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .tint(Color.appMuted)
                     .padding(.vertical, 12)
                 }
@@ -491,12 +525,12 @@ struct SleepAnalysisView: View {
         return VStack(alignment: .leading, spacing: 20) {
             HStack {
                 Text("DURATION")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(StrapTypography.body(10, weight: .semibold))
                     .tracking(1)
                     .foregroundStyle(Color.appMuted)
                 Spacer()
                 Text(CoachFormat.duration(total / 60.0))
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(StrapTypography.body(16, weight: .semibold))
             }
             ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
                 let value = minutes[stage] ?? 0
@@ -507,14 +541,14 @@ struct SleepAnalysisView: View {
                             .strokeBorder(stage.color, lineWidth: 2)
                             .frame(width: 22, height: 22)
                         Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
-                            .font(.system(size: 12, weight: .semibold))
+                            .font(StrapTypography.body(12, weight: .semibold))
                             .tracking(0.5)
                         Text(String(format: "%.0f%%", fraction * 100))
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .foregroundStyle(stage.color)
                         Spacer()
                         Text(CoachFormat.duration(value / 60.0))
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(StrapTypography.body(17, weight: .semibold))
                     }
                     SleepStageDistributionBar(fraction: fraction, color: stage.color)
                         .frame(height: 20)
@@ -527,7 +561,7 @@ struct SleepAnalysisView: View {
                     Spacer()
                     Text(CoachFormat.duration(session.unclassifiedHours))
                 }
-                .font(.system(size: 12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .medium))
             }
             Divider().overlay(Color.appLine).padding(.top, 2)
             let restorative = (minutes[.deep] ?? 0) + (minutes[.rem] ?? 0)
@@ -537,11 +571,11 @@ struct SleepAnalysisView: View {
                                          startPoint: .topLeading, endPoint: .bottomTrailing))
                     .frame(width: 12, height: 12)
                 Text("RESTORATIVE SLEEP")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(0.5)
                 Spacer()
                 Text(CoachFormat.duration(restorative / 60.0))
-                    .font(.system(size: 17, weight: .semibold))
+                    .font(StrapTypography.body(17, weight: .semibold))
             }
             .padding(.top, 4)
         }
@@ -569,9 +603,9 @@ struct SleepAnalysisView: View {
                 )
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(demo ? SampleData.needTotal : analysis.map { CoachFormat.duration($0.needHours) } ?? "—")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(StrapTypography.body(15, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("needed").font(.system(size: 10)).foregroundStyle(Color.appMuted)
+                    Text("needed").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
@@ -597,10 +631,10 @@ struct SleepAnalysisView: View {
 
     private func needRow(_ title: String, demo: String, live: String) -> some View {
         HStack {
-            Text(title).font(.system(size: 12)).foregroundStyle(Color.appMuted)
+            Text(title).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
             Spacer()
             Text(self.demo ? demo : live)
-                .font(.system(size: 13, weight: .medium)).foregroundStyle(Color.appFG)
+                .font(StrapTypography.body(13, weight: .medium)).foregroundStyle(Color.appFG)
         }
         .padding(.vertical, 7)
         .overlay(alignment: .top) { Rectangle().fill(Color.appLine).frame(height: 1) }
@@ -711,8 +745,8 @@ struct SleepAnalysisView: View {
 
     private func stressSplit(_ value: String, _ label: String, color: Color) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(value).font(.system(size: 15, weight: .medium)).foregroundStyle(color)
-            Text(label).font(.system(size: 10)).foregroundStyle(Color.appMuted)
+            Text(value).font(StrapTypography.body(15, weight: .medium)).foregroundStyle(color)
+            Text(label).font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -827,9 +861,9 @@ struct SleepAnalysisView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(title).font(.system(size: 12.5, weight: .medium)).foregroundStyle(Color.appFG)
+                Text(title).font(StrapTypography.body(12.5, weight: .medium)).foregroundStyle(Color.appFG)
                 Spacer()
-                Text(unit).font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
+                Text(unit).font(StrapTypography.body(10.5)).foregroundStyle(Color.appMuted)
             }
             content()
         }
@@ -840,12 +874,12 @@ struct SleepAnalysisView: View {
     private var coachButton: some View {
         NavigationLink(value: Route.sleepCoach) {
             Text("OPEN SLEEP COACH ›")
-                .font(.system(size: 11, weight: .medium))
+                .font(StrapTypography.body(11, weight: .medium))
                 .tracking(0.6)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, minHeight: 44)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }
@@ -855,8 +889,8 @@ private extension SleepStage {
     var color: Color {
         switch self {
         case .wake: return Color(red: 0.78, green: 0.79, blue: 0.80)
-        case .light: return Color(red: 0.65, green: 0.61, blue: 0.92)
-        case .deep: return Color(red: 0.93, green: 0.39, blue: 0.86)
+        case .light: return Color(hex: 0xABA4EE)
+        case .deep: return Color(hex: 0xED84F6)
         case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
         }
     }
@@ -878,7 +912,7 @@ private struct StageHypnogram: View {
             VStack(alignment: .trailing, spacing: 0) {
                 ForEach(rows) { stage in
                     Text(stage.title)
-                        .font(.system(size: 8.5))
+                        .font(StrapTypography.body(8.5))
                         .foregroundStyle(Color.appMuted)
                         .frame(height: rowHeight, alignment: .center)
                 }

@@ -69,14 +69,14 @@ struct HealthHubView: View {
             if let estimate = fitnessSnapshot {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
                     Text(String(format: "%.0f", estimate.years))
-                        .font(.system(size: 31, weight: .medium))
+                        .font(StrapTypography.body(31, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("years")
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
                     Text("Actual age: \(estimate.chronologicalYears)")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
                 Hint("7-day median resting HR: \(String(format: "%.0f", estimate.restingHeartRate)) bpm · \(estimate.restingNights) nights")
@@ -86,7 +86,7 @@ struct HealthHubView: View {
                         .foregroundStyle(ageGap >= 0 ? Color.appGood : Color.appMuted)
                     Text(String(format: "%.1f years %@", abs(ageGap),
                                 ageGap >= 0 ? "below actual age" : "above actual age"))
-                        .font(.system(size: 12, weight: .medium))
+                        .font(StrapTypography.body(12, weight: .medium))
                         .foregroundStyle(Color.appFG)
                 }
                 Hint("Activity: \(estimate.exerciseDays) recorded days · estimated HUNT-like index \(String(format: "%.1f", estimate.physicalActivityIndex))")
@@ -94,7 +94,7 @@ struct HealthHubView: View {
                 Hint(estimate.confidenceNote)
             } else {
                 Text("—")
-                    .font(.system(size: 30, weight: .medium))
+                    .font(StrapTypography.body(30, weight: .medium))
                     .foregroundStyle(Color.appMuted)
                 Hint("Healthspan needs sufficient measured data: confirm age and sex, capture 4 resting-HR nights, 4 days of recorded steps and one workout within 7 days.")
             }
@@ -110,10 +110,10 @@ struct HealthHubView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("HEALTH MONITOR")
-                        .font(.system(size: 10.5, weight: .medium)).tracking(0.8)
+                        .font(StrapTypography.body(10.5, weight: .medium)).tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 HStack(spacing: 6) {
                     monitorCheck("HRV", present: demo || store.lastCapture?.hrv.rmssdMS != nil)
@@ -123,7 +123,7 @@ struct HealthHubView: View {
                 }
                 Text(demo ? "✓ 4/4 metrics within range · sample"
                           : monitorSummary)
-                    .font(.system(size: 11.5))
+                    .font(StrapTypography.body(11.5))
                     .foregroundStyle(demo ? Color.appGood : Color.appMuted)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(10)
@@ -131,8 +131,8 @@ struct HealthHubView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
@@ -154,12 +154,12 @@ struct HealthHubView: View {
     private func monitorCheck(_ label: String, present: Bool) -> some View {
         VStack(spacing: 5) {
             Text(present ? "✓" : "—")
-                .font(.system(size: 14, weight: .medium))
+                .font(StrapTypography.body(14, weight: .medium))
                 .foregroundStyle(present ? Color.appGood : Color.appMuted)
                 .frame(width: 26, height: 26)
                 .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
             Text(label)
-                .font(.system(size: 9.5, weight: .medium)).tracking(0.5)
+                .font(StrapTypography.body(9.5, weight: .medium)).tracking(0.5)
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity)
@@ -172,22 +172,22 @@ struct HealthHubView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("STRESS MONITOR")
-                        .font(.system(size: 10.5, weight: .medium)).tracking(0.8)
+                        .font(StrapTypography.body(10.5, weight: .medium)).tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 HStack(alignment: .bottom, spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
                         Text("TODAY'S STRESS INDEX")
-                            .font(.system(size: 9.5)).tracking(0.6)
+                            .font(StrapTypography.body(9.5)).tracking(0.6)
                             .foregroundStyle(Color.appMuted)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(demo ? SampleData.highStressToday : stressText)
-                                .font(.system(size: 26, weight: .medium))
+                                .font(StrapTypography.body(26, weight: .medium))
                                 .foregroundStyle(Color.appFG)
                             Text(demo ? "hrs" : "SD")
-                                .font(.system(size: 11)).foregroundStyle(Color.appMuted)
+                                .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                         }
                     }
                     Spacer()
@@ -199,13 +199,13 @@ struct HealthHubView: View {
                 }
                 if !demo {
                     Text(stressDetail)
-                        .font(.system(size: 11)).foregroundStyle(Color.appMuted)
+                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                 }
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(Color.appSurface))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
@@ -227,7 +227,7 @@ struct HealthHubView: View {
         Panel {
             CardHead(title: "Not measured by this client")
             Text("Blood pressure is not produced here. Respiratory rate is an RSA estimate from R-R timing, not a chest-band measurement. SpO₂ is only the strap's unvalidated candidate byte and is never a clinical reading. Skin temperature is shown as an absolute reading on the detail screen only.")
-                .font(.system(size: 11.5))
+                .font(StrapTypography.body(11.5))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)

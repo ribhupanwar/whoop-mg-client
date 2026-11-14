@@ -12,7 +12,7 @@ struct GPSRunView: View {
                 Panel {
                     SectionTitle("Outdoor GPS run")
                     Text(String(format: "%.2f km", gps.distanceMeters / 1000))
-                        .font(.system(size: 40, weight: .bold))
+                        .font(StrapTypography.body(40, weight: .bold))
                         .foregroundStyle(Color.appFG)
                     Text("Elapsed: \(gps.elapsedSeconds / 60)m \(gps.elapsedSeconds % 60)s")
                         .foregroundStyle(Color.appMuted)
@@ -22,7 +22,7 @@ struct GPSRunView: View {
                             .foregroundStyle(Color.appFG)
                     }
                     Text(gps.status)
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     HStack(spacing: 14) {
                         if !gps.recording {
@@ -49,7 +49,7 @@ struct GPSRunView: View {
                                 Spacer()
                                 Text(String(format: "%d:%02d", seconds / 60, seconds % 60))
                             }
-                            .font(.system(size: 13))
+                            .font(StrapTypography.body(13))
                             .foregroundStyle(Color.appFG)
                         }
                     }
@@ -67,13 +67,13 @@ struct GPSRunView: View {
                                                 run.distanceMeters / 1000,
                                                 run.movingSeconds / 60,
                                                 run.splitSeconds.count))
-                                        .font(.system(size: 11))
+                                        .font(StrapTypography.body(11))
                                         .foregroundStyle(Color.appMuted)
                                 }
                                 Spacer()
                                 if run.route.count >= 2 {
                                     Button("Map") { selectedRun = run }
-                                        .font(.system(size: 12))
+                                        .font(StrapTypography.body(12))
                                 }
                                 Button(role: .destructive) {
                                     gps.deleteRun(id: run.id)

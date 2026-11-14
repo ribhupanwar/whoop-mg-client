@@ -45,6 +45,11 @@ final class AppStore: ObservableObject {
         self.manualActivities = activities.manualActivities()
         self.liveActivities = activities.liveActivities()
         self.detectedBandActivities = activities.detectedActivities()
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--design-preview") {
+            self.settings.designPreview = true
+        }
+        #endif
         band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
         bandCancellable = band.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
@@ -277,17 +282,14 @@ final class AppStore: ObservableObject {
             : "Uth 2004 · your measured max HR"
     }
 
-    /// Minutes in Z1–Z3 (low) or Z4–Z5 (high) over the last seven days of
-    /// measured live sessions. nil when no zone-timed session exists.
+    /// Recorded calendar-week zone time. Prefer raw day coverage and use live
+    /// sessions only for days without it, so one workout is not counted twice.
     func weeklyZoneMinutes(high: Bool) -> Double? {
-        let cutoff = Int(Date().timeIntervalSince1970) - 7 * 86_400
-        let records = liveActivities.filter { $0.startedUnix >= cutoff && !$0.zoneSeconds.isEmpty }
-        guard !records.isEmpty else { return nil }
-        let seconds = records.reduce(0) { total, record in
-            let slice = high ? record.zoneSeconds.dropFirst(3) : record.zoneSeconds.prefix(3)
-            return total + slice.reduce(0, +)
-        }
-        return Double(seconds) / 60.0
+        let days = MetricTimeline.make(days: band.days, live: liveActivities, manual: [],
+            caloriesByDay: [:], ending: Date(), count: 7, sleepNeedHours: settings.sleepNeedHours)
+        let metric: DetailMetric = high ? .zonesHigh : .zonesLow
+        let values = days.compactMap { $0.value(metric) }
+        return values.isEmpty ? nil : values.reduce(0, +)
     }
 
     /// Active energy over the last capture's per-minute heart rates. Nil when

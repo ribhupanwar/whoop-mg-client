@@ -28,14 +28,26 @@ enum ActivityDetect {
         _ samples: [V18Sample],
         sleepPeriods: [SleepPeriod] = []
     ) -> [ActivitySession] {
-        let ordered = samples
-            .filter { $0.wearing }
-            .filter { sample in
-                !sleepPeriods.contains {
-                    $0.startUnix <= sample.unix && sample.unix <= $0.endUnix
-                }
+        // Historical offload can replay the same second after reconnect.
+        // Choose one record per timestamp before calculating cadence, HR
+        // baselines and sustained-activity duration; duplicates are not time.
+        var bySecond: [Int: V18Sample] = [:]
+        for sample in samples where sample.wearing && (35...220).contains(sample.heartRate) {
+            guard !sleepPeriods.contains(where: {
+                $0.startUnix <= sample.unix && sample.unix <= $0.endUnix
+            }) else { continue }
+            if let old = bySecond[sample.unix] {
+                let oldQuality = (old.stepCounter == nil ? 0 : 2)
+                    + (old.dynamicAccelG == nil ? 0 : 1)
+                    + old.rrIntervalsMS.count
+                let newQuality = (sample.stepCounter == nil ? 0 : 2)
+                    + (sample.dynamicAccelG == nil ? 0 : 1)
+                    + sample.rrIntervalsMS.count
+                if newQuality <= oldQuality { continue }
             }
-            .sorted { $0.unix < $1.unix }
+            bySecond[sample.unix] = sample
+        }
+        let ordered = bySecond.values.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
 
         let rates = (0..<ordered.count).map { StepCounter.rate(ordered, at: $0) }
