@@ -418,11 +418,10 @@ final class SleepStageTests: XCTestCase {
             Array(repeating: SleepStage.wake, count: 10) + Array(repeating: SleepStage.light, count: 10),
             Array(repeating: SleepStage.light, count: 10)
         ]
-        let minutes = [
-            (0..<20).map { Double($0) / 2 },
-            (0..<20).map { 90 + Double($0) / 2 },
-            (0..<10).map { 180 + Double($0) / 2 }
-        ]
+        let firstRunMinutes: [Double] = (0..<20).map { Double($0) / 2 }
+        let secondRunMinutes: [Double] = (0..<20).map { 90.0 + Double($0) / 2 }
+        let thirdRunMinutes: [Double] = (0..<10).map { 180.0 + Double($0) / 2 }
+        let minutes: [[Double]] = [firstRunMinutes, secondRunMinutes, thirdRunMinutes]
 
         XCTAssertEqual(
             try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(provisionalRuns: runs, epochMinutes: minutes)),
