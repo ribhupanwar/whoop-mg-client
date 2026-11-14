@@ -321,6 +321,17 @@ final class StrainTests: XCTestCase {
 // MARK: - Activity detection
 
 final class ActivityDetectTests: XCTestCase {
+    func testHistoricalReplayDoesNotChangeDetectedActivity() {
+        var rows = rest()
+        rows += stream(900, 1200, hr: 150, accel: 0.4,
+                       spm: 160, gait: 2, step0: 100)
+        rows += coolDown(2100)
+        let expected = ActivityDetect.detect(rows)
+        let replayed = ActivityDetect.detect(rows + rows)
+        XCTAssertEqual(replayed, expected)
+    }
+
+
     func testRunDetectedAndLabelledFromGait() {
         var rows = rest()
         rows += stream(900, 1200, hr: 150, accel: 0.4, spm: 160, gait: 2, step0: 100)
