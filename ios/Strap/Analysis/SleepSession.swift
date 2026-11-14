@@ -34,7 +34,14 @@ struct SleepSession: Codable, Equatable {
     var unclassifiedHours: Double {
         max(0, timeInBedHours - classifiedAsleepHours - classifiedAwakeHours)
     }
-    var isComplete: Bool { staging.stageable && unclassifiedHours < 1.0 / 3600 }
+    var isComplete: Bool {
+        guard staging.stageable, timeInBedHours > 0 else { return false }
+        let classified = classifiedAsleepHours + classifiedAwakeHours
+        // Both missing epochs and over-counted epochs invalidate a duration.
+        // Clamping a negative gap to zero must not turn bad staging into
+        // a complete night or yield efficiency above 100%.
+        return abs(timeInBedHours - classified) < 1.0 / 3600
+    }
     /// Only a complete estimated night can drive need, Recovery or debt.
     var asleepHours: Double? { isComplete ? classifiedAsleepHours : nil }
     var awakeHours: Double? { isComplete ? classifiedAwakeHours : nil }
