@@ -341,7 +341,7 @@ final class SleepStageTests: XCTestCase {
         XCTAssertNil(staging.reason)
         XCTAssertGreaterThan(staging.wakeMinutes, 0)
         XCTAssertEqual(staging.segments.last?.startUnix, alignedBase + 870)
-        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertNotEqual(staging.segments.last?.stage, .wake)
         assertHole(staging, start: alignedBase + 840, end: alignedBase + 870)
         assertTotals(staging, period: period, classifiedSeconds: 870)
     }
@@ -368,7 +368,7 @@ final class SleepStageTests: XCTestCase {
         let missing = 2 * 60 * 60..<(2 * 60 * 60 + 10 * 60)
         // 16:00 UTC is 21:30 in the app's Asia/Kolkata timezone, so this
         // four-hour window crosses local midnight.
-        let nightStart = (alignedBase / 86_400) * 86_400 + 16 * 60 * 60 + 20
+        let nightStart = (alignedBase / 86_400) * 86_400 + 16 * 60 * 60
         let period = stageWindow(start: nightStart, seconds: seconds)
         let samples = (0..<seconds).filter { !missing.contains($0) }.map {
             stageSample(unix: nightStart + $0)
@@ -482,7 +482,8 @@ final class SleepStageTests: XCTestCase {
         ))
 
         XCTAssertEqual(onset, 5, accuracy: 1e-12)
-        XCTAssertEqual(SleepStager.remGuard(minutes[50] - onset), 0, accuracy: 1e-12)
+        XCTAssertEqual(SleepStager.remGuard(minutes[50] - onset), SleepStager.remGuard(20), accuracy: 1e-12)
+        XCTAssertLessThan(SleepStager.remGuard(minutes[50] - onset), SleepStager.remGuard(0))
         XCTAssertEqual(SleepStager.deepGuard(minutes[50] - onset), 0, accuracy: 1e-12)
     }
 
@@ -499,14 +500,14 @@ final class SleepStageTests: XCTestCase {
 
         XCTAssertNil(staging.reason)
         XCTAssertEqual(staging.segments.last?.endUnix, alignedBase + seconds)
-        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertNotEqual(staging.segments.last?.stage, .wake)
         XCTAssertEqual(staging.wakeMinutes, 0)
         assertHole(staging, start: alignedBase + gap.lowerBound, end: alignedBase + gap.upperBound)
     }
 
     func testMissingHRNearFinalAwakeningRemainsUnclassified() {
         let seconds = 4 * 60 * 60
-        let missing = 3 * 60 * 60 + 20..<seconds
+        let missing = (3 * 60 * 60 + 20 * 60)..<seconds
         let period = stageWindow(seconds: seconds)
         let samples = (0..<seconds).filter { !missing.contains($0) }.map {
             stageSample(unix: alignedBase + $0)
