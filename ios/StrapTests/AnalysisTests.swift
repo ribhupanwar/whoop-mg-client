@@ -90,6 +90,31 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
 // MARK: - HRV
 
 final class HrvTests: XCTestCase {
+    func testReplayOfIdenticalSecondDoesNotInflateHRV() {
+        let original = (0..<90).map { second in
+            makeSample(1000 + second, hr: 65, accel: 0.01,
+                       rr: second.isMultiple(of: 2) ? [800, 810] : [805, 795])
+        }
+        let once = Hrv.fromSamples(original)
+        let replayed = Hrv.fromSamples(original + original)
+        XCTAssertEqual(replayed.beats, once.beats)
+        XCTAssertEqual(replayed.nnBeats, once.nnBeats)
+        XCTAssertEqual(replayed.rmssdMS!, once.rmssdMS!, accuracy: 0.00001)
+    }
+
+    func testReplayPrefersMoreCompleteSecond() {
+        let full = (0..<90).map { second in
+            makeSample(2000 + second, hr: 65, accel: 0.01, rr: [800, 805])
+        }
+        let truncated = (0..<90).map { second in
+            makeSample(2000 + second, hr: 65, accel: 0.01, rr: [800])
+        }
+        let expected = Hrv.fromSamples(full)
+        let combined = Hrv.fromSamples(truncated + full)
+        XCTAssertEqual(combined.beats, expected.beats)
+        XCTAssertEqual(combined.rmssdMS!, expected.rmssdMS!, accuracy: 0.00001)
+    }
+
     func testCleanSeriesPassesThrough() {
         let series: [Double] = [800, 810, 795, 805, 800]
         XCTAssertEqual(Hrv.nnIntervals(series), series)
