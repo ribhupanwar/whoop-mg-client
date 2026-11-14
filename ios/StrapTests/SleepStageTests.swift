@@ -384,7 +384,8 @@ final class SleepStageTests: XCTestCase {
     }
 
     func testSessionOnsetAndLatencyGuardsDoNotRestartAcrossRuns() throws {
-        let firstRun = Array(repeating: .wake, count: 10) + Array(repeating: .light, count: 12)
+        let firstRun: [SleepStage] = Array(repeating: SleepStage.wake, count: 10)
+            + Array(repeating: SleepStage.light, count: 12)
         let secondRun = Array(repeating: SleepStage.light, count: 12)
         let firstMinutes = (0..<firstRun.count).map { Double($0) / 2 }
         let secondMinutes = (0..<secondRun.count).map { 120 + Double($0) / 2 }
@@ -412,9 +413,9 @@ final class SleepStageTests: XCTestCase {
     }
 
     func testMultipleRunsUseOnlyReliableOnsetFromFirstRun() throws {
-        let runs = [
-            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: .light, count: 10),
-            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: .light, count: 10),
+        let runs: [[SleepStage]] = [
+            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: SleepStage.light, count: 10),
+            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: SleepStage.light, count: 10),
             Array(repeating: SleepStage.light, count: 10)
         ]
         let minutes = [
