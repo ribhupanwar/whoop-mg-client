@@ -82,7 +82,7 @@ struct GPSRunView: View {
                                 }
                                 .buttonStyle(.plain)
                             }
-                            .font(.system(size: 13))
+                            .font(StrapTypography.body(13))
                             .foregroundStyle(Color.appFG)
                             .padding(.vertical, 5)
                         }

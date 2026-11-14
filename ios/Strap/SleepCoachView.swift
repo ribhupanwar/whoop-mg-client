@@ -220,7 +220,7 @@ struct SleepCoachView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             if alarmConfirmation {
                 Text("Alarm preference saved for \(CoachFormat.clock(wakeMinutes)).")
-                    .font(.footnote)
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appGood)
             }
             Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")

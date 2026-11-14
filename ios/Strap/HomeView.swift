@@ -28,8 +28,8 @@ struct HomeView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 Text("STRAP")
-                    .font(StrapTypography.body(20, weight: .bold)).tracking(2)
-                    .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    .font(StrapTypography.body(18, weight: .light)).tracking(3)
+                    .frame(maxWidth: .infinity).padding(.top, 24).padding(.bottom, 10)
                 ringTrio
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: HomeHeroPosition.self,
@@ -98,7 +98,7 @@ struct HomeView: View {
                         }
                     }
                     Text("Only the activity label changes. Recorded HR, duration and steps stay untouched.")
-                        .font(.footnote)
+                        .font(StrapTypography.body(11))
                 }
                 .navigationTitle("Edit activity")
                 .toolbar {
@@ -120,8 +120,14 @@ struct HomeView: View {
                 Form {
                     DatePicker("Sleep started", selection: $correctedSleepStart)
                     DatePicker("Woke up", selection: $correctedSleepEnd)
+                    Button {
+                        correctedSleepEnd = Date()
+                    } label: {
+                        Label("Mark sleep ended now", systemImage: "moon.zzz")
+                            .font(StrapTypography.body(14, weight: .semibold))
+                    }
                     Text("Bed and wake times are editable. Recovery uses estimated time asleep (excluding awake periods); HRV and RHR remain sensor-derived.")
-                        .font(.footnote)
+                        .font(StrapTypography.body(11))
                 }
                 .navigationTitle("Edit sleep")
                 .toolbar {

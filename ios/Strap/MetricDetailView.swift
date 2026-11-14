@@ -135,7 +135,7 @@ struct MetricDetailView: View {
                 Screen {
                     Panel { WeeklyMetricChart(metric: metric, points: Array(history.suffix(7)), selectedKey: selectedKey) }
                     Panel {
-                        Text("Last 30 days").font(.headline).padding(.bottom, 12)
+                        Text("Last 30 days").font(StrapTypography.body(16, weight: .semibold)).padding(.bottom, 12)
                         ForEach(Array(history.suffix(30).reversed())) { day in
                             HStack {
                                 Text(day.date.formatted(date: .abbreviated, time: .omitted))
@@ -188,8 +188,8 @@ struct MetricDetailView: View {
             }
             VStack(spacing: 8) {
                 Text("STRAP").font(StrapTypography.body(17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
-                Text(mainMetric.text(value)).font(StrapTypography.body(57, weight: .bold))
-                    .monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
+                ScoreValueText(value: mainMetric.text(value), size: 57)
+                    .minimumScaleFactor(0.7).lineLimit(1)
                 Text(mainMetric.title.uppercased()).font(StrapTypography.body(13, weight: .bold)).tracking(1.4)
             }.padding(24)
         }
