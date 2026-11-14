@@ -297,6 +297,25 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertNil(correctedDay.reliableSleepHours, "An edited expired night must not keep stale dashboard/debt hours")
     }
 
+    func testRecoveredCorrectionAppliesWhenDetectorOnsetKeyChanges() {
+        let old = knownNight()
+        let shiftedSource = old.sourceStartUnix + 300
+        let shifted = SleepSession(version: old.version, sourceStartUnix: shiftedSource,
+                                   startUnix: old.startUnix, endUnix: old.endUnix,
+                                   staging: old.staging, heartRate: old.heartRate,
+                                   movementBouts: old.movementBouts, isEdited: true,
+                                   sourceEndUnix: old.sourceEndUnix)
+        let editedEnd = old.endUnix - 1800
+        let overrides = [String(old.sourceStartUnix): [old.startUnix, editedEnd]]
+        let retained = SleepSession.retainingUncovered(
+            previous: [shifted], fresh: [], coverageStart: old.startUnix,
+            coverageEnd: old.endUnix - 1, overrides: overrides
+        )
+        XCTAssertEqual(retained.count, 1)
+        XCTAssertEqual(retained.first?.endUnix, editedEnd,
+                       "A correction saved under the earlier detector onset must still apply")
+    }
+
     func testMissingLegacySourceEndDecodesSafely() throws {
         var object = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(knownNight())) as? [String: Any])
         object.removeValue(forKey: "sourceEndUnix")
