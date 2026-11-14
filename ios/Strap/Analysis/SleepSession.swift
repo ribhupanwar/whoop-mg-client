@@ -109,7 +109,15 @@ struct SleepSession: Codable, Equatable {
     ) -> [SleepSession] {
         // No archive coverage must not erase a previously saved canonical night.
         guard let first = coverageStart, let last = coverageEnd else {
-            return previous.isEmpty ? fresh : previous
+            // Preserve saved nights while accepting genuinely new, non-overlapping
+            // sessions. No coverage is not evidence that either night vanished.
+            var retained = previous
+            for candidate in fresh where !retained.contains(where: {
+                max($0.startUnix, candidate.startUnix) < min($0.endUnix, candidate.endUnix)
+            }) {
+                retained.append(candidate)
+            }
+            return retained.sorted { $0.endUnix < $1.endUnix }
         }
         var result = fresh
         let latestPrevious = previous.max { $0.endUnix < $1.endUnix }
