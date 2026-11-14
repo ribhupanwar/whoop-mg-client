@@ -36,67 +36,69 @@ struct DashboardRows: View {
     private func block(for row: DashboardRow) -> some View {
         switch row {
         case .hrv:
-            MetricRow(
-                icon: "waveform.path.ecg",
-                title: "Heart rate variability",
-                value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
-                unit: (demo || latestNightHRV != nil) ? "ms" : nil,
-                detail: demo ? "\(SampleData.hrvCompare)" : compactComparison(hrvDetail),
-                detailColor: .appMuted,
-                trendUp: demo ? true : hrvTrendUp,
-                trendFavourable: demo ? true : hrvTrendUp
-            )
+            historyRow(.hrv) {
+                MetricRow(icon: "waveform.path.ecg", title: "Heart rate variability",
+                          value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
+                          unit: (demo || latestNightHRV != nil) ? "ms" : nil,
+                          detail: demo ? "\(SampleData.hrvCompare)" : compactComparison(hrvDetail),
+                          detailColor: .appMuted,
+                          trendUp: demo ? true : hrvTrendUp,
+                          trendFavourable: demo ? true : hrvTrendUp)
+            }
         case .restingHR:
-            MetricRow(
-                icon: "heart.pulse",
-                title: "Resting heart rate",
-                value: demo ? String(format: "%.0f", SampleData.rhr) : rhrText,
-                detail: demo ? "\(SampleData.rhrCompare)" : compactComparison(rhrDetail),
-                detailColor: .appMuted,
-                trendUp: demo ? true : rhrTrendUp,
-                trendFavourable: demo ? false : rhrTrendUp.map { !$0 }
-            )
+            historyRow(.rhr) {
+                MetricRow(icon: "heart.pulse", title: "Resting heart rate",
+                          value: demo ? String(format: "%.0f", SampleData.rhr) : rhrText,
+                          detail: demo ? "\(SampleData.rhrCompare)" : compactComparison(rhrDetail),
+                          detailColor: .appMuted,
+                          trendUp: demo ? true : rhrTrendUp,
+                          trendFavourable: demo ? false : rhrTrendUp.map { !$0 })
+            }
         case .steps:
-            MetricRow(
-                icon: "figure.walk",
-                title: "Steps",
-                value: demo ? SampleData.steps.formatted() : stepsText,
-                detail: demo ? SampleData.stepsCompare.formatted() : nil,
-                detailColor: demo ? .appWarn : .appMuted
-            )
+            historyRow(.steps) {
+                MetricRow(icon: "figure.walk", title: "Steps",
+                          value: demo ? SampleData.steps.formatted() : stepsText,
+                          detail: demo ? SampleData.stepsCompare.formatted() : nil,
+                          detailColor: demo ? .appWarn : .appMuted)
+            }
         case .zonesLow:
-            MetricRow(
-                icon: "heart.pulse",
-                title: "HR zones 1–3 · weekly",
-                value: demo ? SampleData.zones13 : zoneText(high: false),
-                detail: demo ? SampleData.zones13Compare : nil,
-                detailColor: demo ? .appGood : .appMuted
-            )
+            historyRow(.zonesLow) {
+                MetricRow(icon: "heart.pulse", title: "HR zones 1–3 · weekly",
+                          value: demo ? SampleData.zones13 : zoneText(high: false),
+                          detail: demo ? SampleData.zones13Compare : nil,
+                          detailColor: demo ? .appGood : .appMuted)
+            }
         case .zonesHigh:
-            MetricRow(
-                icon: "heart.pulse",
-                title: "HR zones 4–5 · weekly",
-                value: demo ? SampleData.zones45 : zoneText(high: true),
-                detail: demo ? SampleData.zones45Compare : nil,
-                detailColor: demo ? .appWarn : .appMuted
-            )
+            historyRow(.zonesHigh) {
+                MetricRow(icon: "heart.pulse", title: "HR zones 4–5 · weekly",
+                          value: demo ? SampleData.zones45 : zoneText(high: true),
+                          detail: demo ? SampleData.zones45Compare : nil,
+                          detailColor: demo ? .appWarn : .appMuted)
+            }
         case .strength:
-            MetricRow(icon: "dumbbell", title: "Strength activity time",
-                      value: strengthText, detail: nil, detailColor: .appMuted)
+            historyRow(.strength) {
+                MetricRow(icon: "dumbbell", title: "Strength activity time",
+                          value: strengthText, detail: nil, detailColor: .appMuted)
+            }
         case .vo2Max:
             vo2Block
         case .calories:
-            MetricRow(
-                icon: "flame",
-                title: "Calories",
-                value: demo ? SampleData.calories.formatted() : caloriesValue,
-                unit: (demo == false && store.captureActiveKcal != nil) ? "kcal" : nil,
-                detail: demo ? SampleData.caloriesCompare.formatted() : nil,
-                detailColor: demo ? .appWarn : .appMuted
-            )
+            historyRow(.calories) {
+                MetricRow(icon: "flame", title: "Calories",
+                          value: demo ? SampleData.calories.formatted() : caloriesValue,
+                          unit: (!demo && store.captureActiveKcal != nil) ? "kcal" : nil,
+                          detail: demo ? SampleData.caloriesCompare.formatted() : nil,
+                          detailColor: demo ? .appWarn : .appMuted)
+            }
         case .stress:
             stressRow
         }
+    }
+
+    private func historyRow<Content: View>(_ metric: DetailMetric,
+                                           @ViewBuilder content: () -> Content) -> some View {
+        NavigationLink(value: Route.metricHistory(metric.rawValue), label: content)
+            .buttonStyle(.plain)
     }
 
     // MARK: Live values
