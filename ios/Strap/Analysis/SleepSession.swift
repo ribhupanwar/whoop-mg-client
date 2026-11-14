@@ -124,7 +124,7 @@ struct SleepSession: Codable, Equatable {
         for old in previous where old.version == algorithmVersion {
             let source = old.sourcePeriod
             let sourceEnd = source.endUnix + 1
-            let savedEdit = SleepCorrectionStore.validated(overrides[String(old.sourceStartUnix)])
+            let savedEdit = SleepCorrectionStore.times(for: source, overrides: overrides)
             let editedBoundsChanged = savedEdit.map { $0[0] != old.startUnix || $0[1] != old.endUnix } ?? false
             // A manually edited canonical night is authoritative even when
             // a later BLE replay covers the entire old interval. Only an
