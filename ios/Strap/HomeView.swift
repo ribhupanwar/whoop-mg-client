@@ -61,7 +61,7 @@ struct HomeView: View {
                 topBar
                 if dayOffset != 0 {
                     Text("Activity history · scores show the latest recorded day")
-                        .font(.system(size: 9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
+                        .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
                 }
                 if compactScores { compactRingRow }
             }
@@ -160,14 +160,14 @@ struct HomeView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             NavigationLink(value: Route.settings) {
-                Image(systemName: "person.fill").font(.system(size: 17))
+                Image(systemName: "person.fill").font(StrapTypography.body(17))
                     .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
                     .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
                                                startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
             }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
             HStack(spacing: 4) {
                 Image(systemName: "flame.fill").foregroundStyle(Color.orange)
-                Text("\(store.recordedDayCount)").font(.system(size: 11, weight: .bold))
+                Text("\(store.recordedDayCount)").font(StrapTypography.body(11, weight: .bold))
             }.padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
                 .accessibilityLabel("\(store.recordedDayCount) recorded days")
@@ -178,14 +178,14 @@ struct HomeView: View {
                 Button {
                     if dayOffset > -6 { dayOffset -= 1 }
                 } label: {
-                    Text("‹").font(.system(size: 16)).frame(width: 32, height: 32)
+                    Text("‹").font(StrapTypography.body(16)).frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset <= -6)
                 .foregroundStyle(dayOffset <= -6 ? Color.appLine : Color.appFG)
 
                 Text(dayLabel)
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.9)
                     .foregroundStyle(Color.appFG)
                     .frame(minWidth: 62)
@@ -193,7 +193,7 @@ struct HomeView: View {
                 Button {
                     if dayOffset < 0 { dayOffset += 1 }
                 } label: {
-                    Text("›").font(.system(size: 16)).frame(width: 32, height: 32)
+                    Text("›").font(StrapTypography.body(16)).frame(width: 32, height: 32)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset >= 0)
@@ -206,10 +206,10 @@ struct HomeView: View {
 
             HStack(spacing: 5) {
                 Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                 Image(systemName: batterySymbol)
-                    .font(.system(size: 14))
+                    .font(StrapTypography.body(14))
                     .foregroundStyle(batteryColor)
             }
 
@@ -223,7 +223,7 @@ struct HomeView: View {
                 .font(.system(size: 28, weight: .semibold, design: .rounded))
                 .foregroundStyle(Color.appFG)
             Text(subtitle)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
         }
         .padding(.bottom, 12)
@@ -330,7 +330,7 @@ struct HomeView: View {
         VStack(spacing: 8) {
             RingView(progress: progress, color: color, lineWidth: 6, size: 82, centerText: text)
             Text(label)
-                .font(.system(size: 10.5, weight: .medium))
+                .font(StrapTypography.body(10.5, weight: .medium))
                 .tracking(0.9)
                 .foregroundStyle(Color.appMuted)
         }
@@ -344,12 +344,12 @@ struct HomeView: View {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(demo ? "Elevated HRV" : insightTitle)
-                        .font(.system(size: 14, weight: .medium))
+                        .font(StrapTypography.body(14, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(demo
                          ? "Sample: your HRV is 6% above your usual, which signals strong recovery. A planned threshold run or heavy lift both fit today."
                          : insightBody)
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                         .lineSpacing(3)
                         .fixedSize(horizontal: false, vertical: true)
@@ -358,13 +358,13 @@ struct HomeView: View {
 
                 VStack(spacing: 4) {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 13))
+                        .font(StrapTypography.body(13))
                         .foregroundStyle(Color.appGood)
                         .frame(width: 26, height: 26)
                         .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                     Text(demo ? "1" : "\(store.recordedDayCount)")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
             }
@@ -463,15 +463,15 @@ struct HomeView: View {
         VStack(alignment: .leading, spacing: 11) {
             HStack {
                 Text(title.uppercased())
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(0.7)
                     .foregroundStyle(Color.appFG)
                 Spacer()
-                Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
             }
             HStack(spacing: 7) {
                 Text(pill)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(pillColor)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
@@ -479,11 +479,11 @@ struct HomeView: View {
                     .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(StrapTypography.body(12, weight: .semibold))
                         .tracking(0.4)
                         .foregroundStyle(stateColor)
                     Text(detail)
-                        .font(.system(size: 10.5))
+                        .font(StrapTypography.body(10.5))
                         .foregroundStyle(Color.appMuted)
                 }
             }
@@ -499,10 +499,10 @@ struct HomeView: View {
     private var myDayOutlook: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("My Day").font(.system(size: 24, weight: .semibold)).foregroundStyle(Color.appFG)
+                Text("My Day").font(StrapTypography.body(24, weight: .semibold)).foregroundStyle(Color.appFG)
                 Spacer()
                 Button { showLogger = true } label: {
-                    Image(systemName: "plus").font(.system(size: 21, weight: .medium))
+                    Image(systemName: "plus").font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appBG).frame(width: 40, height: 40)
                         .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
                 }.buttonStyle(.plain).accessibilityLabel("Add activity")
@@ -510,13 +510,13 @@ struct HomeView: View {
             Button(action: openPlan) {
                 HStack(spacing: 10) {
                     Image(systemName: "moon")
-                        .font(.system(size: 16))
+                        .font(StrapTypography.body(16))
                         .foregroundStyle(Color.appWarn)
                     Text("Your Day in Review")
-                        .font(.system(size: 14))
+                        .font(StrapTypography.body(14))
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -540,7 +540,7 @@ struct HomeView: View {
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
-                        Image(systemName: "moon.fill").font(.system(size: 12))
+                        Image(systemName: "moon.fill").font(StrapTypography.body(12))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
                             .font(StrapTypography.metric(17, weight: .bold))
                     }
@@ -586,7 +586,7 @@ struct HomeView: View {
                                     correctedKind = ActivityKind(rawValue: correctedLabels[row.id] ?? "") ?? .other
                                 } label: {
                                     Image(systemName: "pencil.circle")
-                                        .font(.system(size: 19))
+                                        .font(StrapTypography.body(19))
                                         .foregroundStyle(Color.appAccent)
                                 }
                                 .accessibilityLabel("Edit activity")
@@ -617,7 +617,7 @@ struct HomeView: View {
                     }
                     if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                             .frame(maxWidth: .infinity, alignment: .center)
                             .padding(.vertical, 8)
@@ -735,12 +735,12 @@ struct HomeView: View {
 
     private func activityRow(icon: String, name: String, detail: String) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: icon).font(.system(size: 25, weight: .medium))
+            Image(systemName: icon).font(StrapTypography.body(25, weight: .medium))
                 .foregroundStyle(Color.appFG).frame(width: 64, height: 48)
                 .background(Color.appAccent, in: RoundedRectangle(cornerRadius: 9))
-            Text(name.uppercased()).font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.appFG)
+            Text(name.uppercased()).font(StrapTypography.body(12, weight: .semibold)).foregroundStyle(Color.appFG)
             Spacer(minLength: 8)
-            Text(detail).font(.system(size: 10.5)).foregroundStyle(Color.appMuted)
+            Text(detail).font(StrapTypography.body(10.5)).foregroundStyle(Color.appMuted)
                 .multilineTextAlignment(.trailing).frame(maxWidth: 140)
         }
         .padding(8)
@@ -750,7 +750,7 @@ struct HomeView: View {
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(StrapTypography.body(11, weight: .medium))
                 .tracking(0.5)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, minHeight: 42)
@@ -766,13 +766,13 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 NavigationLink(value: Route.sleepCoach) {
                     Text("›")
-                        .font(.system(size: 15))
+                        .font(StrapTypography.body(15))
                         .foregroundStyle(Color.appMuted)
                         .frame(width: 32, height: 32)
                 }
@@ -782,10 +782,10 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("RECOMMENDED\nBEDTIME")
-                        .font(.system(size: 9.5))
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                 }
@@ -795,10 +795,10 @@ struct HomeView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("ALARM ON\nEXACT TIME")
-                        .font(.system(size: 9.5))
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
@@ -808,17 +808,17 @@ struct HomeView: View {
 
             NavigationLink(value: Route.sleepCoach) {
                 Label("EDIT ALARM", systemImage: "pencil")
-                    .font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .font(StrapTypography.body(12, weight: .semibold)).foregroundStyle(Color.appFG)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
             }.buttonStyle(.plain).padding(.top, 14)
             Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
-                .font(.system(size: 10, weight: .semibold))
+                .font(StrapTypography.body(10, weight: .semibold))
                 .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
             DisclosureGroup("How bedtime is calculated") {
                 Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The alarm is a phone notification.")
-                    .font(.system(size: 11)).foregroundStyle(Color.appMuted)
-            }.font(.system(size: 10)).tint(Color.appMuted).padding(.top, 8)
+                    .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+            }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }
     }
 
@@ -866,13 +866,13 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("MY JOURNAL")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 NavigationLink(value: Route.journal) {
                     Text("✎ FILL OUT")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(StrapTypography.body(10, weight: .medium))
                         .tracking(0.7)
                         .foregroundStyle(Color.appFG)
                         .padding(.horizontal, 12)
@@ -890,9 +890,9 @@ struct HomeView: View {
                     NavigationLink(value: Route.journal) {
                         VStack(spacing: 9) {
                             Text(date.formatted(.dateTime.weekday(.abbreviated)).uppercased())
-                                .font(.system(size: 9, weight: .semibold))
+                                .font(StrapTypography.body(9, weight: .semibold))
                             Image(systemName: store.journalEntries[key] == nil ? "circle" : "checkmark.circle.fill")
-                                .font(.system(size: 20, weight: .light))
+                                .font(StrapTypography.body(20, weight: .light))
                         }.foregroundStyle(store.journalEntries[key] == nil ? Color.appMuted : Color.appGood)
                             .frame(maxWidth: .infinity)
                     }.buttonStyle(.plain)
@@ -900,12 +900,12 @@ struct HomeView: View {
             }.padding(.vertical, 14)
             NavigationLink(value: Route.journal) {
                 Label("BEHAVIOR INSIGHTS", systemImage: "lightbulb")
-                    .font(.system(size: 11, weight: .semibold)).foregroundStyle(Color.appFG)
+                    .font(StrapTypography.body(11, weight: .semibold)).foregroundStyle(Color.appFG)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
             }.buttonStyle(.plain)
             Text(journalStateText)
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -981,8 +981,8 @@ struct HomeView: View {
                     HStack(spacing: 18) {
                         VStack(alignment: .leading, spacing: 8) {
                             Text("Build Your Best Self").font(StrapTypography.body(18, weight: .bold))
-                            Text("Set goals, track progress, and build a consistent routine.").font(.system(size: 12)).foregroundStyle(Color.appMuted)
-                            Label("EXPLORE PLANS", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
+                            Text("Set goals, track progress, and build a consistent routine.").font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                            Label("EXPLORE PLANS", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(Color.appAccent)
                         }
                         PlanOrbitView().frame(width: 90, height: 96)
                     }.foregroundStyle(Color.appFG)
@@ -993,7 +993,7 @@ struct HomeView: View {
 
     private var discoverSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Discover More").font(.system(size: 23, weight: .semibold))
+            Text("Discover More").font(StrapTypography.body(23, weight: .semibold))
             NavigationLink(value: Route.health) {
                 Panel { discoveryRow("Understand your health", detail: "Explore recorded measurements and their quality.", icon: "heart.text.square") }
             }.buttonStyle(.plain)
@@ -1008,11 +1008,11 @@ struct HomeView: View {
 
     private func discoveryRow(_ title: String, detail: String, icon: String) -> some View {
         HStack(spacing: 16) {
-            Image(systemName: icon).font(.system(size: 36, weight: .light)).foregroundStyle(Color.appAccent).frame(width: 54)
+            Image(systemName: icon).font(StrapTypography.body(36, weight: .light)).foregroundStyle(Color.appAccent).frame(width: 54)
             VStack(alignment: .leading, spacing: 6) {
-                Text(title).font(.system(size: 16, weight: .semibold)).foregroundStyle(Color.appFG)
-                Text(detail).font(.system(size: 12)).foregroundStyle(Color.appMuted)
-                Label("EXPLORE", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(Color.appAccent)
+                Text(title).font(StrapTypography.body(16, weight: .semibold)).foregroundStyle(Color.appFG)
+                Text(detail).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                Label("EXPLORE", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(Color.appAccent)
             }
         }
     }

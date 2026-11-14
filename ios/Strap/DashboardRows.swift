@@ -231,7 +231,7 @@ struct DashboardRows: View {
                         .monospacedDigit()
                         .foregroundStyle(Color.appFG)
                     Text("›")
-                        .font(.system(size: 15))
+                        .font(StrapTypography.body(15))
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, AppLayout.cardInset)
@@ -243,7 +243,7 @@ struct DashboardRows: View {
 
             if showVO2Detail {
                 Text(vo2Detail)
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, AppLayout.cardInset)
@@ -264,15 +264,15 @@ struct DashboardRows: View {
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 HStack {
                     Text(demo ? "Last updated 11:49 · sample" : stressCaption)
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
                     Text(demo ? "LOW \(String(format: "%.1f", SampleData.stressHome))" : stressValue)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .tracking(0.5)
                         .foregroundStyle(demo ? Color.appAccent : Color.appFG)
                 }

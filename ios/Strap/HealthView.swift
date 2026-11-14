@@ -36,14 +36,14 @@ struct HealthView: View {
             SectionTitle("Heart rate")
             HStack(alignment: .bottom, spacing: 10) {
                 Text(lastHR.map { "\($0)" } ?? "—")
-                    .font(.system(size: 36, weight: .medium))
+                    .font(StrapTypography.body(36, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(freshLiveHR != nil ? "bpm · live" : "bpm · waiting for live")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                     Text(zoneText)
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.bottom, 4)
@@ -52,7 +52,7 @@ struct HealthView: View {
             .padding(.bottom, 6)
             if !demo {
                 Text(liveHRDiagnostic)
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 8)
             }
@@ -98,23 +98,23 @@ struct HealthView: View {
             SectionTitle("R–R signal diagnostics")
             if let capture = summary {
                 Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)\n                History frames undecodable: \(store.band.historyUndecodableFrames) · versions: \(store.band.historyVersionCounts.sorted { $0.key < $1.key }.map { "v\($0.key):\($0.value)" }.joined(separator: ", "))")
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text(store.band.liveRRQualityDiagnostic)
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text("Live R–R beats buffered: \(store.band.liveRRIntervalsMS.count)")
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text("Historical samples: \(capture.sampleCount) · HRV quiet window: \(capture.hrvWindowSeconds)s")
                 Text(store.band.historicalRestQualityReason)
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appFG)
                 Text("Clean R–R beats: \(capture.hrv.nnBeats) / \(capture.hrv.beats) · respiratory beats: \(capture.respiration.beats)")
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 if capture.sampleCount < 60 {
                     Hint("Only \(capture.sampleCount) historical records captured. The HRV algorithm requires at least 60 consecutive quiet seconds with valid motion data; 0/0 here does not mean the band sent zero R–R beats. Check source counters above and complete the overnight history sync.")
@@ -125,10 +125,10 @@ struct HealthView: View {
                 }
             } else {
                 Text(store.band.liveRRQualityDiagnostic)
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text(store.band.historicalRestQualityReason)
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Hint("Read stored history to inspect R–R coverage.")
             }
