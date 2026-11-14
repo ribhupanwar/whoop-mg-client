@@ -145,13 +145,13 @@ jobs:
           echo "Verify signed app: codesign -d --entitlements :- Payload/Strap.app"
 
       - name: Upload signing entitlement plist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Strap-HealthKit-signing-entitlements
           path: ${{ runner.temp }}/ipa/Strap-signing-entitlements.plist
 
       - name: Upload unsigned IPA
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Strap-unsigned-ipa
           path: ${{ runner.temp }}/ipa/Strap-unsigned.ipa
@@ -192,7 +192,7 @@ jobs:
 
       - name: Upload native UI previews
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Strap-native-UI-previews
           path: ${{ runner.temp }}/ui-previews/*.png
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-build-logs
           path: |
@@ -223,7 +223,7 @@ jobs:
 
       - name: Upload test results bundle
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ios-test-results
           path: ${{ runner.temp }}/TestResults.xcresult
