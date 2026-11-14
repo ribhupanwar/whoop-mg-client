@@ -106,7 +106,7 @@ final class MetricTimelineTests: XCTestCase {
     func testIsolatedLineReadingsRemainVisibleAcrossMissingDataGaps() {
         XCTAssertEqual(MetricTimeline.isolatedLineIndices([nil, 45, nil]), [1])
         XCTAssertEqual(MetricTimeline.isolatedLineIndices([nil, 45, 47, nil]), [])
-        XCTAssertEqual(MetricTimeline.isolatedLineIndices([43, nil, 45]), [])
+        XCTAssertEqual(MetricTimeline.isolatedLineIndices([43, nil, 45]), [0, 2])
     }
 
     func testInvalidHeartRateInputsDoNotProduceFiniteLookingStrainOrVO2() {
