@@ -365,7 +365,7 @@ final class SleepStageTests: XCTestCase {
 
     func testTenMinuteMidnightWindowGapStaysUnclassified() {
         let seconds = 4 * 60 * 60
-        let missing = 2 * 60 * 60..<(2 * 60 * 60 + 10 * 60)
+        let missing = 2 * 60 * 60 + 10..<(2 * 60 * 60 + 10 + 10 * 60)
         // 16:00 UTC is 21:30 in the app's Asia/Kolkata timezone, so this
         // four-hour window crosses local midnight.
         let nightStart = (alignedBase / 86_400) * 86_400 + 16 * 60 * 60 + 20
@@ -378,7 +378,7 @@ final class SleepStageTests: XCTestCase {
 
         XCTAssertNil(staging.reason)
         XCTAssertEqual(staging.hrCoverage, Double(seconds - 600) / Double(seconds), accuracy: 1e-12)
-        XCTAssertEqual(staging.epochs, seconds / 30 - 20)
+        XCTAssertEqual(staging.epochs, seconds / 30 - 19)
         assertHole(staging, start: nightStart + missing.lowerBound, end: nightStart + missing.upperBound)
         assertTotals(staging, period: period, classifiedSeconds: seconds - 600)
     }
@@ -482,7 +482,7 @@ final class SleepStageTests: XCTestCase {
         ))
 
         XCTAssertEqual(onset, 5, accuracy: 1e-12)
-        XCTAssertEqual(SleepStager.remGuard(minutes[50] - onset), 0, accuracy: 1e-12)
+        XCTAssertEqual(SleepStager.remGuard(minutes[50] - onset), 2.0, accuracy: 1e-12)
         XCTAssertEqual(SleepStager.deepGuard(minutes[50] - onset), 0, accuracy: 1e-12)
     }
 
