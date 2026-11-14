@@ -84,7 +84,7 @@ struct ActivityLoggerView: View {
                                     Image(systemName: "checkmark")
                                 }
                             }
-                            .font(.system(size: 13))
+                            .font(StrapTypography.body(13))
                             .foregroundStyle(kind == option ? Color.appAccent : Color.appFG)
                             .padding(.vertical, 9)
                             .contentShape(Rectangle())

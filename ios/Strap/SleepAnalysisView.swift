@@ -57,7 +57,7 @@ struct SleepAnalysisView: View {
                     .disabled(correctedSleepEnd <= correctedSleepStart || editablePeriod == nil)
                     .accessibilityHint("Confirm the selected wake-up time as the end of this sleep session")
                     Text("Sleep duration and its Recovery input update; HRV/RHR require overnight sensor data.")
-                        .font(.footnote)
+                        .font(StrapTypography.body(11))
                 }
                 .navigationTitle("Edit time in bed")
                 .toolbar {

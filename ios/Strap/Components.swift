@@ -247,15 +247,38 @@ struct RingView: View {
                     .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
-            Text(centerText)
-                .font(StrapTypography.body(centerFont, weight: .semibold))
-                .monospacedDigit()
+            ScoreValueText(value: centerText, size: centerFont)
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
                 .foregroundStyle(Color.appFG)
         }
         .padding(lineWidth / 2)
         .frame(width: size, height: size)
+    }
+}
+
+/// Numeric score typography shared by score rings and the full-size score hero.
+/// WHOOP-style score values use the bundled DIN Pro face; percent signs are
+/// intentionally smaller than the score digits. Labels remain Proxima Nova.
+struct ScoreValueText: View {
+    let value: String
+    let size: CGFloat
+    var weight: Font.Weight = .bold
+
+    var body: some View {
+        if value.hasSuffix("%"), value.count > 1 {
+            HStack(alignment: .firstTextBaseline, spacing: 1) {
+                Text(String(value.dropLast()))
+                    .font(StrapTypography.metric(size, weight: weight))
+                Text("%")
+                    .font(StrapTypography.metric(size * 0.58, weight: weight))
+            }
+            .monospacedDigit()
+        } else {
+            Text(value)
+                .font(StrapTypography.metric(size, weight: weight))
+                .monospacedDigit()
+        }
     }
 }
 
@@ -547,8 +570,8 @@ struct MetricRow: View {
         HStack(spacing: 10) {
             DashboardMetricIcon(symbol: icon)
             Text(title.uppercased())
-                .font(StrapTypography.body(12, weight: .semibold))
-                .tracking(0.65)
+                .font(StrapTypography.body(12.5, weight: .bold))
+                .tracking(0.6)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
