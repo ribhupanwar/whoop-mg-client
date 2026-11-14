@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreText
+import UIKit
 
 
 // MARK: - Typography
@@ -28,6 +29,43 @@ enum StrapTypography {
     private static func bundled(_ file: String, size: CGFloat) -> Font? {
         guard let name = fontNames[file], UIFont(name: name, size: size) != nil else { return nil }
         return .custom(name, size: size)
+    }
+
+    /// Used by the iOS regression test so a missing licensed face cannot be
+    /// hidden by the system-font fallback in a successful simulator build.
+    static var missingBundledFaces: [String] {
+        ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
+         "proxima-nova-medium", "proxima-nova-semibold",
+         "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
+            .filter { file in
+                guard let name = fontNames[file] else { return true }
+                return UIFont(name: name, size: 12) == nil
+            }
+    }
+
+    /// Install the supplied family for native UIKit text that does not receive
+    /// a SwiftUI `.font` modifier (navigation and segmented-control labels).
+    static func configureUIKitAppearance() {
+        guard missingBundledFaces.isEmpty,
+              let regular = fontNames["ProximaNova-Regular"].flatMap({ UIFont(name: $0, size: 17) }),
+              let semibold = fontNames["proxima-nova-semibold"].flatMap({ UIFont(name: $0, size: 17) }) else { return }
+
+        let navigation = UINavigationBarAppearance()
+        navigation.configureWithDefaultBackground()
+        navigation.titleTextAttributes = [.font: semibold, .foregroundColor: UIColor(Color.appFG)]
+        navigation.largeTitleTextAttributes = [.font: UIFont(name: semibold.fontName, size: 34) ?? semibold,
+                                                .foregroundColor: UIColor(Color.appFG)]
+        UINavigationBar.appearance().standardAppearance = navigation
+        UINavigationBar.appearance().compactAppearance = navigation
+        UINavigationBar.appearance().scrollEdgeAppearance = navigation
+        UINavigationBar.appearance().tintColor = UIColor(Color.appAccent)
+
+        let barButton = UIBarButtonItem.appearance()
+        barButton.setTitleTextAttributes([.font: regular, .foregroundColor: UIColor(Color.appAccent)], for: .normal)
+        barButton.setTitleTextAttributes([.font: regular, .foregroundColor: UIColor(Color.appMuted)], for: .disabled)
+
+        UISegmentedControl.appearance().setTitleTextAttributes([.font: regular], for: .normal)
+        UISegmentedControl.appearance().setTitleTextAttributes([.font: semibold], for: .selected)
     }
 
     private static func weightName(_ weight: Font.Weight) -> String {
@@ -235,7 +273,9 @@ struct RingView: View {
     var lineWidth: CGFloat = 8
     var size: CGFloat = 96
     let centerText: String
-    var centerFont: CGFloat = 22
+    // Home's compact WHOOP-style rings use a smaller DIN score face relative
+    // to the ring diameter; the previous 22 pt value dominated the arc.
+    var centerFont: CGFloat = 18
 
     var body: some View {
         ZStack {
