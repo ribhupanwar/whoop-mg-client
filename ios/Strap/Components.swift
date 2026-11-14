@@ -32,10 +32,10 @@ enum StrapTypography {
         return .system(size: size, weight: weight, design: .default)
     }
 
-    static func metric(_ size: CGFloat, weight: Font.Weight = .semibold) -> Font {
+    static func metric(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
         _ = registered
         let variant = weightName(weight)
-        let names = ["DINPro-\(variant)", "DINPro-Regular", "DINPro-Light", "DINPro\(variant)", "DIN2014-\(variant)", "D-DIN"]
+        let names = ["DINPro-\(variant)", "DINPro\(variant)", "DINPro-Regular", "DINPro-Light", "DIN2014-\(variant)", "D-DIN"]
         for name in names where UIFont(name: name, size: size) != nil {
             return .custom(name, size: size).monospacedDigit()
         }
@@ -500,7 +500,7 @@ struct ChartLegend: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 26
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 24
     let icon: String
     let title: String
     let value: String
@@ -526,7 +526,7 @@ struct MetricRow: View {
             VStack(alignment: .trailing, spacing: 1) {
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
                     Text(value)
-                        .font(StrapTypography.metric(valueFontSize))
+                        .font(StrapTypography.metric(valueFontSize, weight: .bold))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
