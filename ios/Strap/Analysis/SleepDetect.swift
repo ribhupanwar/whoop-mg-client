@@ -172,6 +172,16 @@ enum SleepDetect {
             let verifiedIndices = (start..<end).filter {
                 ordered[$0].unix >= verifiedStart && ordered[$0].unix <= verifiedEnd
             }
+            // The pre-trim coverage check can be satisfied entirely by awake
+            // evening records. Re-check coverage inside the confirmed sleep
+            // window so an archive gap cannot become fabricated sleep.
+            let verifiedDuration = verifiedEnd - verifiedStart + 1
+            let verifiedObserved = Set(verifiedIndices.map { ordered[$0].unix }).count
+            let verifiedWorn = Set(verifiedIndices.filter {
+                ordered[$0].wearing && (35...220).contains(ordered[$0].heartRate)
+            }.map { ordered[$0].unix }).count
+            guard verifiedObserved >= verifiedDuration / 2,
+                  verifiedWorn * 5 >= verifiedObserved * 4 else { continue }
             let quietSeconds = verifiedIndices.filter { quiet[$0] }.count
             let verifiedHRs = verifiedIndices.compactMap { index -> Double? in
                 let row = ordered[index]
