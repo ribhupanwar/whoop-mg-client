@@ -24,7 +24,7 @@ struct LiveSessionView: View {
                     Panel {
                         SectionTitle("Not connected")
                         Text("Connect to the strap to stream live heart rate. The band must not be paired in iOS Settings first.")
-                            .font(.system(size: 12))
+                            .font(StrapTypography.body(12))
                             .foregroundStyle(Color.appMuted)
                             .lineSpacing(3)
                             .padding(.bottom, 10)
@@ -32,7 +32,7 @@ struct LiveSessionView: View {
                             store.connectBand()
                         } label: {
                             Text("CONNECT")
-                                .font(.system(size: 11, weight: .medium))
+                                .font(StrapTypography.body(11, weight: .medium))
                                 .tracking(0.5)
                                 .foregroundStyle(Color.appFG)
                                 .frame(maxWidth: .infinity, minHeight: 42)
@@ -80,19 +80,19 @@ struct LiveSessionView: View {
         Panel {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(freshHeartRate(now: now).map { "\($0)" } ?? "—")
-                    .font(.system(size: 52, weight: .medium))
+                    .font(StrapTypography.body(52, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text("bpm")
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Spacer()
                 Text(clock(elapsedSeconds(now: now)))
-                    .font(.system(size: 15, weight: .medium))
+                    .font(StrapTypography.body(15, weight: .medium))
                     .monospacedDigit()
                     .foregroundStyle(Color.appMuted)
             }
             Text("LIVE HEART RATE · WHOOP BAND")
-                .font(.system(size: 10, weight: .medium))
+                .font(StrapTypography.body(10, weight: .medium))
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 2)
@@ -125,14 +125,14 @@ struct LiveSessionView: View {
                             .fill(zoneColors[min(pair.0.index - 1, zoneColors.count - 1)])
                             .frame(width: 8, height: 8)
                         Text(pair.0.name)
-                            .font(.system(size: 11, weight: .medium))
+                            .font(StrapTypography.body(11, weight: .medium))
                             .foregroundStyle(Color.appFG)
                         Text(pair.0.use)
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                         Spacer()
                         Text(clock(pair.1))
-                            .font(.system(size: 11))
+                            .font(StrapTypography.body(11))
                             .monospacedDigit()
                             .foregroundStyle(Color.appMuted)
                     }
@@ -140,12 +140,12 @@ struct LiveSessionView: View {
                 }
             } else {
                 Text("—")
-                    .font(.system(size: 21, weight: .medium))
+                    .font(StrapTypography.body(21, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text(zones == nil
                      ? "Set a resting HR override in Settings, or take one history capture, before zones can be computed."
                      : "Zone time appears once heart rate is streaming.")
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .lineSpacing(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -170,10 +170,10 @@ struct LiveSessionView: View {
     private func stat(label: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(value)
-                .font(.system(size: 17, weight: .medium))
+                .font(StrapTypography.body(17, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text(label)
-                .font(.system(size: 9.5, weight: .medium))
+                .font(StrapTypography.body(9.5, weight: .medium))
                 .tracking(0.6)
                 .foregroundStyle(Color.appMuted)
         }

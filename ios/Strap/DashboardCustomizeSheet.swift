@@ -23,7 +23,7 @@ struct DashboardCustomizeSheet: View {
                         store.resetDashboardLayout()
                     } label: {
                         Text("RESET TO DEFAULT ORDER")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(StrapTypography.body(11, weight: .medium))
                             .tracking(0.7)
                             .foregroundStyle(Color.appAccent)
                             .frame(maxWidth: .infinity)
@@ -54,11 +54,11 @@ struct DashboardCustomizeSheet: View {
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(row.title.uppercased())
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.7)
                     .foregroundStyle(hidden ? Color.appMuted : Color.appFG)
                 Text(hidden ? "Hidden" : "Shown")
-                    .font(.system(size: 10.5))
+                    .font(StrapTypography.body(10.5))
                     .foregroundStyle(hidden ? Color.appWarn : Color.appGood)
             }
             Spacer()

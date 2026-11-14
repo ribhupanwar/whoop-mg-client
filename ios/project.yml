@@ -40,6 +40,18 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        UIAppFonts:
+          - DINPro-Bold.ttf
+          - DINPro-Light.ttf
+          - DINPro-Regular.ttf
+          - ProximaNova-Bold.ttf
+          - ProximaNova-BoldIt.ttf
+          - ProximaNova-Light.ttf
+          - ProximaNova-LightIt.ttf
+          - ProximaNova-Regular.ttf
+          - ProximaNova-RegularIt.ttf
+          - proxima-nova-medium.ttf
+          - proxima-nova-semibold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         NSBluetoothAlwaysUsageDescription: "Strap reads your own band's biometric stream locally."

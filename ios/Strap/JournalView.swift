@@ -14,7 +14,7 @@ struct JournalView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 Text(Self.headerFormatter.string(from: Date()))
-                    .font(.system(size: 12))
+                    .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 10)
                 questionsPanel
@@ -64,7 +64,7 @@ struct JournalView: View {
                 .padding(.bottom, 12)
             SectionTitle("Notes")
             TextEditor(text: $entry.notes)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appFG)
                 .scrollContentBackground(.hidden)
                 .frame(height: 90)
@@ -89,7 +89,7 @@ struct JournalView: View {
             saved = true
         } label: {
             Text(saved ? "Saved ✓" : "SAVE JOURNAL")
-                .font(.system(size: 12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .medium))
                 .tracking(0.6)
                 .foregroundStyle(Color.appBG)
                 .frame(maxWidth: .infinity, minHeight: 44)

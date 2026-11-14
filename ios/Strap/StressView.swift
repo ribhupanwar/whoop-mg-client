@@ -26,10 +26,10 @@ struct StressView: View {
                 StressGauge(value: demo ? SampleData.stressGauge : stressIndex)
                 VStack(spacing: 5) {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
-                        .font(.system(size: 33, weight: .medium))
+                        .font(StrapTypography.body(33, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(demo ? "HIGH · SAMPLE" : "\(store.band.stress.band.uppercased())")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .tracking(1.0)
                         .foregroundStyle(demo ? Color.appWarn : Color.appMuted)
                 }
@@ -45,14 +45,14 @@ struct StressView: View {
                 Spacer()
                 Text("3.0 high")
             }
-            .font(.system(size: 10))
+            .font(StrapTypography.body(10))
             .foregroundStyle(Color.appMuted)
             .padding(.horizontal, 6)
             .padding(.top, 2)
 
             if !demo {
                 Text(stressStateText)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(stressIndex == nil ? Color.appWarn : Color.appGood)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 10)
@@ -201,10 +201,10 @@ struct StressView: View {
     private func splitValue(_ value: String, label: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(value)
-                .font(.system(size: 15, weight: .medium))
+                .font(StrapTypography.body(15, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text(label)
-                .font(.system(size: 10))
+                .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

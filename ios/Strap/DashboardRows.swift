@@ -223,15 +223,15 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appMuted)
                         .frame(width: 22)
                     Text("VO₂ MAX")
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .tracking(0.7)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? String(format: "%.1f", SampleData.vo2) : vo2Text)
-                        .font(.system(size: 20, weight: .medium))
+                        .font(StrapTypography.body(20, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("›")
-                        .font(.system(size: 15))
+                        .font(StrapTypography.body(15))
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, 14)
@@ -242,7 +242,7 @@ struct DashboardRows: View {
             .buttonStyle(.plain)
 
             Text(demo ? "Uth 2004 · sample" : (store.vo2Basis ?? "needs a measured resting HR — Uth 2004 (15.3 × HRmax/HRrest)"))
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal, 14)
@@ -250,7 +250,7 @@ struct DashboardRows: View {
 
             if showVO2Detail {
                 Text(vo2Detail)
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 14)
@@ -267,19 +267,19 @@ struct DashboardRows: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("STRESS MONITOR")
-                        .font(.system(size: 10.5, weight: .medium))
+                        .font(StrapTypography.body(10.5, weight: .medium))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(.system(size: 15)).foregroundStyle(Color.appMuted)
+                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
                 }
                 HStack {
                     Text(demo ? "Last updated 11:49 · sample" : stressCaption)
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
                     Text(demo ? "LOW \(String(format: "%.1f", SampleData.stressHome))" : stressValue)
-                        .font(.system(size: 11, weight: .medium))
+                        .font(StrapTypography.body(11, weight: .medium))
                         .tracking(0.5)
                         .foregroundStyle(demo ? Color.appAccent : Color.appFG)
                 }

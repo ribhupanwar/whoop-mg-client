@@ -28,7 +28,7 @@ struct DashboardView: View {
         Panel {
             SectionTitle("Your trends")
             Text("Historical analysis · Home keeps your live metrics")
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
             HStack(spacing: 10) {
                 analyticsStat("RECORDED DAYS", "\(recentDays.count)/\(trendWindow)")
@@ -48,7 +48,7 @@ struct DashboardView: View {
         Panel {
             SectionTitle("What changed this week")
             Text("Personal trends · comparing recent and preceding recorded days")
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 9) {
                 insightTile("HRV CHANGE", value: hrvChangeText,
@@ -145,14 +145,14 @@ struct DashboardView: View {
                 Image(systemName: icon).foregroundStyle(Color.appAccent)
                 Text(label).foregroundStyle(Color.appMuted)
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(StrapTypography.body(10, weight: .medium))
             Text(value)
-                .font(.system(size: 23, weight: .semibold))
+                .font(StrapTypography.body(23, weight: .semibold))
                 .foregroundStyle(Color.appFG)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(note)
-                .font(.system(size: 10))
+                .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -163,12 +163,12 @@ struct DashboardView: View {
     private func analyticsStat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(value)
-                .font(.system(size: 18, weight: .semibold))
+                .font(StrapTypography.body(18, weight: .semibold))
                 .foregroundStyle(Color.appFG)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             Text(title)
-                .font(.system(size: 9))
+                .font(StrapTypography.body(9))
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -203,7 +203,7 @@ struct DashboardView: View {
             .pickerStyle(.segmented)
             .accessibilityLabel("Chart period")
             Text("Last \(trendWindow) calendar days · \(recentDays.count) recorded days")
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
             if focusedMetric != "strain" { recoveryTrend }
             if focusedMetric == "recovery" { recoveryVitalsTrends }
@@ -275,12 +275,12 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("RECOVERY")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Text("0–100%")
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
             }
             let history = recoveryHistory
@@ -315,7 +315,7 @@ struct DashboardView: View {
                                     .frame(width: width, height: max(2, barHeight))
                                     .position(x: x, y: 166 - barHeight / 2)
                                 Text(String(format: "%.0f%%", value))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(StrapTypography.body(10, weight: .semibold))
                                     .foregroundStyle(color)
                                     .position(x: x, y: max(10, 154 - barHeight))
                             }
@@ -323,7 +323,7 @@ struct DashboardView: View {
                                 Text(item.date.formatted(.dateTime.weekday(.abbreviated)))
                                 Text(item.date.formatted(.dateTime.day()))
                             }
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(9))
                             .foregroundStyle(Color.appMuted)
                             .position(x: x, y: 184)
                         }
@@ -369,7 +369,7 @@ struct DashboardView: View {
             )
             VStack(alignment: .leading, spacing: 6) {
                 Text("RESPIRATORY RATE")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .foregroundStyle(Color.appFG)
                 Hint("Weekly respiratory rate is not present in the stored daily records yet. A validated dated source is needed before plotting this chart.")
             }
@@ -385,7 +385,7 @@ struct DashboardView: View {
                                     maximum: Double) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .semibold))
                 .tracking(0.7)
                 .foregroundStyle(Color.appFG)
             HStack(alignment: .bottom, spacing: 4) {
@@ -393,7 +393,7 @@ struct DashboardView: View {
                     VStack(spacing: 4) {
                         if index < values.count, let value = values[index], value.isFinite {
                             Text(String(format: unit == "%" ? "%.0f%%" : "%.0f", value))
-                                .font(.system(size: 9, weight: .medium))
+                                .font(StrapTypography.body(9, weight: .medium))
                                 .foregroundStyle(color)
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
@@ -402,14 +402,14 @@ struct DashboardView: View {
                                 .frame(height: max(3, CGFloat(min(max(value, 0), maximum) / maximum) * 115))
                         } else {
                             Text("—")
-                                .font(.system(size: 10))
+                                .font(StrapTypography.body(10))
                                 .foregroundStyle(Color.appMuted)
                             RoundedRectangle(cornerRadius: 3)
                                 .fill(Color.appLine)
                                 .frame(height: 3)
                         }
                         Text(String(day.dateKey.suffix(2)))
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(9))
                             .foregroundStyle(Color.appMuted)
                     }
                     .frame(maxWidth: .infinity)
@@ -417,7 +417,7 @@ struct DashboardView: View {
             }
             .frame(height: 150, alignment: .bottom)
             Text("Last \(trendWindow) days · \(unit) · missing days stay blank")
-                .font(.system(size: 10))
+                .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
         .padding(12)
@@ -428,12 +428,12 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("STRAIN")
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .semibold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Text("0–21")
-                    .font(.system(size: 11))
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
             }
             let history = strainHistory
@@ -466,7 +466,7 @@ struct DashboardView: View {
                                     .frame(width: width, height: max(2, barHeight))
                                     .position(x: x, y: 166 - barHeight / 2)
                                 Text(String(format: "%.1f", value))
-                                    .font(.system(size: 10, weight: .semibold))
+                                    .font(StrapTypography.body(10, weight: .semibold))
                                     .foregroundStyle(Color(hex: 0x009FEE))
                                     .position(x: x, y: max(10, 154 - barHeight))
                             }
@@ -474,7 +474,7 @@ struct DashboardView: View {
                                 Text(item.date.formatted(.dateTime.weekday(.abbreviated)))
                                 Text(item.date.formatted(.dateTime.day()))
                             }
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(9))
                             .foregroundStyle(Color.appMuted)
                             .position(x: x, y: 184)
                         }
@@ -510,7 +510,7 @@ struct DashboardView: View {
                 Spacer()
                 Text(unit).foregroundStyle(Color.appMuted)
             }
-            .font(.system(size: 12))
+            .font(StrapTypography.body(12))
             if values.count >= 2 && values.allSatisfy({ $0 != nil }) {
                 LineChart(values: values.compactMap { $0 },
                           color: color, minY: 0, maxY: upper, height: 105,
@@ -529,7 +529,7 @@ struct DashboardView: View {
                 ForEach(1...7, id: \.self) { day in
                     let filled = day <= filledDays
                     Text("\(day)")
-                        .font(.system(size: 11))
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(filled ? Color(hex: 0x08130C) : Color.appMuted)
                         .frame(width: 30, height: 30)
                         .background(RoundedRectangle(cornerRadius: 9).fill(filled ? Color.appGood : Color.appRaised))
