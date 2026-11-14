@@ -172,7 +172,8 @@ enum SleepReport {
         nights: [NightSpan],
         sleepBaseline: Baseline?
     ) -> SleepAnalysis? {
-        guard !periods.isEmpty, needHours > 0 else { return nil }
+        guard !periods.isEmpty, needHours.isFinite, needHours > 0,
+              periods.allSatisfy({ $0.durationS > 0 }) else { return nil }
         let hours = SleepDetect.totalHours(periods)
         let totalSeconds = periods.reduce(0) { $0 + $1.durationS }
         let efficiency = 100.0
