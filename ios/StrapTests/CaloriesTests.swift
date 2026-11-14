@@ -76,6 +76,22 @@ final class CaloriesTests: XCTestCase {
         XCTAssertEqual(kcal ?? 0, 13.0771, accuracy: 0.001)
     }
 
+    func testImplausibleHeartRateDoesNotInflateMinuteOrSessionCalories() {
+        let clean = Calories.activeKcal(
+            hrPerMinute: [150], restingHR: resting, maxHR: maximum,
+            weightKg: weight, heightCm: height, age: age, sex: .male
+        )
+        let corrupted = Calories.activeKcal(
+            hrPerMinute: [150, 250, .nan, .infinity], restingHR: resting, maxHR: maximum,
+            weightKg: weight, heightCm: height, age: age, sex: .male
+        )
+        XCTAssertEqual(try! XCTUnwrap(corrupted), try! XCTUnwrap(clean), accuracy: 0.000001)
+        XCTAssertEqual(Calories.sessionActiveKcal(
+            meanHR: 250, steps: 0, minutes: 10, restingHR: resting, maxHR: maximum,
+            weightKg: weight, heightCm: height, age: age, sex: .male
+        ) ?? -1, 0, accuracy: 0.000001)
+    }
+
     func testSessionAtExerciseHeartRate() {
         let kcal = Calories.sessionActiveKcal(
             meanHR: 150, steps: 0, minutes: 10, restingHR: resting, maxHR: maximum,
