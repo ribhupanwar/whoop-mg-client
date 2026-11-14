@@ -146,6 +146,20 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(sessions.reduce(0.0) { $0 + $1.timeInBedHours }, 2, accuracy: 1e-9)
     }
 
+    func testMissingArchiveCoverageRetainsOldNightAndAddsNonOverlappingNewNight() {
+        let old = knownNight()
+        let next = SleepSession.make(samples: [], period: SleepPeriod(
+            startUnix: old.endUnix + 3600, endUnix: old.endUnix + 7200 - 1,
+            quietFraction: 0, meanHR: 0, wakeEvents: 0
+        ))
+        let merged = SleepSession.retainingUncovered(
+            previous: [old], fresh: [next], coverageStart: nil, coverageEnd: nil
+        )
+        XCTAssertEqual(merged.count, 2)
+        XCTAssertEqual(merged[0], old)
+        XCTAssertEqual(merged[1], next)
+    }
+
     func testRollingPartialArchivePreservesPreviousNight() {
         let previous = DayMetrics(
             dateKey: "2026-11-12", state: "sleep", restingHR: nil, lnRMSSD: nil,
