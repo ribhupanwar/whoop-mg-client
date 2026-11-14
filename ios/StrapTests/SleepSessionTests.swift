@@ -297,6 +297,20 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertNil(correctedDay.reliableSleepHours, "An edited expired night must not keep stale dashboard/debt hours")
     }
 
+    func testManualSleepCorrectionPersistsWithoutArchiveCoverage() {
+        let old = knownNight()
+        let correctedEnd = old.endUnix - 1800
+        let result = SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: nil, coverageEnd: nil,
+            overrides: [String(old.sourceStartUnix): [old.startUnix, correctedEnd]]
+        )
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.endUnix, correctedEnd)
+        XCTAssertTrue(result.first?.isEdited == true)
+        XCTAssertNil(result.first?.asleepHours,
+                     "Without archive samples the corrected window cannot invent sleep stages")
+    }
+
     func testRecoveredCorrectionAppliesWhenDetectorOnsetKeyChanges() {
         let old = knownNight()
         let shiftedSource = old.sourceStartUnix + 300
