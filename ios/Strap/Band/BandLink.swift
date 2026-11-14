@@ -405,7 +405,11 @@ final class BandLink: NSObject, ObservableObject {
             fresh.outsideWorkoutStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: excluded)
             let stressPoints = StressWindows.series(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
             fresh.stressSeries = stressPoints.isEmpty ? nil : stressPoints
-            let nights = Array(allDays.suffix(14)).compactMap(\.night)
+            // Use the newly analyzed nights for sleep consistency. The
+            // previously persisted day can still describe the pre-edit bounds.
+            let nights = Array(allDays.map { day in
+                freshDays.first(where: { $0.dateKey == day.dateKey }) ?? day
+            }.suffix(14)).compactMap(\.night)
             let sleepBaseline = DailyAnalysis.baseline(
                 from: Array(allDays.filter { $0.state == "sleep" }.suffix(30))
             )
@@ -424,7 +428,9 @@ final class BandLink: NSObject, ObservableObject {
                 }) else { continue }
                 let segment = samples.filter { session.startUnix <= $0.unix && $0.unix < session.endUnix }
                 freshDays[index].respiratoryRate = Respiration.estimate(segment).breathsPerMinute
-                let datedNights = Array(allDays.filter { $0.dateKey <= day.dateKey }.suffix(14)).compactMap(\.night)
+                let datedNights = Array(allDays.map { existing in
+                    freshDays.first(where: { $0.dateKey == existing.dateKey }) ?? existing
+                }.filter { $0.dateKey <= day.dateKey }.suffix(14)).compactMap(\.night)
                 let datedReport = SleepReport.analyze(samples: samples, session: session,
                     needHours: needSnapshot, nights: datedNights, sleepBaseline: sleepBaseline)
                 freshDays[index].sleepPerformancePct = datedReport?.performancePct
