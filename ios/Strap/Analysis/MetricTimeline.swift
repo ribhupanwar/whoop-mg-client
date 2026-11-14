@@ -69,7 +69,7 @@ enum MetricTimeline {
             let logs = manual.filter { $0.dateKey == key }
             let strengthLogs = logs.filter { $0.kind.usesSets }
             let hasDay = day != nil || !sessions.isEmpty || !logs.isEmpty
-            let strength: Double? = hasDay && strengthLogs.allSatisfy({ $0.minutes > 0 })
+            let strength: Double? = hasDay && !strengthLogs.isEmpty && strengthLogs.allSatisfy({ $0.minutes > 0 })
                 ? strengthLogs.reduce(0.0) { $0 + Double($1.minutes) } : nil
             return MetricDay(date: date, key: key, recorded: day, recovery: recovery,
                              zones: zones, calories: caloriesByDay[key], strength: strength)
