@@ -32,7 +32,7 @@ enum ActivityDetect {
         // Choose one record per timestamp before calculating cadence, HR
         // baselines and sustained-activity duration; duplicates are not time.
         var bySecond: [Int: V18Sample] = [:]
-        for sample in samples where sample.wearing {
+        for sample in samples where sample.wearing && (35...220).contains(sample.heartRate) {
             guard !sleepPeriods.contains(where: {
                 $0.startUnix <= sample.unix && sample.unix <= $0.endUnix
             }) else { continue }

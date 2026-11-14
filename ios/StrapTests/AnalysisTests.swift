@@ -321,6 +321,19 @@ final class StrainTests: XCTestCase {
 // MARK: - Activity detection
 
 final class ActivityDetectTests: XCTestCase {
+    func testInvalidHeartRateDoesNotDistortActivity() {
+        var rows = rest()
+        rows += stream(900, 1200, hr: 150, accel: 0.4,
+                       spm: 160, gait: 2, step0: 100)
+        rows += coolDown(2100)
+        let expected = ActivityDetect.detect(rows)
+        let corrupt = (0..<300).map {
+            makeSample(900 + $0, hr: 0, accel: 0.4, steps: 100 + $0 * 2, gait: 2)
+        }
+        XCTAssertEqual(ActivityDetect.detect(rows + corrupt), expected)
+    }
+
+
     func testHistoricalReplayDoesNotChangeDetectedActivity() {
         var rows = rest()
         rows += stream(900, 1200, hr: 150, accel: 0.4,
