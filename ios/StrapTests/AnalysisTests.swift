@@ -469,6 +469,24 @@ final class StrainTests: XCTestCase {
     }
 }
 
+final class CaloriesDataQualityTests: XCTestCase {
+    func testInvalidHeartRateBreaksTimestampedEnergyInterval() {
+        let parameters = (resting: 60.0, max: 190.0, weight: 75.0, height: 175.0, age: 35.0)
+        let clean = Calories.activeKcalTimestamped(
+            heartRates: [(unix: 0, bpm: 150), (unix: 10, bpm: 150)],
+            restingHR: parameters.resting, maxHR: parameters.max,
+            weightKg: parameters.weight, heightCm: parameters.height,
+            age: parameters.age, sex: .male)
+        let corrupted = Calories.activeKcalTimestamped(
+            heartRates: [(unix: 0, bpm: 150), (unix: 5, bpm: 250), (unix: 10, bpm: 150)],
+            restingHR: parameters.resting, maxHR: parameters.max,
+            weightKg: parameters.weight, heightCm: parameters.height,
+            age: parameters.age, sex: .male)
+        XCTAssertGreaterThan(clean ?? 0, 0)
+        XCTAssertEqual(corrupted, 0)
+    }
+}
+
 // MARK: - Activity detection
 
 final class ActivityDetectTests: XCTestCase {
