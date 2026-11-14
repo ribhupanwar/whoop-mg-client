@@ -522,7 +522,7 @@ struct DashboardMetricIcon: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 24
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 26
     let icon: String
     let title: String
     let value: String
@@ -565,7 +565,7 @@ struct MetricRow: View {
                 }
                 if let detail {
                     Text(detail)
-                        .font(StrapTypography.metric(11, weight: .regular))
+                        .font(StrapTypography.metric(12, weight: .regular))
                         .foregroundStyle(detailColor)
                         .multilineTextAlignment(.trailing)
                         .lineLimit(1)
