@@ -308,7 +308,7 @@ final class SleepSessionTests: XCTestCase {
         rows.reserveCapacity(8 * 3600)
         for second in 0..<(8 * 3600) {
             let unix = base + second
-            let state: UInt8 = second < 6 * 3600 ? 2 : (second < 7 * 3600 ? 3 : 0)
+            let state: Int = second < 6 * 3600 ? 2 : (second < 7 * 3600 ? 3 : 0)
             let isQuiet = second < 6 * 3600
             rows.append(V18Sample(
                 header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
