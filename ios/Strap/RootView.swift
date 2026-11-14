@@ -33,6 +33,7 @@ enum Route: Hashable {
     case sleepAnalysis
     case settings
     case dataQuality
+    case metricHistory(DetailMetric)
 }
 
 struct RootView: View {
@@ -169,6 +170,9 @@ extension View {
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
             case .dataQuality: DataQualityView()
+            case .metricHistory(let rawValue):
+                MetricHistoryView(metric: DetailMetric(rawValue: rawValue) ?? .hrv)
+            case .metricHistory(let metric): MetricHistoryView(metric: metric)
             }
         }
     }
