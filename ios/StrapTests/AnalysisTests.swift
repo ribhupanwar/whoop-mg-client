@@ -475,7 +475,7 @@ final class StrainTests: XCTestCase {
         let oneActiveSample = quiet + [makeSample(300, hr: 150, accel: 0.5)]
         let disconnected = quiet + [
             makeSample(300, hr: 150, accel: 0.5),
-            makeSample(421, hr: 150, accel: 0.5)
+            makeSample(421, hr: 60, accel: 0.01)
         ]
         let expected = Hrv.trimp(
             oneActiveSample, maxHR: 180, restingHR: 60, sex: .male
@@ -488,18 +488,53 @@ final class StrainTests: XCTestCase {
 
     func testFinalHeartRateSampleCountsOnlyOneSecond() {
         let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let finalSample = quiet + [makeSample(300, hr: 150, accel: 0.5)]
+        let expected = (1.0 / 60.0) * 0.75 * 0.64 * exp(1.92 * 0.75)
+        let actual = Hrv.trimp(
+            finalSample, maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(actual!, expected, accuracy: 1e-9)
+    }
+
+    func testExactlyOneHundredTwentySecondGapDoesNotExtrapolate() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
         let oneActiveSample = quiet + [makeSample(300, hr: 150, accel: 0.5)]
-        let finalSample = quiet + [
+        let boundaryGap = quiet + [
             makeSample(300, hr: 150, accel: 0.5),
-            makeSample(330, hr: 60, accel: 0.01)
+            makeSample(420, hr: 60, accel: 0.01)
         ]
         let expected = Hrv.trimp(
             oneActiveSample, maxHR: 180, restingHR: 60, sex: .male
         )
         let actual = Hrv.trimp(
-            finalSample, maxHR: 180, restingHR: 60, sex: .male
+            boundaryGap, maxHR: 180, restingHR: 60, sex: .male
         )
         XCTAssertEqual(actual!, expected!, accuracy: 1e-9)
+    }
+
+    func testDuplicateTimestampsDoNotAddExtraStrain() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let sample = makeSample(300, hr: 150, accel: 0.5)
+        let once = Hrv.trimp(
+            quiet + [sample], maxHR: 180, restingHR: 60, sex: .male
+        )
+        let duplicated = Hrv.trimp(
+            quiet + [sample, sample], maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(duplicated!, once!, accuracy: 1e-9)
+    }
+
+    func testOutOfOrderSamplesMatchChronologicalInput() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let first = makeSample(300, hr: 150, accel: 0.5)
+        let second = makeSample(305, hr: 150, accel: 0.5)
+        let ordered = Hrv.trimp(
+            quiet + [first, second], maxHR: 180, restingHR: 60, sex: .male
+        )
+        let shuffled = Hrv.trimp(
+            quiet + [second, first], maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(shuffled!, ordered!, accuracy: 1e-9)
     }
 
     func testStrainScaleConstant() {
