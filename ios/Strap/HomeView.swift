@@ -220,7 +220,7 @@ struct HomeView: View {
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text("Home")
-                .font(.system(size: 28, weight: .semibold, design: .rounded))
+                .font(StrapTypography.body(28, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Text(subtitle)
                 .font(StrapTypography.body(12))

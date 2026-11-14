@@ -91,10 +91,10 @@ struct DemoBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Design preview — sample data")
-                .font(.system(size: 12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Text("Values marked sample are invented to show the finished layout. They are not your measurements.")
-                .font(.system(size: 11.5))
+                .font(StrapTypography.body(11.5))
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -157,13 +157,13 @@ struct CardHead: View {
     var body: some View {
         HStack {
             Text(title.uppercased())
-                .font(.system(size: 12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .semibold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appFG)
             Spacer()
             if let trailing {
                 Text(trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appMuted)
             }
         }
@@ -180,7 +180,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(.system(size: 12, weight: .semibold))
+            .font(StrapTypography.body(12, weight: .semibold))
             .tracking(0.8)
             .foregroundStyle(Color.appMuted)
             .padding(.bottom, 8)
@@ -196,7 +196,7 @@ struct Hint: View {
 
     var body: some View {
         Text(text)
-            .font(.system(size: 11))
+            .font(StrapTypography.body(11))
             .foregroundStyle(Color.appMuted)
             .lineSpacing(3)
             .fixedSize(horizontal: false, vertical: true)
@@ -212,10 +212,10 @@ struct EmptyState: View {
     var body: some View {
         VStack(spacing: 6) {
             Text(title)
-                .font(.system(size: 14, weight: .medium))
+                .font(StrapTypography.body(14, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text(detail)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
@@ -248,7 +248,7 @@ struct RingView: View {
                     .rotationEffect(.degrees(-90))
             }
             Text(centerText)
-                .font(.system(size: centerFont, weight: .semibold, design: .rounded))
+                .font(StrapTypography.metric(centerFont, weight: .bold))
                 .monospacedDigit()
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
@@ -353,7 +353,7 @@ struct LineChart: View {
                 }
                 ForEach(Array(yLabels.enumerated()), id: \.offset) { idx, label in
                     Text(label)
-                        .font(.system(size: 9))
+                        .font(StrapTypography.body(9))
                         .foregroundStyle(Color.appMuted)
                         .position(
                             x: leftPad / 2,
@@ -362,7 +362,7 @@ struct LineChart: View {
                 }
                 ForEach(Array(xLabels.enumerated()), id: \.offset) { idx, label in
                     Text(label)
-                        .font(.system(size: 9))
+                        .font(StrapTypography.body(9))
                         .foregroundStyle(Color.appMuted)
                         .position(
                             x: leftPad + plotW * CGFloat(idx) / CGFloat(max(xLabels.count - 1, 1)),
@@ -390,13 +390,13 @@ struct BarChart: View {
                     VStack(spacing: 3) {
                         Spacer(minLength: 0)
                         Text("\(Int(value))")
-                            .font(.system(size: 9))
+                            .font(StrapTypography.metric(9, weight: .regular))
                             .foregroundStyle(Color.appMuted)
                         RoundedRectangle(cornerRadius: 4)
                             .fill(color)
                             .frame(height: max(2, barMax * CGFloat(min(max(value / maxValue, 0), 1))))
                         Text(idx < labels.count ? labels[idx] : "")
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(9))
                             .foregroundStyle(Color.appMuted)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -431,7 +431,7 @@ struct StackedBarChart: View {
                         }
                         .clipShape(RoundedRectangle(cornerRadius: 4))
                         Text(idx < labels.count ? labels[idx] : "")
-                            .font(.system(size: 9))
+                            .font(StrapTypography.body(9))
                             .foregroundStyle(Color.appMuted)
                             .padding(.top, 3)
                     }
@@ -481,7 +481,7 @@ struct BedWakeChart: View {
                 }
                 ForEach(Array(labels.enumerated()), id: \.offset) { idx, label in
                     Text(label)
-                        .font(.system(size: 9))
+                        .font(StrapTypography.body(9))
                         .foregroundStyle(Color.appMuted)
                         .position(x: slot * (CGFloat(idx) + 0.5), y: geo.size.height - 8)
                 }
@@ -500,7 +500,7 @@ struct ChartLegend: View {
             ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                 HStack(spacing: 5) {
                     RoundedRectangle(cornerRadius: 2).fill(item.1).frame(width: 14, height: 3)
-                    Text(item.0).font(.system(size: 10)).foregroundStyle(Color.appMuted)
+                    Text(item.0).font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 }
             }
         }
@@ -605,22 +605,22 @@ struct MetricTile: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .medium))
+                .font(StrapTypography.body(10, weight: .medium))
                 .tracking(0.6)
                 .foregroundStyle(Color.appMuted)
                 .frame(minHeight: 27, alignment: .topLeading)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(.system(size: 25, weight: .medium))
+                    .font(StrapTypography.metric(25, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 if let unit {
                     Text(unit)
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                 }
             }
             Text(chip)
-                .font(.system(size: 10))
+                .font(StrapTypography.body(10))
                 .foregroundStyle(chipGood ? Color.appGood : Color.appMuted)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -642,15 +642,15 @@ struct StatCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(title.uppercased())
-                .font(.system(size: 9.5, weight: .medium))
+                .font(StrapTypography.body(9.5, weight: .medium))
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
             Text(value)
-                .font(.system(size: 20, weight: .medium))
+                .font(StrapTypography.metric(20, weight: .medium))
                 .foregroundStyle(Color.appFG)
             if let detail {
                 Text(detail)
-                    .font(.system(size: 9.5))
+                    .font(StrapTypography.body(9.5))
                     .foregroundStyle(Color.appMuted)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -677,7 +677,7 @@ struct ChipPicker<Option: Hashable>: View {
                     selection = option
                 } label: {
                     Text(label(option))
-                        .font(.system(size: 11.5, weight: .medium))
+                        .font(StrapTypography.body(11.5, weight: .medium))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                         .background(RoundedRectangle(cornerRadius: 9).fill(selection == option ? Color.appSurface : Color.appRaised))
@@ -698,7 +698,7 @@ struct YesNoRow: View {
     var body: some View {
         HStack(spacing: 10) {
             Text(question)
-                .font(.system(size: 12.5))
+                .font(StrapTypography.body(12.5))
                 .foregroundStyle(Color.appFG)
             Spacer()
             HStack(spacing: 4) {
@@ -717,7 +717,7 @@ struct YesNoRow: View {
     private func yesNoButton(_ title: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(size: 11, weight: .medium))
+                .font(StrapTypography.body(11, weight: .medium))
                 .frame(minWidth: 44, minHeight: 32)
                 .background(RoundedRectangle(cornerRadius: 8).fill(isOn ? Color.appSurface : Color.appRaised))
                 .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(isOn ? Color.appAccent : Color.appLine, lineWidth: 1))

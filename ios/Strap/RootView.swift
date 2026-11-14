@@ -183,11 +183,11 @@ private struct DailyInsightsView: View {
                 Panel {
                     CardHead(title: "Your recorded day")
                     Text("Recovery " + DetailMetric.recovery.text(store.band.recovery.score))
-                        .font(.system(size: 22, weight: .semibold)).padding(.bottom, 12)
+                        .font(StrapTypography.body(22, weight: .semibold)).padding(.bottom, 12)
                     Text("HRV " + (store.lastCapture?.hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "—"))
-                        .font(.system(size: 16)).padding(.bottom, 8)
+                        .font(StrapTypography.body(16)).padding(.bottom, 8)
                     Text("Resting HR " + (store.measuredRestingHR.map { String(format: "%.0f bpm", $0) } ?? "—"))
-                        .font(.system(size: 16))
+                        .font(StrapTypography.body(16))
                     Hint("These are your recorded measurements and local estimates. Open each detail screen to review dated inputs and data coverage.")
                 }
                 NavigationLink(value: Route.recovery) { Panel { Label("Recovery details", systemImage: "heart") } }.buttonStyle(.plain)

@@ -21,9 +21,9 @@ struct CombinedLoadChart: View {
                         let y = plotH * CGFloat(tick) / 3
                         Path { p in p.move(to: CGPoint(x: left, y: y)); p.addLine(to: CGPoint(x: left + width, y: y)) }
                             .stroke(Color.appLine, lineWidth: 1)
-                        Text("\(21 - tick * 7)").font(.system(size: 8)).foregroundStyle(Color.appAccent).position(x: 9, y: y)
+                        Text("\(21 - tick * 7)").font(StrapTypography.body(8)).foregroundStyle(Color.appAccent).position(x: 9, y: y)
                         Text("\(100 - Int((Double(tick) * 100 / 3).rounded()))%")
-                            .font(.system(size: 8)).foregroundStyle(Color.appMuted).position(x: left + width + 18, y: y)
+                            .font(StrapTypography.body(8)).foregroundStyle(Color.appMuted).position(x: left + width + 18, y: y)
                     }
                     if !days.isEmpty {
                         RoundedRectangle(cornerRadius: 4).fill(Color.appFG.opacity(0.08))
@@ -40,7 +40,7 @@ struct CombinedLoadChart: View {
                             let y = plotH * CGFloat(1 - value / 21)
                             Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(Color.appAccent, lineWidth: 2)).position(x: x, y: y)
-                            Text(DetailMetric.strain.text(value)).font(.system(size: 9, weight: .semibold))
+                            Text(DetailMetric.strain.text(value)).font(StrapTypography.metric(9, weight: .bold))
                                 .foregroundStyle(Color.appAccent).position(x: x, y: min(plotH - 3, y + 12))
                         }
                         if let value = day.recovery {
@@ -48,13 +48,13 @@ struct CombinedLoadChart: View {
                             let color = DetailMetric.recovery.color(value)
                             Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(color, lineWidth: 2)).position(x: x, y: y)
-                            Text(DetailMetric.recovery.text(value)).font(.system(size: 9, weight: .semibold))
+                            Text(DetailMetric.recovery.text(value)).font(StrapTypography.body(9, weight: .semibold))
                                 .foregroundStyle(color).position(x: x, y: max(6, y - 13))
                         }
                         VStack(spacing: 3) {
                             Text(day.date.formatted(.dateTime.weekday(.abbreviated)))
                             Text(day.date.formatted(.dateTime.day()))
-                        }.font(.system(size: 9)).foregroundStyle(Color.appMuted).position(x: x, y: plotH + 24)
+                        }.font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).position(x: x, y: plotH + 24)
                     }
                 }
             }.frame(height: 230)
@@ -107,7 +107,7 @@ struct RecordedStressChart: View {
                 Text(sorted.first.map { Date(timeIntervalSince1970: TimeInterval($0.unix)).formatted(date: .omitted, time: .shortened) } ?? "—")
                 Spacer()
                 Text(sorted.last.map { Date(timeIntervalSince1970: TimeInterval($0.unix)).formatted(date: .omitted, time: .shortened) } ?? "—")
-            }.font(.system(size: 9)).foregroundStyle(Color.appMuted)
+            }.font(StrapTypography.body(9)).foregroundStyle(Color.appMuted)
             if sorted.isEmpty { Hint("Recorded stress windows appear after the awake baseline and R-R coverage are available.") }
         }
     }

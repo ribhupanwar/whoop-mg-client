@@ -75,7 +75,7 @@ struct SleepCoachView: View {
     private var coachPanel: some View {
         Panel {
             Text(introSentence)
-                .font(.system(size: 12.5))
+                .font(StrapTypography.body(12.5))
                 .foregroundStyle(Color.appFG)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -112,10 +112,10 @@ struct SleepCoachView: View {
         HStack(alignment: .top, spacing: 10) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(CoachFormat.clock(rec.bedtimeMinutes))
-                    .font(.system(size: 26, weight: .medium))
+                    .font(StrapTypography.body(26, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text("SUGGESTED\nBEDTIME")
-                    .font(.system(size: 9.5))
+                    .font(StrapTypography.body(9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
             }
@@ -125,7 +125,7 @@ struct SleepCoachView: View {
                 DatePicker("", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
                     .labelsHidden()
                 Text("YOUR WAKE\nTIME")
-                    .font(.system(size: 9.5))
+                    .font(StrapTypography.body(9.5))
                     .tracking(0.7)
                     .foregroundStyle(Color.appMuted)
                     .multilineTextAlignment(.trailing)
@@ -172,7 +172,7 @@ struct SleepCoachView: View {
         Panel {
             SectionTitle("Sleep debt")
             Text(debtSentence)
-                .font(.system(size: 15, weight: .medium))
+                .font(StrapTypography.body(15, weight: .medium))
                 .foregroundStyle(Color.appFG)
                 .padding(.bottom, 2)
             Hint("The running shortfall against your need over the last 14 nights; a longer night repays it. At most 2 h of debt joins one night's need, so a bad week cannot demand an impossible bedtime. Our own coach built on the Kitamura 2016 sleep-debt model — not a proprietary algorithm.")
@@ -192,7 +192,7 @@ struct SleepCoachView: View {
         Panel {
             HStack {
                 Text("ALARM")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .medium))
                     .tracking(0.8)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -215,7 +215,7 @@ struct SleepCoachView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.appAccent)
-            .font(.system(size: 12, weight: .semibold))
+            .font(StrapTypography.body(12, weight: .semibold))
             .controlSize(.small)
             .frame(maxWidth: .infinity, alignment: .trailing)
             if alarmConfirmation {
@@ -242,7 +242,7 @@ struct SleepCoachView: View {
 
     private func coachLabel(_ title: String) -> some View {
         Text(title)
-            .font(.system(size: 10.5, weight: .medium))
+            .font(StrapTypography.body(10.5, weight: .medium))
             .tracking(0.4)
             .foregroundStyle(Color.appFG)
             .frame(maxWidth: .infinity, minHeight: 42)

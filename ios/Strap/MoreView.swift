@@ -9,7 +9,7 @@ struct MoreView: View {
         Screen {
             VStack(alignment: .leading, spacing: 14) {
                 Text("More")
-                    .font(.system(size: 26, weight: .semibold))
+                    .font(StrapTypography.body(26, weight: .semibold))
                     .foregroundStyle(Color.appFG)
 
                 Panel {
@@ -17,10 +17,10 @@ struct MoreView: View {
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(store.band.bandName ?? store.band.preferredBandName ?? "No saved band")
-                                .font(.system(size: 14, weight: .medium))
+                                .font(StrapTypography.body(14, weight: .medium))
                                 .foregroundStyle(Color.appFG)
                             Text(store.band.status.title)
-                                .font(.system(size: 11))
+                                .font(StrapTypography.body(11))
                                 .foregroundStyle(Color.appMuted)
                         }
                         Spacer()
@@ -73,7 +73,7 @@ struct MoreView: View {
                 Panel {
                     SectionTitle("Privacy & data")
                     Text("Your band history is stored locally. HealthKit export is optional.")
-                        .font(.system(size: 12))
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     NavigationLink(value: Route.dataQuality) {
                         moreRow("Data quality & diagnostics", icon: "waveform.path.ecg")
@@ -96,7 +96,7 @@ struct MoreView: View {
                 .frame(width: 22)
                 .foregroundStyle(Color.appAccent)
             Text(title)
-                .font(.system(size: 13))
+                .font(StrapTypography.body(13))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Image(systemName: "chevron.right")

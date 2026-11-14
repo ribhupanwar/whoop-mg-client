@@ -95,12 +95,12 @@ struct MetricDetailView: View {
                 hero(current, history: history)
                 summary(current, history: history)
                 if recoveryMode { behaviorCard } else { activities }
-                Text("Weekly Trends").font(.system(size: 23, weight: .semibold)).padding(.vertical, 18)
+                Text("Weekly Trends").font(StrapTypography.body(23, weight: .semibold)).padding(.vertical, 18)
                 ForEach(metrics) { metric in
                     Panel {
                         Button { detail = metric } label: {
                             HStack {
-                                Text(metric.title.uppercased()).font(.system(size: 12, weight: .semibold)).tracking(0.8)
+                                Text(metric.title.uppercased()).font(StrapTypography.body(12, weight: .semibold)).tracking(0.8)
                                 Spacer()
                                 Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                             }.foregroundStyle(Color.appFG)
@@ -116,7 +116,7 @@ struct MetricDetailView: View {
         .toolbar {
             ToolbarItem(placement: .principal) {
                 Text(dayOffset == 0 ? "TODAY" : endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()).uppercased())
-                    .font(.system(size: 12, weight: .bold)).tracking(1)
+                    .font(StrapTypography.body(12, weight: .bold)).tracking(1)
                     .contextMenu {
                         Button("Previous day") { dayOffset -= 1 }
                         Button("Next day") { dayOffset = min(0, dayOffset + 1) }.disabled(dayOffset == 0)
@@ -141,7 +141,7 @@ struct MetricDetailView: View {
                                 Text(day.date.formatted(date: .abbreviated, time: .omitted))
                                 Spacer()
                                 Text(metric.text(day.value(metric))).monospacedDigit()
-                            }.font(.system(size: 13)).padding(.vertical, 9)
+                            }.font(StrapTypography.metric(13, weight: .regular)).padding(.vertical, 9)
                             Divider().overlay(Color.appLine)
                         }
                         Hint(sourceNote(metric))
@@ -164,7 +164,7 @@ struct MetricDetailView: View {
             Button { dayOffset -= 1 } label: { Image(systemName: "chevron.left").frame(width: 44, height: 40) }
             Spacer()
             Text(dayOffset == 0 ? "TODAY" : endDate.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()).uppercased())
-                .font(.system(size: 12, weight: .bold)).tracking(1)
+                .font(StrapTypography.body(12, weight: .bold)).tracking(1)
             Spacer()
             Button { dayOffset = min(0, dayOffset + 1) } label: { Image(systemName: "chevron.right").frame(width: 44, height: 40) }
                 .disabled(dayOffset == 0)
@@ -187,10 +187,10 @@ struct MetricDetailView: View {
                     .offset(y: -118).rotationEffect(.degrees(mean / 21 * 360))
             }
             VStack(spacing: 8) {
-                Text("STRAP").font(.system(size: 17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
-                Text(mainMetric.text(value)).font(.system(size: 57, weight: .bold, design: .rounded))
+                Text("STRAP").font(StrapTypography.body(17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
+                Text(mainMetric.text(value)).font(StrapTypography.body(57, weight: .bold))
                     .monospacedDigit().minimumScaleFactor(0.7).lineLimit(1)
-                Text(mainMetric.title.uppercased()).font(.system(size: 13, weight: .bold)).tracking(1.4)
+                Text(mainMetric.title.uppercased()).font(StrapTypography.body(13, weight: .bold)).tracking(1.4)
             }.padding(24)
         }
         .frame(width: 236, height: 236)
@@ -219,21 +219,21 @@ struct MetricDetailView: View {
             ForEach(rows) { metric in
                 HStack(spacing: 10) {
                     Image(systemName: metric.icon).font(.system(size: 20)).foregroundStyle(Color.appMuted).frame(width: 24)
-                    Text(metric.title.uppercased()).font(.system(size: 11, weight: .semibold)).tracking(0.5)
+                    Text(metric.title.uppercased()).font(StrapTypography.body(11, weight: .semibold)).tracking(0.5)
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(metric.text(day?.value(metric))).font(.system(size: 23, weight: .semibold, design: .rounded)).monospacedDigit()
+                            Text(metric.text(day?.value(metric))).font(StrapTypography.body(23, weight: .semibold)).monospacedDigit()
                             comparisonIndicator(metric, day: day, history: history)
                         }
                         Text(metric.text(MetricTimeline.comparison(metric, before: selectedKey, in: history)))
-                            .font(.system(size: 11)).foregroundStyle(Color.appMuted)
+                            .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                     }
                 }.padding(.vertical, 14)
                 if metric != rows.last { Divider().overlay(Color.appLine) }
             }
             Text("Today vs. available readings in the previous 30 days")
-                .font(.system(size: 10)).foregroundStyle(Color.appMuted)
+                .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 .frame(maxWidth: .infinity, alignment: .leading).padding(10)
                 .background(Color.appBG, in: RoundedRectangle(cornerRadius: 8)).padding(.top, 12)
         }
@@ -244,9 +244,9 @@ struct MetricDetailView: View {
             Panel {
                 HStack(spacing: 18) {
                     VStack(alignment: .leading, spacing: 9) {
-                        Text("Behavior insights").font(.system(size: 17, weight: .semibold))
-                        Text("Review your daily journal alongside your recovery history.").font(.system(size: 12)).foregroundStyle(Color.appMuted)
-                        Label("VIEW JOURNAL", systemImage: "arrow.right").font(.system(size: 10, weight: .bold)).foregroundStyle(strainBlue)
+                        Text("Behavior insights").font(StrapTypography.body(17, weight: .semibold))
+                        Text("Review your daily journal alongside your recovery history.").font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                        Label("VIEW JOURNAL", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(strainBlue)
                     }
                     Image(systemName: "checkmark.circle").font(.system(size: 64, weight: .light)).foregroundStyle(Color.appMuted)
                 }
@@ -261,7 +261,7 @@ struct MetricDetailView: View {
         }
         let manual = store.manualActivities(on: selectedKey)
         return VStack(alignment: .leading, spacing: 10) {
-            Text(dayOffset == 0 ? "Today's Activities" : "Activities").font(.system(size: 23, weight: .semibold)).padding(.top, 14)
+            Text(dayOffset == 0 ? "Today's Activities" : "Activities").font(StrapTypography.body(23, weight: .semibold)).padding(.top, 14)
             if store.isPreview {
                 activityRow("Running · sample", icon: "figure.run", detail: "7:40 AM\n8:10 AM")
             }
@@ -285,9 +285,9 @@ struct MetricDetailView: View {
         HStack(spacing: 14) {
             Image(systemName: icon).font(.system(size: 26)).frame(width: 62, height: 48)
                 .background(strainBlue, in: RoundedRectangle(cornerRadius: 9))
-            Text(title.uppercased()).font(.system(size: 12, weight: .bold))
+            Text(title.uppercased()).font(StrapTypography.body(12, weight: .bold))
             Spacer()
-            Text(detail).font(.system(size: 11)).foregroundStyle(Color.appMuted).multilineTextAlignment(.trailing)
+            Text(detail).font(StrapTypography.body(11)).foregroundStyle(Color.appMuted).multilineTextAlignment(.trailing)
         }.padding(8).background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 15)).contentShape(Rectangle())
     }
     private func clockRange(_ start: Int, _ end: Int) -> String {
@@ -312,15 +312,15 @@ struct MetricDetailView: View {
                 HStack {
                     Image(systemName: "waveform.path.ecg").foregroundStyle(strainBlue)
                     Text(mainMetric.title + " · " + mainMetric.text(day?.value(mainMetric)))
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(StrapTypography.body(12, weight: .semibold))
                     Spacer()
                     Image(systemName: expandedInsight ? "chevron.down" : "chevron.up")
                 }.foregroundStyle(Color.appFG)
             }.buttonStyle(.plain)
             if expandedInsight {
                 Text("Previous 30-day comparison: " + mainMetric.text(MetricTimeline.comparison(mainMetric, before: selectedKey, in: history)))
-                    .font(.system(size: 12)).foregroundStyle(Color.appMuted)
-                Text(sourceNote(mainMetric)).font(.system(size: 11)).foregroundStyle(Color.appMuted)
+                    .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                Text(sourceNote(mainMetric)).font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
             }
         }.padding(14).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 24))
             .padding(.horizontal, 16).padding(.bottom, 6)
@@ -352,7 +352,7 @@ struct WeeklyMetricChart: View {
                     ForEach(zoneIndices, id: \.self) { zone in
                         HStack(spacing: 4) {
                             Rectangle().fill(zonePalette[zone]).frame(width: 7, height: 7)
-                            Text("ZONE \(zone + 1)").font(.system(size: 9, weight: .semibold))
+                            Text("ZONE \(zone + 1)").font(StrapTypography.body(9, weight: .semibold))
                         }
                     }
                 }
@@ -400,15 +400,15 @@ struct WeeklyMetricChart: View {
                                 Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                     .overlay(Circle().stroke(strainBlue, lineWidth: 2)).position(x: x, y: height - barHeight)
                             }
-                            Text(metric.text(value)).font(.system(size: 10, weight: .semibold)).monospacedDigit()
+                            Text(metric.text(value)).font(StrapTypography.metric(10, weight: .bold)).monospacedDigit()
                                 .foregroundStyle(metric.color(value)).position(x: x, y: max(7, height - barHeight - 12))
                         } else {
-                            Text("—").font(.system(size: 10)).foregroundStyle(Color.appMuted).position(x: x, y: height - 12)
+                            Text("—").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted).position(x: x, y: height - 12)
                         }
                         VStack(spacing: 3) {
                             Text(day.date.formatted(.dateTime.weekday(.abbreviated)))
                             Text(day.date.formatted(.dateTime.day()))
-                        }.font(.system(size: 9)).foregroundStyle(day.key == selectedKey ? Color.appFG : Color.appMuted)
+                        }.font(StrapTypography.body(9)).foregroundStyle(day.key == selectedKey ? Color.appFG : Color.appMuted)
                             .position(x: x, y: height + 27)
                     }
                     if metric.isLine {

@@ -21,10 +21,10 @@ struct PlanView: View {
     private var outlookBox: some View {
         CTABox {
             Text(outlookTitle)
-                .font(.system(size: 13, weight: .medium))
+                .font(StrapTypography.body(13, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text(outlookBody)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -73,11 +73,11 @@ struct PlanView: View {
     private func planRow(name: String, status: String) -> some View {
         HStack(spacing: 10) {
             Text(name)
-                .font(.system(size: 12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(status)
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
         }
         .padding(.horizontal, 12)
@@ -91,10 +91,10 @@ struct PlanView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(CoachFormat.duration(store.settings.sleepNeedHours))
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("HOURS\nNEEDED")
-                        .font(.system(size: 9.5))
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                 }
@@ -104,10 +104,10 @@ struct PlanView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.planActualSleep : store.band.lastNightHours.map(CoachFormat.duration) ?? "—")
-                        .font(.system(size: 21, weight: .medium))
+                        .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text("LAST NIGHT\nACTUAL")
-                        .font(.system(size: 9.5))
+                        .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)

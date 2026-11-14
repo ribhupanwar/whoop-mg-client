@@ -63,7 +63,7 @@ struct TrainView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
@@ -76,7 +76,7 @@ struct TrainView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(.system(size: 15))
+                    .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
@@ -91,7 +91,7 @@ struct TrainView: View {
     private func fieldRow<Control: View>(label: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 10) {
             Text(label)
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
             Spacer()
             control()
@@ -112,7 +112,7 @@ struct TrainView: View {
                 Spacer()
                 Text("BPM")
             }
-            .font(.system(size: 10, weight: .medium))
+            .font(StrapTypography.body(10, weight: .medium))
             .tracking(0.6)
             .foregroundStyle(Color.appMuted)
             .padding(.horizontal, 8)
@@ -138,17 +138,17 @@ struct TrainView: View {
                     .fill(zoneColors[index])
                     .frame(width: 7, height: 18)
                 Text("Z\(index + 1)")
-                    .font(.system(size: 12, weight: .medium))
+                    .font(StrapTypography.body(12, weight: .medium))
                     .foregroundStyle(Color.appFG)
             }
             .frame(width: 52, alignment: .leading)
 
             Text(Karvonen.uses[index])
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(range)
-                .font(.system(size: 12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .medium))
                 .foregroundStyle(Color.appFG)
         }
         .padding(.horizontal, 8)
@@ -162,10 +162,10 @@ struct TrainView: View {
     private var ctaBox: some View {
         CTABox {
             Text("Most of your running belongs in Z2")
-                .font(.system(size: 13, weight: .medium))
+                .font(StrapTypography.body(13, weight: .medium))
                 .foregroundStyle(Color.appFG)
             Text("You run and lift daily, so the trap is drifting into the middle zone every day — hard enough to accumulate fatigue, too easy to drive adaptation. Z2 should feel conversational. Save Z4/Z5 for sessions you planned as hard.")
-                .font(.system(size: 12))
+                .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
@@ -176,7 +176,7 @@ struct TrainView: View {
         Panel {
             SectionTitle("Gym day")
             Text("Lifting barely moves heart rate, so HR-based load alone undercounts a heavy session. Lifts get logged separately as sets × reps × load rather than pretending a HR-derived number captures them.")
-                .font(.system(size: 11))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
