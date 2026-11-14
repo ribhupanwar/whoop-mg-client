@@ -413,15 +413,22 @@ final class SleepStageTests: XCTestCase {
     }
 
     func testMultipleRunsUseOnlyReliableOnsetFromFirstRun() throws {
-        let runs: [[SleepStage]] = [
-            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: SleepStage.light, count: 10),
-            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: SleepStage.light, count: 10),
-            Array(repeating: SleepStage.light, count: 10)
-        ]
-        let firstRunMinutes: [Double] = (0..<20).map { Double($0) / 2 }
-        let secondRunMinutes: [Double] = (0..<20).map { 90.0 + Double($0) / 2 }
-        let thirdRunMinutes: [Double] = (0..<10).map { 180.0 + Double($0) / 2 }
-        let minutes: [[Double]] = [firstRunMinutes, secondRunMinutes, thirdRunMinutes]
+        let firstRun: [SleepStage] = Array(repeating: .wake, count: 10)
+            + Array(repeating: .light, count: 10)
+        let secondRun: [SleepStage] = Array(repeating: .wake, count: 10)
+            + Array(repeating: .light, count: 10)
+        let thirdRun: [SleepStage] = Array(repeating: .light, count: 10)
+        var runs: [[SleepStage]] = []
+        runs.append(firstRun)
+        runs.append(secondRun)
+        runs.append(thirdRun)
+        let firstMinutes: [Double] = (0..<20).map { Double($0) / 2 }
+        let secondMinutes: [Double] = (0..<20).map { 90 + Double($0) / 2 }
+        let thirdMinutes: [Double] = (0..<10).map { 180 + Double($0) / 2 }
+        var minutes: [[Double]] = []
+        minutes.append(firstMinutes)
+        minutes.append(secondMinutes)
+        minutes.append(thirdMinutes)
 
         XCTAssertEqual(
             try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(provisionalRuns: runs, epochMinutes: minutes)),
