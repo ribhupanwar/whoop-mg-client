@@ -73,45 +73,6 @@ jobs:
             CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
-      - name: Render native design previews
-        run: |
-          set -euo pipefail
-          # xcodebuild test may shut down its simulator when tests finish.
-          # Select an available iPhone deterministically, boot it if needed,
-          # and wait for SpringBoard before installing the preview build.
-          SIM_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next((v["udid"] for k in sorted(d, reverse=True) for v in d[k] if v.get("isAvailable") and v["name"].startswith("iPhone")), ""))')
-          if [ -z "$SIM_ID" ]; then
-            echo "::error::No available iPhone simulator for native previews"
-            xcrun simctl list devices available
-            exit 1
-          fi
-          echo "Rendering previews on simulator $SIM_ID"
-          xcrun simctl boot "$SIM_ID" || {
-            # Already booted is not a failure; verify the selected device state.
-            xcrun simctl list devices booted | grep -F "$SIM_ID"
-          }
-          xcrun simctl bootstatus "$SIM_ID" -b
-          xcrun simctl install "$SIM_ID" build/Build/Products/Debug-iphonesimulator/Strap.app
-          mkdir -p "$RUNNER_TEMP/ui-previews"
-          for screen in home sleep recovery strain health train plan more; do
-            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
-            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview "--preview-$screen"
-            sleep 3
-            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/$screen.png"
-          done
-          for metric in recovery hrv rhr respiration sleepPerformance strain zonesLow zonesHigh steps calories strength; do
-            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
-            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview --preview-recovery "--preview-chart=$metric"
-            sleep 3
-            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/chart-$metric.png"
-          done
-
-      - name: Upload native UI previews
-        uses: actions/upload-artifact@v4
-        with:
-          name: Strap-native-UI-previews
-          path: ${{ runner.temp }}/ui-previews/*.png
-
       - name: Archive and package SideStore-ready ad-hoc signed IPA
         run: |
           set -uo pipefail
@@ -194,6 +155,47 @@ jobs:
         with:
           name: Strap-unsigned-ipa
           path: ${{ runner.temp }}/ipa/Strap-unsigned.ipa
+
+      - name: Render native design previews
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          # xcodebuild test may shut down its simulator when tests finish.
+          # Select an available iPhone deterministically, boot it if needed,
+          # and wait for SpringBoard before installing the preview build.
+          SIM_ID=$(xcrun simctl list devices available --json | python3 -c 'import json,sys; d=json.load(sys.stdin)["devices"]; print(next((v["udid"] for k in sorted(d, reverse=True) for v in d[k] if v.get("isAvailable") and v["name"].startswith("iPhone")), ""))')
+          if [ -z "$SIM_ID" ]; then
+            echo "::error::No available iPhone simulator for native previews"
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Rendering previews on simulator $SIM_ID"
+          xcrun simctl boot "$SIM_ID" || {
+            # Already booted is not a failure; verify the selected device state.
+            xcrun simctl list devices booted | grep -F "$SIM_ID"
+          }
+          xcrun simctl bootstatus "$SIM_ID" -b
+          xcrun simctl install "$SIM_ID" build/Build/Products/Debug-iphonesimulator/Strap.app
+          mkdir -p "$RUNNER_TEMP/ui-previews"
+          for screen in home sleep recovery strain health train plan more; do
+            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview "--preview-$screen"
+            sleep 3
+            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/$screen.png"
+          done
+          for metric in recovery hrv rhr respiration sleepPerformance strain zonesLow zonesHigh steps calories strength; do
+            xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
+            xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview --preview-recovery "--preview-chart=$metric"
+            sleep 3
+            xcrun simctl io "$SIM_ID" screenshot "$RUNNER_TEMP/ui-previews/chart-$metric.png"
+          done
+
+      - name: Upload native UI previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Strap-native-UI-previews
+          path: ${{ runner.temp }}/ui-previews/*.png
 
       # Job logs need repository auth; annotations are public. Re-emit the
       # first compiler errors so a failed public build is diagnosable.
