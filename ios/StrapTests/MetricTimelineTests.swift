@@ -86,6 +86,16 @@ final class MetricTimelineTests: XCTestCase {
                        "Missing recent days must not hide an older measured observation")
     }
 
+    func testComparisonIsIndependentOfInputOrder() {
+        let points = (0..<31).map { index in
+            MetricDay(date: date(10), key: String(format: "%03d", index), recorded: nil,
+                      recovery: nil, zones: nil, calories: index == 0 ? 1000 : 100, strength: nil)
+        }
+        XCTAssertEqual(MetricTimeline.comparison(.calories, before: "031", in: points), 100)
+        XCTAssertEqual(MetricTimeline.comparison(.calories, before: "031", in: points.reversed()), 100,
+                       "The most recent 30 valid days must not depend on caller ordering")
+    }
+
     func testComparisonExcludesTheCurrentObservation() {
         var prior = day(9)
         prior = DayMetrics(dateKey: prior.dateKey, state: "sleep", restingHR: 60, lnRMSSD: log(44),
