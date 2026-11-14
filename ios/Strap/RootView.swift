@@ -170,9 +170,8 @@ extension View {
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
             case .dataQuality: DataQualityView()
-            case .metricHistory(let rawValue):
-                MetricHistoryView(metric: DetailMetric(rawValue: rawValue) ?? .hrv)
-            case .metricHistory(let metric): MetricHistoryView(metric: metric)
+            case .metricHistory(let metric):
+                MetricHistoryView(metric: metric)
             }
         }
     }
