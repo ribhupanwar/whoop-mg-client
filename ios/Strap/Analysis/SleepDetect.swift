@@ -167,19 +167,28 @@ enum SleepDetect {
             }
             guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
 
-            let quietSeconds = quiet[start..<end].filter { $0 }.count
+            // Metrics must describe the verified interval, not the discarded
+            // awake tail or a trimmed pre-bed onset.
+            let verifiedIndices = (start..<end).filter {
+                ordered[$0].unix >= verifiedStart && ordered[$0].unix <= verifiedEnd
+            }
+            let quietSeconds = verifiedIndices.filter { quiet[$0] }.count
+            let verifiedHRs = verifiedIndices.compactMap { index -> Double? in
+                let row = ordered[index]
+                return row.wearing && (35...220).contains(row.heartRate)
+                    ? Double(row.heartRate) : nil
+            }
             var wakeEvents = 0
-            if end > start + 1 {
-                for second in (start + 1)..<end where !quiet[second] && quiet[second - 1] {
-                    wakeEvents += 1
-                }
+            for (offset, index) in verifiedIndices.enumerated() where offset > 0 {
+                let previous = verifiedIndices[offset - 1]
+                if !quiet[index] && quiet[previous] { wakeEvents += 1 }
             }
             periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
                     endUnix: verifiedEnd,
-                    quietFraction: Double(quietSeconds) / Double(run.count),
-                    meanHR: Stats.mean(runHRs),
+                    quietFraction: Double(quietSeconds) / Double(max(1, verifiedIndices.count)),
+                    meanHR: Stats.mean(verifiedHRs),
                     wakeEvents: wakeEvents
                 )
             )
