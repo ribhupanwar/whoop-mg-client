@@ -383,13 +383,19 @@ enum Hrv {
             guard let ratio = hrReserveRatio(
                 Double(sample.heartRate), resting: restingHR, maximum: maxHR
             ) else { continue }
-            // Preserve dense 1 Hz behavior; sparse samples cover up to 30 s.
-            // Do not integrate a long data gap (e.g. disconnected strap).
+            // Preserve dense 1 Hz behavior, but do not assume a sparse HR
+            // observation represents the full interval. Cap extrapolation at
+            // five seconds; longer gaps are not evidence of sustained effort.
             let seconds: Int
             if index + 1 < unique.count {
                 let gap = unique[index + 1].unix - sample.unix
-                seconds = gap > 0 && gap <= 30 ? gap : 1
+                // Treat gaps over 30 seconds as a disconnect: the next
+                // observation cannot establish sustained effort in between.
+                // For shorter sparse intervals, cap extrapolation at five seconds.
+                seconds = gap > 30 ? 1 : (gap > 0 ? min(gap, 5) : 1)
             } else {
+                // A final sample has no following timestamp to establish
+                // duration. Count only its observed second, never 30 seconds.
                 seconds = 1
             }
             let gross = ratio * coefficients.k1 * exp(coefficients.k2 * ratio)
