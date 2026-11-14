@@ -36,10 +36,10 @@ struct SleepAnalysisView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                lastNightPanel
-                needPanel
                 performancePanel
                 componentsPanel
+                lastNightPanel
+                needPanel
                 consistencyPanel
                 stressDetailPanel
                 weeklyPanel
