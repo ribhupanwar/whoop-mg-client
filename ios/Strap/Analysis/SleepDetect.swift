@@ -138,17 +138,31 @@ enum SleepDetect {
             // rather than extending the night's end on a later archive replay.
             // Do not infer wake from missing or ambiguous band states.
             var verifiedEnd = run[run.count - 1].unix
-            let tail = run.reversed()
+            // A terminal band state 0 means no positive sleep declaration,
+            // not that an earlier sustained up(3) run has disappeared.
+            // Skip only a short contiguous terminal 0 suffix, then require
+            // at least five minutes of explicit up(3) before trimming.
+            // This handles archive tails like 3 -> 0 without treating a
+            // transient mid-night up(3) interval as final wake-up.
             var upStart: Int? = nil
             var nextUnix: Int? = nil
-            for sample in tail {
-                guard sample.sleepState == 3, sample.wearing,
-                      (35...220).contains(sample.heartRate),
+            var trailingUnknownSeconds = 0
+            var upSeconds = 0
+            for sample in run.reversed() {
+                guard sample.wearing, (35...220).contains(sample.heartRate),
                       nextUnix.map({ $0 - sample.unix <= 2 }) ?? true else { break }
-                upStart = sample.unix
+                if sample.sleepState == 0 && upSeconds == 0 {
+                    trailingUnknownSeconds += nextUnix.map { $0 - sample.unix } ?? 1
+                    if trailingUnknownSeconds > 30 * 60 { break }
+                } else if sample.sleepState == 3 {
+                    upStart = sample.unix
+                    upSeconds += nextUnix.map { $0 - sample.unix } ?? 1
+                } else {
+                    break
+                }
                 nextUnix = sample.unix
             }
-            if let upStart, verifiedEnd - upStart + 1 >= 300 {
+            if let upStart, upSeconds >= 300 {
                 verifiedEnd = upStart - 1
             }
             guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
