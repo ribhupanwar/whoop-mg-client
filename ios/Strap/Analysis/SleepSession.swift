@@ -260,6 +260,12 @@ enum SleepCorrectionStore {
             guard overlap > 0, overlap * 2 >= shorter else { return nil }
             return (abs(source - period.startUnix), times)
         }
-        return candidates.min { $0.0 < $1.0 }?.1
+        // Dictionary iteration order is undefined. Equal-distance aliases must
+        // resolve identically across app launches and archive refreshes.
+        return candidates.sorted {
+            if $0.0 != $1.0 { return $0.0 < $1.0 }
+            if $0.1[0] != $1.1[0] { return $0.1[0] < $1.1[0] }
+            return $0.1[1] < $1.1[1]
+        }.first?.1
     }
 }
