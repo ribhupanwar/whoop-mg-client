@@ -219,7 +219,7 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(decoded, retained)
         XCTAssertEqual(SleepSession.retainingUncovered(
             previous: [old], fresh: [tail], coverageStart: start, coverageEnd: old.endUnix - 1
-        ), [tail], "Full retained coverage allows authoritative reanalysis")
+        ), [old], "Full archive replay must preserve a manually edited canonical night")
         let edited = SleepSession.make(samples: samples, period: tailPeriod,
                                        correctedTimes: [tailStart, old.endUnix])
         XCTAssertEqual(SleepSession.retainingUncovered(
