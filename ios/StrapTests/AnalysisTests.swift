@@ -524,6 +524,34 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertEqual(periods.first?.endUnix, 4199)
     }
 
+    func testOvernightBandUpThenSleepThenFinalUpAndUnknownTail() {
+        // Observed 14 Nov archive pattern: up -> sleep -> up -> unknown.
+        // The earlier up interval is not the final wake; terminal 0 must
+        // not erase a sustained, later up confirmation.
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (4200..<4800).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 3)
+        }
+        rows += (4800..<8400).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (8400..<9000).map {
+            makeSample($0, hr: 65, accel: 0.02, sleepState: 3)
+        }
+        rows += (9000..<9300).map {
+            makeSample($0, hr: 70, accel: 0.02, sleepState: 0)
+        }
+        rows += stretch(9300, 600, hr: 100, accel: 0.5)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(periods.first?.startUnix, 600)
+        XCTAssertEqual(periods.first?.endUnix, 8399)
+        XCTAssertEqual(periods.first?.meanHR ?? 0, 60, accuracy: 0.01)
+    }
+
     func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
         var rows = stretch(0, 600, hr: 100, accel: 0.5)
         rows += (600..<4200).map {
