@@ -1,3 +1,11 @@
+Continue=Stop : The term 'Continue=Stop' is not recognized as the name of a cmdlet, function, script file, or operable 
+program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ Continue='Stop'; [Console]::Write((Get-Content -LiteralPath 'ios/Stra ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Continue=Stop:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
 import SwiftUI
 
 /// Live session: measured heart rate from standard 0x2A37 or WHOOP Gen5 realtime, Karvonen
@@ -56,7 +64,7 @@ struct LiveSessionView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Stop & save") { stopAndSave() }
-                        .fontWeight(.semibold)
+                        .font(StrapTypography.body(17, weight: .semibold))
                         .foregroundStyle(Color.appAccent)
                         .disabled(!store.band.isLiveSession || elapsedSeconds(now: Date()) < 10)
                 }
@@ -79,7 +87,7 @@ struct LiveSessionView: View {
     private func heartPanel(now: Date) -> some View {
         Panel {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(freshHeartRate(now: now).map { "\($0)" } ?? "—")
+                Text(freshHeartRate(now: now).map { "\($0)" } ?? "â€”")
                     .font(StrapTypography.body(52, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text("bpm")
@@ -91,13 +99,13 @@ struct LiveSessionView: View {
                     .monospacedDigit()
                     .foregroundStyle(Color.appMuted)
             }
-            Text("LIVE HEART RATE · WHOOP BAND")
+            Text("LIVE HEART RATE Â· WHOOP BAND")
                 .font(StrapTypography.body(10, weight: .medium))
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 2)
             if store.band.liveHeartRate != nil && freshHeartRate(now: now) == nil {
-                Hint("Waiting for a fresh HR notification — reconnecting stream.")
+                Hint("Waiting for a fresh HR notification â€” reconnecting stream.")
             }
             if let message = store.band.lastMessage {
                 Hint(message)
@@ -139,7 +147,7 @@ struct LiveSessionView: View {
                     .padding(.vertical, 4)
                 }
             } else {
-                Text("—")
+                Text("â€”")
                     .font(StrapTypography.body(21, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 Text(zones == nil
@@ -159,9 +167,9 @@ struct LiveSessionView: View {
             SectionTitle("Beat-to-beat")
             let hrv = store.band.currentLiveHRV
             HStack(spacing: 18) {
-                stat(label: "R-R BEATS", value: hrv.beats > 0 ? "\(hrv.beats)" : "—")
-                stat(label: "RMSSD", value: hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "—")
-                stat(label: "MEAN R-R", value: hrv.meanRRMS.map { String(format: "%.0f ms", $0) } ?? "—")
+                stat(label: "R-R BEATS", value: hrv.beats > 0 ? "\(hrv.beats)" : "â€”")
+                stat(label: "RMSSD", value: hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "â€”")
+                stat(label: "MEAN R-R", value: hrv.meanRRMS.map { String(format: "%.0f ms", $0) } ?? "â€”")
             }
             Hint("R-R beats require a supported beat-to-beat stream; live BPM alone cannot produce HRV. A steady 30+ seconds of valid R-R data is needed.")
         }

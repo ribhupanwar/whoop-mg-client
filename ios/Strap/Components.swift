@@ -1,3 +1,11 @@
+Continue=Stop : The term 'Continue=Stop' is not recognized as the name of a cmdlet, function, script file, or operable 
+program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ Continue='Stop'; [Console]::Write((Get-Content -LiteralPath 'ios/Stra ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Continue=Stop:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
 import SwiftUI
 import CoreText
 import UIKit
@@ -35,6 +43,7 @@ enum StrapTypography {
     /// hidden by the system-font fallback in a successful simulator build.
     static var missingBundledFaces: [String] {
         ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
+         "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt",
          "proxima-nova-medium", "proxima-nova-semibold",
          "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
             .filter { file in
@@ -128,7 +137,7 @@ struct Screen<Content: View>: View {
 struct DemoBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Design preview — sample data")
+            Text("Design preview â€” sample data")
                 .font(StrapTypography.body(12, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Text("Values marked sample are invented to show the finished layout. They are not your measurements.")
@@ -506,7 +515,7 @@ struct StackedBarChart: View {
     }
 }
 
-/// Vertical bed→wake range bars on a shared time axis (0…axisMax). Each span
+/// Vertical bedâ†’wake range bars on a shared time axis (0â€¦axisMax). Each span
 /// is (top, bottom) in axis units; top < bottom. Used for consistency and
 /// time-in-bed charts.
 struct BedWakeChart: View {
@@ -790,7 +799,7 @@ struct YesNoRow: View {
     }
 }
 
-// MARK: - Stress gauge (0–3 semicircle)
+// MARK: - Stress gauge (0â€“3 semicircle)
 
 struct StressGauge: View {
     /// nil == unavailable (no baseline): arcs only, no needle.

@@ -1,7 +1,15 @@
+Continue=Stop : The term 'Continue=Stop' is not recognized as the name of a cmdlet, function, script file, or operable 
+program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
+At line:1 char:1
++ Continue='Stop'; [Console]::Write((Get-Content -LiteralPath 'ios/Stra ...
++ ~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (Continue=Stop:String) [], CommandNotFoundException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
 import SwiftUI
 
-/// Manual activity entry. Lifting is logged as sets × reps × load; everything
-/// else by minutes. Nothing here feeds a score — it is the user's own log.
+/// Manual activity entry. Lifting is logged as sets Ã— reps Ã— load; everything
+/// else by minutes. Nothing here feeds a score â€” it is the user's own log.
 struct ActivityLoggerView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -36,7 +44,7 @@ struct ActivityLoggerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .fontWeight(.semibold)
+                        .font(StrapTypography.body(17, weight: .semibold))
                         .foregroundStyle(Color.appAccent)
                 }
             }
@@ -195,7 +203,7 @@ struct ActivityLoggerView: View {
     private var volumeText: String {
         let reps = sets.reduce(0) { $0 + $1.reps }
         let volume = Int(sets.reduce(0.0) { $0 + $1.volumeKG }.rounded())
-        return "\(sets.count) sets · \(reps) reps · \(volume) kg total volume"
+        return "\(sets.count) sets Â· \(reps) reps Â· \(volume) kg total volume"
     }
 
     private func row<Control: View>(label: String, @ViewBuilder control: () -> Control) -> some View {
