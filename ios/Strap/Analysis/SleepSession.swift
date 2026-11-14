@@ -115,7 +115,10 @@ struct SleepSession: Codable, Equatable {
             let sourceEnd = source.endUnix + 1
             let savedEdit = SleepCorrectionStore.validated(overrides[String(old.sourceStartUnix)])
             let editedBoundsChanged = savedEdit.map { $0[0] != old.startUnix || $0[1] != old.endUnix } ?? false
-            guard editedBoundsChanged || first > old.startUnix || last < old.endUnix - 1 else { continue }
+            // A manually edited canonical night is authoritative even when
+            // a later BLE replay covers the entire old interval. Only an
+            // explicit newly saved correction may change its bounds.
+            guard old.isEdited || editedBoundsChanged || first > old.startUnix || last < old.endUnix - 1 else { continue }
             // Keep intersecting source windows and the latest saved night, not a growing archive.
             guard (source.startUnix <= last && first < sourceEnd)
                     || old == latestPrevious else { continue }
