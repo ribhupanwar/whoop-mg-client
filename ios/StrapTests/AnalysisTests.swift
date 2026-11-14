@@ -923,7 +923,7 @@ final class CaloriesCoverageTests: XCTestCase {
 
     func testDuplicateTimestampAddsNoCalories() {
         let original: [(unix: Int, bpm: Double)] = [(0, 150), (10, 150)]
-        let repeated = original + [(0, 150), (10, 150)]
+        let repeated: [(unix: Int, bpm: Double)] = original + [(unix: 0, bpm: 150), (unix: 10, bpm: 150)]
         let args = (restingHR: 55.0, maxHR: 190.0, weightKg: 70.0,
                     heightCm: 175.0, age: 35.0)
         let a = Calories.activeKcalTimestamped(
