@@ -510,6 +510,20 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
+    func testSustainedBandUpTrimsQuietWakeTail() {
+        var rows = stretch(0, 600, hr: 100, accel: 0.5)
+        rows += (600..<4200).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += (4200..<4800).map {
+            makeSample($0, hr: 60, accel: 0.02, sleepState: 3)
+        }
+        rows += stretch(4800, 600, hr: 100, accel: 0.5)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(periods.first?.endUnix, 4199)
+    }
+
     func testBandStillDoesNotForceSleepOrOverrideHrEvidence() {
         var rows = stretch(0, 600, hr: 100, accel: 0.5)
         rows += (600..<4200).map {

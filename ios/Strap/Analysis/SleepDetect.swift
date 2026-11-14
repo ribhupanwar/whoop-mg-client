@@ -133,6 +133,26 @@ enum SleepDetect {
                 continue
             }
 
+            // A prolonged, explicitly reported band-up tail is wakefulness,
+            // even when the wearer remains physically still. Trim at its onset
+            // rather than extending the night's end on a later archive replay.
+            // Do not infer wake from missing or ambiguous band states.
+            var verifiedEnd = run[run.count - 1].unix
+            let tail = run.reversed()
+            var upStart: Int? = nil
+            var nextUnix: Int? = nil
+            for sample in tail {
+                guard sample.sleepState == 3, sample.wearing,
+                      (35...220).contains(sample.heartRate),
+                      nextUnix.map({ $0 - sample.unix <= 2 }) ?? true else { break }
+                upStart = sample.unix
+                nextUnix = sample.unix
+            }
+            if let upStart, verifiedEnd - upStart + 1 >= 300 {
+                verifiedEnd = upStart - 1
+            }
+            guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
+
             let quietSeconds = quiet[start..<end].filter { $0 }.count
             var wakeEvents = 0
             if end > start + 1 {
@@ -143,7 +163,7 @@ enum SleepDetect {
             periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
-                    endUnix: run[run.count - 1].unix,
+                    endUnix: verifiedEnd,
                     quietFraction: Double(quietSeconds) / Double(run.count),
                     meanHR: Stats.mean(runHRs),
                     wakeEvents: wakeEvents
