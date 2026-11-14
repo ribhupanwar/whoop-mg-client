@@ -96,7 +96,7 @@ enum SleepDetect {
             let declaredSleepRows = stateRows.filter { $0.sleepState == 2 }.count
             let declaredStillRows = stateRows.filter { $0.sleepState == 1 }.count
             // Early-evening quiet while reading or using a phone can last
-            // hours and lower HR. Do not label pre-22:00 stillness as sleep
+            // hours and lower HR. Do not label pre-midnight stillness as sleep
             // unless the band positively reports sustained sleep evidence.
             // This conservative gate may leave early bedtimes unclassified.
             // A long pre-bed quiet period can precede true sleep. Do not
@@ -105,7 +105,7 @@ enum SleepDetect {
             // declaration instead. Keep the rest of the night available.
             var verifiedStart = run[0].unix
             let informativeStateRows = stateRows.filter { $0.sleepState != 0 }
-            if (18..<22).contains(startHour) && informativeStateRows.count >= 300 {
+            if (18..<24).contains(startHour) && informativeStateRows.count >= 300 {
                 let sleepRows = run.filter {
                     $0.sleepState == 2 && $0.wearing && (35...220).contains($0.heartRate)
                 }
