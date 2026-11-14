@@ -202,6 +202,19 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(SleepCorrectionStore.saving(times, for: shifted, overrides: saved), saved)
     }
 
+    func testMissingRawCoverageRetainsEditedCanonicalNight() {
+        let old = knownNight()
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: nil, coverageEnd: nil
+        ), [old], "A disconnected band must not erase a saved manual sleep edit")
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: start, coverageEnd: nil
+        ), [old], "Partial coverage metadata must not erase the saved night")
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [], fresh: [old], coverageStart: nil, coverageEnd: nil
+        ), [old], "No prior cache should preserve the fresh result")
+    }
+
     func testCompleteRetainedTailDoesNotReplaceSavedCanonicalNight() throws {
         let old = knownNight()
         let tailStart = start + 5 * 3600
