@@ -130,8 +130,9 @@ enum Calories {
     }
 
     /// OpenStrap analytics-inspired elapsed-time weighting for irregular HR samples.
-    /// Samples must be timestamped in seconds. Never bill more than 150 seconds
+    /// Samples must be timestamped in seconds. Never bill more than 30 seconds
     /// across a missing-data gap; duplicate timestamps carry no extra energy.
+    /// This conservative limit avoids assuming sustained exercise across long BLE outages.
     /// Reference: OpenStrap/analytics lib/src/onehz/workout/calories.dart
     /// (AGPL-3.0; independently adapted for this Swift API).
     static func activeKcalTimestamped(
@@ -142,7 +143,7 @@ enum Calories {
         heightCm: Double,
         age: Double,
         sex: Sex,
-        maxGapSeconds: Double = 150
+        maxGapSeconds: Double = 30
     ) -> Double? {
         guard let bmr = bmrKcalPerDay(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex),
               let gate = gateHR(restingHR: restingHR, maxHR: maxHR),

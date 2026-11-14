@@ -904,3 +904,35 @@ final class DailyMetricQualityTests: XCTestCase {
         XCTAssertNil(day.strain, "Exercise load still needs its own quiet awake reference")
     }
 }
+
+
+final class CaloriesCoverageTests: XCTestCase {
+    func testLongGapDoesNotBillUnobservedWorkoutMinutes() {
+        let inputs: [(unix: Int, bpm: Double)] = [(0, 150), (300, 150)]
+        let result = Calories.activeKcalTimestamped(
+            heartRates: inputs, restingHR: 55, maxHR: 190,
+            weightKg: 70, heightCm: 175, age: 35, sex: .male
+        )
+        let thirtySeconds = Calories.activeKcalTimestamped(
+            heartRates: [(0, 150), (30, 150)], restingHR: 55, maxHR: 190,
+            weightKg: 70, heightCm: 175, age: 35, sex: .male
+        )
+        XCTAssertNotNil(result)
+        XCTAssertEqual(result!, thirtySeconds!, accuracy: 0.001)
+    }
+
+    func testDuplicateTimestampAddsNoCalories() {
+        let original: [(unix: Int, bpm: Double)] = [(0, 150), (10, 150)]
+        let repeated = original + [(0, 150), (10, 150)]
+        let args = (restingHR: 55.0, maxHR: 190.0, weightKg: 70.0,
+                    heightCm: 175.0, age: 35.0)
+        let a = Calories.activeKcalTimestamped(
+            heartRates: original, restingHR: args.restingHR, maxHR: args.maxHR,
+            weightKg: args.weightKg, heightCm: args.heightCm, age: args.age, sex: .male)
+        let b = Calories.activeKcalTimestamped(
+            heartRates: repeated, restingHR: args.restingHR, maxHR: args.maxHR,
+            weightKg: args.weightKg, heightCm: args.heightCm, age: args.age, sex: .male)
+        XCTAssertEqual(a!, b!, accuracy: 0.001)
+    }
+}
+
