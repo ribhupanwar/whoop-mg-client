@@ -177,6 +177,157 @@ final class HrvTests: XCTestCase {
     }
 }
 
+final class LiveHrvTests: XCTestCase {
+    private func makeLive(_ unix: Int, _ rr: [Int]) -> LiveSample {
+        LiveSample(unix: unix, heartRate: 60, rrIntervalsMS: rr)
+    }
+
+    /// Two clusters of 15 beats each separated by a 30-second gap.
+    /// Cluster 1 has 800 ms RR; Cluster 2 has 850 ms RR.
+    /// Flattening across the gap would yield a false (850 - 800)^2 = 2500 delta,
+    /// giving RMSSD ≈ 9.28 ms. With gap splitting, no cross-gap delta is computed,
+    /// so RMSSD is 0.0 ms.
+    func testGapSeparatedClustersDoNotBridgeRRDiff() {
+        var samples: [LiveSample] = []
+        // Cluster 1: 15 seconds at 800 ms
+        for t in 0..<15 {
+            samples.append(makeLive(t, [800]))
+        }
+        // 30-second gap (t = 15..<45 missing)
+        // Cluster 2: 15 seconds at 850 ms
+        for t in 45..<60 {
+            samples.append(makeLive(t, [850]))
+        }
+
+        let result = Hrv.fromLiveSamples(samples)
+        XCTAssertEqual(result.beats, 30)
+        XCTAssertEqual(result.nnBeats, 30)
+        XCTAssertNotNil(result.rmssdMS)
+        XCTAssertEqual(result.rmssdMS!, 0.0, accuracy: 1e-6)
+    }
+
+    /// Contiguous samples without gaps produce identical RMSSD to fromRR.
+    func testContiguousSamplesPreserveRmssdBehavior() {
+        var samples: [LiveSample] = []
+        var flatRR: [Double] = []
+        // 20 contiguous seconds with alternating 800 and 810 ms intervals
+        for t in 0..<20 {
+            let rr = (t % 2 == 0) ? 800 : 810
+            samples.append(makeLive(t, [rr]))
+            flatRR.append(Double(rr))
+        }
+
+        let liveResult = Hrv.fromLiveSamples(samples)
+        let rrResult = Hrv.fromRR(flatRR)
+
+        XCTAssertEqual(liveResult.beats, 20)
+        XCTAssertEqual(liveResult.nnBeats, 20)
+        XCTAssertNotNil(liveResult.rmssdMS)
+        XCTAssertNotNil(rrResult.rmssdMS)
+        XCTAssertEqual(liveResult.rmssdMS!, rrResult.rmssdMS!, accuracy: 1e-6)
+        XCTAssertEqual(liveResult.rmssdMS!, 10.0, accuracy: 1e-6)
+    }
+
+    /// When splitting creates runs with insufficient beats (< 20 clean beats)
+    /// or no successive pairs (e.g. isolated samples), rmssdMS returns nil.
+    func testInsufficientValidPairsAfterSplittingReturnsNil() {
+        // Sub-case A: Total beats < 20 across split runs (two 5-beat clusters)
+        var shortSamples: [LiveSample] = []
+        for t in 0..<5 { shortSamples.append(makeLive(t, [800])) }
+        for t in 35..<40 { shortSamples.append(makeLive(t, [800])) }
+
+        let shortResult = Hrv.fromLiveSamples(shortSamples)
+        XCTAssertEqual(shortResult.beats, 10)
+        XCTAssertNil(shortResult.rmssdMS)
+
+        // Sub-case B: 25 beats total, but each beat is isolated by a 2-second gap (0 successive pairs)
+        var isolatedSamples: [LiveSample] = []
+        for i in 0..<25 {
+            isolatedSamples.append(makeLive(i * 2, [800]))
+        }
+
+        let isolatedResult = Hrv.fromLiveSamples(isolatedSamples)
+        XCTAssertEqual(isolatedResult.beats, 25)
+        XCTAssertEqual(isolatedResult.nnBeats, 25)
+        XCTAssertNil(isolatedResult.rmssdMS)
+    }
+
+    /// Multiple RR intervals in a single LiveSample are processed in beat order
+    /// and produce the expected successive-difference RMSSD across intra-sample
+    /// and inter-sample boundaries.
+    func testMultipleRRInSingleSampleComputesSuccessiveDiffs() {
+        var samples: [LiveSample] = []
+        var flatRR: [Double] = []
+        // 12 contiguous seconds, each carrying two alternating intervals: [800, 810]
+        // Yields 24 beats total: 800, 810, 800, 810, ...
+        // Every successive difference (both intra-sample and inter-sample) is ±10 ms.
+        for t in 0..<12 {
+            samples.append(makeLive(t, [800, 810]))
+            flatRR.append(800)
+            flatRR.append(810)
+        }
+
+        let liveResult = Hrv.fromLiveSamples(samples)
+        let rrResult = Hrv.fromRR(flatRR)
+
+        XCTAssertEqual(liveResult.beats, 24)
+        XCTAssertEqual(liveResult.nnBeats, 24)
+        XCTAssertNotNil(liveResult.rmssdMS)
+        XCTAssertNotNil(rrResult.rmssdMS)
+        XCTAssertEqual(liveResult.rmssdMS!, 10.0, accuracy: 1e-6)
+        XCTAssertEqual(liveResult.rmssdMS!, rrResult.rmssdMS!, accuracy: 1e-6)
+    }
+
+    /// An empty RR sample in the middle of a contiguous timestamp run resets the
+    /// predecessor chain, preventing an RMSSD delta across that empty sample.
+    func testEmptyRRSampleResetsPredecessorChainInContiguousRun() {
+        var samples: [LiveSample] = []
+        // Cluster 1: 15 contiguous seconds at 800 ms (t = 0..<15)
+        for t in 0..<15 {
+            samples.append(makeLive(t, [800]))
+        }
+        // Empty sample at t = 15 (contiguous: 15 == 14 + 1)
+        samples.append(makeLive(15, []))
+        // Cluster 2: 15 contiguous seconds at 850 ms (t = 16..<31, contiguous: 16 == 15 + 1)
+        for t in 16..<31 {
+            samples.append(makeLive(t, [850]))
+        }
+
+        let result = Hrv.fromLiveSamples(samples)
+        XCTAssertEqual(result.beats, 30)
+        XCTAssertEqual(result.nnBeats, 30)
+        XCTAssertNotNil(result.rmssdMS)
+        // If the empty sample failed to reset previous, a false (850 - 800)^2 = 2500
+        // delta would be included, giving RMSSD ≈ 9.28 ms. With reset, RMSSD is 0.0 ms.
+        XCTAssertEqual(result.rmssdMS!, 0.0, accuracy: 1e-6)
+    }
+
+    /// A rejected outlier (ectopic/artefact) resets the predecessor chain,
+    /// preventing a false difference from being computed across the rejected beat.
+    func testRejectedOutlierResetsPredecessorChain() {
+        var samples: [LiveSample] = []
+        // Cluster 1: 15 contiguous seconds at 800 ms (t = 0..<15)
+        for t in 0..<15 {
+            samples.append(makeLive(t, [800]))
+        }
+        // Outlier at t = 15: 1500 ms (> 20% deviation from 800 ms reference)
+        samples.append(makeLive(15, [1500]))
+        // Cluster 2: 15 contiguous seconds at 850 ms (t = 16..<31)
+        for t in 16..<31 {
+            samples.append(makeLive(t, [850]))
+        }
+
+        let result = Hrv.fromLiveSamples(samples)
+        XCTAssertEqual(result.beats, 31)
+        XCTAssertEqual(result.nnBeats, 30)
+        XCTAssertEqual(result.rejectedBeats, 1)
+        XCTAssertNotNil(result.rmssdMS)
+        // If the outlier did not reset previous, (850 - 800)^2 = 2500 would be
+        // computed across the rejected beat, giving RMSSD ≈ 9.28 ms.
+        XCTAssertEqual(result.rmssdMS!, 0.0, accuracy: 1e-6)
+    }
+}
+
 final class RestingHrvTests: XCTestCase {
     func testNeedsALongEnoughQuietRun() {
         let rows = stretch(0, 30, hr: 70, accel: 0.01, rr: [800, 810])

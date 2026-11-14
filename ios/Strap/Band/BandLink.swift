@@ -733,7 +733,7 @@ final class BandLink: NSObject, ObservableObject {
                 : Stats.mean(liveSamples.map { Double($0.heartRate) }),
             maxHeartRate: liveSamples.map { $0.heartRate }.max(),
             beats: rr.count,
-            hrv: Hrv.fromRR(rr)
+            hrv: Hrv.fromLiveSamples(liveSamples)
         )
         lastLiveSession = result
         sessionStartedUnix = nil
@@ -742,7 +742,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     var currentLiveHRV: HrvResult {
-        Hrv.fromRR(liveSamples.flatMap { sample in sample.rrIntervalsMS.map { Double($0) } })
+        Hrv.fromLiveSamples(liveSamples)
     }
 
     // MARK: - Scan and connect
