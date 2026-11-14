@@ -718,6 +718,19 @@ final class SleepDetectTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
+    func testEveningQuietWithSparseBandStateCannotBypassSleepConfirmation() {
+        let evening = Calendar.current.date(bySettingHour: 21, minute: 32, second: 0, of: Date())!
+        let start = Int(evening.timeIntervalSince1970)
+        var rows = stretch(start - 600, 600, hr: 100, accel: 0.5)
+        rows += (0..<6420).map { offset in
+            makeSample(start + offset, hr: 60, accel: 0.02,
+                       sleepState: offset < 120 ? 1 : nil)
+        }
+        rows += stretch(start + 6420, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty,
+                      "Sparse band-state evidence must not turn awake evening rest into sleep")
+    }
+
     func testEveningOnsetRequiresSustainedBandEvidenceNotOnePacket() {
         let evening = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!
         let start = Int(evening.timeIntervalSince1970)
