@@ -77,7 +77,7 @@ struct SleepAnalysisView: View {
             Button("Cancel", role: .cancel) {}
             Button("End Sleep") { saveSleepCorrection() }
         } message: {
-            Text("End this sleep session at the selected Wake Time? You can edit the time later.")
+            Text("Set the sleep end to the selected time? This updates the sleep window and recalculates available metrics. You can edit it later.")
         }
         .navigationTitle("Sleep analysis")
         .navigationBarTitleDisplayMode(.inline)
@@ -211,6 +211,19 @@ struct SleepAnalysisView: View {
         showSleepEditor = true
     }
 
+    private func requestEndSleepNow() {
+        guard let period = editablePeriod else { return }
+        let now = Date()
+        let start = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? period.startUnix))
+        guard now > start, now.timeIntervalSince(start) <= 86400 else {
+            openSleepEditor()
+            return
+        }
+        correctedSleepStart = start
+        correctedSleepEnd = now
+        confirmEndSleep = true
+    }
+
     private var lastNightPanel: some View {
         Panel {
             HStack {
@@ -238,6 +251,19 @@ struct SleepAnalysisView: View {
                 Spacer()
             }
             .padding(.bottom, 8)
+
+            if !demo, editablePeriod != nil {
+                Button(action: requestEndSleepNow) {
+                    Label("END SLEEP NOW", systemImage: "stop.circle")
+                        .font(StrapTypography.body(12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                }
+                .buttonStyle(.bordered)
+                .tint(Color.appSleep)
+                .accessibilityHint("Confirm ending the current sleep at the present time")
+                .padding(.bottom, 12)
+            }
 
             if demo {
                 LineChart(
