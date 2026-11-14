@@ -1283,3 +1283,69 @@ final class CaloriesCoverageTests: XCTestCase {
     }
 }
 
+
+final class HistoricalArchiveWriterTests: XCTestCase {
+    func testQueuedMergesPreserveEarlierChunksAndReloadSavedHistory() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("history.json")
+        let start = 1_790_000_000
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try JSONEncoder().encode([makeSample(start, hr: 60)]).write(to: url)
+        let writer = HistoricalArchiveWriter(url: url)
+        let first = expectation(description: "first chunk")
+        let second = expectation(description: "second chunk")
+        writer.merge([makeSample(start + 1, hr: 61)]) { result in
+            XCTAssertTrue(Thread.isMainThread)
+            switch result {
+            case .success(let rows): XCTAssertEqual(rows.map(\.unix), [start, start + 1])
+            case .failure(let error): XCTFail("\(error)")
+            }
+            first.fulfill()
+        }
+        // Enqueue before the first callback: a stale snapshot would lose its chunk.
+        writer.merge([makeSample(start + 2, hr: 62)]) { result in
+            XCTAssertTrue(Thread.isMainThread)
+            switch result {
+            case .success(let rows): XCTAssertEqual(rows.map(\.unix), [start, start + 1, start + 2])
+            case .failure(let error): XCTFail("\(error)")
+            }
+            second.fulfill()
+        }
+        wait(for: [first, second], timeout: 5, enforceOrder: true)
+        let saved = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        XCTAssertEqual(saved.map(\.unix), [start, start + 1, start + 2])
+    }
+
+    func testFailedSaveDoesNotPublishOrDiscardPreviousHistory() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("history.json")
+        let writer = HistoricalArchiveWriter(url: url)
+        let initial = expectation(description: "initial archive")
+        writer.merge([makeSample(1_790_000_000, hr: 60)]) { result in
+            if case .failure(let error) = result { XCTFail("\(error)") }
+            initial.fulfill()
+        }
+        wait(for: [initial], timeout: 5)
+        // Replace the parent directory with a file to force a real disk failure.
+        try FileManager.default.removeItem(at: directory)
+        try Data().write(to: directory)
+        let failed = expectation(description: "save fails")
+        writer.merge([makeSample(1_790_000_001, hr: 61)]) { result in
+            if case .success = result { XCTFail("Must not publish unsaved records") }
+            failed.fulfill()
+        }
+        wait(for: [failed], timeout: 5)
+        try FileManager.default.removeItem(at: directory)
+        let recovered = expectation(description: "retry retains original chunk")
+        writer.merge([makeSample(1_790_000_001, hr: 61)]) { result in
+            switch result {
+            case .success(let rows): XCTAssertEqual(rows.count, 2)
+            case .failure(let error): XCTFail("\(error)")
+            }
+            recovered.fulfill()
+        }
+        wait(for: [recovered], timeout: 5)
+    }
+}

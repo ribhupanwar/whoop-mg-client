@@ -101,11 +101,18 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var summary: CaptureSummary?
     @Published private(set) var lastSleepAnalysis: SleepAnalysis?
     @Published private(set) var isAnalyzingHistory = false
+    @Published private(set) var isSavingHistory = false
+    private var pendingArchiveWrites = 0
+    @Published private(set) var historicalRestQualityReason = "Loading retained historical records…"
     private var metricsRequest = 0
+    private var metricsRefreshPending = false
+    private var lastCheckpointCount = 0
+    private var lastCheckpointAt = Date.distantPast
+    private lazy var archiveWriter = HistoricalArchiveWriter(url: historicalArchiveURL)
     private let analysisQueue = DispatchQueue(label: "strap.history.analysis", qos: .userInitiated)
 
     var latestSleepSession: SleepSession? {
-        guard !isAnalyzingHistory, let session = summary?.latestSleepSession,
+        guard let session = summary?.latestSleepSession,
               session.version == SleepSession.algorithmVersion else { return nil }
         return session
     }
@@ -202,22 +209,10 @@ final class BandLink: NSObject, ObservableObject {
         return "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
     }
 
-    var historicalRestQualityReason: String {
-        guard !retainedHistoricalSamples.isEmpty else { return "No retained historical records" }
-        let periods = SleepDetect.detect(retainedHistoricalSamples)
-        guard !periods.isEmpty else {
-            return "Sleep session not detected; " + Hrv.restingQualityReason(retainedHistoricalSamples)
-        }
-        let overnight = retainedHistoricalSamples.filter { sample in
-            periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
-        }
-        return Hrv.restingQualityReason(overnight)
-    }
-
     /// Export the exact retained channels and staged labels for this displayed
     /// night. The file stays local until the user explicitly shares it.
     func exportSleepDiagnostics() async throws -> URL {
-        guard let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
+        guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
         let samples = retainedHistoricalSamples
         let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("sleep-exports", isDirectory: true)
@@ -231,20 +226,25 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("strap-history-v18.json")
     }
 
-    private func mergeHistoricalArchive(_ incoming: [V18Sample]) -> [V18Sample]? {
-        let bySecond = HistoricalCaptureRecovery.merged(retainedHistoricalSamples + incoming)
-        let ordered = bySecond.values.sorted { $0.unix < $1.unix }
-        let cutoff = (ordered.last?.unix ?? 0) - 72 * 3600
-        let merged = ordered.filter { $0.unix >= cutoff }
-        do {
-            let url = historicalArchiveURL
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try JSONEncoder().encode(merged).write(to: url, options: .atomic)
-            retainedHistoricalSamples = merged
-            return merged
-        } catch {
-            lastMessage = "History archive save failed: \(error.localizedDescription)"
-            return nil
+    /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
+    /// the latest archive so recovery and a live drain cannot overwrite each other.
+    private func mergeHistoricalArchive(
+        _ incoming: [V18Sample], completion: @escaping () -> Void
+    ) {
+        pendingArchiveWrites += 1
+        isSavingHistory = true
+        archiveWriter.merge(incoming) { [weak self] result in
+            guard let self else { return }
+            self.pendingArchiveWrites -= 1
+            self.isSavingHistory = self.pendingArchiveWrites > 0
+            switch result {
+            case .success(let merged):
+                self.retainedHistoricalSamples = merged
+                self.lastHistoryRecordCount = merged.count
+                completion()
+            case .failure(let error):
+                self.lastMessage = "History archive save failed: \(error.localizedDescription)"
+            }
         }
     }
     private var seenRecordIndices: Set<UInt32> = []
@@ -293,11 +293,6 @@ final class BandLink: NSObject, ObservableObject {
            let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
             archivedLiveRRSamples = saved
         }
-        if let data = try? Data(contentsOf: historicalArchiveURL),
-           let saved = try? JSONDecoder().decode([V18Sample].self, from: data) {
-            retainedHistoricalSamples = saved
-        }
-        lastHistoryRecordCount = retainedHistoricalSamples.count
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
@@ -314,10 +309,10 @@ final class BandLink: NSObject, ObservableObject {
         analysisQueue.async { [weak self] in
             let recovered = HistoricalCaptureRecovery.read(directory: directory)
             DispatchQueue.main.async { [weak self] in
-                guard let self, !recovered.isEmpty,
-                      let merged = self.mergeHistoricalArchive(recovered) else { return }
-                self.lastHistoryRecordCount = merged.count
-                self.recalculateRetainedMetrics()
+                guard let self else { return }
+                self.mergeHistoricalArchive(recovered) { [weak self] in
+                    self?.recalculateRetainedMetrics()
+                }
             }
         }
     }
@@ -343,13 +338,14 @@ final class BandLink: NSObject, ObservableObject {
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
     func recalculateRetainedMetrics() {
-        lastSleepAnalysis = nil
-        UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+        // Repeated settings, recovery and drain callbacks request one follow-up,
+        // rather than queueing multiple full-night analyses behind stale work.
+        guard !isAnalyzingHistory else {
+            metricsRefreshPending = true
+            return
+        }
         metricsRequest += 1
         guard !retainedHistoricalSamples.isEmpty else {
-            var cached = summary
-            cached?.sleepSessions = nil
-            summary = cached
             isAnalyzingHistory = false
             return
         }
@@ -419,6 +415,12 @@ final class BandLink: NSObject, ObservableObject {
                     nights: nights, sleepBaseline: sleepBaseline
                 )
             }
+            let diagnosticPeriods = fresh.sleepPeriods
+            let restSamples = diagnosticPeriods.isEmpty ? samples : samples.filter { sample in
+                diagnosticPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+            }
+            let restReason = (diagnosticPeriods.isEmpty ? "Sleep session not detected; " : "")
+                + Hrv.restingQualityReason(restSamples)
             // Persist the same night-bound report used by Sleep Analysis, so
             // weekly Recovery charts never substitute a different sleep score.
             for index in freshDays.indices {
@@ -439,6 +441,7 @@ final class BandLink: NSObject, ObservableObject {
             let finalFresh = fresh
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
+                self.historicalRestQualityReason = restReason
                 self.summary = finalFresh
                 self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
                            editedDays: editedDays)
@@ -450,6 +453,10 @@ final class BandLink: NSObject, ObservableObject {
                     UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
                 }
                 self.isAnalyzingHistory = false
+                if self.metricsRefreshPending {
+                    self.metricsRefreshPending = false
+                    self.recalculateRetainedMetrics()
+                }
             }
         }
     }
@@ -1086,6 +1093,8 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startCaptureFile() {
         capturedSamples = []
+        lastCheckpointCount = 0
+        lastCheckpointAt = Date()
         seenRecordIndices = []
         drainFrames = 0
         drainAcks = 0
@@ -1112,6 +1121,18 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
+        // A band can keep sending metadata without completing its offload.
+        // Analyze durable checkpoints while it is still connected; reopening
+        // the app must not be required to discover the night's saved records.
+        if capturedSamples.count > lastCheckpointCount,
+           now.timeIntervalSince(lastCheckpointAt) >= 60,
+           !isAnalyzingHistory {
+            lastCheckpointCount = capturedSamples.count
+            lastCheckpointAt = now
+            mergeHistoricalArchive(capturedSamples) { [weak self] in
+                self?.recalculateRetainedMetrics()
+            }
+        }
         if drainFrames > 0 && idle >= Self.drainIdleSeconds {
             finishDrain(reason: "idle timeout after \(Int(idle))s")
         } else if drainFrames == 0 && elapsed >= Self.drainEmptySeconds {
@@ -1167,10 +1188,11 @@ final class BandLink: NSObject, ObservableObject {
             }
             return
         }
-        guard let combined = mergeHistoricalArchive(samples) else { return }
-        lastHistoryRecordCount = combined.count
-        UserDefaults.standard.set(combined.count, forKey: Keys.retainedHistoryCount)
-        recalculateRetainedMetrics()
+        mergeHistoricalArchive(samples) { [weak self] in
+            guard let self else { return }
+            UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
+            self.recalculateRetainedMetrics()
+        }
         lastMessage = "History sync: \(reason). Captured \(samples.count) records, \(drainAcks) ACKs. \(historyQuality). \(reason == "explicit completion" ? "" : "History may be incomplete; retry sync.")"
     }
 
@@ -1338,9 +1360,9 @@ final class BandLink: NSObject, ObservableObject {
                     lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
                     return
                 }
-                // Also persist decoded records before permitting the strap to
-                // advance its cursor; app termination must not lose this chunk.
-                guard mergeHistoricalArchive(capturedSamples) != nil else { return }
+                // The flushed raw capture is the durable source for recovery.
+                // Do not rewrite up to 72 hours of decoded JSON on the main
+                // thread for every ACK. Checkpoints rebuild it in the background.
                 enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
                 drainAcks += 1
                 lastFrameAt = Date()

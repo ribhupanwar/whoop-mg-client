@@ -107,7 +107,7 @@ struct RootView: View {
                     Button { tab = item } label: {
                         VStack(spacing: 4) {
                             Image(systemName: item.icon).font(.system(size: 19, weight: .medium))
-                            Text(item.label).font(StrapTypography.body(11, weight: .regular))
+                            Text(item.label).font(StrapTypography.body(11, weight: tab == item ? .bold : .medium))
                         }
                         .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity).frame(height: 52)
@@ -187,7 +187,7 @@ private struct DailyInsightsView: View {
                 Panel {
                     CardHead(title: "Your recorded day")
                     Text("Recovery " + DetailMetric.recovery.text(store.band.recovery.score))
-                        .font(StrapTypography.body(22, weight: .semibold)).padding(.bottom, 12)
+                        .font(StrapTypography.body(22, weight: .bold)).padding(.bottom, 12)
                     Text("HRV " + (store.lastCapture?.hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "—"))
                         .font(StrapTypography.body(16)).padding(.bottom, 8)
                     Text("Resting HR " + (store.measuredRestingHR.map { String(format: "%.0f bpm", $0) } ?? "—"))

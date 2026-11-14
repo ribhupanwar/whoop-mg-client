@@ -215,7 +215,7 @@ struct SleepCoachView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(.appAccent)
-            .font(StrapTypography.body(12, weight: .semibold))
+            .font(StrapTypography.body(12, weight: .bold))
             .controlSize(.small)
             .frame(maxWidth: .infinity, alignment: .trailing)
             if alarmConfirmation {

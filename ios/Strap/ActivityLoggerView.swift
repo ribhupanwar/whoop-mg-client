@@ -36,7 +36,7 @@ struct ActivityLoggerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") { save() }
-                        .font(StrapTypography.body(17, weight: .semibold))
+                        .font(StrapTypography.body(17, weight: .bold))
                         .foregroundStyle(Color.appAccent)
                 }
             }
@@ -52,7 +52,7 @@ struct ActivityLoggerView: View {
                 Image(systemName: kind.icon)
                     .foregroundStyle(Color.appAccent)
                 Text(kind.label)
-                    .font(StrapTypography.body(14, weight: .semibold))
+                    .font(StrapTypography.body(14, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 Image(systemName: "chevron.down")

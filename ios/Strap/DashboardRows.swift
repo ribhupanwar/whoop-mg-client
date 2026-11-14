@@ -262,7 +262,7 @@ struct DashboardRows: View {
             VStack(alignment: .leading, spacing: 7) {
                 HStack {
                     Text("STRESS MONITOR")
-                        .font(StrapTypography.body(12, weight: .semibold))
+                        .font(StrapTypography.body(12, weight: .bold))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()

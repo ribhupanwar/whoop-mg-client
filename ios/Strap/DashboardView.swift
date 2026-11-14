@@ -147,7 +147,7 @@ struct DashboardView: View {
             }
             .font(StrapTypography.body(10, weight: .medium))
             Text(value)
-                .font(StrapTypography.body(23, weight: .semibold))
+                .font(StrapTypography.body(23, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -163,7 +163,7 @@ struct DashboardView: View {
     private func analyticsStat(_ title: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(value)
-                .font(StrapTypography.body(18, weight: .semibold))
+                .font(StrapTypography.body(18, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -196,7 +196,7 @@ struct DashboardView: View {
         Panel {
             SectionTitle("Weekly Trends")
             Text(focusedMetric == "recovery" ? "RECOVERY" : focusedMetric == "strain" ? "STRAIN" : "SLEEP · RECOVERY · STRAIN")
-                .font(StrapTypography.body(12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appMuted)
             Picker("Chart period", selection: $trendWindow) {
@@ -279,7 +279,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("RECOVERY")
-                    .font(StrapTypography.body(12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .bold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -319,7 +319,7 @@ struct DashboardView: View {
                                     .frame(width: width, height: max(2, barHeight))
                                     .position(x: x, y: 166 - barHeight / 2)
                                 Text(String(format: "%.0f%%", value))
-                                    .font(StrapTypography.body(11, weight: .semibold))
+                                    .font(StrapTypography.body(11, weight: .bold))
                                     .foregroundStyle(color)
                                     .position(x: x, y: max(10, 154 - barHeight))
                             }
@@ -373,7 +373,7 @@ struct DashboardView: View {
             )
             VStack(alignment: .leading, spacing: 6) {
                 Text("RESPIRATORY RATE")
-                    .font(StrapTypography.body(12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Hint("Weekly respiratory rate is not present in the stored daily records yet. A validated dated source is needed before plotting this chart.")
             }
@@ -389,7 +389,7 @@ struct DashboardView: View {
                                     maximum: Double) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(StrapTypography.body(12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appFG)
             HStack(alignment: .bottom, spacing: 4) {
@@ -432,7 +432,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("STRAIN")
-                    .font(StrapTypography.body(12, weight: .semibold))
+                    .font(StrapTypography.body(12, weight: .bold))
                     .tracking(1)
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -510,7 +510,7 @@ struct DashboardView: View {
                             color: Color, upper: Double) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text(title).font(StrapTypography.body(12, weight: .semibold)).tracking(0.7).foregroundStyle(Color.appFG)
+                Text(title).font(StrapTypography.body(12, weight: .bold)).tracking(0.7).foregroundStyle(Color.appFG)
                 Spacer()
                 Text(unit).foregroundStyle(Color.appMuted)
             }

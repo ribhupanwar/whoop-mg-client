@@ -96,12 +96,12 @@ struct MetricHistoryView: View {
                                 .font(.system(size: 19, weight: .light))
                                 .foregroundStyle(Color.appMuted)
                             Text(selectedMetric.title.uppercased())
-                                .font(StrapTypography.body(14, weight: .semibold))
+                                .font(StrapTypography.body(14, weight: .bold))
                                 .tracking(0.7)
                                 .foregroundStyle(Color.appFG)
                             Spacer()
                             Image(systemName: "chevron.down")
-                                .font(.system(size: 14, weight: .semibold))
+                                .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(Color.appFG)
                         }
                         .padding(.vertical, 4)
@@ -114,7 +114,7 @@ struct MetricHistoryView: View {
                     HStack(alignment: .bottom, spacing: 14) {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(selectedMetric.isTime ? "AVG. WEEKLY TOTAL" : "AVERAGE")
-                                .font(StrapTypography.body(10, weight: .semibold))
+                                .font(StrapTypography.body(10, weight: .bold))
                                 .tracking(0.8)
                                 .foregroundStyle(Color.appMuted)
                             Text(selectedMetric.text(average))
@@ -144,7 +144,7 @@ struct MetricHistoryView: View {
                         }
                         Spacer()
                         Text(rangeTitle.uppercased())
-                            .font(StrapTypography.body(11, weight: .semibold))
+                            .font(StrapTypography.body(11, weight: .bold))
                             .tracking(0.7)
                             .foregroundStyle(Color.appFG)
                         Spacer()

@@ -168,9 +168,8 @@ enum DailyAnalysis {
             let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
             byDay[JournalStore.dayKey(for: date, calendar: calendar), default: []].append(sample)
         }
-        let detectedPeriods = SleepDetect.detect(ordered)
         let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
-            samples: ordered, periods: detectedPeriods, overrides: sleepCorrections
+            samples: ordered, periods: SleepDetect.detect(ordered), overrides: sleepCorrections
         )
         // Sleep duration, nightly biometrics and awake load must share the
         // canonical edited bounds. The measurements remain sensor-derived.

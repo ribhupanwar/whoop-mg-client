@@ -40,7 +40,7 @@ struct CombinedLoadChart: View {
                             let y = plotH * CGFloat(1 - value / 21)
                             Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(Color.appAccent, lineWidth: 2)).position(x: x, y: y)
-                            Text(DetailMetric.strain.text(value)).font(StrapTypography.body(9, weight: .semibold))
+                            Text(DetailMetric.strain.text(value)).font(StrapTypography.body(9, weight: .bold))
                                 .foregroundStyle(Color.appAccent).position(x: x, y: min(plotH - 3, y + 12))
                         }
                         if let value = day.recovery {
@@ -48,7 +48,7 @@ struct CombinedLoadChart: View {
                             let color = DetailMetric.recovery.color(value)
                             Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                 .overlay(Circle().stroke(color, lineWidth: 2)).position(x: x, y: y)
-                            Text(DetailMetric.recovery.text(value)).font(StrapTypography.body(9, weight: .semibold))
+                            Text(DetailMetric.recovery.text(value)).font(StrapTypography.body(9, weight: .bold))
                                 .foregroundStyle(color).position(x: x, y: max(6, y - 13))
                         }
                         VStack(spacing: 3) {

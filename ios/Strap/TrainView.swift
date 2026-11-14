@@ -27,10 +27,10 @@ struct TrainView: View {
                 zonesPanel
                 NavigationLink(value: Route.gpsRun) {
                     HStack {
-                        Image(systemName: "location.fill").font(.system(size: 14, weight: .semibold))
-                        Text("Start outdoor GPS run").font(StrapTypography.body(14, weight: .semibold))
+                        Image(systemName: "location.fill").font(.system(size: 14, weight: .bold))
+                        Text("Start outdoor GPS run").font(StrapTypography.body(14, weight: .bold))
                         Spacer()
-                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .semibold))
+                        Image(systemName: "chevron.right").font(.system(size: 12, weight: .bold))
                     }
                     .foregroundStyle(Color.appAccent)
                     .padding(16)
