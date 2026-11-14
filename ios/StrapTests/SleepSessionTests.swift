@@ -415,6 +415,17 @@ final class SleepSessionTests: XCTestCase {
                                         needHours: 8, nights: [], sleepBaseline: nil))
     }
 
+    func testEqualDistanceSleepCorrectionAliasesAreDeterministic() {
+        let night = SleepPeriod(startUnix: start, endUnix: start + 8 * 3600 - 1,
+                                quietFraction: 0.8, meanHR: 55, wakeEvents: 0)
+        let earlier = [start + 60, start + 7 * 3600]
+        let later = [start + 120, start + 7 * 3600 + 60]
+        let a = [String(start - 60): later, String(start + 60): earlier]
+        let b = [String(start + 60): earlier, String(start - 60): later]
+        XCTAssertEqual(SleepCorrectionStore.times(for: night, overrides: a), earlier)
+        XCTAssertEqual(SleepCorrectionStore.times(for: night, overrides: b), earlier)
+    }
+
     func testZeroOrNonfiniteNeedRefusesScore() {
         for need in [0.0, -1.0, .infinity, .nan] {
             XCTAssertNil(SleepReport.analyze(samples: [], session: knownNight(), needHours: need, nights: [], sleepBaseline: nil))
