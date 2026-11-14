@@ -77,7 +77,8 @@ enum MetricTimeline {
     }
 
     static func comparison(_ metric: DetailMetric, before key: String, in points: [MetricDay]) -> Double? {
-        let values = points.filter { $0.key < key }.compactMap { $0.value(metric) }.suffix(30)
+        let values = points.filter { $0.key < key }.sorted { $0.key < $1.key }
+            .compactMap { $0.value(metric) }.suffix(30)
         return values.isEmpty ? nil : Stats.mean(values)
     }
 }
