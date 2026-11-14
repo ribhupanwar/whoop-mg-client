@@ -151,15 +151,19 @@ enum Calories {
         // Discard physiologically implausible optical spikes rather than
         // allowing a corrupt sample to create artificial exercise energy.
         // Retain below-gate valid HR as zero-active observations.
-        let points = heartRates.filter { $0.bpm.isFinite && (35...220).contains($0.bpm) }
-            .sorted { $0.unix < $1.unix }
+        // Keep invalid observations as gaps: filtering them first would bridge
+        // valid HR points across a corrupt reading and invent active energy.
+        let points = heartRates.sorted { $0.unix < $1.unix }
         guard points.count >= 2 else { return 0 }
         let basalPerSecond = bmr / 86400
         var active = 0.0
         for index in 0..<(points.count - 1) {
             let point = points[index]
             let elapsed = Double(points[index + 1].unix - point.unix)
-            guard elapsed > 0, point.bpm >= gate else { continue }
+            guard elapsed > 0, point.bpm.isFinite, (35...220).contains(point.bpm),
+                  points[index + 1].bpm.isFinite,
+                  (35...220).contains(points[index + 1].bpm),
+                  point.bpm >= gate else { continue }
             let rate = keytelKcalPerS(
                 hr: point.bpm, maxHR: maxHR, weightKg: weightKg, age: age, sex: sex
             )
