@@ -297,6 +297,25 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertNil(correctedDay.reliableSleepHours, "An edited expired night must not keep stale dashboard/debt hours")
     }
 
+    func testOvercountedStagesCannotBecomeCompleteSleep() {
+        let old = knownNight()
+        let invalid = SleepStaging(
+            segments: old.staging.segments,
+            deepMinutes: 60, lightMinutes: 465, remMinutes: 0,
+            wakeMinutes: 27, epochs: 984, hrCoverage: 1, reason: nil
+        )
+        let session = SleepSession(
+            version: old.version, sourceStartUnix: old.sourceStartUnix,
+            startUnix: old.startUnix, endUnix: old.endUnix,
+            staging: invalid, heartRate: old.heartRate,
+            movementBouts: old.movementBouts, isEdited: old.isEdited,
+            sourceEndUnix: old.sourceEndUnix
+        )
+        XCTAssertFalse(session.isComplete)
+        XCTAssertNil(session.asleepHours)
+        XCTAssertNil(session.efficiencyPct)
+    }
+
     func testManualSleepCorrectionPersistsWithoutArchiveCoverage() {
         let old = knownNight()
         let correctedEnd = old.endUnix - 1800
