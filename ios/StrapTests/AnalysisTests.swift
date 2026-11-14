@@ -731,6 +731,27 @@ final class SleepDetectTests: XCTestCase {
                       "Sparse band-state evidence must not turn awake evening rest into sleep")
     }
 
+    func testSparseArchiveAfterConfirmedEveningOnsetIsNotFullNight() {
+        let evening = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!
+        let start = Int(evening.timeIntervalSince1970)
+        var rows = stretch(start - 600, 600, hr: 100, accel: 0.5)
+        rows += (0..<3600).map {
+            makeSample(start + $0, hr: 60, accel: 0.02, sleepState: 1)
+        }
+        // Five minutes of positive sleep-state evidence, then sparse archive
+        // records across an apparent hour. The earlier awake samples must not
+        // satisfy the coverage requirement for the trimmed sleep interval.
+        rows += (3600..<3900).map {
+            makeSample(start + $0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += stride(from: 3900, through: 7500, by: 5).map {
+            makeSample(start + $0, hr: 60, accel: 0.02, sleepState: 2)
+        }
+        rows += stretch(start + 7501, 600, hr: 100, accel: 0.5)
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty,
+                      "Pre-onset awake coverage must not validate a sparse confirmed sleep window")
+    }
+
     func testEveningOnsetRequiresSustainedBandEvidenceNotOnePacket() {
         let evening = Calendar.current.date(bySettingHour: 19, minute: 0, second: 0, of: Date())!
         let start = Int(evening.timeIntervalSince1970)
