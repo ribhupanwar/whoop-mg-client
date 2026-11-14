@@ -96,6 +96,19 @@ final class MetricTimelineTests: XCTestCase {
                        "The most recent 30 valid days must not depend on caller ordering")
     }
 
+    func testInvalidHeartRateInputsDoNotProduceFiniteLookingStrainOrVO2() {
+        XCTAssertNil(Hrv.hrReserveRatio(.nan, resting: 60, maximum: 190))
+        XCTAssertNil(Hrv.hrReserveRatio(120, resting: 60, maximum: .infinity))
+        XCTAssertNil(Hrv.hrReserveRatio(120, resting: .nan, maximum: 190))
+        XCTAssertNil(Hrv.strainScore(.infinity))
+        XCTAssertNil(Hrv.strainScore(.nan))
+        XCTAssertNil(Hrv.vo2Max(maxHR: .infinity, restingHR: 60))
+        XCTAssertNil(Hrv.vo2Max(maxHR: 190, restingHR: .nan))
+        XCTAssertNotNil(Hrv.hrReserveRatio(120, resting: 60, maximum: 190))
+        XCTAssertNotNil(Hrv.strainScore(50))
+        XCTAssertNotNil(Hrv.vo2Max(maxHR: 190, restingHR: 60))
+    }
+
     func testComparisonExcludesTheCurrentObservation() {
         var prior = day(9)
         prior = DayMetrics(dateKey: prior.dateKey, state: "sleep", restingHR: 60, lnRMSSD: log(44),
