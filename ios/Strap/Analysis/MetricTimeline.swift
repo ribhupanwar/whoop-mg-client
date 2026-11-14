@@ -79,7 +79,26 @@ enum MetricTimeline {
     static func comparison(_ metric: DetailMetric, before key: String, in points: [MetricDay]) -> Double? {
         let values = points.filter { $0.key < key }.sorted { $0.key < $1.key }
             .compactMap { $0.value(metric) }.suffix(30)
-        return values.isEmpty ? nil : Stats.mean(values)
+        return values.isEmpty ? nil : Stats.mean(Array(values))
+    }
+
+    /// Average weekly duration over the requested calendar period. Missing
+    /// days contribute nothing and are never extrapolated as if observed.
+    static func averageWeeklyDuration(_ readings: [Double], calendarDayCount: Int) -> Double? {
+        guard calendarDayCount > 0, !readings.isEmpty else { return nil }
+        let weeks = Double(calendarDayCount) / 7
+        return readings.reduce(0, +) / weeks
+    }
+
+    /// Values surrounded by gaps have no line segment, so the chart must draw
+    /// a dot for those observations to keep them visible without bridging gaps.
+    static func isolatedLineIndices(_ values: [Double?]) -> [Int] {
+        values.indices.filter { index in
+            guard values[index] != nil else { return false }
+            let beforeIsMissing = index == values.startIndex || values[index - 1] == nil
+            let afterIsMissing = index == values.index(before: values.endIndex) || values[index + 1] == nil
+            return beforeIsMissing && afterIsMissing
+        }
     }
 }
 
