@@ -97,7 +97,7 @@ struct DashboardRows: View {
 
     private func historyRow<Content: View>(_ metric: DetailMetric,
                                            @ViewBuilder content: () -> Content) -> some View {
-        NavigationLink(value: Route.metricHistory(metric.rawValue), label: content)
+        NavigationLink(value: Route.metricHistory(metric), label: content)
             .buttonStyle(.plain)
     }
 
