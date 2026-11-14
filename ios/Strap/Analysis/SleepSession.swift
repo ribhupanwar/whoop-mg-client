@@ -107,7 +107,10 @@ struct SleepSession: Codable, Equatable {
         previous: [SleepSession], fresh: [SleepSession], coverageStart: Int?, coverageEnd: Int?,
         samples: [V18Sample] = [], overrides: [String: [Int]] = [:]
     ) -> [SleepSession] {
-        guard let first = coverageStart, let last = coverageEnd else { return fresh }
+        // No archive coverage must not erase a previously saved canonical night.
+        guard let first = coverageStart, let last = coverageEnd else {
+            return previous.isEmpty ? fresh : previous
+        }
         var result = fresh
         let latestPrevious = previous.max { $0.endUnix < $1.endUnix }
         for old in previous where old.version == algorithmVersion {
