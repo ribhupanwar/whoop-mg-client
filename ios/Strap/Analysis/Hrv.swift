@@ -389,7 +389,10 @@ enum Hrv {
             let seconds: Int
             if index + 1 < unique.count {
                 let gap = unique[index + 1].unix - sample.unix
-                seconds = gap > 0 ? min(gap, 5) : 1
+                // Treat gaps over 30 seconds as a disconnect: the next
+                // observation cannot establish sustained effort in between.
+                // For shorter sparse intervals, cap extrapolation at five seconds.
+                seconds = gap > 30 ? 1 : (gap > 0 ? min(gap, 5) : 1)
             } else {
                 // A final sample has no following timestamp to establish
                 // duration. Count only its observed second, never 30 seconds.
