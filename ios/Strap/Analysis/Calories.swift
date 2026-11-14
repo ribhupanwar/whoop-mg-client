@@ -120,7 +120,7 @@ enum Calories {
               let gate = gateHR(restingHR: restingHR, maxHR: maxHR) else { return nil }
         let basalPerMinute = bmr / 1440
         var active = 0.0
-        for hr in hrPerMinute where hr.isFinite && hr >= gate {
+        for hr in hrPerMinute where hr.isFinite && (35...220).contains(hr) && hr >= gate {
             let perMinute = keytelKcalPerS(
                 hr: hr, maxHR: maxHR, weightKg: weightKg, age: age, sex: sex
             ) * 60
@@ -194,7 +194,7 @@ enum Calories {
               let bmr = bmrKcalPerDay(weightKg: weightKg, heightCm: heightCm, age: age, sex: sex),
               let gate = gateHR(restingHR: restingHR, maxHR: maxHR) else { return nil }
         let basalPerMinute = bmr / 1440
-        if let meanHR, meanHR.isFinite, meanHR >= gate {
+        if let meanHR, meanHR.isFinite, (35...220).contains(meanHR), meanHR >= gate {
             let perMinute = keytelKcalPerS(
                 hr: meanHR, maxHR: maxHR, weightKg: weightKg, age: age, sex: sex
             ) * 60
