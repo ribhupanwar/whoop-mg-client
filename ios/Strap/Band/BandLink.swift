@@ -229,7 +229,7 @@ final class BandLink: NSObject, ObservableObject {
     /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
     /// the latest archive so recovery and a live drain cannot overwrite each other.
     private func mergeHistoricalArchive(
-        _ incoming: [V18Sample], completion: @escaping () -> Void
+        _ incoming: [V18Sample], retriesRemaining: Int = 2, completion: @escaping () -> Void
     ) {
         pendingArchiveWrites += 1
         isSavingHistory = true
@@ -244,6 +244,12 @@ final class BandLink: NSObject, ObservableObject {
                 completion()
             case .failure(let error):
                 self.lastMessage = "History archive save failed: \(error.localizedDescription)"
+                if retriesRemaining > 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+                        self?.mergeHistoricalArchive([], retriesRemaining: retriesRemaining - 1,
+                                                     completion: completion)
+                    }
+                }
             }
         }
     }
@@ -870,6 +876,9 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func resetLink() {
+        // Status can already be .failed after a rejected BLE command.
+        // The drain clock, not the presentation status, owns its lifecycle.
+        if drainStartedAt != nil { finishDrain(reason: "link reset") }
         drainTimer?.invalidate()
         drainTimer = nil
         liveHRWatchdog?.invalidate()
@@ -936,6 +945,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func startDraining() {
+        if drainStartedAt != nil { finishDrain(reason: "starting a new sync") }
         resubscribeNotifyCharacteristics()
         startCaptureFile()
         // 0x0E enables the standard HR profile so 0x180D broadcasts. It is a
@@ -1126,7 +1136,7 @@ final class BandLink: NSObject, ObservableObject {
         // the app must not be required to discover the night's saved records.
         if capturedSamples.count > lastCheckpointCount,
            now.timeIntervalSince(lastCheckpointAt) >= 60,
-           !isAnalyzingHistory {
+           !isAnalyzingHistory, !isSavingHistory {
             lastCheckpointCount = capturedSamples.count
             lastCheckpointAt = now
             mergeHistoricalArchive(capturedSamples) { [weak self] in
@@ -1143,6 +1153,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func finishDrain(reason: String = "interrupted") {
+        guard drainStartedAt != nil else { return }
         drainTimer?.invalidate()
         drainTimer = nil
         drainStartedAt = nil
@@ -1366,7 +1377,7 @@ final class BandLink: NSObject, ObservableObject {
                 enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
                 drainAcks += 1
                 lastFrameAt = Date()
-            } else if inner[2] == 3, status == .draining {
+            } else if inner[2] == 3, drainStartedAt != nil {
                 // HISTORY_COMPLETE: stop only on the explicit completion marker.
                 finishDrain(reason: "explicit completion")
             }
@@ -1560,8 +1571,6 @@ extension BandLink: CBCentralManagerDelegate {
         error: Error?
     ) {
         guard peripheral === self.peripheral else { return }
-        let wasDraining = status == .draining
-        if wasDraining { finishDrain() }
         resetLink()
         isLiveSession = false
         sessionStartedUnix = nil

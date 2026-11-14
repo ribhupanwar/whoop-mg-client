@@ -1339,13 +1339,40 @@ final class HistoricalArchiveWriterTests: XCTestCase {
         wait(for: [failed], timeout: 5)
         try FileManager.default.removeItem(at: directory)
         let recovered = expectation(description: "retry retains original chunk")
-        writer.merge([makeSample(1_790_000_001, hr: 61)]) { result in
+        writer.merge([makeSample(1_790_000_002, hr: 62)]) { result in
             switch result {
-            case .success(let rows): XCTAssertEqual(rows.count, 2)
+            case .success(let rows):
+                XCTAssertEqual(rows.map(\.unix), [1_790_000_000, 1_790_000_001, 1_790_000_002])
             case .failure(let error): XCTFail("\(error)")
             }
             recovered.fulfill()
         }
         wait(for: [recovered], timeout: 5)
+    }
+}
+
+extension HistoricalArchiveWriterTests {
+    func testInvalidArchiveIsPreservedAndRebuiltFromRecoveredRecords() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("history.json")
+        let invalid = Data("broken archive".utf8)
+        try invalid.write(to: url)
+        let writer = HistoricalArchiveWriter(url: url)
+        let rebuilt = expectation(description: "rebuilt from raw recovery")
+        writer.merge([makeSample(1_790_000_000, hr: 60)]) { result in
+            switch result {
+            case .success(let rows): XCTAssertEqual(rows.count, 1)
+            case .failure(let error): XCTFail("\(error)")
+            }
+            rebuilt.fulfill()
+        }
+        wait(for: [rebuilt], timeout: 5)
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+        let backup = try XCTUnwrap(files.first { $0.lastPathComponent.contains("invalid-") })
+        XCTAssertEqual(try Data(contentsOf: backup), invalid)
+        let restored = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        XCTAssertEqual(restored.map(\.unix), [1_790_000_000])
     }
 }
