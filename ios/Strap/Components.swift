@@ -497,6 +497,28 @@ struct ChartLegend: View {
     }
 }
 
+// Dashboard pictograms: consistent thin outline treatment matching the WHOOP reference.
+struct DashboardMetricIcon: View {
+    let symbol: String
+    var body: some View {
+        ZStack {
+            if symbol == "heart.pulse" {
+                Image(systemName: "heart")
+                    .font(.system(size: 20, weight: .ultraLight))
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 12, weight: .light))
+                    .offset(x: 3, y: 1)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 19, weight: .ultraLight))
+            }
+        }
+        .foregroundStyle(Color.appMuted)
+        .frame(width: 24, height: 25)
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
@@ -512,10 +534,7 @@ struct MetricRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 17, weight: .regular))
-                .foregroundStyle(Color.appMuted)
-                .frame(width: 20)
+            DashboardMetricIcon(symbol: icon)
             Text(title.uppercased())
                 .font(StrapTypography.body(12.5, weight: .semibold))
                 .tracking(0.9)

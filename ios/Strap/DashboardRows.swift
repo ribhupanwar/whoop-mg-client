@@ -48,7 +48,7 @@ struct DashboardRows: View {
             )
         case .restingHR:
             MetricRow(
-                icon: "heart.fill",
+                icon: "heart.pulse",
                 title: "Resting heart rate",
                 value: demo ? String(format: "%.0f", SampleData.rhr) : rhrText,
                 detail: demo ? "\(SampleData.rhrCompare)" : compactComparison(rhrDetail),
@@ -66,7 +66,7 @@ struct DashboardRows: View {
             )
         case .zonesLow:
             MetricRow(
-                icon: "clock",
+                icon: "heart.pulse",
                 title: "HR zones 1–3 · weekly",
                 value: demo ? SampleData.zones13 : zoneText(high: false),
                 detail: demo ? SampleData.zones13Compare : nil,
@@ -74,7 +74,7 @@ struct DashboardRows: View {
             )
         case .zonesHigh:
             MetricRow(
-                icon: "bolt.fill",
+                icon: "heart.pulse",
                 title: "HR zones 4–5 · weekly",
                 value: demo ? SampleData.zones45 : zoneText(high: true),
                 detail: demo ? SampleData.zones45Compare : nil,
@@ -87,7 +87,7 @@ struct DashboardRows: View {
             vo2Block
         case .calories:
             MetricRow(
-                icon: "flame.fill",
+                icon: "flame",
                 title: "Calories",
                 value: demo ? SampleData.calories.formatted() : caloriesValue,
                 unit: (demo == false && store.captureActiveKcal != nil) ? "kcal" : nil,
@@ -220,10 +220,7 @@ struct DashboardRows: View {
                 showVO2Detail.toggle()
             } label: {
                 HStack(spacing: 11) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 15))
-                        .foregroundStyle(Color.appMuted)
-                        .frame(width: 20)
+                    DashboardMetricIcon(symbol: "lungs")
                     Text("VO₂ MAX")
                         .font(StrapTypography.body(12.5, weight: .bold))
                         .tracking(0.6)
