@@ -354,6 +354,15 @@ final class SleepSessionTests: XCTestCase {
                       "Terminal state 0 must not conceal sustained up(3) wake")
     }
 
+    func testLegacySleepReportRejectsNonfiniteNeedAndInvalidPeriods() {
+        for need in [0.0, -1.0, .infinity, .nan] {
+            XCTAssertNil(SleepReport.analyze(samples: [], periods: [period(3600)],
+                                            needHours: need, nights: [], sleepBaseline: nil))
+        }
+        XCTAssertNil(SleepReport.analyze(samples: [], periods: [],
+                                        needHours: 8, nights: [], sleepBaseline: nil))
+    }
+
     func testZeroOrNonfiniteNeedRefusesScore() {
         for need in [0.0, -1.0, .infinity, .nan] {
             XCTAssertNil(SleepReport.analyze(samples: [], session: knownNight(), needHours: need, nights: [], sleepBaseline: nil))
