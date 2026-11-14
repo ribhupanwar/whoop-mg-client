@@ -346,6 +346,220 @@ final class SleepStageTests: XCTestCase {
         assertTotals(staging, period: period, classifiedSeconds: 870)
     }
 
+    func testSingleMissingEpochAfterTwoHoursStaysUnclassified() {
+        let seconds = 4 * 60 * 60
+        let missing = 2 * 60 * 60..<(2 * 60 * 60 + 30)
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).filter { !missing.contains($0) }.map {
+            stageSample(unix: alignedBase + $0)
+        }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.hrCoverage, Double(seconds - 30) / Double(seconds), accuracy: 1e-12)
+        XCTAssertEqual(staging.epochs, seconds / 30 - 1)
+        assertHole(staging, start: alignedBase + missing.lowerBound, end: alignedBase + missing.upperBound)
+        assertTotals(staging, period: period, classifiedSeconds: seconds - 30)
+    }
+
+    func testTenMinuteMidnightWindowGapStaysUnclassified() {
+        let seconds = 4 * 60 * 60
+        let missing = 2 * 60 * 60..<(2 * 60 * 60 + 10 * 60)
+        // 16:00 UTC is 21:30 in the app's Asia/Kolkata timezone, so this
+        // four-hour window crosses local midnight.
+        let nightStart = (alignedBase / 86_400) * 86_400 + 16 * 60 * 60 + 20
+        let period = stageWindow(start: nightStart, seconds: seconds)
+        let samples = (0..<seconds).filter { !missing.contains($0) }.map {
+            stageSample(unix: nightStart + $0)
+        }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.hrCoverage, Double(seconds - 600) / Double(seconds), accuracy: 1e-12)
+        XCTAssertEqual(staging.epochs, seconds / 30 - 20)
+        assertHole(staging, start: nightStart + missing.lowerBound, end: nightStart + missing.upperBound)
+        assertTotals(staging, period: period, classifiedSeconds: seconds - 600)
+    }
+
+    func testSessionOnsetAndLatencyGuardsDoNotRestartAcrossRuns() throws {
+        let firstRun = Array(repeating: .wake, count: 10) + Array(repeating: .light, count: 12)
+        let secondRun = Array(repeating: SleepStage.light, count: 12)
+        let firstMinutes = (0..<firstRun.count).map { Double($0) / 2 }
+        let secondMinutes = (0..<secondRun.count).map { 120 + Double($0) / 2 }
+
+        XCTAssertEqual(
+            try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(
+                provisionalRuns: [firstRun], epochMinutes: [firstMinutes]
+            )),
+            5,
+            accuracy: 1e-12
+        )
+        let onset = try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(
+            provisionalRuns: [firstRun, secondRun],
+            epochMinutes: [firstMinutes, secondMinutes]
+        ))
+
+        XCTAssertEqual(onset, 5, accuracy: 1e-12)
+        let afterGapMinutes = secondMinutes[0] - onset
+        XCTAssertEqual(SleepStager.remGuard(afterGapMinutes), 0, accuracy: 1e-12)
+        XCTAssertEqual(SleepStager.deepGuard(afterGapMinutes), 0, accuracy: 1e-12)
+        // The second run's own sustained onset is recent, so it would still receive
+        // both latency penalties if the onset clock were incorrectly restarted.
+        XCTAssertGreaterThan(SleepStager.remGuard(0), 0)
+        XCTAssertGreaterThan(SleepStager.deepGuard(0), 0)
+    }
+
+    func testMultipleRunsUseOnlyReliableOnsetFromFirstRun() throws {
+        let runs = [
+            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: .light, count: 10),
+            Array(repeating: SleepStage.wake, count: 10) + Array(repeating: .light, count: 10),
+            Array(repeating: SleepStage.light, count: 10)
+        ]
+        let minutes = [
+            (0..<20).map { Double($0) / 2 },
+            (0..<20).map { 90 + Double($0) / 2 },
+            (0..<10).map { 180 + Double($0) / 2 }
+        ]
+
+        XCTAssertEqual(
+            try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(provisionalRuns: runs, epochMinutes: minutes)),
+            5,
+            accuracy: 1e-12
+        )
+    }
+
+    func testQuietBedtimeLabelsCannotCreateAnEarlySessionOnset() {
+        // 15 minutes of quiet bedtime (30 epochs) followed by 40 epochs of sleep.
+        let quietWakeAndSleep = Array(repeating: SleepStage.light, count: 30)
+            + Array(repeating: SleepStage.light, count: 40)
+        let minutes = quietWakeAndSleep.indices.map { Double($0) / 2 }
+
+        XCTAssertNil(SleepStager.sessionSleepOnsetMinutes(
+            provisionalRuns: [quietWakeAndSleep], epochMinutes: [minutes]
+        ))
+    }
+
+    func testFifteenMinutesOfQuietBedtimeKeepsRecordedWindowAndModelStages() throws {
+        let (samples, period) = makeNight(minutes: 60)
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.first?.startUnix, period.startUnix)
+        XCTAssertEqual(staging.segments.first?.stage, .light)
+        XCTAssertEqual(staging.segments.last?.endUnix, period.endUnix + 1)
+        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertEqual(staging.wakeMinutes, 0)
+    }
+
+    func testFifteenMinutesOfQuietMorningDoesNotCreateAWakeOffset() throws {
+        let (samples, period) = makeNight(minutes: 60)
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.last?.endUnix, period.endUnix + 1)
+        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertEqual(staging.wakeMinutes, 0)
+    }
+
+    func testProlongedMiddleAwakeningDoesNotRestartSessionOnset() throws {
+        let firstRun = Array(repeating: SleepStage.wake, count: 10)
+            + Array(repeating: .light, count: 20)
+            + Array(repeating: .wake, count: 20)
+            + Array(repeating: .light, count: 20)
+        let minutes = firstRun.indices.map { Double($0) / 2 }
+
+        let onset = try XCTUnwrap(SleepStager.sessionSleepOnsetMinutes(
+            provisionalRuns: [firstRun], epochMinutes: [minutes]
+        ))
+
+        XCTAssertEqual(onset, 5, accuracy: 1e-12)
+        XCTAssertEqual(SleepStager.remGuard(minutes[50] - onset), 0, accuracy: 1e-12)
+        XCTAssertEqual(SleepStager.deepGuard(minutes[50] - onset), 0, accuracy: 1e-12)
+    }
+
+    func testFinalValidRunShorterThanTenEpochsIsNotForceLabelledWake() {
+        let seconds = 4 * 60 * 60
+        // Leave nine valid 30-second epochs after the gap.
+        let gap = (3 * 60 * 60 + 30 * 60)..<(3 * 60 * 60 + 55 * 60 + 30)
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).filter { !gap.contains($0) }.map {
+            stageSample(unix: alignedBase + $0)
+        }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.last?.endUnix, alignedBase + seconds)
+        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertEqual(staging.wakeMinutes, 0)
+        assertHole(staging, start: alignedBase + gap.lowerBound, end: alignedBase + gap.upperBound)
+    }
+
+    func testMissingHRNearFinalAwakeningRemainsUnclassified() {
+        let seconds = 4 * 60 * 60
+        let missing = 3 * 60 * 60 + 20..<seconds
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).filter { !missing.contains($0) }.map {
+            stageSample(unix: alignedBase + $0)
+        }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.last?.endUnix, alignedBase + missing.lowerBound)
+        XCTAssertFalse(staging.segments.contains { $0.endUnix > alignedBase + missing.lowerBound })
+        assertHole(staging, start: alignedBase + missing.lowerBound, end: alignedBase + seconds)
+    }
+
+    func testMissingHRSpanAcrossSleepOnsetLeavesGapUnclassified() {
+        let seconds = 4 * 60 * 60
+        // Missing HR covers the first 30 minutes, spanning the onset of the window.
+        let missing = 0..<(30 * 60)
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).filter { !missing.contains($0) }.map {
+            stageSample(unix: alignedBase + $0)
+        }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.first?.startUnix, alignedBase + 30 * 60)
+        assertHole(staging, start: alignedBase, end: alignedBase + 30 * 60)
+        assertTotals(staging, period: period, classifiedSeconds: seconds - 30 * 60)
+    }
+
+    func testShortNapDoesNotApplyForcedBoundaryRelabelling() {
+        let seconds = 45 * 60
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).map { stageSample(unix: alignedBase + $0) }
+
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertEqual(staging.segments.first?.startUnix, alignedBase)
+        XCTAssertEqual(staging.segments.first?.stage, .light)
+        XCTAssertEqual(staging.segments.last?.endUnix, alignedBase + seconds)
+        XCTAssertEqual(staging.segments.last?.stage, .light)
+        XCTAssertEqual(staging.wakeMinutes, 0)
+        assertTotals(staging, period: period, classifiedSeconds: seconds)
+    }
+
+    func testGapStagingIsDeterministic() {
+        let seconds = 90 * 60
+        let gap = 45 * 60..<(45 * 60 + 10 * 60)
+        let period = stageWindow(seconds: seconds)
+        let samples = (0..<seconds).filter { !gap.contains($0) }.map {
+            stageSample(unix: alignedBase + $0)
+        }
+
+        XCTAssertEqual(
+            SleepStager.stage(samples: samples, period: period),
+            SleepStager.stage(samples: samples, period: period)
+        )
+    }
+
     func testRepeatedPacketsDoNotChangeStagingOrCoverage() {
         let (samples, period) = makeNight(minutes: 15, bursts: [(5, 7)])
         let expected = SleepStager.stage(samples: samples, period: period)

@@ -14,7 +14,7 @@ import Foundation
 ///      and R-R RSA regularity;
 ///   2. a deep gate on the night's own 11-minute HR-flatness percentile;
 ///   3. a soft sleep-cycle prior (deep early, REM rising) plus REM/deep latency
-///      guards measured from the first sustained sleep run;
+///      guards measured from one session-level sustained onset;
 ///   4. a wake gate on peak jerk relative to the night's own quiescent floor;
 ///   5. Viterbi smoothing with a sticky transition matrix.
 ///
@@ -410,11 +410,11 @@ enum SleepStager {
         epoch.moveFrac <= 0 && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
     }
 
-    private static func remGuard(_ minutesSinceOnset: Double) -> Double {
+    static func remGuard(_ minutesSinceOnset: Double) -> Double {
         remLatencyPenalty * min(1, max(0, 1 - minutesSinceOnset / remLatencyMinutes))
     }
 
-    private static func deepGuard(_ minutesSinceOnset: Double) -> Double {
+    static func deepGuard(_ minutesSinceOnset: Double) -> Double {
         deepLatencyPenalty * min(1, max(0, 1 - minutesSinceOnset / deepLatencyMinutes))
     }
 
@@ -491,9 +491,33 @@ enum SleepStager {
         return nil
     }
 
+    /// Resolve one latency origin for a night whose valid epochs were split by
+    /// sensor gaps. Only the first valid run can establish the origin. A sustained
+    /// non-Wake label at the beginning of a recording is ambiguous (quiet awake in
+    /// bed can look like Light), so require an explicit modelled Wake before the
+    /// candidate transition. If that evidence is absent,
+    /// leave latency unanchored instead of treating the recording boundary as sleep.
+    static func sessionSleepOnsetMinutes(
+        provisionalRuns: [[SleepStage]], epochMinutes: [[Double]]
+    ) -> Double? {
+        guard let labels = provisionalRuns.first,
+              let minutes = epochMinutes.first,
+              labels.count == minutes.count,
+              let onset = sustainedSleepOnset(labels),
+              onset > 0,
+              labels[..<onset].contains(.wake) else {
+            return nil
+        }
+        return minutes[onset]
+    }
+
     private static func labelsForValidRuns(_ epochs: [Epoch]) -> [SleepStage?] {
         let population = epochs.filter { $0.hr != nil }
         var labels = [SleepStage?](repeating: nil, count: epochs.count)
+        // HMM state restarts at each unclassified gap. A gapped session shares one
+        // latency origin only when the first valid run contains a sustained,
+        // modelled Wake-to-sleep transition; later runs never restart that clock.
+        var runs: [Range<Int>] = []
         var index = 0
         while index < epochs.count {
             guard epochs[index].hr != nil else {
@@ -506,16 +530,54 @@ enum SleepStager {
                   epochs[index - 1].end == epochs[index].start {
                 index += 1
             }
-            let runLabels = stageEpochs(Array(epochs[first..<index]), population: population)
-            for (offset, label) in runLabels.enumerated() { labels[first + offset] = label }
+            runs.append(first..<index)
+        }
+
+        let runEpochs = runs.map { Array(epochs[$0]) }
+        let provisionalRuns = runEpochs.map { provisionalStages($0, population: population) }
+        let sessionOnset: Double?
+        if runs.count == 1 {
+            // Preserve the established no-gap behavior. A single contiguous run
+            // uses its original provisional onset and recording-start fallback.
+            if let onset = sustainedSleepOnset(provisionalRuns[0]) {
+                sessionOnset = runEpochs[0][onset].minutes
+            } else {
+                sessionOnset = runEpochs[0].first?.minutes
+            }
+        } else {
+            sessionOnset = sessionSleepOnsetMinutes(
+                provisionalRuns: provisionalRuns,
+                epochMinutes: runEpochs.map { $0.map(\.minutes) }
+            )
+        }
+        for (runIndex, range) in runs.enumerated() {
+            let runLabels = stageEpochs(runEpochs[runIndex], population: population, onsetMinutes: sessionOnset)
+            for (offset, label) in runLabels.enumerated() { labels[range.lowerBound + offset] = label }
         }
         return labels
     }
 
-    private static func stageEpochs(_ epochs: [Epoch], population: [Epoch]) -> [SleepStage] {
+    private static func provisionalStages(_ epochs: [Epoch], population: [Epoch]) -> [SleepStage] {
+        viterbi(baseEmissions(epochs, population: population))
+    }
+
+    private static func stageEpochs(
+        _ epochs: [Epoch], population: [Epoch], onsetMinutes: Double?
+    ) -> [SleepStage] {
         guard !epochs.isEmpty else { return [] }
-        // Normalize against valid epochs in this window, but run both HMM passes
-        // and sustained-onset detection separately on either side of every hole.
+        var emissions = baseEmissions(epochs, population: population)
+        if let onsetMinutes {
+            for index in epochs.indices {
+                let sinceOnset = epochs[index].minutes - onsetMinutes
+                emissions[index][.rem] = (emissions[index][.rem] ?? 0) - remGuard(sinceOnset)
+                emissions[index][.deep] = (emissions[index][.deep] ?? 0) - deepGuard(sinceOnset)
+            }
+        }
+        return viterbi(emissions)
+    }
+
+    private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {
+        guard !epochs.isEmpty else { return [] }
         let zHR = zScorer(population.map { $0.hr })
         let zVar = zScorer(population.map { $0.hrVar })
         let zMove = zScorer(population.map { Optional($0.moveFrac) })
@@ -555,15 +617,6 @@ enum SleepStager {
             emissions.append(emission)
         }
 
-        let provisional = viterbi(emissions)
-        let origin = sustainedSleepOnset(provisional).map { epochs[$0].minutes } ?? 0
-        for index in epochs.indices {
-            let sinceOnset = epochs[index].minutes - origin
-            var emission = emissions[index]
-            emission[.rem] = (emission[.rem] ?? 0) - remGuard(sinceOnset)
-            emission[.deep] = (emission[.deep] ?? 0) - deepGuard(sinceOnset)
-            emissions[index] = emission
-        }
-        return viterbi(emissions)
+        return emissions
     }
 }
