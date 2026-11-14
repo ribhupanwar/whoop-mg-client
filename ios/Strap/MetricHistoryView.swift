@@ -50,13 +50,18 @@ struct MetricHistoryView: View {
     }
 
     private var selectedKey: String { JournalStore.dayKey(for: ending) }
-    private var readings: [Double] {
-        points.filter { dayOffset != 0 || $0.key < selectedKey }.compactMap { $0.value(selectedMetric) }
+    private var eligiblePoints: [MetricDay] {
+        points.filter { dayOffset != 0 || $0.key < selectedKey }
     }
+    private var readings: [Double] { eligiblePoints.compactMap { $0.value(selectedMetric) } }
     private var average: Double? {
         guard !readings.isEmpty else { return nil }
-        let mean = Stats.mean(readings)
-        return selectedMetric.isTime ? mean * 7 : mean
+        if selectedMetric.isTime {
+            // Normalize to the selected calendar range, including an unrecorded
+            // current day. This avoids inflating a partial week into a full one.
+            return MetricTimeline.averageWeeklyDuration(readings, calendarDayCount: window)
+        }
+        return Stats.mean(readings)
     }
     private var rangeTitle: String {
         guard let first = points.first?.date, let last = points.last?.date else { return "" }
@@ -116,6 +121,11 @@ struct MetricHistoryView: View {
                                 .font(StrapTypography.metric(34, weight: .bold))
                                 .foregroundStyle(Color.appFG)
                                 .contentTransition(.numericText())
+                            if selectedMetric.isTime {
+                                Text("\(readings.count)/\(eligiblePoints.count) days with recorded duration")
+                                    .font(StrapTypography.body(10))
+                                    .foregroundStyle(Color.appMuted)
+                            }
                         }
                         Spacer(minLength: 0)
                         HStack(spacing: 3) {
@@ -294,6 +304,16 @@ private struct TrendMetricChart: View {
                 if metric.isLine {
                     chartLine(left: left, top: top, width: plotWidth, height: plotHeight, low: low, range: range)
                         .stroke(metric.color(nil), style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                    ForEach(MetricTimeline.isolatedLineIndices(points.map { $0.value(metric) }), id: \.self) { index in
+                        if let value = points[index].value(metric) {
+                            let x = left + plotWidth * (CGFloat(index) + 0.5) / CGFloat(max(1, points.count))
+                            let y = top + plotHeight * CGFloat(1 - (value - low) / range)
+                            Circle()
+                                .fill(metric.color(nil))
+                                .frame(width: 6, height: 6)
+                                .position(x: x, y: y)
+                        }
+                    }
                 } else {
                     ForEach(Array(points.enumerated()), id: \.element.key) { index, day in
                         if let value = day.value(metric), value > 0 {

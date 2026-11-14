@@ -96,6 +96,19 @@ final class MetricTimelineTests: XCTestCase {
                        "The most recent 30 valid days must not depend on caller ordering")
     }
 
+    func testWeeklyDurationSumsObservedMinutesWithoutExtrapolatingMissingDays() {
+        XCTAssertEqual(MetricTimeline.averageWeeklyDuration([60], calendarDayCount: 7), 60)
+        XCTAssertEqual(MetricTimeline.averageWeeklyDuration([60, 30], calendarDayCount: 7), 90)
+        XCTAssertEqual(MetricTimeline.averageWeeklyDuration([60], calendarDayCount: 30)!, 14, accuracy: 0.01)
+        XCTAssertNil(MetricTimeline.averageWeeklyDuration([60], calendarDayCount: 0))
+    }
+
+    func testIsolatedLineReadingsRemainVisibleAcrossMissingDataGaps() {
+        XCTAssertEqual(MetricTimeline.isolatedLineIndices([nil, 45, nil]), [1])
+        XCTAssertEqual(MetricTimeline.isolatedLineIndices([nil, 45, 47, nil]), [])
+        XCTAssertEqual(MetricTimeline.isolatedLineIndices([43, nil, 45]), [])
+    }
+
     func testInvalidHeartRateInputsDoNotProduceFiniteLookingStrainOrVO2() {
         XCTAssertNil(Hrv.hrReserveRatio(.nan, resting: 60, maximum: 190))
         XCTAssertNil(Hrv.hrReserveRatio(120, resting: 60, maximum: .infinity))
