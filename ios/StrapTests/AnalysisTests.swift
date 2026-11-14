@@ -1376,3 +1376,33 @@ extension HistoricalArchiveWriterTests {
         XCTAssertEqual(restored.map(\.unix), [1_790_000_000])
     }
 }
+
+
+extension HistoricalArchiveWriterTests {
+    func testEmptySyncRetriesRecordsFromFailedDrain() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        // A file in place of the parent directory makes the first save fail.
+        try Data().write(to: directory)
+        let url = directory.appendingPathComponent("history.json")
+        let writer = HistoricalArchiveWriter(url: url)
+        let failed = expectation(description: "failed drain remains pending")
+        writer.merge([makeSample(1_790_000_000, hr: 60)]) { result in
+            if case .success = result { XCTFail("Expected disk failure") }
+            failed.fulfill()
+        }
+        wait(for: [failed], timeout: 5)
+        try FileManager.default.removeItem(at: directory)
+        let retried = expectation(description: "empty next drain saves pending records")
+        writer.merge([]) { result in
+            switch result {
+            case .success(let rows): XCTAssertEqual(rows.map(\.unix), [1_790_000_000])
+            case .failure(let error): XCTFail("\(error)")
+            }
+            retried.fulfill()
+        }
+        wait(for: [retried], timeout: 5)
+        let saved = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        XCTAssertEqual(saved.map(\.unix), [1_790_000_000])
+    }
+}

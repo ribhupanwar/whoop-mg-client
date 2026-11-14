@@ -103,6 +103,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var isAnalyzingHistory = false
     @Published private(set) var isSavingHistory = false
     private var pendingArchiveWrites = 0
+    private var hasUnsavedArchiveRecords = false
     @Published private(set) var historicalRestQualityReason = "Loading retained historical records…"
     private var metricsRequest = 0
     private var metricsRefreshPending = false
@@ -239,10 +240,12 @@ final class BandLink: NSObject, ObservableObject {
             self.isSavingHistory = self.pendingArchiveWrites > 0
             switch result {
             case .success(let merged):
+                self.hasUnsavedArchiveRecords = false
                 self.retainedHistoricalSamples = merged
                 self.lastHistoryRecordCount = merged.count
                 completion()
             case .failure(let error):
+                self.hasUnsavedArchiveRecords = true
                 self.lastMessage = "History archive save failed: \(error.localizedDescription)"
                 if retriesRemaining > 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
@@ -1190,6 +1193,15 @@ final class BandLink: NSObject, ObservableObject {
         ensureHeartRateStream()
 
         guard !samples.isEmpty else {
+            // The strap may already have trimmed ACKed raw records. An empty
+            // retry still needs to persist pending records from that earlier drain.
+            if hasUnsavedArchiveRecords {
+                mergeHistoricalArchive([]) { [weak self] in
+                    guard let self else { return }
+                    UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
+                    self.recalculateRetainedMetrics()
+                }
+            }
             if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
             } else if historicalRecordFrames > 0 {
