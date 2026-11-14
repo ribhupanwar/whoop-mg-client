@@ -77,6 +77,15 @@ final class MetricTimelineTests: XCTestCase {
         XCTAssertNil(timeline([decoded]).last?.value(.respiration))
         XCTAssertNil(timeline([decoded]).last?.value(.sleepPerformance))
     }
+    func testComparisonUsesLastThirtyValidObservationsNotCalendarSlots() {
+        let points = (0..<35).map { index in
+            MetricDay(date: date(10), key: String(format: "%03d", index), recorded: nil,
+                      recovery: nil, zones: nil, calories: index == 0 ? 250 : nil, strength: nil)
+        }
+        XCTAssertEqual(MetricTimeline.comparison(.calories, before: "035", in: points), 250,
+                       "Missing recent days must not hide an older measured observation")
+    }
+
     func testComparisonExcludesTheCurrentObservation() {
         var prior = day(9)
         prior = DayMetrics(dateKey: prior.dateKey, state: "sleep", restingHR: 60, lnRMSSD: log(44),
