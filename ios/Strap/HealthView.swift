@@ -23,10 +23,10 @@ struct HealthView: View {
         .navigationTitle("Health monitor")
         .navigationBarTitleDisplayMode(.inline)
         .task {
-            // Force freshness evaluation even when no new BLE packet arrives.
+            // A one-second timer invalidated the entire health screen, including charts and\n            // the diagnostics panel. BLE updates still publish live HR independently;\n            // check staleness at a lower cadence to reduce main-thread rendering.
             while !Task.isCancelled {
                 clock = Date()
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(for: .seconds(3))
             }
         }
     }
