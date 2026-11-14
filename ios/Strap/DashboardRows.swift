@@ -227,7 +227,7 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? String(format: "%.1f", SampleData.vo2) : vo2Text)
-                        .font(StrapTypography.metric(26, weight: .bold))
+                        .font(StrapTypography.metric(21, weight: .bold))
                         .monospacedDigit()
                         .foregroundStyle(Color.appFG)
                     Text("›")
