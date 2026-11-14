@@ -1,11 +1,3 @@
-Continue=Stop : The term 'Continue=Stop' is not recognized as the name of a cmdlet, function, script file, or operable 
-program. Check the spelling of the name, or if a path was included, verify that the path is correct and try again.
-At line:1 char:1
-+ Continue='Stop'; [Console]::Write((Get-Content -LiteralPath 'ios/Stra ...
-+ ~~~~~~~~~~~~~~~
-    + CategoryInfo          : ObjectNotFound: (Continue=Stop:String) [], CommandNotFoundException
-    + FullyQualifiedErrorId : CommandNotFoundException
- 
 import SwiftUI
 
 /// Manual activity entry. Lifting is logged as sets Ã— reps Ã— load; everything
