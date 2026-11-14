@@ -117,7 +117,17 @@ enum Hrv {
     /// Each contiguous run is cleaned independently, preventing a stale
     /// rolling-median reference from leaking across a recording gap.
     static func fromSamples(_ samples: [V18Sample]) -> HrvResult {
-        let ordered = samples.sorted { $0.unix < $1.unix }
+        // Offload may replay a second after reconnect. Count its R-R beats once.
+        // Prefer the copy with more beat intervals rather than duplicating data.
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
         var allNN: [Double] = []
         var squaredDifferences = 0.0
