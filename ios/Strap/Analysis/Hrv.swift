@@ -13,6 +13,7 @@ enum Hrv {
     static let restingMinWindowS = 60
     static let strainScaleTrimp = 150.0
     static let strainMax = 21.0
+    static let minCleanBeats = 20
 
     // MARK: - NN filtering
 
@@ -129,6 +130,19 @@ enum Hrv {
         }
         let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
+        return evaluateRuns(runs) { $0.rrIntervalsMS }
+    }
+
+    /// Compute RMSSD for live streaming samples across consecutive beats inside
+    /// contiguous records. Never bridge missing timestamps or disconnect gaps:
+    /// doing so creates artificial successive-NN deltas and inflates live HRV.
+    static func fromLiveSamples(_ samples: [LiveSample]) -> HrvResult {
+        let ordered = samples.sorted { $0.unix < $1.unix }
+        let runs = contiguousLiveRuns(ordered)
+        return evaluateRuns(runs) { $0.rrIntervalsMS }
+    }
+
+    private static func evaluateRuns<T>(_ runs: [[T]], getRR: (T) -> [Int]) -> HrvResult {
         var allNN: [Double] = []
         var squaredDifferences = 0.0
         var successivePairs = 0
@@ -138,11 +152,11 @@ enum Hrv {
         for run in runs {
             // A missing R-R field or rejected ectopic beat is a hard boundary.
             // Never calculate RMSSD across those boundaries: doing so can
-            // produce artificially high overnight HRV.
+            // produce artificially high HRV.
             var previous: Double?
             var recent: [Double] = []
             for sample in run {
-                let rr = sample.rrIntervalsMS.map(Double.init)
+                let rr = getRR(sample).map(Double.init)
                 rawBeats += rr.count
                 if rr.isEmpty { previous = nil; recent.removeAll(); continue }
                 for value in rr {
@@ -172,7 +186,7 @@ enum Hrv {
             }
         }
         // The 20-clean-beat gate is a quality floor, not clinical validation.
-        guard allNN.count >= 20, successivePairs > 0 else {
+        guard allNN.count >= minCleanBeats, successivePairs > 0 else {
             return HrvResult(beats: rawBeats, nnBeats: allNN.count,
                              rmssdMS: nil, sdnnMS: nil, pnn50Pct: nil,
                              lnRMSSD: nil, meanRRMS: nil)
@@ -193,13 +207,26 @@ enum Hrv {
 
     /// Consecutive seconds, split wherever the record clock jumps.
     static func contiguousRuns(_ samples: [V18Sample]) -> [[V18Sample]] {
-        var runs: [[V18Sample]] = []
-        var current: [V18Sample] = []
-        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+        splitContiguousRuns(samples) { $0.unix }
+    }
+
+    /// Consecutive seconds for live samples, split wherever the timestamp jumps.
+    static func contiguousLiveRuns(_ samples: [LiveSample]) -> [[LiveSample]] {
+        splitContiguousRuns(samples) { $0.unix }
+    }
+
+    private static func splitContiguousRuns<T>(
+        _ samples: [T],
+        getUnix: (T) -> Int
+    ) -> [[T]] {
+        var runs: [[T]] = []
+        var current: [T] = []
+        for sample in samples.sorted(by: { getUnix($0) < getUnix($1) }) {
+            let u = getUnix(sample)
             // Archive replay can duplicate a timestamp. Preserve continuity
             // instead of splitting a valid resting window at duplicates.
-            if current.last?.unix == sample.unix { continue }
-            if let last = current.last, sample.unix != last.unix + 1 {
+            if let last = current.last, getUnix(last) == u { continue }
+            if let last = current.last, u != getUnix(last) + 1 {
                 runs.append(current)
                 current = []
             }
