@@ -20,6 +20,12 @@ final class MetricTimelineTests: XCTestCase {
         MetricTimeline.make(days: days, live: live, manual: [], caloriesByDay: [:], ending: date(10),
                             count: count, sleepNeedHours: 8, calendar: calendar)
     }
+    func testDayWithoutStrengthActivityDoesNotInventZeroStrengthMinutes() {
+        let points = timeline([day(10)])
+        XCTAssertNil(points.last?.value(.strength),
+                     "No logged strength activity is missing data, not a measured zero")
+    }
+
     func testSevenCalendarSlotsSurviveDSTAndMissingDays() throws {
         let points = timeline([day(4), day(10)])
         XCTAssertEqual(points.count, 7)
