@@ -40,6 +40,7 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
+        # Register the bundled Proxima Nova and DIN Pro typefaces.
         UIAppFonts:
           - DINPro-Bold.ttf
           - DINPro-Light.ttf
