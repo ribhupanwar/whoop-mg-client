@@ -5,14 +5,31 @@ import CoreText
 // MARK: - Typography
 // Bundled Proxima Nova and DIN Pro; keep font weight explicit to avoid thin fallbacks.
 enum StrapTypography {
-    private static let registered: Bool = {
-        let names = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light", "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt", "proxima-nova-medium", "proxima-nova-semibold", "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
-        for name in names {
-            guard let url = Bundle.main.url(forResource: name, withExtension: "ttf", subdirectory: "Fonts") ?? Bundle.main.url(forResource: name, withExtension: "ttf") else { continue }
+    // Use the font's actual internal PostScript name, not its .ttf filename.
+    // Some bundled Proxima faces have filenames that differ from UIFont names.
+    private static let fontNames: [String: String] = {
+        let files = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
+                     "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt",
+                     "proxima-nova-medium", "proxima-nova-semibold",
+                     "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
+        var names: [String: String] = [:]
+        for file in files {
+            guard let url = Bundle.main.url(forResource: file, withExtension: "ttf", subdirectory: "Fonts")
+                    ?? Bundle.main.url(forResource: file, withExtension: "ttf") else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            if let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+               let descriptor = descriptors.first,
+               let postScript = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String {
+                names[file] = postScript
+            }
         }
-        return true
+        return names
     }()
+    private static func bundled(_ file: String, size: CGFloat) -> Font? {
+        guard let name = fontNames[file], UIFont(name: name, size: size) != nil else { return nil }
+        return .custom(name, size: size)
+    }
+
     private static func weightName(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
         // Use the bundled genuine Semibold and Medium faces for their requested weights.
@@ -23,23 +40,17 @@ enum StrapTypography {
     }
 
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        _ = registered
         let variant = weightName(weight)
-        let names = variant == "Semibold" ? ["proxima-nova-semibold", "ProximaNova-Semibold"] : variant == "Medium" ? ["proxima-nova-medium", "ProximaNova-Medium"] : ["ProximaNova-\(variant)", "ProximaNova\(variant)", "Proxima Nova \(variant)"]
-        for name in names where UIFont(name: name, size: size) != nil {
-            return .custom(name, size: size)
-        }
-        return .system(size: size, weight: weight, design: .default)
+        let file = variant == "Semibold" ? "proxima-nova-semibold"
+                 : variant == "Medium" ? "proxima-nova-medium"
+                 : "ProximaNova-\(variant)"
+        return bundled(file, size: size) ?? .system(size: size, weight: weight)
     }
 
     static func metric(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        _ = registered
-        let variant = weightName(weight)
-        let names = ["DINPro-\(variant)", "DINPro\(variant)", "DINPro-Regular", "DINPro-Light", "DIN2014-\(variant)", "D-DIN"]
-        for name in names where UIFont(name: name, size: size) != nil {
-            return .custom(name, size: size).monospacedDigit()
-        }
-        return .system(size: size, weight: weight, design: .default).monospacedDigit()
+        let file = "DINPro-\(weightName(weight))"
+        return (bundled(file, size: size) ?? bundled("DINPro-Regular", size: size)
+                ?? .system(size: size, weight: weight)).monospacedDigit()
     }
 }
 
@@ -522,7 +533,7 @@ struct DashboardMetricIcon: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 24
+    private let valueFontSize: CGFloat = 21
     let icon: String
     let title: String
     let value: String
@@ -536,8 +547,8 @@ struct MetricRow: View {
         HStack(spacing: 10) {
             DashboardMetricIcon(symbol: icon)
             Text(title.uppercased())
-                .font(StrapTypography.body(12.5, weight: .semibold))
-                .tracking(0.9)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .tracking(0.65)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .lineLimit(1)
