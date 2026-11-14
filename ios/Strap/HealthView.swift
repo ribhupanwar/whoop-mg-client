@@ -148,8 +148,8 @@ struct HealthView: View {
             MetricTile(
                 label: "Resting HR",
                 value: demo ? String(format: "%.0f", SampleData.rhr)
-                             : ActivityFormat.whole(store.measuredRestingHR) ?? "—",
-                unit: (demo || store.measuredRestingHR != nil) ? "bpm" : nil,
+                             : ActivityFormat.whole(displayedNightRHR) ?? "—",
+                unit: (demo || displayedNightRHR != nil) ? "bpm" : nil,
                 chip: demo ? "↓ favourable · sample" : rhrTrendChip,
                 chipGood: demo || rhrFavourable
             )
@@ -205,9 +205,18 @@ struct HealthView: View {
 
     // Use the same validated overnight HRV source as the Home dashboard.
     // A daytime capture must not overwrite the night's recovery metric.
-    private var latestNightHRV: Double? {
-        DailyAnalysis.latestNightHRV(from: store.band.days)
+    private var displayedNight: DayMetrics? {
+        guard let session = store.band.latestSleepSession else { return nil }
+        let key = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)))
+        return store.band.days.first { $0.dateKey == key && $0.state == "sleep" }
     }
+
+    private var latestNightHRV: Double? {
+        guard let lnRMSSD = displayedNight?.lnRMSSD, lnRMSSD.isFinite else { return nil }
+        return exp(lnRMSSD)
+    }
+
+    private var displayedNightRHR: Double? { displayedNight?.restingHR }
 
 
     private var freshLiveHR: Int? {
@@ -259,7 +268,7 @@ struct HealthView: View {
     private var rhrFavourable: Bool {
         guard store.hasRecoveryBaseline,
               let baseline = store.band.baseline,
-              let current = store.measuredRestingHR,
+              let current = displayedNightRHR,
               current.isFinite else { return false }
         return current < baseline.rhrMean
     }

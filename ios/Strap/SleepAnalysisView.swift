@@ -211,8 +211,16 @@ struct SleepAnalysisView: View {
         showSleepEditor = true
     }
 
+    private var canEndSleepNow: Bool {
+        guard let period = editablePeriod else { return false }
+        let now = Date().timeIntervalSince1970
+        // End Now is for an active/recently detected window only. Older nights must be edited explicitly.
+        return now >= Double(period.startUnix) && now - Double(period.endUnix) <= 15 * 60
+            && now - Double(period.startUnix) <= 86400
+    }
+
     private func requestEndSleepNow() {
-        guard let period = editablePeriod else { return }
+        guard canEndSleepNow, let period = editablePeriod else { return }
         let now = Date()
         let start = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? period.startUnix))
         guard now > start, now.timeIntervalSince(start) <= 86400 else {
@@ -252,7 +260,7 @@ struct SleepAnalysisView: View {
             }
             .padding(.bottom, 8)
 
-            if !demo, editablePeriod != nil {
+            if !demo, canEndSleepNow {
                 Button(action: requestEndSleepNow) {
                     Label("END SLEEP NOW", systemImage: "stop.circle")
                         .font(StrapTypography.body(12, weight: .semibold))
