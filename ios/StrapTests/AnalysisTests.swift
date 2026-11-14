@@ -453,6 +453,55 @@ final class StrainTests: XCTestCase {
         XCTAssertNil(Hrv.trimp(rows, maxHR: 60, restingHR: 60, sex: .male))
     }
 
+    func testSparseThirtySecondIntervalIsCappedAtFiveSeconds() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let sparse = quiet + [
+            makeSample(300, hr: 150, accel: 0.5),
+            makeSample(330, hr: 150, accel: 0.5)
+        ]
+        let fiveSecondCadence = quiet + [
+            makeSample(300, hr: 150, accel: 0.5),
+            makeSample(305, hr: 150, accel: 0.5)
+        ]
+        let sparseLoad = Hrv.trimp(sparse, maxHR: 180, restingHR: 60, sex: .male)
+        let referenceLoad = Hrv.trimp(
+            fiveSecondCadence, maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(sparseLoad!, referenceLoad!, accuracy: 1e-9)
+    }
+
+    func testGapOverThirtySecondsDoesNotExtrapolateAcrossDisconnect() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let oneActiveSample = quiet + [makeSample(300, hr: 150, accel: 0.5)]
+        let disconnected = quiet + [
+            makeSample(300, hr: 150, accel: 0.5),
+            makeSample(421, hr: 150, accel: 0.5)
+        ]
+        let expected = Hrv.trimp(
+            oneActiveSample, maxHR: 180, restingHR: 60, sex: .male
+        )
+        let actual = Hrv.trimp(
+            disconnected, maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(actual!, expected!, accuracy: 1e-9)
+    }
+
+    func testFinalHeartRateSampleCountsOnlyOneSecond() {
+        let quiet = stretch(0, 300, hr: 60, accel: 0.01)
+        let oneActiveSample = quiet + [makeSample(300, hr: 150, accel: 0.5)]
+        let finalSample = quiet + [
+            makeSample(300, hr: 150, accel: 0.5),
+            makeSample(330, hr: 60, accel: 0.01)
+        ]
+        let expected = Hrv.trimp(
+            oneActiveSample, maxHR: 180, restingHR: 60, sex: .male
+        )
+        let actual = Hrv.trimp(
+            finalSample, maxHR: 180, restingHR: 60, sex: .male
+        )
+        XCTAssertEqual(actual!, expected!, accuracy: 1e-9)
+    }
+
     func testStrainScaleConstant() {
         XCTAssertEqual(Hrv.strainScore(150.0)!, 21.0 * (1.0 - 1.0 / exp(1.0)), accuracy: 0.000001)
         XCTAssertEqual(Hrv.strainScore(0.0), 0.0)
