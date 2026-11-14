@@ -107,7 +107,11 @@ struct SleepSession: Codable, Equatable {
         previous: [SleepSession], fresh: [SleepSession], coverageStart: Int?, coverageEnd: Int?,
         samples: [V18Sample] = [], overrides: [String: [Int]] = [:]
     ) -> [SleepSession] {
-        guard let first = coverageStart, let last = coverageEnd else { return fresh }
+        // An empty BLE/offload window cannot invalidate a previously saved night.
+        // In particular, keep manually edited bounds when no raw coverage arrives.
+        guard let first = coverageStart, let last = coverageEnd else {
+            return previous.isEmpty ? fresh : previous
+        }
         var result = fresh
         let latestPrevious = previous.max { $0.endUnix < $1.endUnix }
         for old in previous where old.version == algorithmVersion {
