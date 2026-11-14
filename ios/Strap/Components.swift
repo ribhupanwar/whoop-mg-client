@@ -248,7 +248,7 @@ struct RingView: View {
                     .rotationEffect(.degrees(-90))
             }
             Text(centerText)
-                .font(StrapTypography.metric(centerFont, weight: .bold))
+                .font(StrapTypography.body(centerFont, weight: .semibold))
                 .monospacedDigit()
                 .minimumScaleFactor(0.75)
                 .lineLimit(1)
@@ -611,7 +611,7 @@ struct MetricTile: View {
                 .frame(minHeight: 27, alignment: .topLeading)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(StrapTypography.metric(25, weight: .medium))
+                    .font(StrapTypography.body(25, weight: .medium))
                     .foregroundStyle(Color.appFG)
                 if let unit {
                     Text(unit)
@@ -646,7 +646,7 @@ struct StatCard: View {
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
             Text(value)
-                .font(StrapTypography.metric(20, weight: .medium))
+                .font(StrapTypography.body(20, weight: .medium))
                 .foregroundStyle(Color.appFG)
             if let detail {
                 Text(detail)

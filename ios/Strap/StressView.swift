@@ -26,7 +26,7 @@ struct StressView: View {
                 StressGauge(value: demo ? SampleData.stressGauge : stressIndex)
                 VStack(spacing: 5) {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
-                        .font(StrapTypography.metric(33, weight: .medium))
+                        .font(StrapTypography.body(33, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Text(demo ? "HIGH · SAMPLE" : "\(store.band.stress.band.uppercased())")
                         .font(StrapTypography.body(11, weight: .medium))

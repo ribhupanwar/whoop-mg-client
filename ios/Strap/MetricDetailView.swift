@@ -400,7 +400,7 @@ struct WeeklyMetricChart: View {
                                 Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
                                     .overlay(Circle().stroke(strainBlue, lineWidth: 2)).position(x: x, y: height - barHeight)
                             }
-                            Text(metric.text(value)).font(StrapTypography.metric(10, weight: .bold)).monospacedDigit()
+                            Text(metric.text(value)).font(StrapTypography.body(10, weight: .semibold)).monospacedDigit()
                                 .foregroundStyle(metric.color(value)).position(x: x, y: max(7, height - barHeight - 12))
                         } else {
                             Text("—").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted).position(x: x, y: height - 12)
