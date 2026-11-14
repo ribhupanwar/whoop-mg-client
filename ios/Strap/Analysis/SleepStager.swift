@@ -566,12 +566,13 @@ enum SleepStager {
     ) -> [SleepStage] {
         guard !epochs.isEmpty else { return [] }
         var emissions = baseEmissions(epochs, population: population)
-        if let onsetMinutes {
-            for index in epochs.indices {
-                let sinceOnset = epochs[index].minutes - onsetMinutes
-                emissions[index][.rem] = (emissions[index][.rem] ?? 0) - remGuard(sinceOnset)
-                emissions[index][.deep] = (emissions[index][.deep] ?? 0) - deepGuard(sinceOnset)
-            }
+        // Without a reliable session onset, do not invent REM/Deep latency.
+        // Apply the maximum penalties rather than allowing an unanchored run
+        // to create speculative REM/Deep labels after a sensor gap.
+        for index in epochs.indices {
+            let sinceOnset = onsetMinutes.map { epochs[index].minutes - $0 } ?? -.infinity
+            emissions[index][.rem] = (emissions[index][.rem] ?? 0) - remGuard(sinceOnset)
+            emissions[index][.deep] = (emissions[index][.deep] ?? 0) - deepGuard(sinceOnset)
         }
         return viterbi(emissions)
     }
