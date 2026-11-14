@@ -132,14 +132,22 @@ struct RootView: View {
 private extension View {
     @ViewBuilder
     func strapLiquidGlass(cornerRadius: CGFloat) -> some View {
-        self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
-            .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+        } else {
+            self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
+                .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
+        }
     }
 
     @ViewBuilder
     func strapLiquidGlassCircle() -> some View {
-        self.background(.ultraThinMaterial, in: Circle())
-            .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
+        if #available(iOS 26.0, *) {
+            self.glassEffect(.regular, in: .circle)
+        } else {
+            self.background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(Color.appCustomizeEnd.opacity(0.8), lineWidth: 1))
+        }
     }
 }
 

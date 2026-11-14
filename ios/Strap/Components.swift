@@ -25,7 +25,7 @@ enum StrapTypography {
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         _ = registered
         let variant = weightName(weight)
-        let names = ["ProximaNova-\(variant)", "ProximaNova\(variant)", "Proxima Nova \(variant)"]
+        let names = variant == "Semibold" ? ["proxima-nova-semibold", "ProximaNova-Semibold"] : variant == "Medium" ? ["proxima-nova-medium", "ProximaNova-Medium"] : ["ProximaNova-\(variant)", "ProximaNova\(variant)", "Proxima Nova \(variant)"]
         for name in names where UIFont(name: name, size: size) != nil {
             return .custom(name, size: size)
         }
@@ -522,7 +522,7 @@ struct DashboardMetricIcon: View {
 // MARK: - Metric rows and tiles
 
 struct MetricRow: View {
-    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 26
+    @ScaledMetric(relativeTo: .title2) private var valueFontSize: CGFloat = 24
     let icon: String
     let title: String
     let value: String
