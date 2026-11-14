@@ -255,7 +255,7 @@ struct HomeView: View {
                     label: "RECOVERY ›",
                     text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                     progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: DetailMetric.recovery.color(recoveryScore)
+                    color: DetailMetric.recovery.color(demo ? Double(SampleData.recoveryRingPercent) : recoveryScore)
                     )
                 }
                 .buttonStyle(.plain)

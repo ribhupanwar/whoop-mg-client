@@ -95,6 +95,7 @@ struct RootView: View {
             #endif
         }
         .tint(.appAccent)
+        .font(StrapTypography.body(15))
         .environmentObject(store)
         .preferredColorScheme(.dark)
     }
