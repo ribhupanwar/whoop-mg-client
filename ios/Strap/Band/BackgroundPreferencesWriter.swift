@@ -4,7 +4,7 @@ import Foundation
 /// off the Bluetooth/UI queue. Encoding failures keep the last valid value.
 final class BackgroundPreferencesWriter {
     private let defaults: UserDefaults
-    private let queue = DispatchQueue(label: "strap.preferences.snapshots", qos: .utility)
+    private let queue = DispatchQueue(label: "strap.preferences.snapshots", qos: .userInitiated)
     init(defaults: UserDefaults = .standard) { self.defaults = defaults }
 
     func write<Value: Encodable>(_ value: Value, forKey key: String, completion: ((Bool) -> Void)? = nil) {
