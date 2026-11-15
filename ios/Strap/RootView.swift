@@ -37,9 +37,16 @@ enum Route: Hashable {
     case metricHistory(DetailMetric)
 }
 
+private final class AppStoreOwner: ObservableObject {
+    let store = AppStore()
+}
+
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var store = AppStore()
+    // The navigation shell owns the store without subscribing to sensor changes.
+    // Descendant screens observe it; tab selection never rebuilds every screen per packet.
+    @StateObject private var owner = AppStoreOwner()
+    private var store: AppStore { owner.store }
     @State private var tab: AppTab = .home
     @State private var showInsights = false
     @State private var homePath: [Route] = []
@@ -91,6 +98,7 @@ struct RootView: View {
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.band.resumeHistoryProcessing() }
+            else { store.band.persistLiveRRArchive(force: true) }
         }
         .onAppear {
             #if DEBUG
@@ -122,7 +130,8 @@ struct RootView: View {
                         }
                         .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity).frame(height: 52)
-                    }.buttonStyle(.plain).accessibilityAddTraits(tab == item ? .isSelected : [])
+                    }.buttonStyle(.plain).accessibilityIdentifier("tab.\(item.rawValue)")
+                        .accessibilityAddTraits(tab == item ? .isSelected : [])
                 }
             }
             .padding(.horizontal, 8).padding(.vertical, 4)

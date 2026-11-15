@@ -85,6 +85,12 @@ struct MoreView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("Build " + BuildInfo.revision)
+                    Text(StrapTypography.missingBundledFaces.isEmpty
+                        ? "Fonts: Proxima Nova · DIN Pro" : "Font assets unavailable: " + StrapTypography.missingBundledFaces.joined(separator: ", "))
+                }
+                .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted).padding(.vertical, 12)
             }
         }
         .strapTabTypography("More")

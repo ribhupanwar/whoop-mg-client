@@ -48,17 +48,21 @@ enum MetricTimeline {
                      caloriesByDay: [String: Double], ending: Date, count: Int = 37,
                      sleepNeedHours: Double, maxHR: Double? = nil, calendar: Calendar = .current) -> [MetricDay] {
         let byKey = Dictionary(days.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
+        let ordered = byKey.values.sorted { $0.dateKey < $1.dateKey }
+        let liveByDay = Dictionary(grouping: live, by: \.dateKey)
+        let manualByDay = Dictionary(grouping: manual, by: \.dateKey)
+        var priorEnd = 0
         let end = calendar.startOfDay(for: ending)
         guard count > 0 else { return [] }
         return (0..<count).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset - count + 1, to: end) else { return nil }
             let key = JournalStore.dayKey(for: date, calendar: calendar)
             let day = byKey[key]
-            let prior = byKey.values.filter { $0.dateKey < key }.sorted { $0.dateKey < $1.dateKey }
-            let baseline = DailyAnalysis.baseline(from: Array(prior.suffix(30)))
+            while priorEnd < ordered.count && ordered[priorEnd].dateKey < key { priorEnd += 1 }
+            let baseline = DailyAnalysis.baseline(from: Array(ordered[max(0, priorEnd - 30)..<priorEnd]))
             let recovery = Recovery.score(lnRMSSD: day?.lnRMSSD, rhr: day?.restingHR,
                 sleepHours: day?.reliableSleepHours, sleepNeedHours: sleepNeedHours, baseline: baseline).score
-            let sessions = live.filter { $0.dateKey == key }
+            let sessions = liveByDay[key] ?? []
             var zones: [Double]?
             if let raw = day?.zoneSeconds, raw.count == 5, raw.allSatisfy({ $0 >= 0 }) {
                 zones = raw.map(Double.init)
@@ -68,7 +72,7 @@ enum MetricTimeline {
                     zones = (0..<5).map { index in valid.reduce(0.0) { $0 + Double($1.zoneSeconds[index]) } }
                 }
             }
-            let logs = manual.filter { $0.dateKey == key }
+            let logs = manualByDay[key] ?? []
             let strengthLogs = logs.filter { $0.kind.usesSets }
             let hasDay = day != nil || !sessions.isEmpty || !logs.isEmpty
             let strength: Double? = hasDay && !strengthLogs.isEmpty && strengthLogs.allSatisfy({ $0.minutes > 0 })

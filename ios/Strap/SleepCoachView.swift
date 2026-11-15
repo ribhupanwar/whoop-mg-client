@@ -15,6 +15,7 @@ struct SleepCoachView: View {
     @State private var alarmOn = false
     @State private var alarmConfirmation = false
     @State private var seeded = false
+    @State private var showWakePicker = false
 
     private var demo: Bool { store.isPreview }
 
@@ -44,8 +45,17 @@ struct SleepCoachView: View {
                 alarmPanel
             }
         }
-        .navigationTitle("Sleep coach")
-        .navigationBarTitleDisplayMode(.inline)
+        .strapTabTypography("Sleep coach")
+        .sheet(isPresented: $showWakePicker) {
+            NavigationStack {
+                DatePicker("Wake time", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
+                    .datePickerStyle(.wheel).labelsHidden().padding()
+                    .navigationTitle("Wake time")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { showWakePicker = false }.font(StrapTypography.body(16, weight: .bold))
+                    } }
+            }.presentationDetents([.height(300)])
+        }
         .onAppear {
             if !seeded {
                 wakeMinutes = demo ? SampleData.demoWakeMinutes : store.settings.wakeTimeMinutes
@@ -126,8 +136,11 @@ struct SleepCoachView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(alignment: .trailing, spacing: 3) {
-                DatePicker("", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
-                    .labelsHidden()
+                Button { showWakePicker = true } label: {
+                    Text(CoachFormat.clock(wakeMinutes))
+                        .font(StrapTypography.metric(26, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }.buttonStyle(.plain).accessibilityLabel("Change wake time")
                 Text("YOUR WAKE\nTIME")
                     .font(StrapTypography.body(9.5))
                     .tracking(0.7)

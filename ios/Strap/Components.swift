@@ -6,93 +6,85 @@ import UIKit
 // MARK: - Typography
 // Bundled Proxima Nova and DIN Pro; keep font weight explicit to avoid thin fallbacks.
 enum StrapTypography {
-    // Use the font's actual internal PostScript name, not its .ttf filename.
-    // Some bundled Proxima faces have filenames that differ from UIFont names.
-    private static let fontNames: [String: String] = {
-        let files = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
-                     "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt",
-                     "proxima-nova-medium", "proxima-nova-semibold",
-                     "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
-        var names: [String: String] = [:]
+    private static let files = ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
+        "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt",
+        "proxima-nova-medium", "proxima-nova-semibold", "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
+    private static let descriptors: [String: CTFontDescriptor] = {
+        var result: [String: CTFontDescriptor] = [:]
         for file in files {
             guard let url = Bundle.main.url(forResource: file, withExtension: "ttf", subdirectory: "Fonts")
-                    ?? Bundle.main.url(forResource: file, withExtension: "ttf") else { continue }
+                ?? Bundle.main.url(forResource: file, withExtension: "ttf"),
+                let list = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+                let descriptor = list.first else { continue }
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
-            if let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
-               let descriptor = descriptors.first,
-               let postScript = CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String {
-                names[file] = postScript
-            }
+            result[file] = descriptor
         }
-        return names
+        return result
     }()
-    private static func bundled(_ file: String, size: CGFloat) -> Font? {
-        guard let name = fontNames[file], UIFont(name: name, size: size) != nil else { return nil }
-        return .custom(name, size: size)
+    private final class ResolvedFont: NSObject {
+        let coreText: CTFont
+        let swiftUI: Font
+        init(_ descriptor: CTFontDescriptor, size: CGFloat) {
+            coreText = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+            swiftUI = Font(coreText)
+        }
     }
+    private static let cache = NSCache<NSString, ResolvedFont>()
+    private static let cacheLock = NSLock()
 
-    /// Used by the iOS regression test so a missing licensed face cannot be
-    /// hidden by the system-font fallback in a successful simulator build.
+    private static func resolved(_ file: String, size: CGFloat) -> ResolvedFont? {
+        let key = "\(file):\(size)" as NSString
+        cacheLock.lock()
+        defer { cacheLock.unlock() }
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let descriptor = descriptors[file] else { return nil }
+        let result = ResolvedFont(descriptor, size: size)
+        cache.setObject(result, forKey: key)
+        return result
+    }
+    /// Inspect the actual CoreText face handed to SwiftUI, not a successful
+    /// UIFont name lookup that can conceal a substituted family or weight.
+    static func resolvedPostScriptName(_ file: String, size: CGFloat = 15) -> String? {
+        resolved(file, size: size).map { CTFontCopyPostScriptName($0.coreText) as String }
+    }
     static var missingBundledFaces: [String] {
-        ["ProximaNova-Regular", "ProximaNova-Bold", "ProximaNova-Light",
-         "ProximaNova-RegularIt", "ProximaNova-BoldIt", "ProximaNova-LightIt",
-         "proxima-nova-medium", "proxima-nova-semibold",
-         "DINPro-Regular", "DINPro-Light", "DINPro-Bold"]
-            .filter { file in
-                guard let name = fontNames[file] else { return true }
-                return UIFont(name: name, size: 12) == nil
-            }
+        files.filter { file in
+            let expected = file == "proxima-nova-medium" ? "ProximaNova-Medium"
+                : file == "proxima-nova-semibold" ? "ProximaNova-Semibold" : file
+            return resolvedPostScriptName(file) != expected
+        }
     }
-
-    /// Install the supplied family for native UIKit text that does not receive
-    /// a SwiftUI `.font` modifier (navigation and segmented-control labels).
     static func configureUIKitAppearance() {
-        guard missingBundledFaces.isEmpty,
-              let regular = fontNames["ProximaNova-Regular"].flatMap({ UIFont(name: $0, size: 17) }),
-              let semibold = fontNames["proxima-nova-semibold"].flatMap({ UIFont(name: $0, size: 17) }) else { return }
-
+        guard let regularName = resolvedPostScriptName("ProximaNova-Regular"),
+              let boldName = resolvedPostScriptName("ProximaNova-Bold"),
+              let regular = UIFont(name: regularName, size: 17),
+              let bold = UIFont(name: boldName, size: 17) else { return }
         let navigation = UINavigationBarAppearance()
         navigation.configureWithDefaultBackground()
-        navigation.titleTextAttributes = [.font: semibold, .foregroundColor: UIColor(Color.appFG)]
-        navigation.largeTitleTextAttributes = [.font: UIFont(name: semibold.fontName, size: 34) ?? semibold,
-                                                .foregroundColor: UIColor(Color.appFG)]
+        navigation.titleTextAttributes = [.font: bold, .foregroundColor: UIColor(Color.appFG)]
+        navigation.largeTitleTextAttributes = [.font: UIFont(name: boldName, size: 34) ?? bold,
+                                               .foregroundColor: UIColor(Color.appFG)]
         UINavigationBar.appearance().standardAppearance = navigation
         UINavigationBar.appearance().compactAppearance = navigation
         UINavigationBar.appearance().scrollEdgeAppearance = navigation
         UINavigationBar.appearance().tintColor = UIColor(Color.appAccent)
-
-        let barButton = UIBarButtonItem.appearance()
-        barButton.setTitleTextAttributes([.font: regular, .foregroundColor: UIColor(Color.appAccent)], for: .normal)
-        barButton.setTitleTextAttributes([.font: regular, .foregroundColor: UIColor(Color.appMuted)], for: .disabled)
-
+        UIBarButtonItem.appearance().setTitleTextAttributes([.font: regular], for: .normal)
         UISegmentedControl.appearance().setTitleTextAttributes([.font: regular], for: .normal)
-        UISegmentedControl.appearance().setTitleTextAttributes([.font: semibold], for: .selected)
+        UISegmentedControl.appearance().setTitleTextAttributes([.font: bold], for: .selected)
     }
-
-    private static func weightName(_ weight: Font.Weight) -> String {
-        if weight == .bold || weight == .heavy || weight == .black { return "Bold" }
-        // Use the bundled genuine Semibold and Medium faces for their requested weights.
-        if weight == .semibold { return "Semibold" }
-        if weight == .medium { return "Medium" }
-        if weight == .light || weight == .ultraLight { return "Light" }
-        return "Regular"
+    private static func bodyFile(_ weight: Font.Weight) -> String {
+        if weight == .bold || weight == .heavy || weight == .black { return "ProximaNova-Bold" }
+        if weight == .semibold { return "proxima-nova-semibold" }
+        if weight == .medium { return "proxima-nova-medium" }
+        if weight == .light || weight == .ultraLight { return "ProximaNova-Light" }
+        return "ProximaNova-Regular"
     }
-
     static func body(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
-        let variant = weightName(weight)
-        let file = variant == "Semibold" ? "proxima-nova-semibold"
-                 : variant == "Medium" ? "proxima-nova-medium"
-                 : "ProximaNova-\(variant)"
-        return bundled(file, size: size) ?? .system(size: size, weight: weight)
+        resolved(bodyFile(weight), size: size)?.swiftUI ?? .system(size: size, weight: weight)
     }
-
     static func metric(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        // DIN Pro ships Regular, Light and Bold. Medium/Semibold must not
-        // silently fall back to Regular for prominent scores and durations.
-        let face = (weight == .medium || weight == .semibold) ? "Bold" : weightName(weight)
-        let file = "DINPro-\(face)"
-        return (bundled(file, size: size) ?? bundled("DINPro-Regular", size: size)
-                ?? .system(size: size, weight: weight)).monospacedDigit()
+        let face = weight == .regular ? "Regular" : (weight == .light || weight == .ultraLight) ? "Light" : "Bold"
+        return (resolved("DINPro-\(face)", size: size)?.swiftUI ?? .system(size: size, weight: weight)).monospacedDigit()
     }
 }
 

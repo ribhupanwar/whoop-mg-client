@@ -58,7 +58,7 @@ jobs:
           xcodebuild -project ios/Strap.xcodeproj -scheme Strap \
             -destination "generic/platform=iOS Simulator" \
             -configuration Debug -derivedDataPath build \
-            CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
+            STRAP_BUILD_REVISION="$GITHUB_SHA" CODE_SIGNING_ALLOWED=NO build 2>&1 | tee build.log
           exit ${PIPESTATUS[0]}
 
       - name: Unit tests on a concrete iPhone simulator
@@ -70,7 +70,7 @@ jobs:
             -destination "platform=iOS Simulator,id=$UDID" \
             -configuration Debug -derivedDataPath build \
             -resultBundlePath "$RUNNER_TEMP/TestResults.xcresult" \
-            CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
+            STRAP_BUILD_REVISION="$GITHUB_SHA" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
       - name: Archive and package SideStore-ready ad-hoc signed IPA
@@ -79,7 +79,7 @@ jobs:
           xcodebuild archive -project ios/Strap.xcodeproj -scheme Strap \
             -configuration Release -destination "generic/platform=iOS" \
             -archivePath "$RUNNER_TEMP/Strap.xcarchive" \
-            CODE_SIGNING_ALLOWED=NO 2>&1 | tee archive.log
+            STRAP_BUILD_REVISION="$GITHUB_SHA" CODE_SIGNING_ALLOWED=NO 2>&1 | tee archive.log
           code=${PIPESTATUS[0]}
           if [ "$code" -ne 0 ]; then exit "$code"; fi
           mkdir -p "$RUNNER_TEMP/ipa/Payload"

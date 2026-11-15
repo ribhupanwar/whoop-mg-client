@@ -46,16 +46,7 @@ struct HealthHubView: View {
 
     // MARK: Independent fitness-age comparison
 
-    private var fitnessSnapshot: FitnessAgeSnapshot? {
-        FitnessAgeModel.snapshot(
-            age: store.settings.age,
-            sex: store.settings.sex,
-            ageConfirmed: store.settings.ageConfirmed,
-            days: store.band.days,
-            detected: store.detectedBandActivities,
-            live: store.liveActivities
-        )
-    }
+    private var fitnessSnapshot: FitnessAgeSnapshot? { store.fitnessSnapshot }
 
     private var fitnessAgePanel: some View {
         NavigationLink { HealthspanView() } label: {

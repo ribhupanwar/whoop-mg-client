@@ -2,7 +2,7 @@ import SwiftUI
 
 private let healthspanMint = Color(hex: 0x55DDA6)
 
-struct HealthspanPoint: Identifiable {
+struct HealthspanPoint: Identifiable, Sendable {
     let date: Date
     let years: Double?
     var id: Date { date }
@@ -21,13 +21,11 @@ struct HealthspanView: View {
                 physicalActivityIndex: 7.5, restingNights: 6, capturedDays: 7,
                 exerciseDays: 4, confidenceNote: "Design preview sample")
         }
-        return FitnessAgeModel.snapshot(age: store.settings.age, sex: store.settings.sex,
-            ageConfirmed: store.settings.ageConfirmed, days: store.band.days,
-            detected: store.detectedBandActivities, live: store.liveActivities)
+        return store.fitnessSnapshot
     }
     private var refreshKey: String {
         let days = store.band.days.map { "\($0.dateKey):\($0.restingHR ?? -1):\($0.steps ?? -1)" }.joined(separator: "|")
-        return "\(window):\(store.isPreview):\(store.settings.age):\(store.settings.sex):\(store.settings.ageConfirmed):\(store.liveActivities.count):\(store.detectedBandActivities.count):" + days
+        return "\(store.fitnessSnapshot?.years ?? -1):\(window):\(store.isPreview):\(store.settings.age):\(store.settings.sex):\(store.settings.ageConfirmed):\(store.liveActivities.count):\(store.detectedBandActivities.count):" + days
     }
     var body: some View {
         Screen {
@@ -53,7 +51,7 @@ struct HealthspanView: View {
             }.foregroundStyle(Color.appFG)
         }
         .navigationTitle("HEALTHSPAN").navigationBarTitleDisplayMode(.inline)
-        .task(id: refreshKey) { rebuildTrend() }
+        .task(id: refreshKey) { await rebuildTrend() }
     }
     private var ageCard: some View {
         Panel {
@@ -141,21 +139,32 @@ struct HealthspanView: View {
             }.buttonStyle(.plain)
         }
     }
-    private func rebuildTrend() {
+    @MainActor private func rebuildTrend() async {
         snapshot = makeSnapshot()
-        let calendar = Calendar.current
-        let end = calendar.startOfDay(for: Date())
-        points = (0..<window).compactMap { index in
-            guard let date = calendar.date(byAdding: .day, value: index - window + 1, to: end) else { return nil }
-            if store.isPreview {
-                let missing = index % 13 == 5
-                return HealthspanPoint(date: date, years: missing ? nil : 27 - Double(index) / Double(window) * 2 + sin(Double(index) * 0.35) * 0.35)
+        let days = store.band.days
+        let live = store.liveActivities
+        let detected = store.detectedBandActivities
+        let age = store.settings.age
+        let sex = store.settings.sex
+        let confirmed = store.settings.ageConfirmed
+        let demo = store.isPreview
+        let count = window
+        let result = await Task.detached(priority: .utility) {
+            let calendar = Calendar.current
+            let end = calendar.startOfDay(for: Date())
+            return (0..<count).compactMap { index -> HealthspanPoint? in
+                guard let date = calendar.date(byAdding: .day, value: index - count + 1, to: end) else { return nil }
+                if demo {
+                    return HealthspanPoint(date: date, years: index % 13 == 5 ? nil
+                        : 27 - Double(index) / Double(count) * 2 + sin(Double(index) * 0.35) * 0.35)
+                }
+                let value = FitnessAgeModel.snapshot(age: age, sex: sex, ageConfirmed: confirmed,
+                    days: days, detected: detected, live: live, asOf: date)
+                return HealthspanPoint(date: date, years: value?.years)
             }
-            let result = FitnessAgeModel.snapshot(age: store.settings.age, sex: store.settings.sex,
-                ageConfirmed: store.settings.ageConfirmed, days: store.band.days,
-                detected: store.detectedBandActivities, live: store.liveActivities, asOf: date)
-            return HealthspanPoint(date: date, years: result?.years)
-        }
+        }.value
+        guard !Task.isCancelled else { return }
+        points = result
     }
 }
 

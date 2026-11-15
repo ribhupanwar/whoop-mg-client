@@ -11,6 +11,7 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.9"
+    STRAP_BUILD_REVISION: local
     CODE_SIGNING_ALLOWED: "NO"
     # XcodeGen writes an explicit Info.plist (info: below), so Xcode must not
     # also auto-generate one — that produces a "multiple commands" conflict.
@@ -37,6 +38,7 @@ targets:
       path: Strap/Info.plist
       properties:
         CFBundleDisplayName: Strap
+        StrapBuildRevision: "$(STRAP_BUILD_REVISION)"
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         UILaunchScreen: {}
@@ -88,18 +90,33 @@ targets:
         TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Strap.app/Strap"
         BUNDLE_LOADER: "$(TEST_HOST)"
 
+  StrapUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - StrapUITests
+    dependencies:
+      - target: Strap
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap.ui-tests
+        TEST_TARGET_NAME: Strap
+        GENERATE_INFOPLIST_FILE: "YES"
+
 schemes:
   Strap:
     build:
       targets:
         Strap: all
         StrapTests: [test]
+        StrapUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - StrapTests
+        - StrapUITests
     profile:
       config: Release
     analyze:

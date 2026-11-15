@@ -164,3 +164,20 @@ extension MetricTimelineTests {
         XCTAssertEqual(try XCTUnwrap(points.last?.value(.vo2)), 15.3 * 180 / 60, accuracy: 0.001)
     }
 }
+
+extension MetricTimelineTests {
+    func testLongRangeBaselineMatchesChronologicalReferenceWithUnsortedInput() throws {
+        let days = (1...10).map { day($0) }
+        let points = MetricTimeline.make(days: Array(days.reversed()), live: [], manual: [], caloriesByDay: [:],
+            ending: date(10), count: 180, sleepNeedHours: 8, calendar: calendar)
+        XCTAssertEqual(points.count, 180)
+        for point in points {
+            let prior = days.filter { $0.dateKey < point.key }.sorted { $0.dateKey < $1.dateKey }
+            let record = days.first { $0.dateKey == point.key }
+            let expected = Recovery.score(lnRMSSD: record?.lnRMSSD, rhr: record?.restingHR,
+                sleepHours: record?.reliableSleepHours, sleepNeedHours: 8,
+                baseline: DailyAnalysis.baseline(from: Array(prior.suffix(30)))).score
+            XCTAssertEqual(point.recovery, expected)
+        }
+    }
+}

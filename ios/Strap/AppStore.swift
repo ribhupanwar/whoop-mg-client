@@ -28,6 +28,18 @@ final class AppStore: ObservableObject {
     private var bandCancellable: AnyCancellable?
     private var summaryCancellable: AnyCancellable?
     private var healthCancellable: AnyCancellable?
+    private var fitnessCancellable: AnyCancellable?
+    @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
+    private let fitnessQueue = DispatchQueue(label: "strap.fitness.snapshot", qos: .utility)
+
+    private struct FitnessInputs: Equatable {
+        let age: Int
+        let sex: Sex
+        let confirmed: Bool
+        let days: [DayMetrics]
+        let detected: [ActivitySession]
+        let live: [LiveActivityRecord]
+    }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -51,13 +63,16 @@ final class AppStore: ObservableObject {
             self.settings.designPreview = true
         }
         #endif
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("--stress-tab-switching") { band.startUIStressReplay() }
+        #endif
         band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
         // A backfill publishes several diagnostics per sensor packet. Forward
-        // at most ten UI updates per second, including the final trailing one,
+        // at most four UI updates per second, including the final trailing one,
         // rather than rebuilding every screen thousands of times during sync.
         // Delivery after willSet also guarantees views read the committed values.
         bandCancellable = band.objectWillChange
-            .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
+            .throttle(for: .milliseconds(250), scheduler: RunLoop.main, latest: true)
             .sink { [weak self] _ in self?.objectWillChange.send() }
         // @Published fires in willSet, so listen to the projected value to see
         // the new summary rather than the previous one.
@@ -67,6 +82,23 @@ final class AppStore: ObservableObject {
         healthCancellable = health.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+        // Fitness comparisons change with saved observations/profile, never
+        // with each live pulse or history packet. Work runs on a serial worker.
+        fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
+            .map { settings, days, detected, live in
+                FitnessInputs(age: settings.age, sex: settings.sex, confirmed: settings.ageConfirmed,
+                              days: days, detected: detected, live: live)
+            }
+            .removeDuplicates()
+            .debounce(for: .milliseconds(200), scheduler: fitnessQueue)
+            .map { input in
+                FitnessAgeModel.snapshot(age: input.age, sex: input.sex, ageConfirmed: input.confirmed,
+                    days: input.days, detected: input.detected, live: input.live)
+            }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] value in
+                if self?.fitnessSnapshot != value { self?.fitnessSnapshot = value }
+            }
         if settings.healthKitEnabled {
             Task { [weak self] in
                 await self?.activateHealthKit(exportBacklog: true)
@@ -273,10 +305,8 @@ final class AppStore: ObservableObject {
     /// Use a dated night-associated resting measurement for fitness trends.
     /// A transient quiet daytime window is not an overnight resting HR.
     private var latestOvernightRestingHR: Double? {
-        band.days
-            .filter { $0.state == "sleep" && $0.restingHR != nil }
-            .sorted { $0.dateKey > $1.dateKey }
-            .first?.restingHR
+        band.days.lazy.filter { $0.state == "sleep" && $0.restingHR != nil }
+            .max { $0.dateKey < $1.dateKey }?.restingHR
     }
 
     /// Where the max HR in the VO₂ estimate came from, for the caption.

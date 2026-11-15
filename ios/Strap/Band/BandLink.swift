@@ -70,6 +70,9 @@ struct LiveSessionSummary: Codable, Equatable {
 /// echoed back with HISTORICAL_DATA_RESULT. Commands are spaced ~120 ms.
 /// BLE is one-central: turn the phone's own Bluetooth pairing to the band off.
 final class BandLink: NSObject, ObservableObject {
+    private let preferencesWriter = BackgroundPreferencesWriter()
+    private var lastLiveRRSaveAt = Date.distantPast
+
     static let commandSpacing: TimeInterval = 0.12
     static let drainIdleSeconds: TimeInterval = 30
     static let drainEmptySeconds: TimeInterval = 25
@@ -403,6 +406,27 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    #if DEBUG
+    private var uiStressTimer: Timer?
+    /// UI regression replay: 250 published mutations/second, without BLE I/O,
+    /// sample persistence or changing a user's stored measurements.
+    func startUIStressReplay() {
+        uiStressTimer?.invalidate()
+        var tick = 0
+        let timer = Timer(timeInterval: 0.02, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            tick += 1
+            self.liveHeartRate = 60 + tick % 20
+            self.liveHRNotificationCount = tick
+            self.historyRRRecords = tick * 100
+            self.historyVersionCounts[18] = tick
+            self.drainStats = DrainStats(frames: tick * 100, samples: tick * 100, acks: tick)
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        uiStressTimer = timer
+    }
+    #endif
+
     // MARK: - Settings
 
     private var lastRecalculationSettings: String?
@@ -533,10 +557,8 @@ final class BandLink: NSObject, ObservableObject {
                            editedDays: editedDays)
                 self.lastSleepAnalysis = report
                 self.persist(finalFresh)
-                if let report, let data = try? JSONEncoder().encode(report) {
-                    UserDefaults.standard.set(data, forKey: Keys.sleepAnalysis)
-                } else {
-                    UserDefaults.standard.removeObject(forKey: Keys.sleepAnalysis)
+                if let report { self.preferencesWriter.write(report, forKey: Keys.sleepAnalysis) } else {
+                    self.preferencesWriter.remove(forKey: Keys.sleepAnalysis)
                 }
                 self.isAnalyzingHistory = false
                 if self.metricsRefreshPending {
@@ -654,9 +676,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         if inserted > 0 {
             days = byDate.values.sorted { $0.dateKey < $1.dateKey }
-            if let encoded = try? JSONEncoder().encode(days) {
-                UserDefaults.standard.set(encoded, forKey: Keys.days)
-            }
+            preferencesWriter.write(days, forKey: Keys.days)
         }
         return inserted
     }
@@ -828,9 +848,14 @@ final class BandLink: NSObject, ObservableObject {
             archivedLiveRRSamples.append(entry)
         }
         archivedLiveRRSamples = Array(archivedLiveRRSamples.suffix(3600))
-        if let data = try? JSONEncoder().encode(archivedLiveRRSamples) {
-            UserDefaults.standard.set(data, forKey: Keys.liveRRArchive)
-        }
+        persistLiveRRArchive()
+    }
+
+    func persistLiveRRArchive(force: Bool = false) {
+        guard !archivedLiveRRSamples.isEmpty,
+              force || Date().timeIntervalSince(lastLiveRRSaveAt) >= 5 else { return }
+        lastLiveRRSaveAt = Date()
+        preferencesWriter.write(archivedLiveRRSamples, forKey: Keys.liveRRArchive)
     }
 
     // Always collect a bounded, timestamped live HR graph, including outside
@@ -968,6 +993,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func resetLink() {
+        persistLiveRRArchive(force: true)
         // Status can already be .failed after a rejected BLE command.
         // The drain clock, not the presentation status, owns its lifecycle.
         if drainStartedAt != nil { finishDrain(reason: "link reset") }
@@ -1322,9 +1348,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func persist(_ summary: CaptureSummary) {
-        if let data = try? JSONEncoder().encode(summary) {
-            UserDefaults.standard.set(data, forKey: Keys.summary)
-        }
+        preferencesWriter.write(summary, forKey: Keys.summary)
     }
 
     private func merge(
@@ -1374,9 +1398,7 @@ final class BandLink: NSObject, ObservableObject {
             )
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
-        if let data = try? JSONEncoder().encode(days) {
-            UserDefaults.standard.set(data, forKey: Keys.days)
-        }
+        preferencesWriter.write(days, forKey: Keys.days)
     }
 
     // MARK: - Notifications
