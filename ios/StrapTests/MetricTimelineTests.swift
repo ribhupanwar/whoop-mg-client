@@ -153,3 +153,14 @@ extension MetricTimelineTests {
         XCTAssertTrue(MetricTimeline.durationBuckets(points, metric: .hrv).isEmpty)
     }
 }
+
+extension MetricTimelineTests {
+    func testVO2HistoryRequiresMaxHRAndRecordedOvernightRestingHR() throws {
+        let record = day(10)
+        XCTAssertNil(timeline([record]).last?.value(.vo2))
+        let points = MetricTimeline.make(days: [record], live: [], manual: [], caloriesByDay: [:],
+            ending: date(10), count: 7, sleepNeedHours: 8, maxHR: 180, calendar: calendar)
+        XCTAssertNil(points[0].value(.vo2))
+        XCTAssertEqual(try XCTUnwrap(points.last?.value(.vo2)), 15.3 * 180 / 60, accuracy: 0.001)
+    }
+}

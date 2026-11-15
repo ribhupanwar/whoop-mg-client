@@ -1,7 +1,7 @@
 import Foundation
 
 enum DetailMetric: String, CaseIterable, Identifiable {
-    case strain, recovery, hrv, rhr, respiration, sleepPerformance
+    case strain, recovery, hrv, rhr, respiration, sleepPerformance, vo2
     case zonesLow, zonesHigh, steps, calories, strength
     var id: String { rawValue }
 }
@@ -14,6 +14,7 @@ struct MetricDay: Identifiable {
     let zones: [Double]?
     let calories: Double?
     let strength: Double?
+    var vo2: Double? = nil
     var id: String { key }
 
     func value(_ metric: DetailMetric) -> Double? {
@@ -28,6 +29,7 @@ struct MetricDay: Identifiable {
         case .steps: result = recorded?.steps.map(Double.init)
         case .calories: result = calories
         case .strength: result = strength
+        case .vo2: result = vo2
         case .zonesLow: result = zones.map { $0.prefix(3).reduce(0, +) / 60 }
         case .zonesHigh: result = zones.map { $0.suffix(2).reduce(0, +) / 60 }
         }
@@ -44,7 +46,7 @@ struct MetricDay: Identifiable {
 enum MetricTimeline {
     static func make(days: [DayMetrics], live: [LiveActivityRecord], manual: [ManualActivity],
                      caloriesByDay: [String: Double], ending: Date, count: Int = 37,
-                     sleepNeedHours: Double, calendar: Calendar = .current) -> [MetricDay] {
+                     sleepNeedHours: Double, maxHR: Double? = nil, calendar: Calendar = .current) -> [MetricDay] {
         let byKey = Dictionary(days.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
         let end = calendar.startOfDay(for: ending)
         guard count > 0 else { return [] }
@@ -71,8 +73,11 @@ enum MetricTimeline {
             let hasDay = day != nil || !sessions.isEmpty || !logs.isEmpty
             let strength: Double? = hasDay && !strengthLogs.isEmpty && strengthLogs.allSatisfy({ $0.minutes > 0 })
                 ? strengthLogs.reduce(0.0) { $0 + Double($1.minutes) } : nil
+            let vo2: Double? = day?.state == "sleep" ? maxHR.flatMap { maximum in
+                day?.restingHR.flatMap { resting in Hrv.vo2Max(maxHR: maximum, restingHR: resting) }
+            } : nil
             return MetricDay(date: date, key: key, recorded: day, recovery: recovery,
-                             zones: zones, calories: caloriesByDay[key], strength: strength)
+                             zones: zones, calories: caloriesByDay[key], strength: strength, vo2: vo2)
         }
     }
 
@@ -121,7 +126,7 @@ extension MetricTimeline {
             }
             let zones: [Double] = offset % 3 == 0 ? [0, 0, 0, 0, 0] : [900, 300, 120, 60, 0]
             return MetricDay(date: date, key: key, recorded: record, recovery: offset == count - 1 ? 53 : 50 + wave * 35,
-                             zones: zones, calories: 350 + wave * 150, strength: offset % 4 == 0 ? 40 : 0)
+                             zones: zones, calories: 350 + wave * 150, strength: offset % 4 == 0 ? 40 : 0, vo2: 48 + wave * 3)
         }
     }
 }

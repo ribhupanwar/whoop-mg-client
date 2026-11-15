@@ -12,7 +12,6 @@ import SwiftUI
 /// what this stack shows.
 struct DashboardRows: View {
     @EnvironmentObject private var store: AppStore
-    @State private var showVO2Detail = false
 
     private var demo: Bool { store.isPreview }
 
@@ -218,9 +217,7 @@ struct DashboardRows: View {
 
     private var vo2Block: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button {
-                showVO2Detail.toggle()
-            } label: {
+            NavigationLink(value: Route.metricHistory(.vo2)) {
                 HStack(spacing: 11) {
                     DashboardMetricIcon(symbol: "lungs")
                     Text("VO₂ MAX")
@@ -243,14 +240,6 @@ struct DashboardRows: View {
             }
             .buttonStyle(.plain)
 
-            if showVO2Detail {
-                Text(vo2Detail)
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .padding(.horizontal, AppLayout.cardInset)
-                    .padding(.top, 4)
-            }
         }
         .padding(.bottom, 10)
     }

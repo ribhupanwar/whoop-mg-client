@@ -8,6 +8,7 @@ extension DetailMetric {
     var title: String {
         switch self {
         case .strain: return "Strain"
+        case .vo2: return "VO₂ max"
         case .recovery: return "Recovery"
         case .hrv: return "Heart rate variability"
         case .rhr: return "Resting heart rate"
@@ -24,7 +25,7 @@ extension DetailMetric {
         switch self {
         case .hrv: return "waveform.path.ecg"
         case .rhr: return "heart"
-        case .respiration: return "lungs"
+        case .respiration, .vo2: return "lungs"
         case .sleepPerformance: return "moon"
         case .zonesLow, .zonesHigh: return "heart.text.square"
         case .strength: return "dumbbell"
@@ -33,13 +34,13 @@ extension DetailMetric {
         default: return "chart.bar"
         }
     }
-    var isLine: Bool { self == .hrv || self == .rhr || self == .respiration }
+    var isLine: Bool { self == .hrv || self == .rhr || self == .respiration || self == .vo2 }
     var isTime: Bool { self == .zonesLow || self == .zonesHigh || self == .strength }
     func text(_ value: Double?) -> String {
         guard let value, value.isFinite else { return "—" }
         if isTime { return ActivityFormat.clock(minutes: value) }
         switch self {
-        case .strain, .respiration: return String(format: "%.1f", value)
+        case .strain, .respiration, .vo2: return String(format: "%.1f", value)
         case .recovery, .sleepPerformance: return String(format: "%.0f%%", value)
         default: return Int(value.rounded()).formatted()
         }

@@ -48,7 +48,8 @@ struct MetricHistoryView: View {
             caloriesByDay: energy,
             ending: ending,
             count: window,
-            sleepNeedHours: store.settings.sleepNeedHours
+            sleepNeedHours: store.settings.sleepNeedHours,
+            maxHR: store.settings.ageConfirmed ? (store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)) : nil
         )
     }
 
@@ -94,6 +95,7 @@ struct MetricHistoryView: View {
         case .respiration: return "rpm"
         case .zonesLow, .zonesHigh, .strength: return "hr"
         case .calories: return "kcal"
+        case .vo2: return "ml/kg/min"
         default: return ""
         }
     }
@@ -298,6 +300,8 @@ struct MetricHistoryView: View {
             return "Sleep performance is estimated from recorded sleep and configured sleep need."
         case .respiration:
             return "Respiratory rate is shown only when a dated validated value exists."
+        case .vo2:
+            return "Uth 2004 estimate reconstructed from saved overnight resting HR and your current confirmed max-HR profile. This is not a measured VO₂ max test. Missing nights remain blank."
         default:
             return "This chart uses saved daily values for this metric. Missing readings are not substituted."
         }
