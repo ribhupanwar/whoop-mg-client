@@ -54,8 +54,9 @@ jobs:
           # Repair only the two licensed font copies with missing naming records.
           # Source glyphs and outlines remain untouched; the original repo files
           # are not rewritten or redistributed outside the app build.
-          python3 -m pip install --quiet --user fonttools
-          python3 - <<'PY'
+          python3 -m venv "$RUNNER_TEMP/strap-font-venv"
+          "$RUNNER_TEMP/strap-font-venv/bin/python" -m pip install --quiet fonttools
+          "$RUNNER_TEMP/strap-font-venv/bin/python" - <<'PY'
           from fontTools.ttLib import TTFont
           from pathlib import Path
 
