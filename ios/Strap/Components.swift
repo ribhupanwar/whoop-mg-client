@@ -123,7 +123,7 @@ struct Screen<Content: View>: View {
         .scrollIndicators(.hidden)
         .background(
             LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
-                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                           startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         )
     }
@@ -163,7 +163,6 @@ struct Panel<Content: View>: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppLayout.cardInset)
         .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(LinearGradient.appCard))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.cardRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         .padding(.bottom, AppLayout.cardSpacing)
     }
 }

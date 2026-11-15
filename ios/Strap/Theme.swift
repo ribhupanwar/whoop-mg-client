@@ -26,23 +26,23 @@ extension Color {
     static let appGood = Color(hex: 0x00D7A0)
     static let appWarn = Color(hex: 0xFFB02E)
     static let appHigh = Color(hex: 0xE50032)
-    static let appSleep = Color(hex: 0x82A9C3)
+    static let appSleep = Color(hex: 0x7DA2B8)
     static let appGoodChipBG = Color(hex: 0x16261B)
     static let appDemoFlagBG = Color(hex: 0x2A2114)
 }
 /// Shared geometry keeps cards and metric rows aligned across tabs.
 enum AppLayout {
-    static let screenInset: CGFloat = 16
-    static let cardInset: CGFloat = 16
-    static let cardRadius: CGFloat = 15
-    static let cardSpacing: CGFloat = 12
+    static let screenInset: CGFloat = 14
+    static let cardInset: CGFloat = 14
+    static let cardRadius: CGFloat = 12
+    static let cardSpacing: CGFloat = 14
     static let metricRadius: CGFloat = 15
 }
 
 /// Subtle gray card shading shared by every tab and detail page.
 extension LinearGradient {
     static var appCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x30363A), Color(hex: 0x282D31)],
+        LinearGradient(colors: [Color(hex: 0x2B3236), Color(hex: 0x202629)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }

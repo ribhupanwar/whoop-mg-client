@@ -3,8 +3,8 @@ import SwiftUI
 /// A timestamped plot: no line joins missing minute buckets.
 struct SleepHeartRateChart: View {
     let session: SleepSession
-    private var low: Double { floor(session.heartRate.map(\.bpm).min() ?? 40) - 2 }
-    private var high: Double { ceil(session.heartRate.map(\.bpm).max() ?? 80) + 2 }
+    private var low: Double { min(30, floor(session.heartRate.map(\.bpm).min() ?? 30) - 2) }
+    private var high: Double { max(110, ceil(session.heartRate.map(\.bpm).max() ?? 110) + 2) }
 
     var body: some View {
         VStack(spacing: 4) {
@@ -52,14 +52,14 @@ struct SleepHeartRateChart: View {
                         }.stroke(Color.appSleep, lineWidth: 1.2)
                     }
                 }
-            }.frame(height: 150)
+            }.frame(height: 160)
             HStack {
                 Text(clock(session.startUnix))
                 Spacer()
                 Text(clock(session.endUnix))
             }
-            .font(StrapTypography.body(9))
-            .foregroundStyle(Color.appMuted)
+            .font(StrapTypography.metric(10))
+            .foregroundStyle(Color.appFG)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Sleep heart rate, \(clock(session.startUnix)) to \(clock(session.endUnix)), \(session.heartRate.count) recorded minute buckets. Missing intervals are gaps.")

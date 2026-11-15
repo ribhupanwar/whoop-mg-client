@@ -53,8 +53,8 @@ struct HomeView: View {
                 }
                 monitorDuo
                 myDayOutlook
-                tonightCard
                 activitiesCard
+                tonightCard
                 journalCard
                 planCard
                 dashboardSection
@@ -531,10 +531,10 @@ struct HomeView: View {
             }
             Button(action: openPlan) {
                 HStack(spacing: 10) {
-                    Image(systemName: "moon")
-                        .font(StrapTypography.body(16))
+                    Image(systemName: "sun.max")
+                        .font(StrapTypography.body(18))
                         .foregroundStyle(Color.appWarn)
-                    Text("Your Day in Review")
+                    Text("Your Daily Outlook")
                         .font(StrapTypography.body(14))
                         .foregroundStyle(Color.appFG)
                     Spacer()
@@ -543,7 +543,7 @@ struct HomeView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color(hex: 0x392F59), Color(hex: 0x214856)], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color(hex: 0x8B8678), Color(hex: 0x344C5D)], startPoint: .leading, endPoint: .trailing)
                 )
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .clipShape(RoundedRectangle(cornerRadius: 12))
@@ -566,10 +566,10 @@ struct HomeView: View {
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
                             .font(StrapTypography.metric(17, weight: .bold))
                     }
-                    .foregroundStyle(Color(hex: 0x0D1219))
+                    .foregroundStyle(Color.appFG)
                     .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(Color.appSleep))
+                    .frame(minWidth: 62, minHeight: 36)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.appSleep))
 
                     Text("SLEEP")
                         .font(StrapTypography.body(13, weight: .bold))
@@ -591,7 +591,7 @@ struct HomeView: View {
                     Button("Edit sleep time") { openHomeSleepEditor() }
                 }
             }
-            .padding(.bottom, 4)
+            .padding(.bottom, 10)
             VStack(spacing: 8) {
                 if demo {
                     activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
@@ -646,8 +646,24 @@ struct HomeView: View {
                     }
                 }
             }
-            .padding(.bottom, 10)
-
+            .padding(.bottom, 16)
+            HStack(spacing: 10) {
+                Button { showLogger = true } label: {
+                    Label("ADD ACTIVITY", systemImage: "plus")
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                Button { showLiveSession = true } label: {
+                    Label("START ACTIVITY", systemImage: "stopwatch")
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+            }
+            .font(StrapTypography.body(10, weight: .bold))
+            .tracking(0.7)
+            .buttonStyle(.plain)
+            .foregroundStyle(Color.appFG)
+            .background(Color.clear)
+            .padding(.vertical, 4)
+            .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 8))
         }
     }
 

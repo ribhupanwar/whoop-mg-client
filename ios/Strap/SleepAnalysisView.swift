@@ -5,6 +5,7 @@ import SwiftUI
 /// The hypnogram is a labelled four-class estimate, never a PSG reading.
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var showMetricInfo = false
     @State private var sleepExportURL: URL?
     @State private var sleepExportError: String?
     @State private var preparingSleepExport = false
@@ -41,6 +42,7 @@ struct SleepAnalysisView: View {
                 lastNightPanel
                 needPanel
                 consistencyPanel
+                efficiencyPanel
                 stressDetailPanel
                 weeklyPanel
                 coachButton
@@ -79,7 +81,27 @@ struct SleepAnalysisView: View {
         } message: {
             Text("Set the sleep end to the selected time? This updates the sleep window and recalculates available metrics. You can edit it later.")
         }
-        .navigationTitle("Sleep analysis")
+        .navigationTitle("TODAY")
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showMetricInfo = true } label: {
+                    Image(systemName: "info.circle").foregroundStyle(Color.appMuted)
+                }.accessibilityLabel("About sleep metrics")
+            }
+        }
+        .sheet(isPresented: $showMetricInfo) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Sleep estimates").font(StrapTypography.body(24, weight: .bold))
+                        Text(performanceCaption)
+                        Text("Sleep stages use recorded heart rate, R-R intervals and movement. They are local estimates, not PSG-validated measurements. Missing intervals remain unclassified. Personal typical ranges require enough recorded nights.")
+                        Text("Consistency compares recorded bed and wake times. Sleep stress needs seven nights of baseline. Empty chart days have no recorded reading.")
+                    }.font(StrapTypography.body(16)).padding(24)
+                }.navigationTitle("About sleep")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showMetricInfo = false } } }
+            }
+        }
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -103,25 +125,39 @@ struct SleepAnalysisView: View {
     }
 
     private var performancePanel: some View {
-        Panel {
-            SectionTitle("Sleep performance")
-            RingView(
-                progress: performancePct.map { min(max($0 / 100.0, 0), 1) },
-                color: .appSleep,
-                lineWidth: 12,
-                size: 170,
-                centerText: performancePct.map { "\(Int($0.rounded()))%" } ?? "—",
-                centerFont: 40
-            )
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-
-            Text(performanceCaption)
-                .font(StrapTypography.body(12))
-                .foregroundStyle(Color.appMuted)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity, alignment: .center)
+        GeometryReader { geometry in
+            let diameter = min(geometry.size.width - 110, 250.0)
+            ZStack {
+                Circle().stroke(Color.appRaised, lineWidth: 15)
+                Circle().trim(from: 0, to: CGFloat(min(1, max(0, (performancePct ?? 0) / 100))))
+                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 15, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 6) {
+                    Text("STRAP").font(StrapTypography.body(18, weight: .light)).tracking(2)
+                        .foregroundStyle(Color.appMuted)
+                    HStack(alignment: .firstTextBaseline, spacing: 0) {
+                        Text(performancePct.map { "\(Int($0.rounded()))" } ?? "—")
+                            .font(StrapTypography.metric(64))
+                        if performancePct != nil { Text("%").font(StrapTypography.metric(40)) }
+                    }
+                    Text("SLEEP\nPERFORMANCE")
+                        .font(StrapTypography.body(12, weight: .bold)).tracking(1)
+                        .multilineTextAlignment(.center)
+                    HStack(spacing: 2) {
+                        ForEach(0..<3, id: \.self) { index in
+                            Rectangle().fill(index == 1 ? Color.appMuted : Color.appRaised)
+                                .frame(width: 18, height: 3)
+                        }
+                    }.padding(.top, 8)
+                }.foregroundStyle(Color.appFG)
+            }
+            .frame(width: diameter, height: diameter)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(height: 280)
+        .padding(.bottom, 20)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Sleep performance, \(percentText(performancePct)). \(performanceCaption)")
     }
 
     private var performanceCaption: String {
@@ -139,50 +175,48 @@ struct SleepAnalysisView: View {
 
     private var componentsPanel: some View {
         Panel {
-            SectionTitle("Components")
-            componentRow(
-                title: "Hours vs. needed",
-                percent: demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct,
-                waiting: "needs an overnight capture"
-            )
-            componentRow(
-                title: "Sleep consistency",
-                percent: demo ? Double(SampleData.sleepConsistency) : analysis?.consistencyPct,
-                waiting: "needs 2+ nights with both bed and wake detected"
-            )
-            componentRow(
-                title: "Sleep efficiency",
-                percent: demo ? Double(SampleData.sleepEfficiency) : reconciledEfficiencyPct,
-                waiting: "needs an overnight capture"
-            )
-            componentRow(
-                title: "High sleep stress",
-                percent: demo ? Double(SampleData.highSleepStress) : analysis?.stress.highPct,
-                waiting: analysis?.stress.reason ?? "needs 7 sleep nights",
-                color: .appWarn
-            )
+            componentRow(title: "Hours vs. needed", symbol: "moon.zzz", percent: demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct)
+            Divider().overlay(Color.appLine)
+            componentRow(title: "Sleep consistency", symbol: "moon", percent: demo ? Double(SampleData.sleepConsistency) : analysis?.consistencyPct)
+            Divider().overlay(Color.appLine)
+            componentRow(title: "Sleep efficiency", symbol: "chart.bar", percent: demo ? Double(SampleData.sleepEfficiency) : reconciledEfficiencyPct)
+            Divider().overlay(Color.appLine)
+            componentRow(title: "High sleep stress", symbol: "gauge.with.needle", percent: demo ? Double(SampleData.highSleepStress) : analysis?.stress.highPct, lowerIsBetter: true)
+            HStack(spacing: 12) {
+                legendKey("Poor", .appWarn)
+                legendKey("Sufficient", .appMuted)
+                legendKey("Optimal", .appGood)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
         }
     }
 
-    private func componentRow(title: String, percent: Double?, waiting: String, color: Color = .appSleep) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            HStack {
-                Text(title)
-                    .font(StrapTypography.body(12, weight: .medium))
-                    .foregroundStyle(Color.appFG)
-                Spacer()
-                Text(percent.map { String(format: "%.0f%%", $0) } ?? "—")
-                    .font(StrapTypography.body(12, weight: .medium))
-                    .foregroundStyle(percent == nil ? Color.appMuted : Color.appFG)
-            }
-            MiniProgress(fraction: percent.map { min(max($0 / 100.0, 0), 1) }, color: color)
-            if !demo && percent == nil {
-                Text(waiting)
-                    .font(StrapTypography.body(10.5))
-                    .foregroundStyle(Color.appMuted)
-            }
+    private func legendKey(_ title: String, _ color: Color) -> some View {
+        HStack(spacing: 7) {
+            RoundedRectangle(cornerRadius: 1).fill(color).frame(width: 11, height: 3)
+            Text(title).font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
         }
-        .padding(.vertical, 7)
+    }
+
+    private func componentRow(title: String, symbol: String, percent: Double?, lowerIsBetter: Bool = false) -> some View {
+        let level = percent.map { lowerIsBetter ? ($0 <= 5 ? 2 : $0 <= 15 ? 1 : 0) : ($0 >= 80 ? 2 : $0 >= 70 ? 1 : 0) }
+        return HStack(spacing: 9) {
+            Image(systemName: symbol).font(.system(size: 16, weight: .light))
+                .foregroundStyle(Color.appMuted).frame(width: 21)
+            Text(title.uppercased()).font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+            Spacer(minLength: 4)
+            HStack(spacing: 2) {
+                ForEach(0..<3, id: \.self) { index in
+                    Rectangle().fill(level == index ? (index == 0 ? Color.appWarn : index == 1 ? Color.appMuted : Color.appGood) : Color.appRaised)
+                        .frame(width: 18, height: 4)
+                }
+            }
+            Text(percentText(percent)).font(StrapTypography.metric(20))
+                .frame(width: 46, alignment: .trailing)
+        }
+        .foregroundStyle(Color.appFG)
+        .frame(minHeight: 58)
     }
 
     // MARK: Last night
@@ -233,9 +267,9 @@ struct SleepAnalysisView: View {
     }
 
     private var lastNightPanel: some View {
-        Panel {
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text("Last night's sleep")
+                Text("Last Night's Sleep")
                     .font(StrapTypography.body(20, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
@@ -244,18 +278,18 @@ struct SleepAnalysisView: View {
                         Label("EDIT", systemImage: "pencil")
                             .font(StrapTypography.body(12, weight: .bold))
                     }
-                    .foregroundStyle(Color.appAccent)
+                    .foregroundStyle(Color.appFG)
                 }
             }
-
+            Text("Today vs. prior 30 days")
+                .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                .padding(.top, 4).padding(.bottom, 16)
+            Panel {
+            CardHead(title: "Hours of sleep")
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(demo ? SampleData.sleepHours : lastNightHours.map(CoachFormat.duration) ?? "—")
                     .font(StrapTypography.metric(34, weight: .bold))
                     .foregroundStyle(Color.appFG)
-                Text("HOURS OF SLEEP")
-                    .font(StrapTypography.body(9.5))
-                    .tracking(0.7)
-                    .foregroundStyle(Color.appMuted)
                 Spacer()
             }
             .padding(.bottom, 8)
@@ -276,11 +310,11 @@ struct SleepAnalysisView: View {
             if demo {
                 LineChart(
                     values: SampleData.sleepHRSeries,
-                    color: .appAccent,
-                    minY: 45,
-                    maxY: 75,
-                    height: 120,
-                    yLabels: ["75", "60", "45"],
+                    color: .appSleep,
+                    minY: 30,
+                    maxY: 110,
+                    height: 160,
+                    yLabels: ["110", "90", "70", "50", "30"],
                     xLabels: ["00:26", "07:33"]
                 )
                 .padding(.bottom, 4)
@@ -347,6 +381,7 @@ struct SleepAnalysisView: View {
             .font(StrapTypography.body(12, weight: .medium))
             .tint(Color.appMuted)
             .padding(.top, 14)
+            }
         }
     }
 
@@ -406,10 +441,10 @@ struct SleepAnalysisView: View {
 
     private var stagingPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            CardHead(title: "Sleep stages", trailing: stagingTrailing)
+
             if demo {
                 stageValues(demoStageMinutes)
-                Hint("Sample stages, not a reading. Live captures stage 30-second epochs from on-wrist heart rate, its 5- and 11-minute variability, wrist movement and R-R breathing regularity.")
+
             } else if let staging, !staging.segments.isEmpty {
                 if session?.isEdited == true {
                     Hint("Recalculated from retained sensor data for your edited bed/wake times.")
@@ -428,7 +463,9 @@ struct SleepAnalysisView: View {
                     .padding(.vertical, 12)
                 }
                 if let session {
-                    Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
+                    DisclosureGroup("About estimated stages") {
+                        Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
+                    }.font(StrapTypography.body(11)).tint(Color.appMuted).padding(.top, 12)
                 }
                 if let reason = staging.reason {
                     Hint("Partial stages only. \(reason). Missing intervals remain unclassified; the full-night sleep score is withheld.")
@@ -539,7 +576,7 @@ struct SleepAnalysisView: View {
                     HStack(spacing: 8) {
                         Circle()
                             .strokeBorder(stage.color, lineWidth: 2)
-                            .frame(width: 22, height: 22)
+                            .frame(width: 23, height: 23)
                         Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
                             .font(StrapTypography.body(12, weight: .bold))
                             .tracking(0.5)
@@ -551,7 +588,7 @@ struct SleepAnalysisView: View {
                             .font(StrapTypography.metric(19, weight: .bold))
                     }
                     SleepStageDistributionBar(fraction: fraction, color: stage.color)
-                        .frame(height: 20)
+                        .frame(height: 15)
                 }
             }
             if let session, session.unclassifiedHours > 0 {
@@ -586,41 +623,44 @@ struct SleepAnalysisView: View {
 
     private var needPanel: some View {
         Panel {
-            CardHead(
-                title: "Hours vs. needed",
-                trailing: (demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct)
-                    .map { String(format: "%.0f%%", $0) } ?? "—"
-            )
-            SectionTitle("Hours of sleep")
-            SplitBar(segments: [
-                SplitBar.Segment(fraction: hoursVsNeededFraction, color: .appSleep)
-            ])
-            .padding(.bottom, 8)
+            detailHead("Hours vs. needed", value: percentText(demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct))
             HStack {
-                splitValue(
-                    demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—",
-                    label: "asleep"
-                )
-                VStack(alignment: .trailing, spacing: 2) {
-                    Text(demo ? SampleData.needTotal : analysis.map { CoachFormat.duration($0.needHours) } ?? "—")
-                        .font(StrapTypography.body(15, weight: .medium))
-                        .foregroundStyle(Color.appFG)
-                    Text("needed").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
-                }
-                .frame(maxWidth: .infinity, alignment: .trailing)
-            }
-            .padding(.bottom, 10)
-            SectionTitle("Next night's plan — separate from last night's score")
-            needRow("Base need", demo: SampleData.needBase, live: CoachFormat.duration(store.settings.sleepNeedHours))
-            needRow("Debt allowance (max 2 h)", demo: SampleData.needDebt, live: debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
-            needRow("Tomorrow's plan", demo: SampleData.needTomorrow, live: "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
-            needRow("Next-night target", demo: SampleData.needTotal, live: CoachFormat.duration(
-                SleepCoach.recommendation(
-                    baseNeedHours: store.settings.sleepNeedHours, intent: store.settings.sleepIntent,
-                    debtHours: debt, wakeMinutes: store.settings.wakeTimeMinutes
-                ).needHours
-            ))
-            Hint("The score above compares last night's estimated asleep time with your base need. The future target adds a capped debt allowance and tomorrow's plan; incomplete nights never create debt.")
+                Text("HOURS OF SLEEP").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Spacer()
+                Text(demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—")
+                    .font(StrapTypography.metric(16))
+            }.padding(.bottom, 8)
+            GeometryReader { geometry in
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(LinearGradient(colors: [.appSleep.opacity(0.03), .appSleep], startPoint: .leading, endPoint: .trailing))
+                    .frame(width: geometry.size.width * CGFloat(hoursVsNeededFraction))
+            }.frame(height: 15).padding(.bottom, 12)
+            RoundedRectangle(cornerRadius: 3)
+                .fill(LinearGradient(colors: [.appRaised.opacity(0.1), .appMuted], startPoint: .leading, endPoint: .trailing))
+                .frame(height: 15)
+            HStack {
+                Text("SLEEP NEEDED").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Spacer()
+                Text(demo ? SampleData.needTotal : analysis.map { CoachFormat.duration($0.needHours) } ?? "—")
+                    .font(StrapTypography.metric(16))
+            }.padding(.top, 6).padding(.bottom, 18)
+            VStack(spacing: 8) {
+                needKey("Healthy minimum", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
+                needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
+                needKey("Tomorrow's plan", color: .appAccent, value: demo ? SampleData.needTomorrow : "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
+            }.padding(14).background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
+            DisclosureGroup("About sleep need") {
+                Hint("The last-night score uses base need. Debt allowance and tomorrow's plan apply to the next night; incomplete nights never create debt.")
+            }.font(StrapTypography.body(11)).tint(Color.appMuted).padding(.top, 12)
+        }.foregroundStyle(Color.appFG)
+    }
+
+    private func needKey(_ title: String, color: Color, value: String) -> some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 11, height: 11)
+            Text(title).font(StrapTypography.body(12))
+            Spacer()
+            Text(value).font(StrapTypography.metric(13))
         }
     }
 
@@ -657,16 +697,12 @@ struct SleepAnalysisView: View {
 
     private var consistencyPanel: some View {
         Panel {
-            CardHead(
-                title: "Sleep consistency",
-                trailing: (demo ? Double(SampleData.sleepConsistency) : analysis?.consistencyPct)
-                    .map { String(format: "%.0f%%", $0) } ?? "—"
-            )
+            detailHead("Sleep consistency", value: percentText(demo ? Double(SampleData.sleepConsistency) : analysis?.consistencyPct))
             if demo {
                 BedWakeChart(
                     spans: Array(SampleData.weeklyBedWake.suffix(5)),
                     labels: Array(SampleData.weekDays.suffix(5)),
-                    height: 140
+                    height: 185
                 )
                 Hint("Dashed lines mark the grid; a night counts when both bed and wake sit within ±60 min of your medians.")
             } else if liveBedWake.count >= 2 {
@@ -674,7 +710,7 @@ struct SleepAnalysisView: View {
                     spans: liveBedWake,
                     labels: liveNights.map { weekdayLabel(forUnix: $0.startUnix) },
                     axisMax: 960,
-                    height: 140
+                    height: 185
                 )
                 Hint("Bars run from 18:00; a night counts when both bed and wake sit within ±60 min of your circular medians.")
             } else {
@@ -684,38 +720,67 @@ struct SleepAnalysisView: View {
         }
     }
 
+    private func detailHead(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(title.uppercased()).font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
+                Spacer()
+                Button { showMetricInfo = true } label: {
+                    Image(systemName: "info.circle").foregroundStyle(Color.appMuted)
+                }.accessibilityLabel("About \(title)")
+            }
+            Text(value).font(StrapTypography.metric(24))
+        }.foregroundStyle(Color.appFG).padding(.bottom, 12)
+    }
+
+    private var efficiencyPanel: some View {
+        Panel {
+            detailHead("Sleep efficiency", value: percentText(demo ? Double(SampleData.sleepEfficiency) : reconciledEfficiencyPct))
+            HStack {
+                Text("ASLEEP").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Spacer()
+                Text(demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—").font(StrapTypography.metric(16))
+            }.padding(.bottom, 8)
+            if let session { SleepEfficiencyTimeline(session: session) }
+            else if demo {
+                VStack(spacing: 12) {
+                    SleepStageDistributionBar(fraction: 0.84, color: .appSleep)
+                    SleepStageDistributionBar(fraction: 0.16, color: Color(hex: 0xCCCCCC))
+                }.frame(height: 42)
+            } else { EmptyState(title: "Needs an overnight capture", detail: "Recorded asleep and awake intervals appear here.") }
+            HStack {
+                Text("AWAKE").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Spacer()
+                Text(demo ? "1:07" : awakeHours.map(CoachFormat.duration) ?? "—").font(StrapTypography.metric(16))
+            }.padding(.top, 8)
+            Divider().overlay(Color.appLine).padding(.vertical, 20)
+            HStack {
+                Text("MOVEMENT BOUTS").font(StrapTypography.body(11, weight: .bold)).tracking(0.7)
+                Spacer()
+                Text(wakeEventText).font(StrapTypography.metric(16))
+            }
+        }.foregroundStyle(Color.appFG)
+    }
+
     // MARK: Sleep stress detail
 
     private var stressDetailPanel: some View {
         Panel {
-            CardHead(
-                title: "Sleep stress",
-                trailing: demo ? "\(SampleData.highSleepStress)% high" : highSleepStressText
-            )
+            detailHead("Sleep stress", value: percentText(demo ? Double(SampleData.highSleepStress) : analysis?.stress.highPct))
             if demo {
                 LineChart(
                     values: SampleData.sleepStressSeries,
                     color: .appGood,
                     minY: 0, maxY: 3,
-                    height: 110,
-                    yLabels: ["3.0", "1.5", "0.0"],
+                    height: 200,
+                    yLabels: ["3.0", "2.0", "1.0", "0.0"],
                     xLabels: ["1:28 AM", "8:22 AM"]
                 )
                 .padding(.bottom, 8)
-                HStack(spacing: 8) {
-                    stressSplit("0:00", "high · 0%", color: .appHigh)
-                    stressSplit("0:19", "medium · 5%", color: .appWarn)
-                    stressSplit("6:34", "low · 95%", color: .appGood)
-                }
-            } else if let stress = analysis?.stress, stress.lowPct != nil {
-                SplitBar(segments: stressSegments(stress))
-                    .padding(.bottom, 10)
-                HStack(spacing: 8) {
-                    stressSplit(percentText(stress.highPct), "high", color: .appHigh)
-                    stressSplit(percentText(stress.mediumPct), "medium", color: .appWarn)
-                    stressSplit(percentText(stress.lowPct), "low", color: .appGood)
-                }
-                Hint("\(stress.windows) five-minute sleep windows scored against your own sleep baseline.")
+                stressDistribution(high: 0, medium: 5, low: 95)
+            } else if let stress = analysis?.stress, let low = stress.lowPct {
+                stressDistribution(high: stress.highPct ?? 0, medium: stress.mediumPct ?? 0, low: low)
+                Hint("\(stress.windows) five-minute sleep windows scored against your own sleep baseline. A timestamped overnight stress curve is not retained.")
             } else {
                 EmptyState(
                     title: "Needs 7 sleep nights of baseline",
@@ -724,6 +789,25 @@ struct SleepAnalysisView: View {
                 )
             }
         }
+    }
+
+    private func stressDistribution(high: Double, medium: Double, low: Double) -> some View {
+        VStack(spacing: 22) {
+            stressDistributionRow("HIGH", percent: high, color: .appWarn)
+            stressDistributionRow("MEDIUM", percent: medium, color: .appGood)
+            stressDistributionRow("LOW", percent: low, color: Color(hex: 0x65ADE0))
+        }.padding(.top, 20)
+    }
+
+    private func stressDistributionRow(_ title: String, percent: Double, color: Color) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                Text(title).font(StrapTypography.body(11, weight: .bold)).tracking(0.7)
+                Text(percentText(percent)).font(StrapTypography.metric(11)).foregroundStyle(color)
+                Spacer()
+            }
+            SleepStageDistributionBar(fraction: percent / 100, color: color).frame(height: 15)
+        }.foregroundStyle(Color.appFG)
     }
 
     private var highSleepStressText: String {
@@ -754,73 +838,139 @@ struct SleepAnalysisView: View {
     // MARK: Weekly trends
 
     private var weeklyPanel: some View {
-        Panel {
-            SectionTitle("Weekly trends")
-            if demo {
-                trendBlock("Sleep performance", "%") {
-                    BarChart(values: SampleData.weeklySleepPerformance, labels: SampleData.weekDays,
-                             maxValue: 100, color: .appSleep, height: 110)
-                }
-                trendBlock("Hours vs. needed", "hours") {
-                    ZStack {
-                        LineChart(values: SampleData.weeklyHoursNeeded, color: .appMuted,
-                                  minY: 0, maxY: 12, height: 110)
-                        LineChart(values: SampleData.weeklyHoursSleep, color: .appSleep,
-                                  minY: 0, maxY: 12, height: 110,
-                                  yLabels: ["12h", "8h", "4h"], xLabels: SampleData.weekDays)
-                    }
-                    ChartLegend(items: [("asleep", .appSleep), ("needed", .appMuted)])
-                }
-                trendBlock("Hours vs. needed", "%") {
-                    BarChart(values: SampleData.weeklyHoursVsNeeded, labels: SampleData.weekDays,
-                             maxValue: 100, color: .appSleep, height: 100)
-                }
-                trendBlock("Consistency", "% within ±60 min") {
-                    BarChart(values: SampleData.weeklyConsistency, labels: SampleData.weekDays,
-                             maxValue: 100, color: .appSleep, height: 100)
-                }
-                trendBlock("Time in bed", "bed → wake") {
-                    BedWakeChart(spans: SampleData.weeklyBedWake, labels: SampleData.weekDays, height: 150)
-                }
-                trendBlock("Efficiency", "% quiet in bed") {
-                    LineChart(values: SampleData.weeklyEfficiency, color: .appSleep,
-                              minY: 80, maxY: 100, height: 110,
-                              yLabels: ["100%", "90%", "80%"], xLabels: SampleData.weekDays)
-                }
-                trendBlock("Sleep debt", "running shortfall") {
-                    BarChart(values: SampleData.weeklyDebtMinutes, labels: SampleData.weekDays,
-                             maxValue: 150, color: .appWarn, height: 100)
-                }
-                trendBlock("Sleep stress", "share of night") {
-                    StackedBarChart(bars: SampleData.weeklyStressSegments,
-                                    colors: [.appHigh, .appWarn, .appGood],
-                                    labels: SampleData.weekDays, maxValue: 100, height: 110)
-                    ChartLegend(items: [("low", .appGood), ("medium", .appWarn), ("high", .appHigh)])
-                }
-                Hint("Every series here comes from our own local rules. The stage estimate above is a 30-second approximation, not a PSG reading.")
-            } else if nights.count >= 2 {
-                trendBlock("Hours vs. needed", "% of need") {
-                    BarChart(
-                        values: recentNights.map { night in
-                            min(100, 100.0 * night.actualHours / max(night.neededHours, 0.1))
-                        },
-                        labels: recentNights.map { weekdayLabel(forDayKey: $0.dateKey) },
-                        maxValue: 100, color: .appSleep, height: 110
-                    )
-                }
-                trendBlock("Sleep debt", "running shortfall") {
-                    BarChart(
-                        values: liveDebtMinutes,
-                        labels: recentNights.map { weekdayLabel(forDayKey: $0.dateKey) },
-                        maxValue: max(60, (liveDebtMinutes.max() ?? 0) * 1.25),
-                        color: .appWarn, height: 100
-                    )
-                }
-                Hint("Both charts come from your recorded nights: hours vs. need, and the capped running shortfall our coach uses. The night's stage estimate and hypnogram sit above.")
-            } else {
-                EmptyState(title: "needs more nights",
-                           detail: "The trends fill in as overnight captures accumulate; nothing is back-filled with guesses.")
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Weekly Trends").font(StrapTypography.body(20, weight: .semibold))
+                .padding(.vertical, 16)
+            weeklyCard("Sleep performance") {
+                SleepTrendChart(dates: weekDates, values: weekPerformance)
             }
+            weeklyCard("Hours vs. needed (hours)") {
+                ChartLegend(items: [("HOURS OF SLEEP", .appSleep), ("SLEEP NEEDED", .appGood)])
+                SleepTrendChart(dates: weekDates, values: weekSleep, secondary: weekNeed,
+                                style: .line, maximum: 12, format: CoachFormat.duration)
+            }
+            weeklyCard("Hours vs. needed (%)") {
+                SleepTrendChart(dates: weekDates, values: zip(weekSleep, weekNeed).map { sleep, need in
+                    guard let sleep, let need, need > 0 else { return nil }
+                    return min(100, sleep / need * 100)
+                })
+            }
+            weeklyCard("Restorative sleep (hours)") {
+                ChartLegend(items: [("DEEP SLEEP", SleepStage.deep.color), ("REM SLEEP", SleepStage.rem.color)])
+                SleepTrendChart(dates: weekDates, values: weekStage(.rem), secondary: weekStage(.deep),
+                                style: .stacked, maximum: 6, color: SleepStage.rem.color,
+                                secondaryColor: SleepStage.deep.color, format: CoachFormat.duration)
+            }
+            weeklyCard("Sleep consistency") {
+                SleepTrendChart(dates: weekDates, values: weekConsistency)
+            }
+            weeklyCard("Time in bed") {
+                SleepTrendChart(dates: weekDates, values: weekBedWake.map { $0?.0 },
+                                secondary: weekBedWake.map { $0?.1 }, style: .range,
+                                maximum: 960, format: bedClock)
+            }
+            weeklyCard("Sleep efficiency") {
+                SleepTrendChart(dates: weekDates, values: weekEfficiency, style: .line, maximum: 100, minimum: 75)
+            }
+            weeklyCard("Sleep debt") {
+                SleepTrendChart(dates: weekDates, values: weekDebt, maximum: max(180, (weekDebt.compactMap { $0 }.max() ?? 0) * 1.2),
+                                format: { CoachFormat.duration($0 / 60) })
+            }
+            weeklyCard("Sleep stress") {
+                ChartLegend(items: [("HIGH", .appWarn), ("MEDIUM", .appGood), ("LOW", Color(hex: 0x65ADE0))])
+                if demo {
+                    SleepTrendChart(dates: weekDates,
+                                    values: SampleData.weeklyStressSegments.map { $0[2] },
+                                    secondary: SampleData.weeklyStressSegments.map { $0[1] },
+                                    tertiary: SampleData.weeklyStressSegments.map { $0[0] },
+                                    style: .stacked, color: Color(hex: 0x65ADE0), format: { _ in "" })
+                } else {
+                    EmptyState(title: "Nightly stress history unavailable", detail: "The latest night's baseline-based stress split appears above. Historical stress windows have not been retained.")
+                }
+            }
+        }.foregroundStyle(Color.appFG)
+    }
+
+    private func weeklyCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
+        Panel {
+            CardHead(title: title)
+            content()
+        }
+    }
+
+    private var weekDates: [Date] {
+        let end = demo ? Date() : (nights.sorted { $0.dateKey < $1.dateKey }.last.flatMap { night in
+            let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
+            return formatter.date(from: night.dateKey)
+        } ?? Date())
+        return (-6...0).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Calendar.current.startOfDay(for: end)) }
+    }
+
+    private func dayKey(_ date: Date) -> String { JournalStore.dayKey(for: date) }
+    private var weekSessions: [SleepSession?] {
+        weekDates.map { date in
+            (store.band.summary?.sleepSessions ?? []).filter {
+                Calendar.current.isDate(Date(timeIntervalSince1970: TimeInterval($0.endUnix)), inSameDayAs: date)
+            }.max { $0.timeInBedHours < $1.timeInBedHours }
+        }
+    }
+    private var weekSleep: [Double?] {
+        demo ? SampleData.weeklyHoursSleep.map(Optional.some) : weekDates.map { date in
+            nights.first { $0.dateKey == dayKey(date) }?.actualHours
+        }
+    }
+    private var weekNeed: [Double?] {
+        demo ? SampleData.weeklyHoursNeeded.map(Optional.some) : weekDates.map { date in
+            nights.first { $0.dateKey == dayKey(date) }?.neededHours
+        }
+    }
+    private var weekPerformance: [Double?] {
+        demo ? SampleData.weeklySleepPerformance.map(Optional.some) : weekDates.map { date in
+            store.band.days.first { $0.dateKey == dayKey(date) }?.sleepPerformancePct
+        }
+    }
+    private var weekEfficiency: [Double?] {
+        demo ? SampleData.weeklyEfficiency.map(Optional.some) : weekSessions.map { $0?.efficiencyPct }
+    }
+    private var weekConsistency: [Double?] {
+        if demo { return SampleData.weeklyConsistency.map(Optional.some) }
+        return weekDates.map { date in
+            let spans = (store.band.summary?.sleepSessions ?? []).filter {
+                $0.isComplete && $0.endUnix < Int(date.addingTimeInterval(86400).timeIntervalSince1970)
+            }.suffix(7).map { NightSpan(startUnix: $0.startUnix, endUnix: $0.endUnix) }
+            guard weekSessions[weekDates.firstIndex(of: date) ?? 0] != nil else { return nil }
+            return SleepReport.consistency(nights: spans).pct
+        }
+    }
+    private func weekStage(_ stage: SleepStage) -> [Double?] {
+        if demo {
+            let deep = [1.55, 1.77, 1.75, 1.52, 1.67, 1.63, 1.78]
+            let rem = [1.25, 1.30, 1.38, 1.15, 1.33, 1.40, 1.55]
+            return (stage == .deep ? deep : rem).map(Optional.some)
+        }
+        return weekSessions.map { session in
+            guard let session, session.isComplete else { return nil }
+            return (stage == .deep ? session.staging.deepMinutes : session.staging.remMinutes) / 60
+        }
+    }
+    private var weekBedWake: [(Double, Double)?] {
+        if demo { return SampleData.weeklyBedWake.map { ($0.0 + 180, $0.1 + 180) } }
+        return weekSessions.map { session in
+            guard let session else { return nil }
+            let bed = Double((SleepReport.minutesOfDay(session.startUnix) - 1080 + 1440) % 1440)
+            return (bed, bed + session.timeInBedHours * 60)
+        }
+    }
+    private func bedClock(_ minutes: Double) -> String {
+        let clock = (Int(minutes) + 1080) % 1440
+        return "\(clock / 60 % 12 == 0 ? 12 : clock / 60 % 12):\(String(format: "%02d", clock % 60))"
+    }
+    private var weekDebt: [Double?] {
+        if demo { return SampleData.weeklyDebtMinutes.map(Optional.some) }
+        return weekDates.map { date in
+            let recorded = nights.filter { $0.dateKey <= dayKey(date) }
+            guard recorded.contains(where: { $0.dateKey == dayKey(date) }) else { return nil }
+            return SleepCoach.sleepDebt(nights: recorded).map { $0 * 60 }
         }
     }
 
@@ -890,8 +1040,8 @@ private extension SleepStage {
         switch self {
         case .wake: return Color(red: 0.78, green: 0.79, blue: 0.80)
         case .light: return Color(hex: 0xABA4EE)
-        case .deep: return Color(hex: 0xED84F6)
-        case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
+        case .deep: return Color(hex: 0xF58DF7)
+        case .rem: return Color(hex: 0xA954E8)
         }
     }
 }
