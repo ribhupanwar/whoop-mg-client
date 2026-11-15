@@ -25,8 +25,10 @@ enum StrapTypography {
         let coreText: CTFont
         let swiftUI: Font
         init(_ descriptor: CTFontDescriptor, size: CGFloat) {
-            coreText = CTFontCreateWithFontDescriptor(descriptor, size, nil)
-            swiftUI = Font(coreText)
+            let font = CTFontCreateWithFontDescriptor(descriptor, size, nil)
+            coreText = font
+            swiftUI = Font(font)
+            super.init()
         }
     }
     private static let cache = NSCache<NSString, ResolvedFont>()
