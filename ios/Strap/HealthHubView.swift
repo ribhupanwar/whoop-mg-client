@@ -23,8 +23,7 @@ struct HealthHubView: View {
                 Hint("Health monitor and stress monitor are local estimates, not medical devices, and cannot diagnose or manage conditions. Consult your doctor for health concerns.")
             }
         }
-        .navigationTitle("Health")
-        .navigationBarTitleDisplayMode(.inline)
+        .strapTabTypography("Health")
     }
 
     // MARK: Baseline progress
@@ -89,7 +88,7 @@ struct HealthHubView: View {
             VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     Text("HEALTH MONITOR")
-                        .font(StrapTypography.body(10.5, weight: .medium)).tracking(0.8)
+                        .font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
@@ -151,7 +150,7 @@ struct HealthHubView: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     Text("STRESS MONITOR")
-                        .font(StrapTypography.body(10.5, weight: .medium)).tracking(0.8)
+                        .font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
@@ -163,7 +162,7 @@ struct HealthHubView: View {
                             .foregroundStyle(Color.appMuted)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
                             Text(demo ? SampleData.highStressToday : stressText)
-                                .font(StrapTypography.body(26, weight: .medium))
+                                .font(StrapTypography.metric(26, weight: .bold))
                                 .foregroundStyle(Color.appFG)
                             Text(demo ? "hrs" : "SD")
                                 .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)

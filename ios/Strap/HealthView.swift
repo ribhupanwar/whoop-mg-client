@@ -36,7 +36,7 @@ struct HealthView: View {
             SectionTitle("Heart rate")
             HStack(alignment: .bottom, spacing: 10) {
                 Text(lastHR.map { "\($0)" } ?? "—")
-                    .font(StrapTypography.body(36, weight: .medium))
+                    .font(StrapTypography.metric(36, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(freshLiveHR != nil ? "bpm · live" : "bpm · waiting for live")

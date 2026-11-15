@@ -14,8 +14,7 @@ struct PlanView: View {
                 sleepTargetPanel
             }
         }
-        .navigationTitle("Plan")
-        .navigationBarTitleDisplayMode(.inline)
+        .strapTabTypography("Plan")
     }
 
     private var outlookBox: some View {
@@ -73,7 +72,7 @@ struct PlanView: View {
     private func planRow(name: String, status: String) -> some View {
         HStack(spacing: 10) {
             Text(name)
-                .font(StrapTypography.body(12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(status)
@@ -91,7 +90,7 @@ struct PlanView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(CoachFormat.duration(store.settings.sleepNeedHours))
-                        .font(StrapTypography.body(21, weight: .medium))
+                        .font(StrapTypography.metric(21, weight: .bold))
                         .foregroundStyle(Color.appFG)
                     Text("HOURS\nNEEDED")
                         .font(StrapTypography.body(9.5))
@@ -104,7 +103,7 @@ struct PlanView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.planActualSleep : store.band.lastNightHours.map(CoachFormat.duration) ?? "—")
-                        .font(StrapTypography.body(21, weight: .medium))
+                        .font(StrapTypography.metric(21, weight: .bold))
                         .foregroundStyle(Color.appFG)
                     Text("LAST NIGHT\nACTUAL")
                         .font(StrapTypography.body(9.5))

@@ -50,6 +50,7 @@ struct RootView: View {
                 HomeView(openPlan: { tab = .plan })
                     .strapDestinations()
             }
+            .font(StrapTypography.body(15))
             .tabItem { Label(AppTab.home.label, systemImage: AppTab.home.icon) }
             .tag(AppTab.home)
 
@@ -57,6 +58,7 @@ struct RootView: View {
                 HealthHubView()
                     .strapDestinations()
             }
+            .font(StrapTypography.body(15))
             .tabItem { Label(AppTab.health.label, systemImage: AppTab.health.icon) }
             .tag(AppTab.health)
 
@@ -64,6 +66,7 @@ struct RootView: View {
                 TrainView()
                     .strapDestinations()
             }
+            .font(StrapTypography.body(15))
             .tabItem { Label(AppTab.train.label, systemImage: AppTab.train.icon) }
             .tag(AppTab.train)
 
@@ -71,6 +74,7 @@ struct RootView: View {
                 PlanView()
                     .strapDestinations()
             }
+            .font(StrapTypography.body(15))
             .tabItem { Label(AppTab.plan.label, systemImage: AppTab.plan.icon) }
             .tag(AppTab.plan)
 
@@ -78,6 +82,7 @@ struct RootView: View {
                 MoreView()
                     .strapDestinations()
             }
+            .font(StrapTypography.body(15))
             .tabItem { Label(AppTab.more.label, systemImage: AppTab.more.icon) }
             .tag(AppTab.more)
         }

@@ -121,6 +121,7 @@ struct Screen<Content: View>: View {
             .padding(.bottom, 28)
         }
         .scrollIndicators(.hidden)
+        .font(StrapTypography.body(15))
         .background(
             LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
                            startPoint: .top, endPoint: .bottom)
@@ -677,7 +678,7 @@ struct MetricTile: View {
                 .frame(minHeight: 27, alignment: .topLeading)
             HStack(alignment: .firstTextBaseline, spacing: 3) {
                 Text(value)
-                    .font(StrapTypography.body(25, weight: .medium))
+                    .font(StrapTypography.metric(25, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 if let unit {
                     Text(unit)
@@ -712,7 +713,7 @@ struct StatCard: View {
                 .tracking(0.7)
                 .foregroundStyle(Color.appMuted)
             Text(value)
-                .font(StrapTypography.body(20, weight: .medium))
+                .font(StrapTypography.metric(20, weight: .bold))
                 .foregroundStyle(Color.appFG)
             if let detail {
                 Text(detail)
@@ -837,5 +838,32 @@ struct StressGauge: View {
                 clockwise: false
             )
         }
+    }
+}
+
+/// Each tab owns its navigation bar, so declare its purchased-font title in
+/// SwiftUI rather than relying on UIKit appearance or the outer TabView.
+private struct StrapTabTypography: ViewModifier {
+    let title: String
+    func body(content: Content) -> some View {
+        content
+            .font(StrapTypography.body(15))
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .principal) {
+                    Text(title.uppercased())
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(1)
+                        .foregroundStyle(Color.appFG)
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
+    }
+}
+
+extension View {
+    func strapTabTypography(_ title: String) -> some View {
+        modifier(StrapTabTypography(title: title))
     }
 }

@@ -37,6 +37,7 @@ struct MoreView: View {
                     } label: {
                         Label(store.band.isConnected ? "Sync now" : "Connect & sync",
                               systemImage: "arrow.triangle.2.circlepath")
+                            .font(StrapTypography.body(14, weight: .semibold))
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
@@ -86,8 +87,7 @@ struct MoreView: View {
                 }
             }
         }
-        .navigationTitle("More")
-        .navigationBarTitleDisplayMode(.inline)
+        .strapTabTypography("More")
     }
 
     private func moreRow(_ title: String, icon: String) -> some View {
@@ -96,7 +96,7 @@ struct MoreView: View {
                 .frame(width: 22)
                 .foregroundStyle(Color.appAccent)
             Text(title)
-                .font(StrapTypography.body(13))
+                .font(StrapTypography.body(13, weight: .semibold))
                 .foregroundStyle(Color.appFG)
             Spacer()
             Image(systemName: "chevron.right")

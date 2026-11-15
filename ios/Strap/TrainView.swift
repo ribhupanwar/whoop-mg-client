@@ -40,8 +40,7 @@ struct TrainView: View {
                 gymPanel
             }
         }
-        .navigationTitle("Train")
-        .navigationBarTitleDisplayMode(.inline)
+        .strapTabTypography("Train")
         .onAppear { seedIfNeeded() }
     }
 
@@ -62,7 +61,7 @@ struct TrainView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(StrapTypography.body(15))
+                    .font(StrapTypography.metric(18, weight: .bold))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
@@ -75,7 +74,7 @@ struct TrainView: View {
                     .keyboardType(.decimalPad)
                     .textFieldStyle(.plain)
                     .multilineTextAlignment(.trailing)
-                    .font(StrapTypography.body(15))
+                    .font(StrapTypography.metric(18, weight: .bold))
                     .foregroundStyle(Color.appFG)
                     .frame(width: 84)
                     .padding(.vertical, 6)
@@ -147,7 +146,7 @@ struct TrainView: View {
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(range)
-                .font(StrapTypography.body(12, weight: .medium))
+                .font(StrapTypography.metric(15, weight: .bold))
                 .foregroundStyle(Color.appFG)
         }
         .padding(.horizontal, 8)
