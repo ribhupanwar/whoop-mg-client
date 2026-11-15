@@ -13,9 +13,9 @@ final class BandHapticsTests: XCTestCase {
         XCTAssertEqual(Array(decoded.prefix(payload.count)), payload)
         XCTAssertEqual(decoded.count % 4, 0)
     }
-    func testBuzzIsOneBoundedPulseAndCancelOnlyTargetsOurSlot() {
-        XCTAssertEqual(BandHaptics.buzzBody, [1, 0x2F, 0x98, 0, 0, 0, 0, 0, 0, 0, 0, 1])
-        XCTAssertEqual(BandHaptics.disableBody, [2, 1])
+    func testBuzzIsOneBoundedPulseAndCancelUsesCapturedGen5Form() {
+        XCTAssertEqual(BandHaptics.buzzBody, [1, 0x2F, 0x98, 0, 0, 0, 0, 0, 0, 0, 0, 0])
+        XCTAssertEqual(BandHaptics.disableBody, [2, 0xFF])
         XCTAssertNil(BandHaptics.alarmBody(at: Date(timeIntervalSince1970: -1)))
     }
     func testNextWakeMovesPastAlreadyElapsedAlarmAndSurvivesDST() throws {

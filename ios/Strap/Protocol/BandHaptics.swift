@@ -1,7 +1,7 @@
 import Foundation
 
 /// Gen5 haptic wire facts documented by the Goose/NOOP interoperability work:
-/// https://github.com/DX23876/goose/blob/main/.planning/seeds/haptic-buzz-primitive.md
+/// https://github.com/ryanbr/noop/blob/main/Packages/WhoopProtocol/Sources/WhoopProtocol/HapticPayloads.swift
 /// https://github.com/DX23876/goose/blob/main/.planning/seeds/smart-alarm-strap-haptic.md
 /// An ATT write is transport delivery, not proof that the motor fired.
 enum BandHaptics {
@@ -11,9 +11,10 @@ enum BandHaptics {
     static let alarmID: UInt8 = 1
     static let waveform: [UInt8] = [0x2F, 0x98, 0, 0, 0, 0, 0, 0]
 
-    static var buzzBody: [UInt8] { [1] + waveform + [0, 0, 1] }
-    // Cancel our own alarm slot rather than clearing all band alarms.
-    static var disableBody: [UInt8] { [2, alarmID] }
+    // The loop byte counts repeats after the initial pulse: zero = one buzz.
+    static var buzzBody: [UInt8] { [1] + waveform + [0, 0, 0] }
+    // Captured Gen5 cancellation form; per-slot cancellation is unverified.
+    static var disableBody: [UInt8] { [2, 0xFF] }
 
     static func alarmBody(at date: Date) -> [UInt8]? {
         let seconds = floor(date.timeIntervalSince1970)
