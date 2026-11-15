@@ -9,7 +9,7 @@ struct MoreView: View {
         Screen {
             VStack(alignment: .leading, spacing: 14) {
                 Text("More")
-                    .font(StrapTypography.body(26, weight: .semibold))
+                    .font(StrapTypography.body(26, weight: .bold))
                     .foregroundStyle(Color.appFG)
 
                 Panel {

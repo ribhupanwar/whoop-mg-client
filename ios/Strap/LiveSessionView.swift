@@ -56,7 +56,7 @@ struct LiveSessionView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Stop & save") { stopAndSave() }
-                        .font(StrapTypography.body(17, weight: .semibold))
+                        .font(StrapTypography.body(17, weight: .bold))
                         .foregroundStyle(Color.appAccent)
                         .disabled(!store.band.isLiveSession || elapsedSeconds(now: Date()) < 10)
                 }

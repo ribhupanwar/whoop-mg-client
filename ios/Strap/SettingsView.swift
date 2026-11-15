@@ -219,7 +219,7 @@ struct SettingsView: View {
             save()
             profileEditing = false
         }
-        .font(StrapTypography.body(11, weight: .semibold))
+        .font(StrapTypography.body(11, weight: .bold))
         .foregroundStyle(Color.appAccent)
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -261,7 +261,7 @@ struct SettingsView: View {
                         store.connectBand()
                     }
                 }
-                .font(StrapTypography.body(12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .bold))
                 .foregroundStyle(Color.appAccent)
             }
             .padding(.horizontal, 12)
@@ -309,7 +309,7 @@ struct SettingsView: View {
                                         .foregroundStyle(Color.appGood)
                                 }
                                 Text("Connect")
-                                    .font(StrapTypography.body(11, weight: .semibold))
+                                    .font(StrapTypography.body(11, weight: .bold))
                                     .foregroundStyle(Color.appAccent)
                             }
                             .padding(.vertical, 8)
@@ -365,7 +365,7 @@ struct SettingsView: View {
             } label: {
                 Label(store.band.isConnected ? "Sync band now" : "Connect & sync band",
                       systemImage: "arrow.triangle.2.circlepath")
-                    .font(StrapTypography.body(13, weight: .semibold))
+                    .font(StrapTypography.body(13, weight: .bold))
                     .foregroundStyle(Color.appAccent)
             }
             .padding(.top, 10)
@@ -508,7 +508,7 @@ struct SettingsView: View {
                 store.setHealthKit(true)
             } label: {
                 Label("Connect Apple Health", systemImage: "heart.text.square")
-                    .font(StrapTypography.body(14, weight: .semibold))
+                    .font(StrapTypography.body(14, weight: .bold))
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.vertical, 10)
             }
@@ -563,7 +563,7 @@ struct SettingsView: View {
             Button("Import WHOOP data ZIP or CSV") {
                 showWhoopImporter = true
             }
-            .font(StrapTypography.body(12, weight: .semibold))
+            .font(StrapTypography.body(12, weight: .bold))
             .foregroundStyle(Color.appAccent)
             Text(whoopImportStatus)
                 .font(StrapTypography.body(11))

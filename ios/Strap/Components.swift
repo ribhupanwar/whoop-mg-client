@@ -87,7 +87,10 @@ enum StrapTypography {
     }
 
     static func metric(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-        let file = "DINPro-\(weightName(weight))"
+        // DIN Pro ships Regular, Light and Bold. Medium/Semibold must not
+        // silently fall back to Regular for prominent scores and durations.
+        let face = (weight == .medium || weight == .semibold) ? "Bold" : weightName(weight)
+        let file = "DINPro-\(face)"
         return (bundled(file, size: size) ?? bundled("DINPro-Regular", size: size)
                 ?? .system(size: size, weight: weight)).monospacedDigit()
     }
@@ -130,7 +133,7 @@ struct DemoBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text("Design preview â€” sample data")
-                .font(StrapTypography.body(12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .bold))
                 .foregroundStyle(Color.appFG)
             Text("Values marked sample are invented to show the finished layout. They are not your measurements.")
                 .font(StrapTypography.body(11.5))
@@ -196,7 +199,7 @@ struct CardHead: View {
     var body: some View {
         HStack {
             Text(title.uppercased())
-                .font(StrapTypography.body(12, weight: .semibold))
+                .font(StrapTypography.body(12, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appFG)
             Spacer()
@@ -219,7 +222,7 @@ struct SectionTitle: View {
 
     var body: some View {
         Text(text.uppercased())
-            .font(StrapTypography.body(12, weight: .semibold))
+            .font(StrapTypography.body(12, weight: .bold))
             .tracking(0.8)
             .foregroundStyle(Color.appMuted)
             .padding(.bottom, 8)
