@@ -126,7 +126,11 @@ struct RootView: View {
                     Button { tab = item } label: {
                         VStack(spacing: 4) {
                             Image(systemName: item.icon).font(.system(size: 19, weight: .medium))
-                            Text(item.label).font(StrapTypography.body(11, weight: tab == item ? .bold : .medium))
+                            Text(item.label)
+                                .font(StrapTypography.body(11, weight: tab == item ? .bold : .medium))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                                .allowsTightening(true)
                         }
                         .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity).frame(height: 52)
