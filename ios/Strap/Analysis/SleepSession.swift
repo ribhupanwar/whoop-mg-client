@@ -58,7 +58,8 @@ struct SleepSession: Codable, Equatable {
     /// Resolve each edit once, replacing overlapping detector fragments rather
     /// than summing the same corrected night twice.
     static func makeAll(
-        samples: [V18Sample], periods: [SleepPeriod], overrides: [String: [Int]]
+        samples: [V18Sample], periods: [SleepPeriod], overrides: [String: [Int]],
+        cache: HistoryAnalysisCache? = nil, progress: ((Int, Int, Bool) -> Void)? = nil
     ) -> [SleepSession] {
         let ordered = periods.sorted { $0.endUnix < $1.endUnix }
         var assigned: [Int: (distance: Int, times: [Int])] = [:]
@@ -102,7 +103,9 @@ struct SleepSession: Codable, Equatable {
             let start = edit?.first ?? period.startUnix
             let end = edit?.last ?? (period.endUnix + 1)
             guard seen.insert("\(start):\(end)").inserted else { continue }
-            results.append(make(samples: samples, period: period, correctedTimes: edit))
+            let resolved = cache?.night(samples: samples, period: period, correctedTimes: edit)
+            results.append(resolved?.0 ?? make(samples: samples, period: period, correctedTimes: edit))
+            progress?(results.count, ordered.count, resolved?.1 ?? false)
         }
         return results.sorted { $0.endUnix < $1.endUnix }
     }
@@ -112,7 +115,8 @@ struct SleepSession: Codable, Equatable {
     /// or the user explicitly changed its bounds.
     static func retainingUncovered(
         previous: [SleepSession], fresh: [SleepSession], coverageStart: Int?, coverageEnd: Int?,
-        samples: [V18Sample] = [], overrides: [String: [Int]] = [:]
+        samples: [V18Sample] = [], overrides: [String: [Int]] = [:],
+        cache: HistoryAnalysisCache? = nil
     ) -> [SleepSession] {
         // No archive coverage must not erase a previously saved canonical night.
         guard let first = coverageStart, let last = coverageEnd else {
@@ -169,8 +173,9 @@ struct SleepSession: Codable, Equatable {
             // measurements without letting detector drift change the edit.
             var retained = old
             if old.isEdited, first <= old.startUnix, last >= old.endUnix - 1 {
-                let refreshed = make(samples: samples, period: source,
-                                     correctedTimes: [old.startUnix, old.endUnix])
+                let times = [old.startUnix, old.endUnix]
+                let refreshed = cache?.night(samples: samples, period: source, correctedTimes: times).0
+                    ?? make(samples: samples, period: source, correctedTimes: times)
                 // A partial replay must never erase a previously measured night.
                 if refreshed.isComplete { retained = refreshed }
             }

@@ -35,22 +35,7 @@ struct HomeView: View {
                         Color.clear.preference(key: HomeHeroPosition.self,
                             value: geometry.frame(in: .named("home-scroll")).maxY)
                     })
-                if !demo && (store.band.isAnalyzingHistory || store.band.isSavingHistory || store.band.status == .draining) {
-                    HStack(spacing: 10) {
-                        ProgressView().tint(Color.appSleep)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(store.band.isAnalyzingHistory ? "Analyzing your night" : (store.band.isSavingHistory ? "Saving band history" : "Syncing band history"))
-                                .font(StrapTypography.body(14, weight: .bold))
-                            Text("Your results update here automatically.")
-                                .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .padding(14)
-                    .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(Color.appRaised))
-                    .padding(.bottom, AppLayout.cardSpacing)
-                    .accessibilityElement(children: .combine)
-                }
+                HistorySyncCard()
                 monitorDuo
                 myDayOutlook
                 activitiesCard

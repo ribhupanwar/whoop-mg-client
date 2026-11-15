@@ -105,6 +105,27 @@ most recent detected sleep window on-device, so the Sleep tab shows the
 hypnogram and deep/light/REM/awake minutes with no cloud round-trip. A window
 with less than 50 % heart-rate coverage is refused and says why.
 
+### Resumable history sync
+
+History is stored locally in SQLite with transactional per-chunk checkpoints.
+Both the raw capture and decoded rows are durable before the strap is ACKed.
+A failed save holds subsequent ACKs; reconnecting safely replays unacknowledged
+records. The legacy JSON archive is imported once and kept intact for recovery.
+Raw history stays on disk, while current analysis loads a 72-hour window.
+
+Night and daily calculations have versioned input fingerprints and durable
+checkpoints. Unchanged completed work is reused after relaunch; new packets,
+edited sleep bounds, timezone or relevant settings invalidate the affected work.
+Home distinguishes receiving, saving and analysis progress, reports stalls and
+offers Retry sync. Connected periodic sync runs at a 15-minute floor, with
+backoff for empty transfers and a bounded continuation for advancing backlogs.
+iOS may suspend background work; returning to the app resumes processing.
+
+Architecture references: [NOOP](https://github.com/ryanbr/noop) and
+[NOOP Forge 13.0](https://github.com/DX23876/noop), particularly transactional
+chunk persistence, connection isolation and resumable analysis. This app keeps
+its own scoring methods and UI.
+
 Two straps: Settings → Strap → **Find another band** lists every strap in
 range (strongest signal first) and you tap the one on your wrist. The choice
 is remembered by its Bluetooth peripheral identifier, so later connects go

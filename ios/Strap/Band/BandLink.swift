@@ -105,6 +105,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastSleepAnalysis: SleepAnalysis?
     @Published private(set) var isAnalyzingHistory = false
     @Published private(set) var isSavingHistory = false
+    @Published private(set) var historyProgress: HistoryProgress?
+    @Published private(set) var historySyncError: String?
     private var pendingArchiveWrites = 0
     private var hasUnsavedArchiveRecords = false
     @Published private(set) var historicalRestQualityReason = "Loading retained historical records…"
@@ -266,6 +268,14 @@ final class BandLink: NSObject, ObservableObject {
 
     private var captureWriter: CaptureWriter?
     private var pendingHistoryFlushes = 0
+    private var historyPersistenceStalled = false
+    private var lastChunkCount = 0
+    private var lastSyncAttempt: Date?
+    private var emptySyncStreak = 0
+    private var automaticSyncTimer: Timer?
+    private var continuationAttempts = 0
+    private var continuationFrontier: Int?
+    private var historySyncGeneration = 0
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
@@ -327,6 +337,7 @@ final class BandLink: NSObject, ObservableObject {
             case .failure(let error):
                 self.hasUnsavedArchiveRecords = true
                 self.lastMessage = "History archive save failed: \(error.localizedDescription)"
+                self.historySyncError = "History save failed: \(error.localizedDescription). Saved raw data will be retried."
                 if retriesRemaining > 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                         self?.mergeHistoricalArchive([], retriesRemaining: retriesRemaining - 1,
@@ -383,6 +394,7 @@ final class BandLink: NSObject, ObservableObject {
             archivedLiveRRSamples = saved
         }
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
+        lastHistorySyncAt = UserDefaults.standard.object(forKey: "strap.history.lastComplete.v1") as? Date
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
         central = CBCentralManager(delegate: self, queue: nil,
@@ -461,6 +473,10 @@ final class BandLink: NSObject, ObservableObject {
         }
         let request = metricsRequest
         isAnalyzingHistory = true
+        let began = Date()
+        historyProgress = HistoryProgress(stage: .preparing, completed: 0, total: 0, reused: 0,
+                                          startedAt: began, lastStepAt: began)
+        let databaseURL = archiveWriter.databaseURL
         let samples = retainedHistoricalSamples
         let sexSnapshot = sex
         let maxSnapshot = maxHR
@@ -471,21 +487,51 @@ final class BandLink: NSObject, ObservableObject {
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
             as? [String: [Int]] ?? [:]
         analysisQueue.async { [weak self] in
+            let cache: HistoryAnalysisCache?
+            var cacheSetupError: String?
+            do { cache = try HistoryAnalysisCache(url: databaseURL) }
+            catch { cache = nil; cacheSetupError = error.localizedDescription }
+            var reusedNights = 0
             var rebuilt = CaptureSummary.make(
                 samples: samples, sex: sexSnapshot, maxHR: maxSnapshot,
-                awakeBaseline: baselineSnapshot, sleepCorrections: corrections
+                awakeBaseline: baselineSnapshot, sleepCorrections: corrections,
+                analysisCache: cache, sleepProgress: { completed, total, reused in
+                    if reused { reusedNights += 1 }
+                    let snapshot = HistoryProgress(stage: .nights, completed: completed, total: total,
+                                                   reused: reusedNights, startedAt: began, lastStepAt: Date())
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.metricsRequest == request else { return }
+                        self.historyProgress = snapshot
+                    }
+                }
             )
             rebuilt.sleepSessions = SleepSession.retainingUncovered(
                 previous: sessionsSnapshot, fresh: rebuilt.sleepSessions ?? [],
                 coverageStart: rebuilt.firstUnix, coverageEnd: rebuilt.lastUnix,
-                samples: samples, overrides: corrections
+                samples: samples, overrides: corrections, cache: cache
             )
             rebuilt.sleepStaging = rebuilt.latestSleepSession?.staging
             var fresh = rebuilt
+            var reusedDays = 0
+            let daysBegan = Date()
             var freshDays = DailyAnalysis.metrics(
                 from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
-                sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions
+                sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions,
+                analysisCache: cache, progress: { completed, total, reused in
+                    if reused { reusedDays += 1 }
+                    let snapshot = HistoryProgress(stage: .days, completed: completed, total: total,
+                                                   reused: reusedDays, startedAt: daysBegan, lastStepAt: Date())
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.metricsRequest == request else { return }
+                        self.historyProgress = snapshot
+                    }
+                }
             )
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.metricsRequest == request else { return }
+                self.historyProgress = HistoryProgress(stage: .finishing, completed: 0, total: 0, reused: 0,
+                                                      startedAt: began, lastStepAt: Date())
+            }
             let editedDays = Set(freshDays.filter { day in
                 fresh.sleepSessions?.contains {
                     $0.isEdited && $0.startUnix == day.sleepStartUnix
@@ -549,6 +595,7 @@ final class BandLink: NSObject, ObservableObject {
             }
             let scoredDays = freshDays
             let finalFresh = fresh
+            let checkpointError = cacheSetupError ?? cache?.lastError
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
                 self.historicalRestQualityReason = restReason
@@ -561,6 +608,10 @@ final class BandLink: NSObject, ObservableObject {
                     self.preferencesWriter.remove(forKey: Keys.sleepAnalysis)
                 }
                 self.isAnalyzingHistory = false
+                self.historyProgress = nil
+                if let checkpointError {
+                    self.historySyncError = "Results updated, but analysis checkpoints could not be saved: \(checkpointError)"
+                }
                 if self.metricsRefreshPending {
                     self.metricsRefreshPending = false
                     self.recalculateRetainedMetrics()
@@ -617,6 +668,9 @@ final class BandLink: NSObject, ObservableObject {
             mergeHistoricalArchive([]) { [weak self] in
                 self?.recalculateRetainedMetrics()
             }
+        } else if status == .ready, isConnected,
+                  HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: lastSyncAttempt, foreground: true) {
+            readHistory()
         }
     }
 
@@ -999,6 +1053,8 @@ final class BandLink: NSObject, ObservableObject {
         if drainStartedAt != nil { finishDrain(reason: "link reset") }
         drainTimer?.invalidate()
         drainTimer = nil
+        automaticSyncTimer?.invalidate()
+        automaticSyncTimer = nil
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = nil
         lastHRRecoveryAt = nil
@@ -1069,10 +1125,41 @@ final class BandLink: NSObject, ObservableObject {
         startDraining()
     }
 
-    private func startDraining() {
+    func retryHistorySync() {
+        if drainStartedAt != nil { finishDrain(reason: "retry requested") }
+        readHistory()
+    }
+
+    private func armAutomaticSync() {
+        guard automaticSyncTimer == nil else { return }
+        let timer = Timer(timeInterval: HistorySyncPolicy.periodicSeconds, repeats: true) { [weak self] _ in
+            guard let self, self.status == .ready, self.isConnected,
+                  !self.isSavingHistory, !self.isAnalyzingHistory,
+                  HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: self.lastSyncAttempt,
+                                               emptyStreak: self.emptySyncStreak) else { return }
+            self.readHistory()
+        }
+        automaticSyncTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func recordCompletedHistorySync() {
+        let now = Date()
+        lastHistorySyncAt = now
+        UserDefaults.standard.set(now, forKey: "strap.history.lastComplete.v1")
+        historySyncError = nil
+    }
+
+    private func startDraining(continuing: Bool = false) {
         if drainStartedAt != nil { finishDrain(reason: "starting a new sync") }
+        if !continuing {
+            continuationAttempts = 0
+            continuationFrontier = retainedHistoricalSamples.last?.unix
+        }
         resubscribeNotifyCharacteristics()
         startCaptureFile()
+        lastSyncAttempt = Date()
+        historySyncError = nil
         // 0x0E enables the standard HR profile so 0x180D broadcasts. It is a
         // documented band setting, not a destructive command.
         ensureHeartRateStream()
@@ -1230,8 +1317,11 @@ final class BandLink: NSObject, ObservableObject {
     // MARK: - Drain lifecycle
 
     private func startCaptureFile() {
+        historySyncGeneration += 1
         capturedSamples = []
         pendingHistoryFlushes = 0
+        historyPersistenceStalled = false
+        lastChunkCount = 0
         lastCheckpointCount = 0
         lastCheckpointAt = Date()
         seenRecordIndices = []
@@ -1286,6 +1376,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func finishDrain(reason: String = "interrupted") {
         guard drainStartedAt != nil else { return }
+        let generation = historySyncGeneration
         drainTimer?.invalidate()
         drainTimer = nil
         drainStartedAt = nil
@@ -1316,21 +1407,33 @@ final class BandLink: NSObject, ObservableObject {
         let missingSeconds = uniqueSeconds.isEmpty ? 0
             : (uniqueSeconds.max()! - uniqueSeconds.min()! + 1 - uniqueSeconds.count)
         let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
-        if !samples.isEmpty { lastHistorySyncAt = Date() }
+        let completed = reason == "explicit completion" && !historyPersistenceStalled && historyUndecodableFrames == 0
+        let newest = uniqueSeconds.max()
+        let continueBacklog = !historyPersistenceStalled && HistorySyncPolicy.shouldContinue(
+            timedOut: reason.hasPrefix("idle timeout"), newest: newest,
+            previous: continuationFrontier, attempts: continuationAttempts, now: Date())
+        emptySyncStreak = samples.isEmpty ? min(10, emptySyncStreak + 1) : 0
+        if !completed && !continueBacklog {
+            historySyncError = "History sync stopped (\(reason)). Saved data is safe; retry to fetch the remaining records."
+        }
         status = .ready
         ensureHeartRateStream()
+        armAutomaticSync()
 
         guard !samples.isEmpty else {
             // The strap may already have trimmed ACKed raw records. An empty
             // retry still needs to persist pending records from that earlier drain.
-            if hasUnsavedArchiveRecords {
+            if hasUnsavedArchiveRecords || (completed && historicalRecordFrames == 0) {
                 mergeHistoricalArchive([]) { [weak self] in
                     guard let self else { return }
                     UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
+                    if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
                     self.recalculateRetainedMetrics()
                 }
             }
-            if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
+            if completed && historicalRecordFrames == 0 {
+                lastMessage = "History sync completed. No new stored sensor records."
+            } else if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
             } else if historicalRecordFrames > 0 {
                 lastMessage = "Received \(historicalRecordFrames) history frames but decoded no samples. Check record version and decoder compatibility; do not discard the raw capture."
@@ -1342,9 +1445,51 @@ final class BandLink: NSObject, ObservableObject {
         mergeHistoricalArchive(samples) { [weak self] in
             guard let self else { return }
             UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
+            if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
             self.recalculateRetainedMetrics()
+            if continueBacklog, self.historySyncGeneration == generation,
+               self.status == .ready, self.isConnected, self.drainStartedAt == nil {
+                self.continuationAttempts += 1
+                self.continuationFrontier = newest
+                self.startDraining(continuing: true)
+            }
         }
         lastMessage = "History sync: \(reason). Captured \(samples.count) records, \(drainAcks) ACKs. \(historyQuality). \(reason == "explicit completion" ? "" : "History may be incomplete; retry sync.")"
+    }
+
+    /// Freeze *all* later ACKs after a failed commit. Otherwise a later empty
+    /// END could free strap history past the failed chunk. Writer identity also
+    /// prevents an old connection's completion from ACKing a new connection.
+    private func persistHistoryChunk(token: [UInt8], writer: CaptureWriter) {
+        guard !historyPersistenceStalled else { return }
+        let incoming = Array(capturedSamples.dropFirst(lastChunkCount))
+        lastChunkCount = capturedSamples.count
+        let checkpoint = token.map { String(format: "%02x", $0) }.joined()
+        pendingHistoryFlushes += 1
+        writer.flushToDisk { [weak self] saved in
+            guard let self, self.captureWriter === writer, self.drainStartedAt != nil else { return }
+            guard saved else {
+                self.pendingHistoryFlushes -= 1
+                self.historyPersistenceStalled = true
+                self.historySyncError = "Raw history could not be saved. Band history has not been acknowledged. Retry sync."
+                return
+            }
+            self.archiveWriter.persistChunk(incoming, token: checkpoint) { [weak self] result in
+                guard let self, self.captureWriter === writer, self.drainStartedAt != nil else { return }
+                self.pendingHistoryFlushes -= 1
+                switch result {
+                case .success:
+                    guard !self.historyPersistenceStalled else { return }
+                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
+                    self.drainAcks += 1
+                    self.lastFrameAt = Date()
+                case .failure(let error):
+                    self.historyPersistenceStalled = true
+                    self.hasUnsavedArchiveRecords = true
+                    self.historySyncError = "History database save failed: \(error.localizedDescription). Band history is preserved for retry."
+                }
+            }
+        }
     }
 
     private func persist(_ summary: CaptureSummary) {
@@ -1504,22 +1649,7 @@ final class BandLink: NSObject, ObservableObject {
                 // raw frames are durably saved. Otherwise the strap may trim
                 // records that the app has not actually preserved.
                 guard let writer = captureWriter else { return }
-                // The flushed raw capture is the durable source for recovery.
-                // Do not rewrite up to 72 hours of decoded JSON on the main
-                // thread for every ACK. Checkpoints rebuild it in the background.
-                pendingHistoryFlushes += 1
-                writer.flushToDisk { [weak self] saved in
-                    guard let self, self.captureWriter === writer,
-                          self.drainStartedAt != nil else { return }
-                    self.pendingHistoryFlushes -= 1
-                    guard saved else {
-                        self.lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
-                        return
-                    }
-                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
-                    self.drainAcks += 1
-                    self.lastFrameAt = Date()
-                }
+                persistHistoryChunk(token: token, writer: writer)
             } else if inner[2] == 3, drainStartedAt != nil {
                 // HISTORY_COMPLETE: stop only on the explicit completion marker.
                 finishDrain(reason: "explicit completion")

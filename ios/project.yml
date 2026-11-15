@@ -28,6 +28,7 @@ targets:
     platform: iOS
     dependencies:
       - package: ZIPFoundation
+      - sdk: libsqlite3.tbd
     sources:
       - path: Strap
         excludes:

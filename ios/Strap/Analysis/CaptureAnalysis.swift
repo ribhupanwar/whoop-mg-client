@@ -63,7 +63,9 @@ struct CaptureSummary: Codable, Equatable {
         sex: Sex,
         maxHR: Double?,
         awakeBaseline: Baseline? = nil,
-        sleepCorrections: [String: [Int]] = [:]
+        sleepCorrections: [String: [Int]] = [:],
+        analysisCache: HistoryAnalysisCache? = nil,
+        sleepProgress: ((Int, Int, Bool) -> Void)? = nil
     ) -> CaptureSummary {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return .empty }
@@ -104,7 +106,8 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections)
+        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
+                                            cache: analysisCache, progress: sleepProgress)
         let staging = sessions.last?.staging
         let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
         let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
@@ -158,7 +161,9 @@ enum DailyAnalysis {
         maxHR: Double?,
         calendar: Calendar = .current,
         sleepCorrections: [String: [Int]] = [:],
-        analyzedSleepSessions: [SleepSession]? = nil
+        analyzedSleepSessions: [SleepSession]? = nil,
+        analysisCache: HistoryAnalysisCache? = nil,
+        progress: ((Int, Int, Bool) -> Void)? = nil
     ) -> [DayMetrics] {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
@@ -186,10 +191,40 @@ enum DailyAnalysis {
         }
 
         var result: [DayMetrics] = []
-        for (key, daySamples) in byDay {
+        for key in byDay.keys.sorted() {
+            let daySamples = byDay[key]!
             let dayPeriods = periods.filter {
                 let end = Date(timeIntervalSince1970: TimeInterval($0.endUnix))
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
+            }
+            struct DayContext: Codable {
+                let key: String
+                let sex: Sex
+                let maxHR: Double?
+                let calendar: String
+                let zone: String
+                let sessions: [SleepSession]
+            }
+            // A night ending today can begin yesterday. Include its earlier
+            // packets and every canonical bound that excludes today's awake load.
+            let first = daySamples.first?.unix ?? dayPeriods.first?.startUnix ?? 0
+            let last = daySamples.last?.unix ?? dayPeriods.last?.endUnix ?? first
+            let related = sleepSessions.filter { session in
+                (session.startUnix <= last && first < session.endUnix)
+                    || dayPeriods.contains { $0.startUnix == session.startUnix && $0.endUnix == session.endUnix - 1 }
+            }
+            let inputs = ordered.filter { row in
+                (first <= row.unix && row.unix <= last)
+                    || dayPeriods.contains { $0.startUnix <= row.unix && row.unix <= $0.endUnix }
+            }
+            let context = DayContext(key: key, sex: sex, maxHR: maxHR,
+                                     calendar: String(describing: calendar.identifier),
+                                     zone: calendar.timeZone.identifier, sessions: related)
+            let ticket = analysisCache?.ticket(key: "day:\(key)", samples: inputs, context: context)
+            if let saved = analysisCache?.load(DayMetrics.self, ticket: ticket) {
+                result.append(saved)
+                progress?(result.count, byDay.count, true)
+                continue
             }
             // NOOP-style per-sleep-session aggregation: derive each validated
             // session independently, then weight HRV by session duration.
@@ -275,6 +310,8 @@ enum DailyAnalysis {
                     awakeRestingHR: awakeResting
                 )
             )
+            if let day = result.last { analysisCache?.save(day, ticket: ticket) }
+            progress?(result.count, byDay.count, false)
         }
         return result.sorted { $0.dateKey < $1.dateKey }
     }

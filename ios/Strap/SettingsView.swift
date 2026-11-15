@@ -349,7 +349,7 @@ struct SettingsView: View {
                     .padding(.top, 6)
             }
             if let lastSync = store.band.lastHistorySyncAt {
-                Text("Last successful history decode: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                Text("Last complete history sync: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
             }
