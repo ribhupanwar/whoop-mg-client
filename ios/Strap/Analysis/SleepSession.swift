@@ -163,11 +163,22 @@ struct SleepSession: Codable, Equatable {
                         || max($0.startUnix, source.startUnix) < min($0.endUnix, sourceEnd))
             }
             guard !changedEdit else { continue }
+            // Preserve the user's bounds, not stale measurements. An edit made
+            // before the BLE archive finishes can have incomplete (or older)
+            // stages. Once the whole edited window can be staged, refresh those
+            // measurements without letting detector drift change the edit.
+            var retained = old
+            if old.isEdited, first <= old.startUnix, last >= old.endUnix - 1 {
+                let refreshed = make(samples: samples, period: source,
+                                     correctedTimes: [old.startUnix, old.endUnix])
+                // A partial replay must never erase a previously measured night.
+                if refreshed.isComplete { retained = refreshed }
+            }
             result.removeAll {
                 max($0.startUnix, old.startUnix) < min($0.endUnix, old.endUnix)
                     || (old.isEdited && max($0.startUnix, source.startUnix) < min($0.endUnix, sourceEnd))
             }
-            result.append(old)
+            result.append(retained)
         }
         return result.sorted { $0.endUnix < $1.endUnix }
     }

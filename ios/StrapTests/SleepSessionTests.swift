@@ -4,10 +4,10 @@ import XCTest
 final class SleepSessionTests: XCTestCase {
     private let start = 1_800_000_000
 
-    private func sample(_ unix: Int) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int = 55) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
-            heartRate: 55, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: 0.01,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: nil, stepCadence: nil, activityClass: 0,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
@@ -252,6 +252,64 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(SleepSession.retainingUncovered(
             previous: [old], fresh: [edited], coverageStart: tailStart, coverageEnd: old.endUnix - 1
         ), [edited], "An intentional new window must not be replaced by an old saved window")
+    }
+
+    func testEditedNightRefreshesWhenCompleteHistoryArrives() throws {
+        let source = period(7200)
+        let times = [start + 600, start + 4200]
+        let old = SleepSession.make(samples: [], period: source, correctedTimes: times)
+        XCTAssertNil(old.asleepHours)
+        let rows = (times[0]..<times[1]).map { sample($0) }
+        // Detector drift must neither move the edit nor prevent its refresh.
+        let shifted = SleepPeriod(startUnix: start + 900, endUnix: start + 4199,
+                                  quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let fresh = SleepSession.make(samples: rows, period: shifted)
+        let result = SleepSession.retainingUncovered(
+            previous: [old], fresh: [fresh], coverageStart: times[0], coverageEnd: times[1] - 1,
+            samples: rows, overrides: [String(source.startUnix): times]
+        )
+        let updated = try XCTUnwrap(result.first)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(updated.startUnix, times[0])
+        XCTAssertEqual(updated.endUnix, times[1])
+        XCTAssertEqual(updated.sourcePeriod, old.sourcePeriod)
+        XCTAssertTrue(updated.isEdited)
+        XCTAssertTrue(updated.isComplete)
+        XCTAssertNotNil(updated.asleepHours)
+        XCTAssertFalse(updated.heartRate.isEmpty)
+        XCTAssertNotNil(SleepReport.analyze(samples: rows, session: updated, needHours: 8,
+                                           nights: [], sleepBaseline: nil))
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: result, fresh: [fresh], coverageStart: times[0], coverageEnd: times[1] - 1,
+            samples: rows, overrides: [String(source.startUnix): times]
+        ), result, "Replaying the same history must be stable")
+    }
+
+    func testEditedNightRefreshesPreviouslyCompleteMeasurements() throws {
+        let source = period(3600)
+        let times = [start, start + 3600]
+        let originalRows = (start..<(start + 3600)).map { sample($0) }
+        let old = SleepSession.make(samples: originalRows, period: source, correctedTimes: times)
+        XCTAssertTrue(old.isComplete)
+        // Recovered packets replace the original constant HR with actual values.
+        let rows = (start..<(start + 3600)).map { sample($0, hr: 65) }
+        let expected = SleepSession.make(samples: rows, period: source, correctedTimes: times)
+        let result = SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: start, coverageEnd: start + 3599,
+            samples: rows
+        )
+        XCTAssertEqual(result, [expected])
+        XCTAssertNotEqual(result.first?.heartRate, old.heartRate)
+    }
+
+    func testGappedReplayCannotEraseCompleteEditedNight() {
+        let old = knownNight()
+        // Archive endpoints alone do not prove that the interior was recovered.
+        let rows = [sample(old.startUnix), sample(old.endUnix - 1)]
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: old.startUnix,
+            coverageEnd: old.endUnix - 1, samples: rows
+        ), [old])
     }
 
     func testShortenedEditedNightDoesNotRegainExcludedTailAfterTrimming() throws {
