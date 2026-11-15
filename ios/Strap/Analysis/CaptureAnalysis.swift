@@ -42,7 +42,7 @@ struct CaptureSummary: Codable, Equatable {
     let skinTempMax: Double?
     let motionMeanG: Double?
     let steps: Int?
-    /// Local 0-21 strain from Banister TRIMP. nil until sex and a max HR are set.
+    /// Local 0-21 WHOOP-derived strain estimate; not yet device-validated.
     let strain: Double?
 
     static let empty = CaptureSummary(
@@ -100,9 +100,7 @@ struct CaptureSummary: Codable, Equatable {
         }
         var strain: Double?
         if let maxHR, let resting, maxHR > resting {
-            strain = Hrv.strainScore(
-                Hrv.trimp(awakeSamples, maxHR: maxHR, restingHR: resting, sex: sex)
-            )
+            strain = WhoopDerivedStrain.score(awakeSamples, restingHR: resting, maxHR: maxHR)
         }
 
         let steps = StepCounter.total(ordered)
@@ -287,9 +285,7 @@ enum DailyAnalysis {
                     }
                     zoneSeconds = LiveZones.seconds(samples: points, zones: zones)
                 }
-                strain = Hrv.strainScore(
-                    Hrv.trimp(awakeDaySamples, maxHR: maxHR, restingHR: strainResting, sex: sex)
-                )
+                strain = WhoopDerivedStrain.score(awakeDaySamples, restingHR: strainResting, maxHR: maxHR)
             }
             let steps = StepCounter.total(daySamples)
             result.append(
