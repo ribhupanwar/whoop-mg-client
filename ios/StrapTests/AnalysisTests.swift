@@ -1313,7 +1313,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
             second.fulfill()
         }
         wait(for: [first, second], timeout: 5, enforceOrder: true)
-        let saved = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        let saved = try HistoryDatabase(url: writer.databaseURL).samples(from: start, through: start + 2)
         XCTAssertEqual(saved.map(\.unix), [start, start + 1, start + 2])
     }
 
