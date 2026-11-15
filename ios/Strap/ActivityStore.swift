@@ -293,6 +293,7 @@ private struct DeletedDetectedActivity: Codable, Equatable {
 }
 
 final class ActivityStore {
+    private let detectedLock = NSRecursiveLock()
     private let defaults: UserDefaults
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
@@ -377,11 +378,15 @@ final class ActivityStore {
     // MARK: - Band-detected sessions
 
     func detectedActivities() -> [ActivitySession] {
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
         guard let data = defaults.data(forKey: detectedKey),
               let saved = try? JSONDecoder().decode([ActivitySession].self, from: data) else {
             return []
         }
-        return saved.filter { !isDetectedDeleted($0) }.sorted { $0.startUnix < $1.startUnix }
+        let deletions = deletedDetectedSessions()
+        return saved.filter { session in !deletions.contains { Self.matches(session, deletion: $0) } }
+            .sorted { $0.startUnix < $1.startUnix }
     }
 
     /// Hides a deleted band session across replays whose boundaries shift slightly.
@@ -390,6 +395,8 @@ final class ActivityStore {
     }
 
     func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
         var deletions = deletedDetectedSessions()
         if !deletions.contains(where: { Self.matches(session, deletion: $0) }) {
             deletions.append(DeletedDetectedActivity(
@@ -427,11 +434,20 @@ final class ActivityStore {
     /// so a session that overlaps an already-stored one is merged rather than
     /// appended, and the longer measurement wins.
     func mergeDetected(_ sessions: [ActivitySession], now: Date = Date()) {
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
         guard !sessions.isEmpty else { return }
         // Replayed history can contain several overlapping variants of the
         // same workout. Deduplicate across both existing and incoming rows,
         // not just the first match; repeat until transitive overlaps collapse.
-        var items = detectedActivities() + sessions.filter { !isDetectedDeleted($0) }
+        let cutoff = Int(now.timeIntervalSince1970) - 60 * 86_400
+        let deletions = deletedDetectedSessions()
+        var seen = Set<String>()
+        var items = (detectedActivities() + sessions).filter { session in
+            guard session.endUnix >= cutoff,
+                  !deletions.contains(where: { Self.matches(session, deletion: $0) }) else { return false }
+            return seen.insert("\(session.startUnix):\(session.endUnix)").inserted
+        }
         var changed = true
         while changed {
             changed = false
@@ -451,7 +467,6 @@ final class ActivityStore {
                 }
             }
         }
-        let cutoff = Int(now.timeIntervalSince1970) - 60 * 86_400
         items = items.filter { $0.endUnix >= cutoff }.sorted { $0.startUnix < $1.startUnix }
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: detectedKey)

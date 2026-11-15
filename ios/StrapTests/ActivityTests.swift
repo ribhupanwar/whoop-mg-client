@@ -315,3 +315,18 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertTrue(ActivityDetect.detect(walk(seconds: 240)).isEmpty)
     }
 }
+
+extension ActivityStoreTests {
+    func testBulkReplayDeduplicatesThousandsOfExactCopiesBeforeOverlapMerging() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = Int(now.timeIntervalSince1970) - 3600
+        let original = session(start: start, end: start + 600)
+        let longer = session(start: start + 30, end: start + 660)
+        store.mergeDetected(Array(repeating: original, count: 2000) + Array(repeating: longer, count: 2000), now: now)
+        XCTAssertEqual(store.detectedActivities().count, 1)
+        XCTAssertEqual(store.detectedActivities().first?.startUnix, longer.startUnix)
+        store.deleteDetected(longer, now: now)
+        store.mergeDetected(Array(repeating: original, count: 2000), now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+    }
+}

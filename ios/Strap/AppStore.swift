@@ -30,6 +30,8 @@ final class AppStore: ObservableObject {
     private var healthCancellable: AnyCancellable?
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
+    private let activityQueue = DispatchQueue(label: "strap.activities.merge", qos: .utility)
+    private var detectedGeneration = 0
     private let fitnessQueue = DispatchQueue(label: "strap.fitness.snapshot", qos: .utility)
 
     private struct FitnessInputs: Equatable {
@@ -110,14 +112,18 @@ final class AppStore: ObservableObject {
     /// and the published list only changes when something new arrived.
     private func syncDetectedActivities(_ fresh: CaptureSummary?) {
         guard let sessions = fresh?.activities, !sessions.isEmpty else { return }
-        // The same workout may be re-detected with a slightly shifted start
-        // or a longer duration. Always merge overlaps, not just start seconds.
-        activities.mergeDetected(sessions)
-        detectedBandActivities = activities.detectedActivities()
-        if settings.healthKitEnabled, health.state.isOn {
-            let merged = detectedBandActivities
-            Task { [weak self] in
-                await self?.health.export(merged)
+        detectedGeneration += 1
+        let generation = detectedGeneration
+        let activityStore = activities
+        activityQueue.async { [weak self] in
+            activityStore.mergeDetected(sessions)
+            let merged = activityStore.detectedActivities()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.detectedGeneration == generation else { return }
+                if self.detectedBandActivities != merged { self.detectedBandActivities = merged }
+                if self.settings.healthKitEnabled, self.health.state.isOn {
+                    Task { [weak self] in await self?.health.export(merged) }
+                }
             }
         }
     }
@@ -179,8 +185,18 @@ final class AppStore: ObservableObject {
     }
 
     func deleteDetectedActivity(_ session: ActivitySession) {
-        activities.deleteDetected(session)
-        detectedBandActivities = activities.detectedActivities()
+        detectedGeneration += 1
+        let generation = detectedGeneration
+        detectedBandActivities.removeAll { $0.id == session.id }
+        let activityStore = activities
+        activityQueue.async { [weak self] in
+            activityStore.deleteDetected(session)
+            let remaining = activityStore.detectedActivities()
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.detectedGeneration == generation else { return }
+                self.detectedBandActivities = remaining
+            }
+        }
     }
 
     func addLiveSession(_ record: LiveActivityRecord) {
