@@ -130,6 +130,9 @@ struct RootView: View {
                         }
                         .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity).frame(height: 52)
+                        // Plain buttons otherwise hit-test only the glyphs, leaving
+                        // most of the visually full-width tab target untappable.
+                        .contentShape(Rectangle())
                     }.buttonStyle(.plain).accessibilityIdentifier("tab.\(item.rawValue)")
                         .accessibilityAddTraits(tab == item ? .isSelected : [])
                 }
