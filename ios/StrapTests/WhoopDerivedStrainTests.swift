@@ -6,7 +6,7 @@ final class WhoopDerivedStrainTests: XCTestCase {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: wearing ? 0x80 : 0,
                 recordIndex: UInt32(second), unix: UInt32(second), subsecQ15: 0),
-            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: 0.2,
+            heartRate: wearing ? hr : 0, rrIntervalsMS: [], dynamicAccelG: 0.2,
             gravityXG: nil, gravityYG: nil, gravityZG: nil,
             stepCounter: nil, stepCadence: nil, activityClass: nil,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
