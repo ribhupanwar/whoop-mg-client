@@ -1326,7 +1326,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
         let writer = HistoricalArchiveWriter(url: url)
         let initial = expectation(description: "initial archive")
         writer.merge([makeSample(1_790_000_000, hr: 60)]) { result in
-            if case .failure(let error) = result { XCTFail("\\(error)") }
+            if case .failure(let error) = result { XCTFail("\(error)") }
             initial.fulfill()
         }
         wait(for: [initial], timeout: 5)
@@ -1345,7 +1345,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
         }
         wait(for: [failed], timeout: 5)
         XCTAssertEqual(try HistoryDatabase(url: writer.databaseURL)
-            .samples(from: 1_790_000_000, through: 1_790_000_002).map(\\.unix),
+            .samples(from: 1_790_000_000, through: 1_790_000_002).map(\.unix),
                        [1_790_000_000], "Failed transaction must preserve prior durable history")
 
         XCTAssertEqual(sqlite3_exec(probe, "DROP TRIGGER reject_fixture", nil, nil, nil), SQLITE_OK)
@@ -1353,8 +1353,8 @@ final class HistoricalArchiveWriterTests: XCTestCase {
         writer.merge([makeSample(1_790_000_002, hr: 62)]) { result in
             switch result {
             case .success(let rows):
-                XCTAssertEqual(rows.map(\\.unix), [1_790_000_000, 1_790_000_001, 1_790_000_002])
-            case .failure(let error): XCTFail("\\(error)")
+                XCTAssertEqual(rows.map(\.unix), [1_790_000_000, 1_790_000_001, 1_790_000_002])
+            case .failure(let error): XCTFail("\(error)")
             }
             recovered.fulfill()
         }
