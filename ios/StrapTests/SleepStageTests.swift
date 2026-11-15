@@ -79,9 +79,11 @@ final class SleepStageTests: XCTestCase {
     func testOptimizedSpectralPowerMatchesDirectDFT() {
         // Non-power-of-two lengths include the clipped boundary RSA windows.
         for count in [16, 65, 479, 840] {
-            let values = (0..<count).map { index in
-                25 * sin(Double(index) * 0.31) + 9 * cos(Double(index) * 0.57)
-                    + Double(index % 7) - 3
+            let values: [Double] = (0..<count).map { index in
+                let respiratory = 25.0 * sin(Double(index) * 0.31)
+                let harmonic = 9.0 * cos(Double(index) * 0.57)
+                let noise = Double(index % 7) - 3.0
+                return respiratory + harmonic + noise
             }
             let low = Int(ceil(0.15 * Double(count) / 4))
             let high = Int(floor(0.40 * Double(count) / 4))

@@ -47,7 +47,8 @@ final class CaptureWriterTests: XCTestCase {
         writer.flushToDisk { success in
             XCTAssertFalse(success)
             do {
-                XCTAssertEqual(try Data(contentsOf: writer.url).split(separator: 0x0A).count, 100)
+                let data = try Data(contentsOf: writer.url)
+                XCTAssertEqual(data.split(separator: 0x0A).count, 100)
             } catch { XCTFail("Close lost queued data: \(error)") }
             closed.fulfill()
         }
@@ -66,7 +67,8 @@ final class CaptureWriterTests: XCTestCase {
             writer.flushToDisk { success in
                 XCTAssertTrue(success)
                 do {
-                    XCTAssertEqual(try Data(contentsOf: writer.url).split(separator: 0x0A).count, 2)
+                    let data = try Data(contentsOf: writer.url)
+                    XCTAssertEqual(data.split(separator: 0x0A).count, 2)
                 } catch { XCTFail("Checkpoint lost subsequent records: \(error)") }
                 checkpoint.fulfill()
             }
