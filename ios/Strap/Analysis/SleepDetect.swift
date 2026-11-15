@@ -26,7 +26,7 @@ enum SleepDetect {
         guard !ordered.isEmpty else { return [] }
 
         let quiet = ordered.map { sample in
-            guard let accel = sample.dynamicAccelG else { return false }
+            guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
             return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
         }
         let activeHRs = zip(ordered, quiet)
