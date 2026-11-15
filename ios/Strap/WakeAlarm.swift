@@ -14,6 +14,13 @@ enum WakeAlarm {
 
     static var hasPreference: Bool { UserDefaults.standard.object(forKey: enabledKey) != nil }
 
+    /// Preserve the pre-haptics wake time when upgrading an existing install.
+    static func restoreWakeTimeIfNeeded(_ minutes: Int, defaults: UserDefaults = .standard) {
+        let key = "strap.wake.alarm.minutes.v1"
+        guard defaults.object(forKey: key) == nil, (0..<1440).contains(minutes) else { return }
+        defaults.set(minutes, forKey: key)
+    }
+
     static var wakeMinutes: Int {
         UserDefaults.standard.object(forKey: "strap.wake.alarm.minutes.v1") as? Int ?? 7 * 60
     }

@@ -14,7 +14,8 @@ struct HealthspanView: View {
     @EnvironmentObject private var store: AppStore
     @State private var points: [HealthspanPoint] = []
     @State private var window = 30
-    private var snapshot: FitnessAgeSnapshot? {
+    @State private var snapshot: FitnessAgeSnapshot?
+    private func makeSnapshot() -> FitnessAgeSnapshot? {
         guard !store.isPreview else {
             return FitnessAgeSnapshot(years: 25, chronologicalYears: 30, restingHeartRate: 54,
                 physicalActivityIndex: 7.5, restingNights: 6, capturedDays: 7,
@@ -45,7 +46,7 @@ struct HealthspanView: View {
                 factors
                 if snapshot == nil { readiness }
                 DisclosureGroup("How this estimate works") {
-                    Text("Strap compares measured resting heart rate and recent exercise using its independent Nes/HUNT-inspired fitness model. Aura's source and private body-age calculation are not published in its release repository. This is an exploratory fitness comparison; it does not measure biological age or lifespan.")
+                    Text("Strap compares measured resting heart rate and recent exercise using its independent Nes/HUNT-inspired fitness model. This is an exploratory fitness comparison; it does not measure biological age or lifespan.")
                     Text("The ±5-year display band is part of the presentation, not a validated confidence interval. Trend points are reconstructed from saved observations and your current confirmed profile; missing dates remain gaps.")
                 }.font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).tint(healthspanMint)
                     .padding(.vertical, 14)
@@ -141,6 +142,7 @@ struct HealthspanView: View {
         }
     }
     private func rebuildTrend() {
+        snapshot = makeSnapshot()
         let calendar = Calendar.current
         let end = calendar.startOfDay(for: Date())
         points = (0..<window).compactMap { index in

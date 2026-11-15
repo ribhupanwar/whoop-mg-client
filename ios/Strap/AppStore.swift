@@ -39,6 +39,7 @@ final class AppStore: ObservableObject {
         } else {
             self.settings = AppSettings()
         }
+        WakeAlarm.restoreWakeTimeIfNeeded(settings.wakeTimeMinutes, defaults: defaults)
         self.journalEntries = Dictionary(
             uniqueKeysWithValues: journal.allEntries().map { ($0.dateKey, $0) }
         )
