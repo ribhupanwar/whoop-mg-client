@@ -1372,7 +1372,7 @@ extension HistoricalArchiveWriterTests {
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         let backup = try XCTUnwrap(files.first { $0.lastPathComponent.contains("invalid-") })
         XCTAssertEqual(try Data(contentsOf: backup), invalid)
-        let restored = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        let restored = try HistoryDatabase(url: writer.databaseURL).samples(from: 1_790_000_000, through: 1_790_000_000)
         XCTAssertEqual(restored.map(\.unix), [1_790_000_000])
     }
 }
@@ -1402,7 +1402,7 @@ extension HistoricalArchiveWriterTests {
             retried.fulfill()
         }
         wait(for: [retried], timeout: 5)
-        let saved = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: url))
+        let saved = try HistoryDatabase(url: writer.databaseURL).samples(from: 1_790_000_000, through: 1_790_000_000)
         XCTAssertEqual(saved.map(\.unix), [1_790_000_000])
     }
 }
