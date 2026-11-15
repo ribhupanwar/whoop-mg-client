@@ -12,7 +12,7 @@ final class WhoopDerivedStrainTests: XCTestCase {
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
             sleepStateByte: nil, sleepState: nil, cardiacFlags: nil,
             hrQualityFlags: nil, spo2CandidateRaw: nil,
-            spo2CandidatePct: nil, spo2CandidateKind: nil,
+            spo2CandidatePct: nil, spo2CandidateKind: .absent,
             signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
         )
     }
