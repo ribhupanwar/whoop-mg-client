@@ -177,7 +177,7 @@ jobs:
           xcrun simctl bootstatus "$SIM_ID" -b
           xcrun simctl install "$SIM_ID" build/Build/Products/Debug-iphonesimulator/Strap.app
           mkdir -p "$RUNNER_TEMP/ui-previews"
-          for screen in home sleep recovery strain health train plan more; do
+          for screen in home sleep recovery strain health healthspan train plan more; do
             xcrun simctl terminate "$SIM_ID" com.ribhupanwar.strap >/dev/null 2>&1 || true
             xcrun simctl launch "$SIM_ID" com.ribhupanwar.strap --design-preview "--preview-$screen"
             sleep 3

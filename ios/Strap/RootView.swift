@@ -33,6 +33,7 @@ enum Route: Hashable {
     case sleepAnalysis
     case settings
     case dataQuality
+    case healthspan
     case metricHistory(DetailMetric)
 }
 
@@ -92,6 +93,7 @@ struct RootView: View {
             if args.contains("--preview-recovery") { homePath = [.recovery] }
             else if args.contains("--preview-strain") { homePath = [.strain] }
             else if args.contains("--preview-sleep") { homePath = [.sleepAnalysis] }
+            else if args.contains("--preview-healthspan") { homePath = [.healthspan] }
             else if args.contains("--preview-health") { tab = .health }
             else if args.contains("--preview-train") { tab = .train }
             else if args.contains("--preview-plan") { tab = .plan }
@@ -175,6 +177,7 @@ extension View {
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
             case .dataQuality: DataQualityView()
+            case .healthspan: HealthspanView()
             case .metricHistory(let metric):
                 MetricHistoryView(metric: metric)
             }

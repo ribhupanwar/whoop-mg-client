@@ -59,48 +59,27 @@ struct HealthHubView: View {
     }
 
     private var fitnessAgePanel: some View {
-        Panel {
-            HStack(spacing: 8) {
-                Image(systemName: "heart.text.square")
-                    .foregroundStyle(Color.appAccent)
-                SectionTitle("Healthspan · fitness age")
-            }
-            Hint("Your fitness-age comparison uses measured resting HR and recent exercise. Inspired by Aura's body-age presentation, but independently calculated.")
-            if let estimate = fitnessSnapshot {
-                HStack(alignment: .firstTextBaseline, spacing: 7) {
-                    Text(String(format: "%.0f", estimate.years))
-                        .font(StrapTypography.body(31, weight: .medium))
-                        .foregroundStyle(Color.appFG)
-                    Text("years")
-                        .font(StrapTypography.body(12))
-                        .foregroundStyle(Color.appMuted)
+        NavigationLink { HealthspanView() } label: {
+            Panel {
+                HStack {
+                    Text("HEALTHSPAN").font(StrapTypography.body(12, weight: .bold)).tracking(1)
                     Spacer()
-                    Text("Actual age: \(estimate.chronologicalYears)")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
+                    Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                 }
-                Hint("7-day median resting HR: \(String(format: "%.0f", estimate.restingHeartRate)) bpm · \(estimate.restingNights) nights")
-                let ageGap = Double(estimate.chronologicalYears) - estimate.years
-                HStack(spacing: 6) {
-                    Image(systemName: ageGap >= 0 ? "arrow.down.right" : "arrow.up.right")
-                        .foregroundStyle(ageGap >= 0 ? Color.appGood : Color.appMuted)
-                    Text(String(format: "%.1f years %@", abs(ageGap),
-                                ageGap >= 0 ? "below actual age" : "above actual age"))
-                        .font(StrapTypography.body(12, weight: .medium))
-                        .foregroundStyle(Color.appFG)
-                }
-                Hint("Activity: \(estimate.exerciseDays) recorded days · estimated HUNT-like index \(String(format: "%.1f", estimate.physicalActivityIndex))")
-                Hint("Evidence: \(estimate.restingNights) resting nights · \(estimate.capturedDays) capture days · \(estimate.exerciseDays) exercise days")
-                Hint(estimate.confidenceNote)
-            } else {
-                Text("—")
-                    .font(StrapTypography.body(30, weight: .medium))
-                    .foregroundStyle(Color.appMuted)
-                Hint("Healthspan needs sufficient measured data: confirm age and sex, capture 4 resting-HR nights, 4 days of recorded steps and one workout within 7 days.")
+                HStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text("Your fitness age").font(StrapTypography.body(20, weight: .semibold))
+                        Text(demo ? "25 years · sample" : fitnessSnapshot.map { String(format: "%.0f years", $0.years) } ?? "Building your baseline")
+                            .font(StrapTypography.body(14)).foregroundStyle(Color(hex: 0x55DDA6))
+                        Text("See your age trend and what's moving it")
+                            .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                    }
+                    Spacer(minLength: 0)
+                    HealthspanOrb(years: demo ? 25 : fitnessSnapshot?.years)
+                        .scaleEffect(0.6).frame(width: 100, height: 112)
+                }.padding(.top, 12)
             }
-            Hint("This is an independent fitness comparison inspired by the published Nes/HUNT model, not Aura's private model, WHOOP Age, biological age or a medical measurement. Activity-index inputs are estimates.")
-        }
-        .padding(.bottom, 11)
+        }.buttonStyle(.plain).foregroundStyle(Color.appFG)
     }
 
     // MARK: Health Monitor card (drill-in)
