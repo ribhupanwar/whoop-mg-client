@@ -274,7 +274,7 @@ enum DailyAnalysis {
             }
             let awakeWindow = Hrv.restingHRV(awakeDaySamples, minWindowS: 300)
             let awakeResting = Hrv.restingHeartRate(awakeDaySamples, windowS: 300)
-            let strainResting = resting ?? Hrv.restingHeartRate(daySamples, windowS: 300)
+            let strainResting = awakeResting
             var strain: Double?
             var zoneSeconds: [Int]?
             if let maxHR, let strainResting, maxHR > strainResting {
