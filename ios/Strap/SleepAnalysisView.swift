@@ -113,7 +113,7 @@ struct SleepAnalysisView: View {
             Int(correctedSleepStart.timeIntervalSince1970),
             Int(correctedSleepEnd.timeIntervalSince1970)
         ], for: period, overrides: oldCorrections)
-        UserDefaults.standard.set(corrections, forKey: "strap.sleep.time.corrections.v1")
+        UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
         store.band.notifySleepCorrectionChanged()
         showSleepEditor = false
     }
@@ -238,7 +238,7 @@ struct SleepAnalysisView: View {
 
     private func openSleepEditor() {
         guard let period = editablePeriod else { return }
-        let corrections = UserDefaults.standard.dictionary(forKey: "strap.sleep.time.corrections.v1") as? [String: [Int]] ?? [:]
+        let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let times = SleepCorrectionStore.times(for: period, overrides: corrections)
         correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
         correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
