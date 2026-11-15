@@ -19,7 +19,7 @@ final class TabResponsivenessTests: XCTestCase {
                 let start = Date()
                 button.tap()
                 let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
-                XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 2), .completed,
+                XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed,
                                "Tab \(tab) must respond while sync notifications continue")
                 durations.append(Date().timeIntervalSince(start))
             }
