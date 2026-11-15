@@ -48,6 +48,37 @@ jobs:
       - name: Install XcodeGen
         run: brew install xcodegen
 
+      - name: Normalize bundled Proxima Nova face metadata for iOS
+        run: |
+          set -euo pipefail
+          # Repair only the two licensed font copies with missing naming records.
+          # Source glyphs and outlines remain untouched; the original repo files
+          # are not rewritten or redistributed outside the app build.
+          python3 -m pip install --quiet --user fonttools
+          python3 - <<'PY'
+          from fontTools.ttLib import TTFont
+          from pathlib import Path
+
+          for filename, style, postscript in (
+              ("proxima-nova-medium.ttf", "Medium", "ProximaNova-Medium"),
+              ("proxima-nova-semibold.ttf", "Semibold", "ProximaNova-Semibold"),
+          ):
+              path = Path("ios/Strap/Fonts") / filename
+              font = TTFont(path)
+              names = font["name"]
+              for name_id, value in (
+                  (1, "Proxima Nova"), (2, style),
+                  (4, "Proxima Nova " + style), (6, postscript),
+                  (16, "Proxima Nova"), (17, style),
+              ):
+                  names.setName(value, name_id, 3, 1, 0x409)
+                  names.setName(value, name_id, 1, 0, 0)
+              font.save(path)
+              check = TTFont(path)
+              assert check["name"].getDebugName(6) == postscript
+              print("Validated iOS font naming:", filename, postscript)
+          PY
+
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
