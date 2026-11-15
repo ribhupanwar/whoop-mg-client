@@ -854,7 +854,7 @@ struct HomeView: View {
                 .font(StrapTypography.body(10, weight: .bold))
                 .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
             DisclosureGroup("How bedtime is calculated") {
-                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The alarm is a phone notification.")
+                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The next alarm is sent to your connected band, with a daily phone notification as well. Open Sleep Coach to test band vibration.")
                     .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
             }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }

@@ -145,6 +145,82 @@ final class BandLink: NSObject, ObservableObject {
         let opcode: UInt8
         let body: [UInt8]
         let expectResponse: Bool
+        var onWrite: (() -> Void)? = nil
+        var onFailure: ((String) -> Void)? = nil
+    }
+
+    @Published private(set) var bandAlarmMessage = "Connect your band to sync the wake alarm."
+    @Published private(set) var buzzMessage = ""
+    @Published private(set) var testingBuzz = false
+    private var nextBandAlarm: Date?
+    private var syncedAlarmMinutes: Int?
+    private var alarmWasDisabled = false
+    private var alarmWritePending = false
+    private var lastBuzzAt: Date?
+    private var lastAlarmAttempt: Date?
+
+    var canTestBuzz: Bool {
+        peripheral?.state == .connected && commandCharacteristic != nil && hrBondConfirmed && !testingBuzz
+    }
+
+    func testBuzz() {
+        guard canTestBuzz else { buzzMessage = "Connect your band before testing vibration."; return }
+        guard lastBuzzAt.map({ Date().timeIntervalSince($0) >= 3 }) ?? true else { return }
+        lastBuzzAt = Date()
+        testingBuzz = true
+        buzzMessage = "Sending test buzz…"
+        commandQueue.append(PendingCommand(opcode: BandHaptics.buzzOpcode, body: BandHaptics.buzzBody,
+            expectResponse: true, onWrite: { [weak self] in
+                self?.testingBuzz = false
+                self?.buzzMessage = "Test command delivered. Did you feel the band buzz?"
+            }, onFailure: { [weak self] error in
+                self?.testingBuzz = false
+                self?.buzzMessage = "Test buzz failed: " + error
+            }))
+        pump()
+    }
+
+    /// The band stores a timestamp, so its next alarm does not depend on an
+    /// iOS timer firing in the background. Reconnect/open the app after waking
+    /// to program the following day; the phone notification repeats daily.
+    func syncWakeAlarm(force: Bool = false) {
+        guard WakeAlarm.hasPreference else { return }
+        guard peripheral?.state == .connected, commandCharacteristic != nil, hrBondConfirmed else {
+            bandAlarmMessage = WakeAlarm.isEnabled ? "Reconnect to send the next wake alarm to your band." : "Alarm off. Reconnect to cancel any previously sent band alarm."
+            return
+        }
+        guard !alarmWritePending else { return }
+        if !force, let lastAlarmAttempt, Date().timeIntervalSince(lastAlarmAttempt) < 30 { return }
+        let on = WakeAlarm.isEnabled
+        let minutes = WakeAlarm.wakeMinutes
+        if !force {
+            if on, syncedAlarmMinutes == minutes, let nextBandAlarm, nextBandAlarm > Date() { return }
+            if !on && alarmWasDisabled { return }
+        }
+        let next = on ? BandHaptics.nextWake(minutes: minutes) : nil
+        guard !on || next != nil else { bandAlarmMessage = "Could not calculate the next wake time."; return }
+        let body = next.flatMap(BandHaptics.alarmBody) ?? BandHaptics.disableBody
+        let opcode = on ? BandHaptics.alarmOpcode : BandHaptics.disableOpcode
+        alarmWritePending = true
+        lastAlarmAttempt = Date()
+        bandAlarmMessage = on ? "Sending the next wake alarm to your band…" : "Cancelling the band alarm…"
+        commandQueue.append(PendingCommand(opcode: opcode, body: body, expectResponse: true,
+            onWrite: { [weak self] in
+                guard let self else { return }
+                self.alarmWritePending = false
+                self.nextBandAlarm = next
+                self.syncedAlarmMinutes = on ? minutes : nil
+                self.alarmWasDisabled = !on
+                self.bandAlarmMessage = next.map {
+                    "Alarm sent to band for " + $0.formatted(date: .abbreviated, time: .shortened) + ". Wrist verification pending."
+                } ?? "Band alarm cancellation delivered."
+                // A preference may have changed while this write was queued.
+                if WakeAlarm.isEnabled != on || WakeAlarm.wakeMinutes != minutes { self.syncWakeAlarm(force: true) }
+            }, onFailure: { [weak self] error in
+                self?.alarmWritePending = false
+                self?.bandAlarmMessage = "Band alarm could not be sent: " + error
+            }))
+        pump()
     }
 
     private var central: CBCentralManager!
@@ -925,8 +1001,15 @@ final class BandLink: NSObject, ObservableObject {
         subscriptionAttempts = 0
         handshakeStarted = false
         helloAttempts = 0
+        commandQueue.forEach { $0.onFailure?("Band disconnected. Reconnect and try again.") }
         commandQueue = []
         commandInFlight = false
+        alarmWritePending = false
+        testingBuzz = false
+        nextBandAlarm = nil
+        syncedAlarmMinutes = nil
+        alarmWasDisabled = false
+        lastAlarmAttempt = nil
         commandSeq = 1
         captureWriter?.close()
         captureWriter = nil
@@ -1013,6 +1096,7 @@ final class BandLink: NSObject, ObservableObject {
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             guard let self, self.isConnected else { return }
+            self.syncWakeAlarm()
             let now = Date()
             if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
             // Never present an old sample as today's live pulse.
@@ -1775,6 +1859,13 @@ extension BandLink: CBPeripheralDelegate {
                 }
                 return
             }
+            if let failed = commandQueue.first, let onFailure = failed.onFailure {
+                commandQueue.removeFirst()
+                onFailure(error.localizedDescription)
+                commandInFlight = false
+                pump()
+                return
+            }
             drainTimer?.invalidate()
             drainTimer = nil
             // Drop the failed command so later retries cannot deadlock behind it.
@@ -1787,6 +1878,7 @@ extension BandLink: CBPeripheralDelegate {
             return
         }
         let finished = commandQueue.first?.opcode
+        commandQueue.first?.onWrite?()
         if finished == BandCommand.setGenericHRProfile.rawValue {
             hrEnableQueued = false
             hrProfileEnabled = true
@@ -1806,6 +1898,7 @@ extension BandLink: CBPeripheralDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 self?.beginDrainRequests()
                 self?.ensureHeartRateStream()
+                self?.syncWakeAlarm(force: true)
             }
         }
     }

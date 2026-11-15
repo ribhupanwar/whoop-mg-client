@@ -58,10 +58,14 @@ struct SleepCoachView: View {
             if store.settings.wakeTimeMinutes != newValue {
                 store.settings.wakeTimeMinutes = newValue
             }
-            if alarmOn { WakeAlarm.setEnabled(true, wakeMinutes: newValue) }
+            if alarmOn {
+                WakeAlarm.setEnabled(true, wakeMinutes: newValue)
+                store.band.syncWakeAlarm(force: true)
+            }
         }
         .onChange(of: alarmOn) { _, newValue in
             WakeAlarm.setEnabled(newValue, wakeMinutes: wakeMinutes)
+            store.band.syncWakeAlarm(force: true)
         }
         .onChange(of: intent) { _, newValue in
             if store.settings.sleepIntent != newValue {
@@ -211,6 +215,7 @@ struct SleepCoachView: View {
 
             Button("OK") {
                 WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
+                store.band.syncWakeAlarm(force: true)
                 alarmConfirmation = true
             }
             .buttonStyle(.borderedProminent)
@@ -223,7 +228,18 @@ struct SleepCoachView: View {
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appGood)
             }
-            Hint("A daily phone notification at your wake time — allow notifications when prompted. This is a phone alarm, not a band haptic: no alarm command has been verified on the strap, so nothing is sent to it.")
+            Text(store.band.bandAlarmMessage)
+                .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).padding(.top, 10)
+            Button { store.band.testBuzz() } label: {
+                Label(store.band.testingBuzz ? "Sending…" : "Test band buzz", systemImage: "waveform")
+                    .font(StrapTypography.body(13, weight: .bold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }.buttonStyle(.bordered).tint(Color.appSleep)
+                .disabled(demo || !store.band.canTestBuzz).padding(.top, 12)
+            if !store.band.buzzMessage.isEmpty {
+                Text(store.band.buzzMessage).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+            }
+            Hint("The next wake alarm is sent to your connected band. Use Test band buzz to check vibration on your wrist. Reconnect after waking to send the following day's alarm. The phone notification repeats daily; allow notifications when prompted.")
         }
     }
 

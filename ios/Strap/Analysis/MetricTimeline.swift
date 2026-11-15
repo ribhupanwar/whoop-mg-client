@@ -125,3 +125,42 @@ extension MetricTimeline {
         }
     }
 }
+
+struct MetricDurationBucket: Identifiable {
+    let start: Date
+    let end: Date
+    let minutes: Double?
+    let zoneSeconds: [Double]?
+    let recordedDays: Int
+    var id: Date { start }
+}
+
+extension MetricTimeline {
+    /// Calendar-aligned chunks ending on the selected day. Missing buckets
+    /// remain nil; observed zero-duration days retain an explicit zero.
+    static func durationBuckets(_ points: [MetricDay], metric: DetailMetric,
+                                daysPerBucket: Int = 7) -> [MetricDurationBucket] {
+        guard daysPerBucket > 0, metric.isDurationMetric else { return [] }
+        let sorted = points.sorted { $0.date < $1.date }
+        var end = sorted.count
+        var buckets: [MetricDurationBucket] = []
+        while end > 0 {
+            let start = max(0, end - daysPerBucket)
+            let days = Array(sorted[start..<end])
+            let readings = days.compactMap { $0.value(metric) }
+            let zones = days.compactMap(\.zones).filter { $0.count == 5 }
+            let sums: [Double]? = zones.isEmpty ? nil : (0..<5).map { zone in
+                zones.reduce(0) { $0 + $1[zone] }
+            }
+            buckets.append(MetricDurationBucket(start: days[0].date, end: days[days.count - 1].date,
+                minutes: readings.isEmpty ? nil : readings.reduce(0, +),
+                zoneSeconds: sums, recordedDays: readings.count))
+            end = start
+        }
+        return buckets.reversed()
+    }
+}
+
+private extension DetailMetric {
+    var isDurationMetric: Bool { self == .zonesLow || self == .zonesHigh || self == .strength }
+}

@@ -1,11 +1,8 @@
 import Foundation
 import UserNotifications
 
-/// A local phone notification fired daily at the sleep coach's wake time.
-///
-/// Deliberately a PHONE alarm, not a band haptic: no alarm command has been
-/// verified on the strap, so nothing is sent to the band. The notification
-/// repeats at the chosen wake time until turned off.
+/// Daily phone notification plus persisted desired next band wake time.
+/// BandLink independently programs the next occurrence on the strap.
 enum WakeAlarm {
     static let identifier = "strap.wake.alarm"
     private static let enabledKey = "strap.wake.alarm.enabled.v1"
@@ -15,8 +12,16 @@ enum WakeAlarm {
         set { UserDefaults.standard.set(newValue, forKey: enabledKey) }
     }
 
+    static var hasPreference: Bool { UserDefaults.standard.object(forKey: enabledKey) != nil }
+
+    static var wakeMinutes: Int {
+        UserDefaults.standard.object(forKey: "strap.wake.alarm.minutes.v1") as? Int ?? 7 * 60
+    }
+
     /// Persist the choice and (re)schedule or cancel the daily notification.
     static func setEnabled(_ on: Bool, wakeMinutes: Int) {
+        guard (0..<1440).contains(wakeMinutes) else { return }
+        UserDefaults.standard.set(wakeMinutes, forKey: "strap.wake.alarm.minutes.v1")
         isEnabled = on
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [identifier])

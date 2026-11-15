@@ -1,7 +1,8 @@
 import SwiftUI
 
-private let strainBlue = Color(hex: 0x009FEE)
-private let zonePalette: [Color] = [Color(hex: 0xABC5D0), Color(hex: 0x4C9DBB), Color(hex: 0x5CB99C), Color(hex: 0xFFB35B), Color(hex: 0xFF702A)]
+let strainBlue = Color(hex: 0x0099DC)
+let recoveryLineBlue = Color(hex: 0x65ADE0)
+let zonePalette: [Color] = [Color(hex: 0xABC5D0), Color(hex: 0x4C9DBB), Color(hex: 0x5CB99C), Color(hex: 0xFFB35B), Color(hex: 0xFF702A)]
 
 extension DetailMetric {
     var title: String {
@@ -45,9 +46,9 @@ extension DetailMetric {
     }
     func color(_ value: Double?) -> Color {
         if self == .recovery, let value {
-            return value >= 67 ? Color(hex: 0x25DE00) : value >= 34 ? Color(hex: 0xF4DD00) : Color(hex: 0xFF0037)
+            return value >= 67 ? Color(hex: 0x00DF00) : value >= 34 ? Color(hex: 0xFFE500) : Color(hex: 0xFF0037)
         }
-        return self == .sleepPerformance ? .appSleep : strainBlue
+        return self == .sleepPerformance ? .appSleep : isLine ? recoveryLineBlue : strainBlue
     }
 }
 
@@ -95,18 +96,18 @@ struct MetricDetailView: View {
                 hero(current, history: history)
                 summary(current, history: history)
                 if recoveryMode { behaviorCard } else { activities }
-                Text("Weekly Trends").font(StrapTypography.body(23, weight: .bold)).padding(.vertical, 18)
+                Text("Weekly Trends").font(StrapTypography.body(19, weight: .semibold)).padding(.vertical, 18)
                 ForEach(metrics) { metric in
                     Panel {
                         Button { detail = metric } label: {
                             HStack {
-                                Text(metric.title.uppercased()).font(StrapTypography.body(12, weight: .bold)).tracking(0.8)
+                                Text(metric.title.uppercased()).font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                                 Spacer()
                                 Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                             }.foregroundStyle(Color.appFG)
                         }.buttonStyle(.plain).padding(.bottom, 20)
                         WeeklyMetricChart(metric: metric, points: Array(history.suffix(7)), selectedKey: selectedKey)
-                        Hint(sourceNote(metric))
+
                     }
                 }
             }
@@ -130,25 +131,8 @@ struct MetricDetailView: View {
         } message: {
             Text("Recovery and strain are local estimates from your recorded data. The white strain-ring marker is the previous 30-day recorded average. Recovery requires earlier baseline days. Zone time is recorded HR coverage; calories are active session estimates, not a full-day total. Missing data stays blank. The values are not WHOOP's proprietary scores.")
         }
-        .sheet(item: $detail) { metric in
-            NavigationStack {
-                Screen {
-                    Panel { WeeklyMetricChart(metric: metric, points: Array(history.suffix(7)), selectedKey: selectedKey) }
-                    Panel {
-                        Text("Last 30 days").font(StrapTypography.body(16, weight: .bold)).padding(.bottom, 12)
-                        ForEach(Array(history.suffix(30).reversed())) { day in
-                            HStack {
-                                Text(day.date.formatted(date: .abbreviated, time: .omitted))
-                                Spacer()
-                                Text(metric.text(day.value(metric))).monospacedDigit()
-                            }.font(StrapTypography.metric(13, weight: .regular)).padding(.vertical, 9)
-                            Divider().overlay(Color.appLine)
-                        }
-                        Hint(sourceNote(metric))
-                    }
-                }.navigationTitle(metric.title).navigationBarTitleDisplayMode(.inline)
-                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { detail = nil } } }
-            }
+        .navigationDestination(item: $detail) { metric in
+            MetricHistoryView(metric: metric)
         }
         .onAppear {
             #if DEBUG
@@ -188,14 +172,15 @@ struct MetricDetailView: View {
             }
             VStack(spacing: 8) {
                 Text("STRAP").font(StrapTypography.body(17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
-                ScoreValueText(value: mainMetric.text(value), size: 57)
+                ScoreValueText(value: mainMetric.text(value), size: 64)
                     .minimumScaleFactor(0.7).lineLimit(1)
-                Text(mainMetric.title.uppercased()).font(StrapTypography.body(13, weight: .bold)).tracking(1.4)
+                Text(mainMetric.title.uppercased()).font(StrapTypography.body(12, weight: .bold)).tracking(1)
             }.padding(24)
         }
         .frame(width: 236, height: 236)
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
+        .padding(.top, 24)
+        .padding(.bottom, 34)
         .accessibilityElement(children: .combine)
     }
 
@@ -218,24 +203,33 @@ struct MetricDetailView: View {
         return Panel {
             ForEach(rows) { metric in
                 HStack(spacing: 10) {
-                    Image(systemName: metric.icon).font(.system(size: 20)).foregroundStyle(Color.appMuted).frame(width: 24)
+                    Image(systemName: metric.icon).font(.system(size: 18, weight: .light)).foregroundStyle(Color.appMuted).frame(width: 24)
                     Text(metric.title.uppercased()).font(StrapTypography.body(11, weight: .bold)).tracking(0.5)
                     Spacer(minLength: 8)
                     VStack(alignment: .trailing, spacing: 3) {
                         HStack(spacing: 6) {
-                            Text(metric.text(day?.value(metric))).font(StrapTypography.body(23, weight: .bold)).monospacedDigit()
+                            Text(metric.text(day?.value(metric))).font(StrapTypography.metric(21, weight: .bold))
                             comparisonIndicator(metric, day: day, history: history)
                         }
                         Text(metric.text(MetricTimeline.comparison(metric, before: selectedKey, in: history)))
-                            .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                            .font(StrapTypography.metric(10, weight: .regular)).foregroundStyle(Color.appMuted)
                     }
                 }.padding(.vertical, 14)
                 if metric != rows.last { Divider().overlay(Color.appLine) }
             }
-            Text("Today vs. available readings in the previous 30 days")
-                .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
-                .frame(maxWidth: .infinity, alignment: .leading).padding(10)
-                .background(Color.appBG, in: RoundedRectangle(cornerRadius: 8)).padding(.top, 12)
+            HStack(spacing: 10) {
+                HStack(spacing: 2) {
+                    Image(systemName: "arrowtriangle.up.fill").foregroundStyle(Color.appGood)
+                    Image(systemName: "arrowtriangle.down.fill").foregroundStyle(Color.appWarn)
+                }.font(.system(size: 6))
+                Text("Today vs. last 30 days").font(StrapTypography.body(10))
+            }
+            .foregroundStyle(Color.appMuted)
+            .frame(maxWidth: .infinity, alignment: .leading).padding(10)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 6)).padding(.top, 10)
+        }
+        .overlay(alignment: .top) {
+            SleepMetricNotch().fill(Color(hex: 0x2B3236)).frame(width: 20, height: 10).offset(y: -10)
         }
     }
 
@@ -244,11 +238,11 @@ struct MetricDetailView: View {
             Panel {
                 HStack(spacing: 18) {
                     VStack(alignment: .leading, spacing: 9) {
-                        Text("Behavior insights").font(StrapTypography.body(17, weight: .bold))
+                        Text("Behavior insights").font(StrapTypography.body(14, weight: .semibold))
                         Text("Review your daily journal alongside your recovery history.").font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
                         Label("VIEW JOURNAL", systemImage: "arrow.right").font(StrapTypography.body(10, weight: .bold)).foregroundStyle(strainBlue)
                     }
-                    Image(systemName: "checkmark.circle").font(.system(size: 64, weight: .light)).foregroundStyle(Color.appMuted)
+                    Image(systemName: "checkmark.circle").font(.system(size: 78, weight: .light)).foregroundStyle(Color.appMuted)
                 }
             }
         }.buttonStyle(.plain).foregroundStyle(Color.appFG)
@@ -261,7 +255,7 @@ struct MetricDetailView: View {
         }
         let manual = store.manualActivities(on: selectedKey)
         return VStack(alignment: .leading, spacing: 10) {
-            Text(dayOffset == 0 ? "Today's Activities" : "Activities").font(StrapTypography.body(23, weight: .bold)).padding(.top, 14)
+            Text(dayOffset == 0 ? "Today's Activities" : "Activities").font(StrapTypography.body(19, weight: .semibold)).padding(.top, 14)
             if store.isPreview {
                 activityRow("Running · sample", icon: "figure.run", detail: "7:40 AM\n8:10 AM")
             }
@@ -359,14 +353,14 @@ struct WeeklyMetricChart: View {
             }
             GeometryReader { geometry in
                 let width = geometry.size.width
-                let height: CGFloat = 190
+                let height: CGFloat = 200
                 let slot = width / CGFloat(max(1, points.count))
                 let low = limits.low
                 let range = max(0.001, limits.high - low)
                 ZStack(alignment: .topLeading) {
                     if metric.isLine {
                         areaPath(width: width, height: height, low: low, range: range)
-                            .fill(LinearGradient(colors: [strainBlue.opacity(0.2), strainBlue.opacity(0.01)],
+                            .fill(LinearGradient(colors: [recoveryLineBlue.opacity(0.14), recoveryLineBlue.opacity(0.01)],
                                                  startPoint: .top, endPoint: .bottom))
                     }
                     Path { path in
@@ -379,7 +373,7 @@ struct WeeklyMetricChart: View {
                         let x = slot * (CGFloat(index) + 0.5)
                         if day.key == selectedKey {
                             RoundedRectangle(cornerRadius: 5).fill(Color.appFG.opacity(0.08))
-                                .frame(width: slot * 0.8, height: height + 50).position(x: x, y: (height + 50) / 2)
+                                .frame(width: slot * 0.62, height: height + 50).position(x: x, y: (height + 50) / 2)
                         }
                         if let value = day.value(metric) {
                             let barHeight = height * CGFloat(max(0, value - low) / range)
@@ -388,35 +382,33 @@ struct WeeklyMetricChart: View {
                                     ForEach(zoneIndices, id: \.self) { zone in
                                         let preceding = zoneIndices.filter { $0 < zone }.reduce(0.0) { $0 + zones[$1] / 60 }
                                         let part = height * CGFloat(zones[zone] / 60 / range)
-                                        Rectangle().fill(zonePalette[zone]).frame(width: min(24, slot * 0.38), height: part)
+                                        Rectangle().fill(zonePalette[zone]).frame(width: min(15, slot * 0.38), height: part)
                                             .position(x: x, y: height - height * CGFloat(preceding / range) - part / 2)
                                     }
                                 } else {
                                     RoundedRectangle(cornerRadius: 2).fill(metric.color(value))
-                                        .frame(width: min(24, slot * 0.38), height: barHeight)
+                                        .frame(width: min(15, slot * 0.38), height: barHeight)
                                         .position(x: x, y: height - barHeight / 2)
                                 }
                             } else {
                                 Circle().fill(LinearGradient.appCard).frame(width: 7, height: 7)
-                                    .overlay(Circle().stroke(strainBlue, lineWidth: 2)).position(x: x, y: height - barHeight)
+                                    .overlay(Circle().stroke(recoveryLineBlue, lineWidth: 1.8)).position(x: x, y: height - barHeight)
                             }
-                            Text(metric.text(value)).font(StrapTypography.body(10, weight: .bold)).monospacedDigit()
-                                .foregroundStyle(metric.color(value)).position(x: x, y: max(7, height - barHeight - 12))
-                        } else {
-                            Text("—").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted).position(x: x, y: height - 12)
+                            Text(metric.text(value)).font(StrapTypography.metric(12, weight: .bold))
+                                .foregroundStyle(metric.isTime ? Color.appFG : metric.color(value)).position(x: x, y: max(7, height - barHeight - 12))
                         }
                         VStack(spacing: 3) {
                             Text(day.date.formatted(.dateTime.weekday(.abbreviated)))
                             Text(day.date.formatted(.dateTime.day()))
-                        }.font(StrapTypography.body(9)).foregroundStyle(day.key == selectedKey ? Color.appFG : Color.appMuted)
+                        }.font(StrapTypography.body(10, weight: day.key == selectedKey ? .bold : .regular)).foregroundStyle(day.key == selectedKey ? Color.appFG : Color.appMuted)
                             .position(x: x, y: height + 27)
                     }
                     if metric.isLine {
                         linePath(width: width, height: height, low: low, range: range)
-                            .stroke(strainBlue.opacity(0.7), lineWidth: 1.5)
+                            .stroke(recoveryLineBlue.opacity(0.75), lineWidth: 1.5)
                     }
                 }
-            }.frame(height: 245)
+            }.frame(height: 250)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(metric.title + ". " + points.map {
@@ -452,6 +444,17 @@ struct WeeklyMetricChart: View {
                 if previous { path.addLine(to: CGPoint(x: x, y: y)) } else { path.move(to: CGPoint(x: x, y: y)) }
                 previous = true
             }
+        }
+    }
+}
+
+private struct SleepMetricNotch: Shape {
+    func path(in rect: CGRect) -> Path {
+        Path { path in
+            path.move(to: CGPoint(x: 0, y: rect.maxY))
+            path.addLine(to: CGPoint(x: rect.midX, y: 0))
+            path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+            path.closeSubpath()
         }
     }
 }

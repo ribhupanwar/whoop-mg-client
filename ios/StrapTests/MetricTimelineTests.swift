@@ -131,3 +131,25 @@ final class MetricTimelineTests: XCTestCase {
         XCTAssertEqual(MetricTimeline.comparison(.strain, before: day(10).dateKey, in: points), 2)
     }
 }
+
+extension MetricTimelineTests {
+    func testDurationBucketsRetainMissingAndZeroWeeks() throws {
+        let points = timeline([day(10, zones: [0, 0, 0, 0, 0])], count: 14)
+        let buckets = MetricTimeline.durationBuckets(points, metric: .zonesLow)
+        XCTAssertEqual(buckets.count, 2)
+        XCTAssertNil(buckets[0].minutes)
+        XCTAssertNil(buckets[0].zoneSeconds)
+        XCTAssertEqual(buckets[1].minutes, 0)
+        XCTAssertEqual(buckets[1].recordedDays, 1)
+    }
+    func testDurationBucketsAggregateZonesWithoutLosingPartialWeek() throws {
+        let points = timeline([day(3, zones: [60, 0, 0, 0, 0]), day(10, zones: [60, 120, 180, 240, 300])], count: 8)
+        let buckets = MetricTimeline.durationBuckets(points, metric: .zonesLow)
+        XCTAssertEqual(buckets.count, 2)
+        XCTAssertEqual(buckets[0].minutes, 1)
+        XCTAssertEqual(buckets[1].minutes, 6)
+        XCTAssertEqual(buckets[1].zoneSeconds, [60, 120, 180, 240, 300])
+        XCTAssertEqual(MetricTimeline.durationBuckets(points, metric: .zonesHigh).last?.minutes, 9)
+        XCTAssertTrue(MetricTimeline.durationBuckets(points, metric: .hrv).isEmpty)
+    }
+}
