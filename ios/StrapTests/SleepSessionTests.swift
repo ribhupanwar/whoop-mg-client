@@ -489,4 +489,13 @@ final class SleepSessionTests: XCTestCase {
             XCTAssertNil(SleepReport.analyze(samples: [], session: knownNight(), needHours: need, nights: [], sleepBaseline: nil))
         }
     }
+
+    func testRestDiagnosticsShowMeasuredCounts() {
+        let short = (0..<10).map { sample(start + $0) }
+        XCTAssertEqual(Hrv.restingQualityReason(short),
+                       "Longest continuous quiet run: 10s; need 60s")
+        let noBeats = (0..<60).map { sample(start + $0) }
+        XCTAssertEqual(Hrv.restingQualityReason(noBeats),
+                       "Quiet run found; R-R: 0 beats in 0s, but insufficient clean consecutive pairs")
+    }
 }

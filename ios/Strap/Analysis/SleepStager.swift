@@ -365,20 +365,29 @@ enum SleepStager {
         var maxPower = 0.0
         var sumPower = 0.0
         for k in kLo...kHi {
-            let omega = 2.0 * Double.pi * Double(k) / Double(count)
-            var real = 0.0
-            var imaginary = 0.0
-            for j in 0..<count {
-                let angle = omega * Double(j)
-                real += grid[j] * cos(angle)
-                imaginary -= grid[j] * sin(angle)
-            }
-            let power = real * real + imaginary * imaginary
+            let power = spectralPower(grid, bin: k)
             sumPower += power
             if power > maxPower { maxPower = power }
         }
         guard sumPower > 0 else { return nil }
         return maxPower / sumPower
+    }
+
+    /// Goertzel evaluates the same DFT bin with one cosine per frequency,
+    /// rather than two transcendental calls per sample. This preserves the RSA
+    /// feature while reducing the repeated work across thousands of epochs.
+    static func spectralPower(_ values: [Double], bin: Int) -> Double {
+        guard !values.isEmpty else { return 0 }
+        let coefficient = 2 * cos(2 * Double.pi * Double(bin) / Double(values.count))
+        var previous = 0.0
+        var beforePrevious = 0.0
+        for value in values {
+            let next = value + coefficient * previous - beforePrevious
+            beforePrevious = previous
+            previous = next
+        }
+        return max(0, previous * previous + beforePrevious * beforePrevious
+                   - coefficient * previous * beforePrevious)
     }
 
     // MARK: - Staging

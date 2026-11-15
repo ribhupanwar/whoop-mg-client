@@ -186,6 +186,7 @@ final class BandLink: NSObject, ObservableObject {
     private var commandSeq: UInt8 = 1
 
     private var captureWriter: CaptureWriter?
+    private var pendingHistoryFlushes = 0
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
     /// Live R-R is diagnostic-only until a verified sleep/rest window exists.
@@ -507,6 +508,18 @@ final class BandLink: NSObject, ObservableObject {
 
     func notifySleepCorrectionChanged() {
         recalculateRetainedMetrics()
+    }
+
+    /// Returning from the lock screen must use the data already received,
+    /// rather than relying on startup recovery after a force-quit.
+    func resumeHistoryProcessing() {
+        if drainStartedAt != nil {
+            tickDrain(forceCheckpoint: true)
+        } else if hasUnsavedArchiveRecords && !isSavingHistory {
+            mergeHistoricalArchive([]) { [weak self] in
+                self?.recalculateRetainedMetrics()
+            }
+        }
     }
 
     var recovery: RecoveryResult {
@@ -965,9 +978,11 @@ final class BandLink: NSObject, ObservableObject {
         historicalRecordFrames = 0
         lastFrameAt = Date()
         drainTimer?.invalidate()
-        drainTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
             self?.tickDrain()
         }
+        drainTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func resubscribeNotifyCharacteristics() {
@@ -1106,6 +1121,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startCaptureFile() {
         capturedSamples = []
+        pendingHistoryFlushes = 0
         lastCheckpointCount = 0
         lastCheckpointAt = Date()
         seenRecordIndices = []
@@ -1126,7 +1142,7 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
-    private func tickDrain() {
+    private func tickDrain(forceCheckpoint: Bool = false) {
         guard let started = drainStartedAt else { return }
         let now = Date()
         let idle = now.timeIntervalSince(lastFrameAt ?? started)
@@ -1138,15 +1154,18 @@ final class BandLink: NSObject, ObservableObject {
         // Analyze durable checkpoints while it is still connected; reopening
         // the app must not be required to discover the night's saved records.
         if capturedSamples.count > lastCheckpointCount,
-           now.timeIntervalSince(lastCheckpointAt) >= 60,
+           (forceCheckpoint || now.timeIntervalSince(lastCheckpointAt) >= 60),
            !isAnalyzingHistory, !isSavingHistory {
+            // The archive writer already owns earlier checkpoints. Submit only
+            // new packets instead of copying/re-merging the entire drain again.
+            let incoming = Array(capturedSamples.dropFirst(lastCheckpointCount))
             lastCheckpointCount = capturedSamples.count
             lastCheckpointAt = now
-            mergeHistoricalArchive(capturedSamples) { [weak self] in
+            mergeHistoricalArchive(incoming) { [weak self] in
                 self?.recalculateRetainedMetrics()
             }
         }
-        if drainFrames > 0 && idle >= Self.drainIdleSeconds {
+        if drainFrames > 0 && pendingHistoryFlushes == 0 && idle >= Self.drainIdleSeconds {
             finishDrain(reason: "idle timeout after \(Int(idle))s")
         } else if drainFrames == 0 && elapsed >= Self.drainEmptySeconds {
             finishDrain(reason: "no history frames after \(Int(elapsed))s")
@@ -1163,11 +1182,11 @@ final class BandLink: NSObject, ObservableObject {
         captureWriter?.close()
         captureWriter = nil
 
-        let samples = capturedSamples.sorted {
-            $0.unix != $1.unix
-                ? $0.unix < $1.unix
-                : $0.header.recordIndex < $1.header.recordIndex
-        }
+        // Ordering belongs to the archive worker. Release the completed drain
+        // buffer instead of holding a second raw-history copy until the next sync.
+        let samples = capturedSamples
+        capturedSamples = []
+        seenRecordIndices.removeAll()
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
@@ -1178,16 +1197,15 @@ final class BandLink: NSObject, ObservableObject {
             let diagnosticCount = samples.filter { $0.spo2CandidateKind == .diagnostic }.count
             let average = values.isEmpty ? "none" :
                 String(format: "%.1f", Double(values.reduce(0, +)) / Double(values.count))
-            let report = "Research only · \\(samples.count) v18 records · \\(values.count) candidate readings · mean \\(average) · \\(sentinelCount) sentinels · \\(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
+            let report = "Research only · \(samples.count) v18 records · \(values.count) candidate readings · mean \(average) · \(sentinelCount) sentinels · \(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
             UserDefaults.standard.set(report, forKey: "strap.spo2ResearchReport")
         }
         let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
         let rrBeats = samples.reduce(0) { $0 + $1.rrIntervalsMS.count }
-        let uniqueSeconds = Set(samples.map(\.unix)).sorted()
-        let missingSeconds = zip(uniqueSeconds, uniqueSeconds.dropFirst()).reduce(0) {
-            $0 + max(0, $1.1 - $1.0 - 1)
-        }
-        let historyQuality = "R-R: \\(rrBeats) beats / \\(rrSeconds) seconds; gaps: \\(missingSeconds)s"
+        let uniqueSeconds = Set(samples.map(\.unix))
+        let missingSeconds = uniqueSeconds.isEmpty ? 0
+            : (uniqueSeconds.max()! - uniqueSeconds.min()! + 1 - uniqueSeconds.count)
+        let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
         if !samples.isEmpty { lastHistorySyncAt = Date() }
         status = .ready
         ensureHeartRateStream()
@@ -1379,16 +1397,23 @@ final class BandLink: NSObject, ObservableObject {
                 // NOOP's safe-trim invariant: never ACK a section until its
                 // raw frames are durably saved. Otherwise the strap may trim
                 // records that the app has not actually preserved.
-                guard let writer = captureWriter, writer.flushToDisk() else {
-                    lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
-                    return
-                }
+                guard let writer = captureWriter else { return }
                 // The flushed raw capture is the durable source for recovery.
                 // Do not rewrite up to 72 hours of decoded JSON on the main
                 // thread for every ACK. Checkpoints rebuild it in the background.
-                enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
-                drainAcks += 1
-                lastFrameAt = Date()
+                pendingHistoryFlushes += 1
+                writer.flushToDisk { [weak self] saved in
+                    guard let self, self.captureWriter === writer,
+                          self.drainStartedAt != nil else { return }
+                    self.pendingHistoryFlushes -= 1
+                    guard saved else {
+                        self.lastMessage = "History chunk not ACKed: raw capture could not be saved. Band data preserved for retry."
+                        return
+                    }
+                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
+                    self.drainAcks += 1
+                    self.lastFrameAt = Date()
+                }
             } else if inner[2] == 3, drainStartedAt != nil {
                 // HISTORY_COMPLETE: stop only on the explicit completion marker.
                 finishDrain(reason: "explicit completion")

@@ -37,6 +37,7 @@ enum Route: Hashable {
 }
 
 struct RootView: View {
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var store = AppStore()
     @State private var tab: AppTab = .home
     @State private var showInsights = false
@@ -82,6 +83,9 @@ struct RootView: View {
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) { floatingNavigation }
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { store.band.resumeHistoryProcessing() }
+        }
         .onAppear {
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments

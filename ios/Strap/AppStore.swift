@@ -51,9 +51,13 @@ final class AppStore: ObservableObject {
         }
         #endif
         band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
-        bandCancellable = band.objectWillChange.sink { [weak self] _ in
-            self?.objectWillChange.send()
-        }
+        // A backfill publishes several diagnostics per sensor packet. Forward
+        // at most ten UI updates per second, including the final trailing one,
+        // rather than rebuilding every screen thousands of times during sync.
+        // Delivery after willSet also guarantees views read the committed values.
+        bandCancellable = band.objectWillChange
+            .throttle(for: .milliseconds(100), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] _ in self?.objectWillChange.send() }
         // @Published fires in willSet, so listen to the projected value to see
         // the new summary rather than the previous one.
         summaryCancellable = band.$summary.sink { [weak self] fresh in

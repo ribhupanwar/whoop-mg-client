@@ -247,13 +247,13 @@ enum Hrv {
         let longest = contiguousRuns(quiet.sorted { $0.unix < $1.unix })
             .map(\.count).max() ?? 0
         guard longest >= restingMinWindowS else {
-            return "Longest continuous quiet run: \\(longest)s; need \\(restingMinWindowS)s"
+            return "Longest continuous quiet run: \(longest)s; need \(restingMinWindowS)s"
         }
         let result = restingHRV(samples)
         guard result.result.rmssdMS != nil else {
             let rrSeconds = quiet.filter { !$0.rrIntervalsMS.isEmpty }.count
             let rrBeats = quiet.reduce(0) { $0 + $1.rrIntervalsMS.count }
-            return "Quiet run found; R-R: \\(rrBeats) beats in \\(rrSeconds)s, but insufficient clean consecutive pairs"
+            return "Quiet run found; R-R: \(rrBeats) beats in \(rrSeconds)s, but insufficient clean consecutive pairs"
         }
         return "Validated quiet HRV available"
     }

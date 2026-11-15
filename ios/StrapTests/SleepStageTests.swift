@@ -76,6 +76,32 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
+    func testOptimizedSpectralPowerMatchesDirectDFT() {
+        // Non-power-of-two lengths include the clipped boundary RSA windows.
+        for count in [16, 65, 479, 840] {
+            let values = (0..<count).map { index in
+                25 * sin(Double(index) * 0.31) + 9 * cos(Double(index) * 0.57)
+                    + Double(index % 7) - 3
+            }
+            let low = Int(ceil(0.15 * Double(count) / 4))
+            let high = Int(floor(0.40 * Double(count) / 4))
+            for bin in low...max(low, high) {
+                let omega = 2 * Double.pi * Double(bin) / Double(count)
+                var real = 0.0
+                var imaginary = 0.0
+                for (index, value) in values.enumerated() {
+                    real += value * cos(omega * Double(index))
+                    imaginary -= value * sin(omega * Double(index))
+                }
+                let expected = real * real + imaginary * imaginary
+                XCTAssertEqual(SleepStager.spectralPower(values, bin: bin), expected,
+                               accuracy: max(1e-6, expected * 1e-9))
+            }
+        }
+        XCTAssertEqual(SleepStager.spectralPower([], bin: 0), 0)
+        XCTAssertEqual(SleepStager.spectralPower(Array(repeating: 0, count: 840), bin: 40), 0)
+    }
+
     func testQuietNightTilesTheWindow() throws {
         let (samples, period) = makeNight()
         let staging = SleepStager.stage(samples: samples, period: period)

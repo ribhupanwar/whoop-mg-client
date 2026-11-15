@@ -11,12 +11,14 @@ final class CaptureWriter {
     private let queue = DispatchQueue(label: "com.ribhupanwar.strap.capture")
     private var isClosed = false
     private var writeFailed = false
+    private var buffer = Data()
+    private static let bufferLimit = 64 * 1024
 
-    init?() {
+    init?(directory: URL? = nil) {
         let manager = FileManager.default
         guard let documents = manager.urls(for: .documentDirectory, in: .userDomainMask).first
         else { return nil }
-        let directory = documents.appendingPathComponent("captures", isDirectory: true)
+        let directory = directory ?? documents.appendingPathComponent("captures", isDirectory: true)
         try? manager.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let formatter = DateFormatter()
@@ -33,41 +35,56 @@ final class CaptureWriter {
     }
 
     func chunk(_ chunk: Data, uuid: String) {
-        record(["t": elapsed, "uuid": uuid, "chunk": Self.hex([UInt8](chunk))])
+        let time = elapsed
+        queue.async {
+            self.record(["t": time, "uuid": uuid, "chunk": Self.hex([UInt8](chunk))])
+        }
     }
 
     func frame(_ inner: [UInt8], uuid: String) {
-        let frame: [String: Any] = [
-            "t": elapsed,
-            "uuid": uuid,
-            "packet_type": inner.first.map { Int($0) } ?? NSNull(),
-            "seq": inner.count > 1 ? Int(inner[1]) : NSNull(),
-            "opcode": inner.count > 2 ? Int(inner[2]) : NSNull(),
-            "len": inner.count,
-            "inner": Self.hex(inner)
-        ]
-        record(["frame": frame])
+        let time = elapsed
+        queue.async {
+            let frame: [String: Any] = [
+                "t": time,
+                "uuid": uuid,
+                "packet_type": inner.first.map { Int($0) } ?? NSNull(),
+                "seq": inner.count > 1 ? Int(inner[1]) : NSNull(),
+                "opcode": inner.count > 2 ? Int(inner[2]) : NSNull(),
+                "len": inner.count,
+                "inner": Self.hex(inner)
+            ]
+            self.record(["frame": frame])
+        }
     }
 
     /// Drain queued writes and sync the raw capture before acknowledging a
     /// HISTORY_END trim cursor. A failed sync must not release strap history.
-    func flushToDisk() -> Bool {
-        queue.sync {
-            guard !isClosed, !writeFailed else { return false }
-            do {
-                try handle.synchronize()
-                return true
-            } catch {
-                return false
+    func flushToDisk(completion: @escaping (Bool) -> Void) {
+        queue.async {
+            var saved = false
+            if !self.isClosed && !self.writeFailed {
+                do {
+                    try self.writeBuffer()
+                    try self.handle.synchronize()
+                    saved = true
+                } catch {
+                    self.writeFailed = true
+                }
             }
+            let result = saved
+            DispatchQueue.main.async { completion(result) }
         }
     }
 
     func close() {
-        queue.sync {
-            guard !isClosed else { return }
-            isClosed = true
-            try? handle.close()
+        queue.async {
+            guard !self.isClosed else { return }
+            do {
+                try self.writeBuffer()
+                try self.handle.synchronize()
+            } catch { self.writeFailed = true }
+            self.isClosed = true
+            try? self.handle.close()
         }
     }
 
@@ -76,16 +93,31 @@ final class CaptureWriter {
     }
 
     private func record(_ object: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: object) else { return }
-        let line = data + Data([0x0A])
-        queue.async { [self] in
-            guard !isClosed else { writeFailed = true; return }
-            do { try handle.write(contentsOf: line) }
-            catch { writeFailed = true }
-        }
+        // Only the serial writer touches encoding, the buffer or the file.
+        // BLE callbacks enqueue raw values and return immediately.
+        guard !isClosed, !writeFailed else { writeFailed = true; return }
+        do {
+            let data = try JSONSerialization.data(withJSONObject: object)
+            buffer.append(data)
+            buffer.append(0x0A)
+            if buffer.count >= Self.bufferLimit { try writeBuffer() }
+        } catch { writeFailed = true }
+    }
+
+    private func writeBuffer() throws {
+        guard !buffer.isEmpty else { return }
+        try handle.write(contentsOf: buffer)
+        buffer.removeAll(keepingCapacity: true)
     }
 
     private static func hex(_ bytes: [UInt8]) -> String {
-        bytes.map { String(format: "%02x", $0) }.joined()
+        let digits = Array("0123456789abcdef".utf8)
+        var result: [UInt8] = []
+        result.reserveCapacity(bytes.count * 2)
+        for byte in bytes {
+            result.append(digits[Int(byte >> 4)])
+            result.append(digits[Int(byte & 0x0F)])
+        }
+        return String(decoding: result, as: UTF8.self)
     }
 }
