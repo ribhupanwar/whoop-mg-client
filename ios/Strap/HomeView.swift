@@ -835,7 +835,7 @@ struct HomeView: View {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
                         .font(StrapTypography.body(21, weight: .medium))
                         .foregroundStyle(Color.appFG)
-                    Text("ALARM ON\nEXACT TIME")
+                    Text(WakeAlarm.isEnabled ? "ALARM ON\nEXACT TIME" : "ALARM OFF\nEXACT TIME")
                         .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)

@@ -125,7 +125,7 @@ struct MetricDetailView: View {
                         Button("Today") { dayOffset = 0 }
                     }
             }
-            ToolbarItem(placement: .topBarTrailing) { Button { showInfo = true } label: { Image(systemName: "info.circle") } }
+            ToolbarItem(placement: .topBarTrailing) { Button { showInfo = true } label: { Image(systemName: "info.circle").foregroundStyle(Color.appMuted) } }
         }
         .alert("About these measurements", isPresented: $showInfo) {
             Button("OK", role: .cancel) { }

@@ -132,7 +132,7 @@ struct Screen<Content: View>: View {
 struct DemoBanner: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("Design preview â€” sample data")
+            Text("Design preview — sample data")
                 .font(StrapTypography.body(12, weight: .bold))
                 .foregroundStyle(Color.appFG)
             Text("Values marked sample are invented to show the finished layout. They are not your measurements.")

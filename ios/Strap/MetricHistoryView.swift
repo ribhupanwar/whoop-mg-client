@@ -71,7 +71,7 @@ struct MetricHistoryView: View {
         guard let first = points.first?.date, let last = points.last?.date else { return "" }
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
-        return "\(formatter.string(from: first)) - \(formatter.string(from: last))"
+        return "\(formatter.string(from: first)) - \(formatter.string(from: last)), \(last.formatted(.dateTime.year(.twoDigits)))"
     }
     private var rangeDescription: String {
         guard let average else { return "Wear your band and save readings to see your \(selectedMetric.title.lowercased()) trend here." }
@@ -156,7 +156,7 @@ struct MetricHistoryView: View {
                                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 12))
                         }.buttonStyle(.plain).padding(.top, 24)
                         NavigationLink { PlanView() } label: {
-                            Label("SET A HR ZONES GOAL IN WEEKLY PLAN", systemImage: "list.clipboard")
+                            Label("VIEW YOUR WEEKLY PLAN", systemImage: "list.clipboard")
                                 .font(StrapTypography.body(11, weight: .bold)).tracking(0.6)
                                 .foregroundStyle(Color.appFG).frame(maxWidth: .infinity, alignment: .leading).padding(18)
                                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 12))
@@ -181,7 +181,12 @@ struct MetricHistoryView: View {
                 }.font(StrapTypography.body(12)).tint(Color.appMuted).padding(.top, 28)
             }.foregroundStyle(Color.appFG)
         }
-        .navigationTitle("TREND VIEW").navigationBarTitleDisplayMode(.inline)
+        .navigationTitle("").navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .principal) {
+                Text("TREND VIEW").font(StrapTypography.body(12, weight: .bold)).tracking(1)
+            }
+        }
         .sheet(isPresented: $showLogger) { ActivityLoggerView() }
         .sheet(isPresented: Binding(get: { learnTopic != nil }, set: { if !$0 { learnTopic = nil } })) {
             NavigationStack {
