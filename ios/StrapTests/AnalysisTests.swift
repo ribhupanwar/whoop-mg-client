@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import Strap
 
@@ -1320,30 +1321,40 @@ final class HistoricalArchiveWriterTests: XCTestCase {
     func testFailedSaveDoesNotPublishOrDiscardPreviousHistory() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("history.json")
         let writer = HistoricalArchiveWriter(url: url)
         let initial = expectation(description: "initial archive")
         writer.merge([makeSample(1_790_000_000, hr: 60)]) { result in
-            if case .failure(let error) = result { XCTFail("\(error)") }
+            if case .failure(let error) = result { XCTFail("\\(error)") }
             initial.fulfill()
         }
         wait(for: [initial], timeout: 5)
-        // Replace the parent directory with a file to force a real disk failure.
-        try FileManager.default.removeItem(at: directory)
-        try Data().write(to: directory)
+
+        // Force a deterministic transaction failure without unlinking an open
+        // SQLite database (which corrupts WAL state on the simulator).
+        var probe: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(writer.databaseURL.path, &probe), SQLITE_OK)
+        defer { sqlite3_close(probe) }
+        let reject = "CREATE TRIGGER reject_fixture BEFORE INSERT ON history_sample WHEN NEW.unix=1790000001 BEGIN SELECT RAISE(ABORT, 'fixture write failure'); END"
+        XCTAssertEqual(sqlite3_exec(probe, reject, nil, nil, nil), SQLITE_OK)
         let failed = expectation(description: "save fails")
         writer.merge([makeSample(1_790_000_001, hr: 61)]) { result in
             if case .success = result { XCTFail("Must not publish unsaved records") }
             failed.fulfill()
         }
         wait(for: [failed], timeout: 5)
-        try FileManager.default.removeItem(at: directory)
+        XCTAssertEqual(try HistoryDatabase(url: writer.databaseURL)
+            .samples(from: 1_790_000_000, through: 1_790_000_002).map(\\.unix),
+                       [1_790_000_000], "Failed transaction must preserve prior durable history")
+
+        XCTAssertEqual(sqlite3_exec(probe, "DROP TRIGGER reject_fixture", nil, nil, nil), SQLITE_OK)
         let recovered = expectation(description: "retry retains original chunk")
         writer.merge([makeSample(1_790_000_002, hr: 62)]) { result in
             switch result {
             case .success(let rows):
-                XCTAssertEqual(rows.map(\.unix), [1_790_000_000, 1_790_000_001, 1_790_000_002])
-            case .failure(let error): XCTFail("\(error)")
+                XCTAssertEqual(rows.map(\\.unix), [1_790_000_000, 1_790_000_001, 1_790_000_002])
+            case .failure(let error): XCTFail("\\(error)")
             }
             recovered.fulfill()
         }
