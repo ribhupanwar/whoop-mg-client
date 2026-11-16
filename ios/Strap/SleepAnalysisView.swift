@@ -247,6 +247,11 @@ struct SleepAnalysisView: View {
 
     private var canEndSleepNow: Bool {
         guard let period = editablePeriod else { return false }
+        // A manually finalized night must never offer an action that silently
+        // extends its saved end back to the current clock time.
+        if session?.isEdited == true { return false }
+        let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        if SleepCorrectionStore.times(for: period, overrides: corrections) != nil { return false }
         let now = Date().timeIntervalSince1970
         // End Now is for an active/recently detected window only. Older nights must be edited explicitly.
         return now >= Double(period.startUnix) && now - Double(period.endUnix) <= 15 * 60
