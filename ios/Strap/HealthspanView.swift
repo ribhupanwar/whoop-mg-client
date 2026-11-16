@@ -38,7 +38,7 @@ struct HealthspanView: View {
                     Spacer()
                     Image(systemName: "leaf.fill").font(.system(size: 26, weight: .light)).foregroundStyle(healthspanMint)
                 }.padding(.top, 12)
-                HealthspanOrb(years: snapshot?.years).frame(height: 190).padding(.vertical, 8)
+                HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.chronologicalYears).frame(height: 280).padding(.vertical, 8)
                 ageCard
                 trendCard
                 factors
@@ -170,27 +170,89 @@ struct HealthspanView: View {
 
 struct HealthspanOrb: View {
     let years: Double?
+    var chronologicalYears: Int? = nil
+
+    private let cyan = Color(hex: 0x54D7E9)
+
+    private var ageGapText: String {
+        guard let years, let chronologicalYears else { return "Building your baseline" }
+        let gap = years - Double(chronologicalYears)
+        return String(format: "%.1f years %@", abs(gap), gap <= 0 ? "younger" : "older")
+    }
+
     var body: some View {
-        ZStack {
-            Circle().fill(RadialGradient(colors: [healthspanMint.opacity(0.02), healthspanMint.opacity(0.32), .clear],
-                                         center: .center, startRadius: 30, endRadius: 90))
-            Circle().stroke(healthspanMint.opacity(0.25), lineWidth: 9).blur(radius: 7).padding(22)
-            Circle().stroke(LinearGradient(colors: [healthspanMint.opacity(0.05), healthspanMint.opacity(0.65), healthspanMint.opacity(0.1)],
-                                          startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 3).blur(radius: 2).padding(24)
-            Canvas { context, size in
-                for index in 0..<32 {
-                    let angle = Double(index) * 2.39996
-                    let radius = size.width * (0.22 + Double(index % 9) * 0.015)
-                    let x = size.width / 2 + cos(angle) * radius
-                    let y = size.height / 2 + sin(angle) * radius
-                    context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)),
-                                 with: .color(healthspanMint.opacity(0.2 + Double(index % 4) * 0.12)))
+        GeometryReader { geometry in
+            let diameter = min(geometry.size.width, geometry.size.height)
+            ZStack {
+                // A subtly irregular, translucent membrane rather than a flat ring.
+                LiquidAgeMembrane()
+                    .fill(RadialGradient(
+                        colors: [Color.black.opacity(0.94), Color(hex: 0x06282E),
+                                 cyan.opacity(0.50), cyan.opacity(0.16)],
+                        center: .center, startRadius: diameter * 0.12,
+                        endRadius: diameter * 0.51))
+                    .overlay {
+                        LiquidAgeMembrane()
+                            .stroke(cyan.opacity(0.68), lineWidth: 1.4)
+                    }
+                    .shadow(color: cyan.opacity(0.22), radius: 20)
+                Canvas { context, size in
+                    // Deterministic particles: no random animation or repeated layout jitter.
+                    for index in 0..<190 {
+                        let angle = Double(index) * 2.399963229728653
+                        let radial = 0.24 + 0.25 * Double((index * 37) % 101) / 100.0
+                        let x = size.width * (0.5 + cos(angle) * radial)
+                        let y = size.height * (0.5 + sin(angle) * radial)
+                        let dot = CGFloat(index % 11 == 0 ? 4.2 : index % 4 == 0 ? 2.5 : 1.25)
+                        let opacity = 0.22 + Double(index % 7) * 0.10
+                        context.fill(Path(ellipseIn: CGRect(x: x - dot / 2, y: y - dot / 2,
+                                                           width: dot, height: dot)),
+                                     with: .color(cyan.opacity(opacity)))
+                    }
                 }
+                .clipShape(LiquidAgeMembrane())
+                VStack(spacing: 6) {
+                    Text(years.map { String(format: "%.1f", $0) } ?? "—")
+                        .font(StrapTypography.metric(47, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("FITNESS AGE")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(1.3)
+                        .foregroundStyle(.white)
+                    Text(ageGapText)
+                        .font(StrapTypography.body(14, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0x9DE5F0))
+                        .padding(.top, 7)
+                }
+                .multilineTextAlignment(.center)
             }
-            Text(years.map { String(format: "%.0f", $0) } ?? "—")
-                .font(StrapTypography.metric(42, weight: .light)).foregroundStyle(Color.appFG)
-        }.frame(width: 180, height: 180).frame(maxWidth: .infinity)
-        .accessibilityLabel(years.map { String(format: "Fitness age %.0f years", $0) } ?? "Fitness age needs more data")
+            .frame(width: diameter, height: diameter)
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+        }
+        .accessibilityLabel(years.map { String(format: "Fitness age %.1f years. %@", $0, ageGapText) }
+                            ?? "Fitness age needs more data")
+    }
+}
+
+/// Stable asymmetric edge to resemble the fluid healthspan silhouette.
+private struct LiquidAgeMembrane: Shape {
+    func path(in rect: CGRect) -> Path {
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) * 0.465
+        var path = Path()
+        let segments = 180
+        for index in 0...segments {
+            let angle = Double(index) * 2 * .pi / Double(segments)
+            let variation = 1.0 + 0.027 * sin(5 * angle + 0.6)
+                + 0.019 * sin(8 * angle - 1.2)
+                + 0.011 * cos(3 * angle)
+            let point = CGPoint(
+                x: center.x + radius * variation * cos(angle),
+                y: center.y + radius * variation * sin(angle))
+            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+        }
+        path.closeSubpath()
+        return path
     }
 }
 
