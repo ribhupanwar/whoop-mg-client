@@ -1,9 +1,13 @@
 import SwiftUI
+import ZIPFoundation
 
 /// Utility and account hub, not another copy of Home or Health metrics.
 /// Inspired by the navigation structure of WHOOP and offline-first clients.
 struct MoreView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var exportURL: URL?
+    @State private var exportError: String?
+    @State private var preparingExport = false
 
     var body: some View {
         Screen {
@@ -76,6 +80,29 @@ struct MoreView: View {
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
+                    Button {
+                        preparingExport = true
+                        defer { preparingExport = false }
+                        do {
+                            exportURL = try makePortableDataExport()
+                            exportError = nil
+                        } catch {
+                            exportError = error.localizedDescription
+                        }
+                    } label: {
+                        moreRow("Export raw history & settings", icon: "square.and.arrow.up")
+                    }
+                    .disabled(preparingExport)
+                    if let exportURL {
+                        ShareLink(item: exportURL) {
+                            moreRow("Save export to Files or iCloud", icon: "externaldrive")
+                        }
+                    }
+                    if let exportError {
+                        Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn)
+                    }
+                    Text("Partial export: includes retained raw JSON history and STRAP settings, not the SQLite database or a restorable full backup. Save outside this app before uninstalling.")
+                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                     NavigationLink(value: Route.dataQuality) {
                         moreRow("Data quality & diagnostics", icon: "waveform.path.ecg")
                     }
@@ -112,4 +139,37 @@ struct MoreView: View {
         .padding(.vertical, 9)
         .contentShape(Rectangle())
     }
+    /// Read-only portable export. Never mutate the live database or claim restore support.
+    private func makePortableDataExport() throws -> URL {
+        let fm = FileManager.default
+        let destination = fm.temporaryDirectory.appendingPathComponent("STRAP-partial-export-\(UUID().uuidString).zip")
+        guard let archive = Archive(url: destination, accessMode: .create) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let history = support.appendingPathComponent("strap-history-v18.json")
+        if fm.fileExists(atPath: history.path) {
+            try archive.addEntry(with: "strap-history-v18.json", relativeTo: support)
+        }
+        let settings = UserDefaults.standard.dictionaryRepresentation()
+        let safeSettings = settings.filter { $0.key.hasPrefix("strap.") }
+            .compactMapValues { value -> Any? in
+                switch value {
+                case is String, is Int, is Double, is Bool, is Date, is Data: return value
+                case let list as [String]: return list
+                case let list as [Int]: return list
+                case let map as [String: [Int]]: return map
+                default: return nil
+                }
+            }
+        let plist = try PropertyListSerialization.data(fromPropertyList: safeSettings,
+                                                       format: .xml, options: 0)
+        let temp = fm.temporaryDirectory.appendingPathComponent("strap-settings-\(UUID().uuidString).plist")
+        try plist.write(to: temp, options: .atomic)
+        defer { try? fm.removeItem(at: temp) }
+        try archive.addEntry(with: "strap-settings.plist", relativeTo: temp.deletingLastPathComponent(),
+                             compressionMethod: .deflate)
+        return destination
+    }
+
 }
