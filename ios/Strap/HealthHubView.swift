@@ -256,11 +256,21 @@ struct HealthHubView: View {
     private var oxygenAvailable: Bool {
         demo || store.lastCapture?.spo2.pct != nil
     }
+    // Match the Health Monitor detail's validated overnight source. A daytime
+    // capture must not light up the nightly HRV/RHR indicators.
+    private var latestNightMetrics: DayMetrics? {
+        guard let session = store.band.latestSleepSession else { return nil }
+        let day = JournalStore.dayKey(
+            for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)))
+        return store.band.days.first { $0.dateKey == day && $0.state == "sleep" }
+    }
     private var restingAvailable: Bool {
-        demo || store.measuredRestingHR != nil
+        demo || latestNightMetrics?.restingHR != nil
     }
     private var hrvAvailable: Bool {
-        demo || store.lastCapture?.hrv.rmssdMS != nil
+        guard !demo else { return true }
+        guard let lnRMSSD = latestNightMetrics?.lnRMSSD else { return false }
+        return lnRMSSD.isFinite
     }
     private var temperatureAvailable: Bool {
         demo || store.lastCapture?.skinTempMean != nil
