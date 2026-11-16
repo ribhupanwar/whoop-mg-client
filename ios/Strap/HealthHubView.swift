@@ -76,29 +76,35 @@ struct HealthHubView: View {
 
     private var healthMonitorCard: some View {
         NavigationLink(value: Route.health) {
-            VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 17) {
                 HStack {
                     Text("HEALTH MONITOR")
-                        .font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
-                        .foregroundStyle(Color.appFG)
+                        .font(StrapTypography.body(12, weight: .bold)).tracking(1)
                     Spacer()
-                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
+                    Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                 }
-                HStack(spacing: 6) {
-                    monitorCheck("HRV", present: demo || store.lastCapture?.hrv.rmssdMS != nil)
-                    monitorCheck("RHR", present: demo || store.measuredRestingHR != nil)
-                    monitorCheck("HR", present: demo || store.band.liveHeartRate != nil || store.lastCapture?.lastHeartRate != nil)
-                    monitorCheck("STEPS", present: demo || store.lastCapture?.steps != nil)
+                HStack(alignment: .top, spacing: 0) {
+                    monitorCheck("RESP", icon: "lungs.fill", present: respirationAvailable)
+                    monitorCheck("SPO₂", icon: "drop", present: oxygenAvailable)
+                    monitorCheck("RHR", icon: "heart", present: restingAvailable)
+                    monitorCheck("HRV", icon: "waveform.path.ecg", present: hrvAvailable)
+                    monitorCheck("TEMP", icon: "thermometer.medium", present: temperatureAvailable)
                 }
-                Text(demo ? "✓ 4/4 metrics within range · sample"
-                          : monitorSummary)
-                    .font(StrapTypography.body(11.5))
-                    .foregroundStyle(demo ? Color.appGood : Color.appMuted)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(10)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
+                HStack(spacing: 10) {
+                    Image(systemName: monitorCount == 5 ? "checkmark.square.fill" : "exclamationmark.square")
+                        .foregroundStyle(monitorCount == 5 ? Color.appGood : Color.appMuted)
+                    Text("\(monitorCount)/5 metrics captured")
+                        .font(StrapTypography.body(12, weight: .semibold))
+                    Spacer()
+                }
+                .padding(11)
+                .background(RoundedRectangle(cornerRadius: 9).fill(Color.appRaised))
+                Text("Captured does not mean clinically validated or within range. SpO₂ is an unvalidated candidate; respiratory rate is an RSA estimate.")
+                    .font(StrapTypography.body(10))
+                    .foregroundStyle(Color.appMuted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(14)
+            .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
             .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
@@ -107,31 +113,43 @@ struct HealthHubView: View {
         .padding(.bottom, 11)
     }
 
-    private var monitorSummary: String {
-        guard let summary = store.lastCapture else {
-            return "needs a capture — tap to see what is measured"
-        }
-        let parts = [
-            summary.hrv.rmssdMS.map { _ in "HRV" },
-            store.measuredRestingHR.map { _ in "RHR" },
-            summary.lastHeartRate.map { _ in "HR" },
-            summary.steps.map { _ in "steps" }
-        ].compactMap { $0 }
-        return "\(parts.count)/4 metrics from the last capture (\(summary.sampleCount) s)"
+    private var respirationAvailable: Bool {
+        demo || store.lastCapture?.respiration.breathsPerMinute != nil
+    }
+    private var oxygenAvailable: Bool {
+        demo || store.lastCapture?.spo2.pct != nil
+    }
+    private var restingAvailable: Bool {
+        demo || store.measuredRestingHR != nil
+    }
+    private var hrvAvailable: Bool {
+        demo || store.lastCapture?.hrv.rmssdMS != nil
+    }
+    private var temperatureAvailable: Bool {
+        demo || store.lastCapture?.skinTempMean != nil
+    }
+    private var monitorCount: Int {
+        [respirationAvailable, oxygenAvailable, restingAvailable, hrvAvailable, temperatureAvailable]
+            .filter { $0 }.count
     }
 
-    private func monitorCheck(_ label: String, present: Bool) -> some View {
-        VStack(spacing: 5) {
-            Text(present ? "✓" : "—")
-                .font(StrapTypography.body(14, weight: .medium))
-                .foregroundStyle(present ? Color.appGood : Color.appMuted)
-                .frame(width: 26, height: 26)
-                .background(RoundedRectangle(cornerRadius: 7).fill(Color.appRaised))
-            Text(label)
-                .font(StrapTypography.body(9.5, weight: .medium)).tracking(0.5)
+    private func monitorCheck(_ label: String, icon: String, present: Bool) -> some View {
+        VStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 22, weight: .light))
                 .foregroundStyle(Color.appMuted)
+                .frame(height: 29)
+            Text(label)
+                .font(StrapTypography.body(10, weight: .bold))
+                .tracking(0.4)
+                .lineLimit(1)
+                .minimumScaleFactor(0.75)
+            Image(systemName: present ? "checkmark.square.fill" : "minus.square")
+                .font(.system(size: 19))
+                .foregroundStyle(present ? Color.appGood : Color.appMuted)
         }
         .frame(maxWidth: .infinity)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Stress Monitor card (drill-in)
