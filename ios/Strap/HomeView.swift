@@ -454,7 +454,7 @@ struct HomeView: View {
 
     private var healthDetail: String {
         guard let summary = store.lastCapture else { return "needs a capture" }
-        return "last capture · \(summary.sampleCount) s"
+        return "last capture · \(summary.sampleCount.formatted()) samples"
     }
 
     private var stressPill: String {
