@@ -91,6 +91,19 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
 // MARK: - HRV
 
 final class HrvTests: XCTestCase {
+    func testStreamingRRRejectsUnconfirmedLeadingArtefact() {
+        let clean = (0..<40).map { second in
+            makeSample(5000 + second, hr: 65, accel: 0.01,
+                       rr: [800, 810])
+        }
+        let leadingSpike = makeSample(4999, hr: 65, accel: 0.01, rr: [449])
+        let expected = Hrv.fromSamples(clean)
+        let actual = Hrv.fromSamples([leadingSpike] + clean)
+        XCTAssertNotNil(expected.rmssdMS)
+        XCTAssertEqual(actual.rmssdMS!, expected.rmssdMS!, accuracy: 0.00001)
+        XCTAssertEqual(actual.nnBeats, expected.nnBeats)
+    }
+
     func testReplayOfIdenticalSecondDoesNotInflateHRV() {
         let original = (0..<90).map { second in
             makeSample(1000 + second, hr: 65, accel: 0.01,
