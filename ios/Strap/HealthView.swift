@@ -17,7 +17,6 @@ struct HealthView: View {
                 connectionBanner
                 hrPanel
                 fiveMetricGrid
-                metricGrid
                 if !demo { rrDiagnosticPanel }
                 Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Respiratory rate is an RSA estimate from R-R; SpO₂ is the band's unvalidated candidate, not a clinical reading.")
             }
