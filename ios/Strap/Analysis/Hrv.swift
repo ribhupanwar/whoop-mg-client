@@ -155,20 +155,42 @@ enum Hrv {
             // produce artificially high HRV.
             var previous: Double?
             var recent: [Double] = []
+            var seedCandidate: Double?
             for sample in run {
                 let rr = getRR(sample).map(Double.init)
                 rawBeats += rr.count
-                if rr.isEmpty { previous = nil; recent.removeAll(); continue }
+                if rr.isEmpty {
+                    previous = nil; recent.removeAll(); seedCandidate = nil
+                    continue
+                }
                 for value in rr {
                     guard value >= Double(V18Decoder.minRRMS),
                           value <= Double(V18Decoder.maxRRMS) else {
-                        previous = nil; recent.removeAll(); continue
+                        previous = nil; recent.removeAll(); seedCandidate = nil
+                        continue
                     }
-                    if !recent.isEmpty {
+                    if recent.isEmpty {
+                        // Confirm a stable pair before seeding RMSSD. A single
+                        // plausible PPG spike must not become the reference.
+                        guard let pending = seedCandidate else {
+                            seedCandidate = value
+                            continue
+                        }
+                        let midpoint = Stats.median([pending, value])
+                        guard abs(value - pending) <= nnMaxDeviation * midpoint else {
+                            seedCandidate = value
+                            continue
+                        }
+                        allNN.append(pending)
+                        recent.append(pending)
+                        previous = pending
+                        seedCandidate = nil
+                    } else {
                         let reference = Stats.median(recent)
                         if abs(value - reference) > nnMaxDeviation * reference {
                             previous = nil
                             recent.removeAll()
+                            seedCandidate = nil
                             continue
                         }
                     }
