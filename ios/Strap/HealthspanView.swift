@@ -1,6 +1,7 @@
 import SwiftUI
 
-private let healthspanMint = Color(hex: 0x55DDA6)
+// Use the same cool cyan accent as the Healthspan orb and Health Monitor.
+private let healthspanMint = Color(hex: 0x54D7E9)
 
 struct HealthspanPoint: Identifiable, Sendable {
     let date: Date
@@ -38,7 +39,9 @@ struct HealthspanView: View {
                     Spacer()
                     Image(systemName: "leaf.fill").font(.system(size: 26, weight: .light)).foregroundStyle(healthspanMint)
                 }.padding(.top, 12)
-                HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.chronologicalYears).frame(height: 280).padding(.vertical, 8)
+                HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.chronologicalYears)
+                    .frame(height: 300)
+                    .padding(.vertical, 10)
                 ageCard
                 trendCard
                 factors
