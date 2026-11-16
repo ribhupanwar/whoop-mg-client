@@ -143,9 +143,7 @@ struct MoreView: View {
     private func makePortableDataExport() throws -> URL {
         let fm = FileManager.default
         let destination = fm.temporaryDirectory.appendingPathComponent("STRAP-partial-export-\(UUID().uuidString).zip")
-        guard let archive = Archive(url: destination, accessMode: .create) else {
-            throw CocoaError(.fileWriteUnknown)
-        }
+        let archive = try Archive(url: destination, accessMode: .create)
         let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         let history = support.appendingPathComponent("strap-history-v18.json")
         if fm.fileExists(atPath: history.path) {
