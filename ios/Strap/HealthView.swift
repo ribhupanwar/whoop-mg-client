@@ -14,13 +14,15 @@ struct HealthView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                connectionBanner
                 hrPanel
+                fiveMetricGrid
                 metricGrid
                 if !demo { rrDiagnosticPanel }
                 Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Respiratory rate is an RSA estimate from R-R; SpO₂ is the band's unvalidated candidate, not a clinical reading.")
             }
         }
-        .navigationTitle("Health monitor")
+        .navigationTitle("HEALTH MONITOR")
         .navigationBarTitleDisplayMode(.inline)
         .task {
             // A one-second timer invalidated the entire health screen, including charts and\n            // the diagnostics panel. BLE updates still publish live HR independently;\n            // check staleness at a lower cadence to reduce main-thread rendering.
@@ -29,6 +31,82 @@ struct HealthView: View {
                 try? await Task.sleep(for: .seconds(3))
             }
         }
+    }
+
+    private var connectionBanner: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "applewatch")
+                .font(.system(size: 20))
+                .foregroundStyle(Color.appMuted)
+            Text(store.band.isConnected ? "CONNECTED" : "DISCONNECTED")
+                .font(StrapTypography.body(12, weight: .bold))
+                .tracking(1.2)
+            Spacer()
+            Image(systemName: store.band.isConnected ? "checkmark" : "xmark")
+                .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
+                .font(.system(size: 19, weight: .bold))
+        }
+        .padding(19)
+        .background(RoundedRectangle(cornerRadius: 15).fill(Color.black.opacity(0.72)))
+        .padding(.bottom, 18)
+    }
+
+    private var fiveMetricGrid: some View {
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            healthMetric("RESPIRATORY RATE", symbol: "lungs", value: demo ? "18.4" :
+                         ActivityFormat.whole(summary?.respiration.breathsPerMinute) ?? "—",
+                         unit: "rpm", detail: demo ? "sample" : respirationChip)
+            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: "drop", value: demo ? "95" :
+                         summary?.spo2.pct.map { String(format: "%.0f", $0) } ?? "—",
+                         unit: "%", detail: demo ? "sample" : "Unvalidated candidate · " + spo2Chip)
+            healthMetric("RHR", symbol: "heart", value: demo ? "62" :
+                         ActivityFormat.whole(displayedNightRHR) ?? "—",
+                         unit: "bpm", detail: demo ? "sample" : rhrTrendChip)
+            healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" :
+                         ActivityFormat.whole(latestNightHRV) ?? "—",
+                         unit: "ms", detail: demo ? "sample" : hrvTrendChip)
+            healthMetric("SKIN TEMP (FROM BASELINE)", symbol: "thermometer.medium",
+                         value: demo ? "+0.2" : "—", unit: "°C",
+                         detail: demo ? "sample" : "Baseline deviation not validated")
+        }
+        .padding(.bottom, 18)
+    }
+
+    private func healthMetric(_ title: String, symbol: String, value: String,
+                              unit: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundStyle(Color.appMuted)
+                    .frame(width: 20)
+                Text(title)
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(Color.appMuted)
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(value)
+                    .font(StrapTypography.metric(31, weight: .bold))
+                    .foregroundStyle(Color.appFG)
+                    .minimumScaleFactor(0.75)
+                    .lineLimit(1)
+                Text(value == "—" ? "" : unit)
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appFG)
+            }
+            Text(detail)
+                .font(StrapTypography.body(10, weight: .semibold))
+                .foregroundStyle(Color.appGood)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
     }
 
     private var hrPanel: some View {
