@@ -549,7 +549,8 @@ struct HomeView: View {
                     HStack(spacing: 7) {
                         Image(systemName: "moon.fill").font(StrapTypography.body(12))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(StrapTypography.metric(17, weight: .bold))
+                            .font(StrapTypography.metric(22, weight: .bold))
+                            .monospacedDigit()
                     }
                     .foregroundStyle(Color.appFG)
                     .padding(.horizontal, 12)
@@ -562,7 +563,8 @@ struct HomeView: View {
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(StrapTypography.body(11, weight: .medium))
+                        .font(StrapTypography.metric(12, weight: .medium))
+                        .monospacedDigit()
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
                 }
@@ -805,7 +807,8 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
-                        .font(StrapTypography.body(21, weight: .medium))
+                        .font(StrapTypography.metric(26, weight: .bold))
+                        .monospacedDigit()
                         .foregroundStyle(Color.appFG)
                     Text("RECOMMENDED\nBEDTIME")
                         .font(StrapTypography.body(9.5))
