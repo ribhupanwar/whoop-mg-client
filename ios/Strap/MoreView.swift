@@ -81,11 +81,14 @@ struct MoreView: View {
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     Button {
+                        // Never leave an older export shareable after a failed refresh:
+                        // it could be mistaken for a current uninstall-safety backup.
+                        exportURL = nil
+                        exportError = nil
                         preparingExport = true
                         defer { preparingExport = false }
                         do {
                             exportURL = try makePortableDataExport()
-                            exportError = nil
                         } catch {
                             exportError = error.localizedDescription
                         }
