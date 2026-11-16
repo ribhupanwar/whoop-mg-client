@@ -15,15 +15,132 @@ struct HealthHubView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                baselinePanel
-                fitnessAgePanel
+                healthspanHero
                 healthMonitorCard
+                bloodPressureCard
                 stressMonitorCard
-                notMeasuredPanel
-                Hint("Health monitor and stress monitor are local estimates, not medical devices, and cannot diagnose or manage conditions. Consult your doctor for health concerns.")
+                Text("Healthspan, Health Monitor, and Stress Monitor are wellness estimates, not medical devices. Blood pressure is not measured by STRAP. Consult a doctor for health concerns.")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 22)
+                    .padding(.bottom, 18)
             }
         }
         .strapTabTypography("Health")
+    }
+
+    // MARK: Health tab hero, modelled on the supplied reference
+
+    private var healthspanHero: some View {
+        VStack(spacing: 14) {
+            HealthspanOrb(years: demo ? 25 : fitnessSnapshot?.years)
+                .frame(height: 245)
+                .padding(.top, 8)
+            Text("FITNESS AGE")
+                .font(StrapTypography.body(11, weight: .bold))
+                .tracking(1.4)
+            Text(demo ? "5.0 years younger · sample" :
+                    fitnessSnapshot.map {
+                        let gap = $0.years - Double($0.chronologicalYears)
+                        return String(format: "%.1f years %@", abs(gap), gap <= 0 ? "younger" : "older")
+                    } ?? "Collecting your baseline")
+                .font(StrapTypography.body(15, weight: .semibold))
+                .foregroundStyle(Color(hex: 0x80D6E8))
+            if !store.hasRecoveryBaseline {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "hourglass")
+                        .foregroundStyle(Color(hex: 0x70BDE4))
+                    Text("Your fitness age is calibrating. As STRAP collects more resting and activity data, this estimate may stabilize.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color(hex: 0x8FC6E7))
+                    Spacer(minLength: 0)
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 13).fill(Color(hex: 0x20303F)))
+            }
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text("PACE OF AGING")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(1)
+                    Spacer()
+                    Text("Not calculated")
+                        .font(StrapTypography.body(10))
+                        .foregroundStyle(Color.appMuted)
+                }
+                HStack {
+                    Text("Slow")
+                    Spacer()
+                    Text("—")
+                        .font(StrapTypography.metric(28, weight: .bold))
+                    Spacer()
+                    Text("Fast")
+                }
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+                HStack(spacing: 3) {
+                    ForEach(0..<60, id: \.self) { _ in
+                        Capsule().fill(Color.appMuted.opacity(0.28)).frame(height: 24)
+                    }
+                }
+                HStack {
+                    Text("-1.0x")
+                    Spacer()
+                    Text("1.0x")
+                    Spacer()
+                    Text("3.0x")
+                }
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
+                NavigationLink { HealthspanView() } label: {
+                    Text("GO TO HEALTHSPAN")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(1)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 15)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.10)))
+                }
+                .buttonStyle(.plain)
+            }
+            .padding(17)
+            .background(RoundedRectangle(cornerRadius: 17).fill(LinearGradient.appCard))
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.bottom, 22)
+    }
+
+    private var bloodPressureCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Text("BLOOD PRESSURE INSIGHTS")
+                    .font(StrapTypography.body(12, weight: .bold))
+                    .tracking(1)
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .foregroundStyle(Color.appMuted)
+            }
+            HStack {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("TODAY'S ESTIMATE")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .foregroundStyle(Color.appMuted)
+                    Text("— / —")
+                        .font(StrapTypography.metric(30, weight: .bold))
+                }
+                Spacer()
+                Image(systemName: "waveform.path")
+                    .font(.system(size: 40, weight: .ultraLight))
+                    .foregroundStyle(Color.appMuted)
+            }
+            .padding(.vertical, 12)
+            Text("Unavailable · STRAP cannot estimate blood pressure from the verified band data.")
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
+        }
+        .padding(17)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+        .padding(.bottom, 18)
     }
 
     // MARK: Baseline progress
