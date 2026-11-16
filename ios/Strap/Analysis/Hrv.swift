@@ -285,6 +285,48 @@ enum Hrv {
         return (.empty, 0)
     }
 
+    /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
+    /// change either production estimator or its quality thresholds.
+    struct RestingWindowDiagnostic {
+        let startUnix: Int
+        let endUnix: Int
+        let durationSeconds: Int
+        let rrBeats: Int
+        let cleanBeats: Int
+        let rmssdMS: Double?
+        let meanHeartRate: Double
+        let minimumRollingHeartRate: Double?
+    }
+
+    static func restingWindowDiagnostics(
+        _ samples: [V18Sample],
+        quietAccelG: Double = restingQuietAccelG,
+        minWindowS: Int = restingMinWindowS
+    ) -> [RestingWindowDiagnostic] {
+        let eligible = samples.filter {
+            $0.wearing && (35...220).contains($0.heartRate)
+                && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+        }
+        // Use the same contiguous-run and RR quality rules as production HRV.
+        return contiguousRuns(eligible)
+            .filter { $0.count >= minWindowS }
+            .map { run in
+                let result = fromSamples(run)
+                let heartRates = run.map { Double($0.heartRate) }
+                return RestingWindowDiagnostic(
+                    startUnix: run[0].unix,
+                    endUnix: run[run.count - 1].unix,
+                    durationSeconds: run.count,
+                    rrBeats: result.beats,
+                    cleanBeats: result.nnBeats,
+                    rmssdMS: result.rmssdMS,
+                    meanHeartRate: Stats.mean(heartRates),
+                    minimumRollingHeartRate: minimumRollingMean(heartRates, window: minWindowS)
+                )
+            }
+            .sorted { $0.startUnix < $1.startUnix }
+    }
+
     /// Lowest sustained heart rate across a quiet window, in bpm.
     ///
     /// Resting HR is the lowest sustained rate during quiet, not the single
