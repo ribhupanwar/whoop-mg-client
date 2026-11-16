@@ -660,8 +660,9 @@ struct HomeView: View {
         guard let period = latestSleepPeriod else { return }
         let session = store.band.latestSleepSession
         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? times?.first ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(session?.endUnix ?? times?.last ?? (period.endUnix + 1)))
+        // Explicit user corrections must win over a stale derived sleep session.
+        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? session?.startUnix ?? period.startUnix))
+        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? session?.endUnix ?? (period.endUnix + 1)))
         showSleepEditor = true
     }
 
@@ -871,13 +872,14 @@ struct HomeView: View {
     }
 
     private var sleepTimesText: String {
-        if let session = store.band.latestSleepSession {
-            return "\(Self.sleepClock(session.startUnix, includeDay: true))\n\(Self.sleepClock(session.endUnix, includeDay: false))"
-        }
         if store.band.isAnalyzingHistory { return "Updating…" }
         guard let period = latestSleepPeriod else { return "wear it\ntonight" }
         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-        return "\(Self.sleepClock(times?.first ?? period.startUnix, includeDay: true))\n\(Self.sleepClock(times?.last ?? (period.endUnix + 1), includeDay: false))"
+        let session = store.band.latestSleepSession
+        // Display saved user edits even while a cached session is being refreshed.
+        let start = times?.first ?? session?.startUnix ?? period.startUnix
+        let end = times?.last ?? session?.endUnix ?? (period.endUnix + 1)
+        return "\(Self.sleepClock(start, includeDay: true))\n\(Self.sleepClock(end, includeDay: false))"
     }
 
     private static func sleepClock(_ unix: Int, includeDay: Bool) -> String {
