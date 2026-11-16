@@ -16,6 +16,7 @@ struct HealthHubView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 healthspanHero
+                advancedLabsCard
                 healthMonitorCard
                 bloodPressureCard
                 stressMonitorCard
@@ -33,19 +34,10 @@ struct HealthHubView: View {
 
     private var healthspanHero: some View {
         VStack(spacing: 14) {
-            HealthspanOrb(years: demo ? 25 : fitnessSnapshot?.years)
-                .frame(height: 245)
-                .padding(.top, 8)
-            Text("FITNESS AGE")
-                .font(StrapTypography.body(11, weight: .bold))
-                .tracking(1.4)
-            Text(demo ? "5.0 years younger · sample" :
-                    fitnessSnapshot.map {
-                        let gap = $0.years - Double($0.chronologicalYears)
-                        return String(format: "%.1f years %@", abs(gap), gap <= 0 ? "younger" : "older")
-                    } ?? "Collecting your baseline")
-                .font(StrapTypography.body(15, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x80D6E8))
+            HealthspanOrb(years: demo ? 25 : fitnessSnapshot?.years,
+                          chronologicalYears: demo ? 30 : fitnessSnapshot?.chronologicalYears)
+                .frame(height: 310)
+                .padding(.top, 4)
             if !store.hasRecoveryBaseline {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "hourglass")
@@ -64,7 +56,7 @@ struct HealthHubView: View {
                         .font(StrapTypography.body(12, weight: .bold))
                         .tracking(1)
                     Spacer()
-                    Text("Not calculated")
+                    Text("Awaiting validated trend")
                         .font(StrapTypography.body(10))
                         .foregroundStyle(Color.appMuted)
                 }
@@ -107,6 +99,34 @@ struct HealthHubView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 22)
+    }
+
+    private var advancedLabsCard: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 15) {
+                Text("ADVANCED LABS")
+                    .font(StrapTypography.body(12, weight: .bold))
+                    .tracking(1)
+                Text("Add laboratory results to understand your health alongside wearable trends.")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text("NOT CONNECTED")
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .foregroundStyle(Color(hex: 0x72C4E8))
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "testtube.2")
+                .font(.system(size: 48, weight: .ultraLight))
+                .foregroundStyle(Color(hex: 0x4DE0B3))
+                .frame(width: 88)
+        }
+        .padding(19)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 17).fill(
+            LinearGradient(colors: [Color(hex: 0x292D30), Color(hex: 0x155B50)],
+                           startPoint: .leading, endPoint: .trailing)))
+        .padding(.bottom, 20)
     }
 
     private var bloodPressureCard: some View {
