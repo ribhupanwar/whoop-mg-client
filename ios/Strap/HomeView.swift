@@ -403,7 +403,7 @@ struct HomeView: View {
         if let summary = store.lastCapture {
             let hrv = summary.hrv.rmssdMS.map { String(format: "%.0f ms", $0) } ?? "no steady R-R window"
             let rhr = summary.restingHeartRate.map { String(format: "%.0f bpm", $0) } ?? "RHR unavailable"
-            return "Last capture: \(summary.sampleCount) s · \(rhr) · HRV \(hrv). Long enough for a baseline day."
+            return "Last capture: \(summary.sampleCount.formatted()) samples · \(rhr) · HRV \(hrv). Long enough for a baseline day."
         }
         return "Strap reads your band locally. Sleep, recovery and HRV insights appear once overnight and daytime captures exist — nothing is estimated until then."
     }
