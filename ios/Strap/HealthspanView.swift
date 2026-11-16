@@ -247,8 +247,8 @@ private struct LiquidAgeMembrane: Shape {
                 + 0.019 * sin(8 * angle - 1.2)
                 + 0.011 * cos(3 * angle)
             let point = CGPoint(
-                x: center.x + radius * variation * cos(angle),
-                y: center.y + radius * variation * sin(angle))
+                x: center.x + radius * CGFloat(variation * cos(angle)),
+                y: center.y + radius * CGFloat(variation * sin(angle)))
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
         path.closeSubpath()
