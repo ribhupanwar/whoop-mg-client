@@ -134,26 +134,8 @@ struct HealthView: View {
                     .padding(.bottom, 8)
             }
 
-            if demo {
-                LineChart(
-                    values: SampleData.hrSeries,
-                    color: .appAccent,
-                    minY: 60,
-                    maxY: 90,
-                    height: 140,
-                    yLabels: ["90", "75", "60"],
-                    xLabels: ["09:13", "10:01"]
-                )
-            } else if series.count >= 2 {
-                LineChart(
-                    values: series,
-                    color: .appAccent,
-                    minY: (series.min() ?? 0) - 4,
-                    maxY: (series.max() ?? 0) + 4,
-                    height: 140,
-                    yLabels: yLabels,
-                    xLabels: xLabels
-                )
+            if demo || series.count >= 2 {
+                liveHeartRateChart
             } else {
                 EmptyState(
                     title: "needs a capture",
@@ -168,6 +150,67 @@ struct HealthView: View {
                     ? "No HR series yet — connect the band to stream live readings."
                     : "Heart-rate graph — live while connected, otherwise last capture.")
         }
+    }
+
+    private var liveHeartRateChart: some View {
+        let values = demo ? SampleData.hrSeries : series
+        let lower = (values.min() ?? 60) - 5
+        let upper = (values.max() ?? 90) + 5
+        return GeometryReader { geometry in
+            let width = geometry.size.width
+            let height = geometry.size.height
+            let chartHeight = height - 25
+            let points: [CGPoint] = values.enumerated().map { index, value in
+                CGPoint(x: width * CGFloat(index) / CGFloat(max(1, values.count - 1)),
+                        y: chartHeight * CGFloat(1 - (value - lower) / max(1, upper - lower)))
+            }
+            ZStack(alignment: .topLeading) {
+                Canvas { context, size in
+                    let spacing: CGFloat = 23
+                    var grid = Path()
+                    for x in stride(from: CGFloat(0), through: size.width, by: spacing) {
+                        grid.move(to: CGPoint(x: x, y: 0))
+                        grid.addLine(to: CGPoint(x: x, y: chartHeight))
+                    }
+                    for y in stride(from: CGFloat(0), through: chartHeight, by: spacing) {
+                        grid.move(to: CGPoint(x: 0, y: y))
+                        grid.addLine(to: CGPoint(x: size.width, y: y))
+                    }
+                    context.stroke(grid, with: .color(Color.white.opacity(0.055)), lineWidth: 0.6)
+                }
+                if points.count >= 2 {
+                    let path = Path { path in
+                        path.move(to: points[0])
+                        for point in points.dropFirst() { path.addLine(to: point) }
+                    }
+                    path.stroke(Color(hex: 0x18A6F5).opacity(0.32),
+                                style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
+                        .blur(radius: 7)
+                    path.stroke(Color(hex: 0x22AFFF),
+                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    if let last = points.last {
+                        Path { path in
+                            path.move(to: CGPoint(x: last.x, y: 0))
+                            path.addLine(to: CGPoint(x: last.x, y: chartHeight))
+                        }
+                        .stroke(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                        Circle().fill(.white).frame(width: 11, height: 11)
+                            .shadow(color: Color(hex: 0x22AFFF), radius: 5)
+                            .position(last)
+                    }
+                }
+                HStack {
+                    Text(demo ? "SAMPLE" : (xLabels.first ?? ""))
+                    Spacer()
+                    Text(demo ? "PREVIEW" : (xLabels.last ?? ""))
+                }
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
+                .offset(y: chartHeight + 5)
+            }
+        }
+        .frame(height: 170)
+        .accessibilityLabel("Heart-rate trend; current value shown at the right endpoint")
     }
 
     private var rrDiagnosticPanel: some View {
