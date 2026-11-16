@@ -272,21 +272,31 @@ struct HealthHubView: View {
 
     private func monitorCheck(_ label: String, icon: String, present: Bool) -> some View {
         VStack(spacing: 9) {
-            Image(systemName: icon)
-                .font(.system(size: 22, weight: .light))
-                .foregroundStyle(Color.appMuted)
-                .frame(height: 29)
+            ZStack {
+                Circle()
+                    .fill(present ? Color(hex: 0x163C4B) : Color.appRaised)
+                    .frame(width: 43, height: 43)
+                Circle()
+                    .strokeBorder(present ? Color(hex: 0x59D5E8) : Color.appLine,
+                                  lineWidth: 1)
+                    .frame(width: 43, height: 43)
+                Image(systemName: icon)
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(present ? Color(hex: 0x7CE3F1) : Color.appMuted)
+            }
             Text(label)
                 .font(StrapTypography.body(10, weight: .bold))
                 .tracking(0.4)
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
-            Image(systemName: present ? "checkmark.square.fill" : "minus.square")
-                .font(.system(size: 19))
-                .foregroundStyle(present ? Color.appGood : Color.appMuted)
+                .foregroundStyle(Color.appFG)
+            Image(systemName: present ? "checkmark.circle.fill" : "minus.circle")
+                .font(.system(size: 17))
+                .foregroundStyle(present ? Color(hex: 0x59D5E8) : Color.appMuted)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label), \(present ? "data available" : "data unavailable")")
     }
 
     // MARK: Stress Monitor card (drill-in)
