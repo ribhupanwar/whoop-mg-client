@@ -287,7 +287,8 @@ final class LiveHrvTests: XCTestCase {
 
         let isolatedResult = Hrv.fromLiveSamples(isolatedSamples)
         XCTAssertEqual(isolatedResult.beats, 25)
-        XCTAssertEqual(isolatedResult.nnBeats, 25)
+        // Isolated one-beat runs cannot seed the NN filter: no confirmed pair.
+        XCTAssertEqual(isolatedResult.nnBeats, 0)
         XCTAssertNil(isolatedResult.rmssdMS)
     }
 
