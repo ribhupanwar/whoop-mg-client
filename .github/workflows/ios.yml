@@ -189,6 +189,9 @@ jobs:
           path: ${{ runner.temp }}/ipa/Strap-unsigned.ipa
 
       - name: Render native design previews
+        # Optional screenshots must never exhaust the 25-minute IPA job.
+        # Both recent attempts finished tests and IPA, then stalled here.
+        timeout-minutes: 5
         continue-on-error: true
         run: |
           set -euo pipefail
@@ -206,7 +209,8 @@ jobs:
             # Already booted is not a failure; verify the selected device state.
             xcrun simctl list devices booted | grep -F "$SIM_ID"
           }
-          xcrun simctl bootstatus "$SIM_ID" -b
+          # simctl bootstatus can hang on a cold macOS runner; bound this optional step.
+          python3 -c 'import subprocess,sys; subprocess.run(sys.argv[1:], timeout=90, check=True)' xcrun simctl bootstatus "$SIM_ID" -b
           xcrun simctl install "$SIM_ID" build/Build/Products/Debug-iphonesimulator/Strap.app
           mkdir -p "$RUNNER_TEMP/ui-previews"
           for screen in home sleep recovery strain health healthspan train plan more; do
