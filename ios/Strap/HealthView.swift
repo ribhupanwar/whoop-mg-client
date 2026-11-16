@@ -108,109 +108,104 @@ struct HealthView: View {
         .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
     }
 
+    // WHOOP-inspired full-bleed presentation, retaining STRAP's measured HR.
     private var hrPanel: some View {
-        Panel {
-            SectionTitle("Heart rate")
-            HStack(alignment: .bottom, spacing: 10) {
-                Text(lastHR.map { "\($0)" } ?? "—")
-                    .font(StrapTypography.metric(36, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(freshLiveHR != nil ? "bpm · live" : "bpm · waiting for live")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                    Text(zoneText)
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .padding(.bottom, 4)
-                Spacer()
-            }
-            .padding(.bottom, 6)
-            if !demo {
-                Text(liveHRDiagnostic)
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted)
-                    .padding(.bottom, 8)
-            }
-
+        VStack(alignment: .leading, spacing: 0) {
+            Text("HEART RATE")
+                .font(StrapTypography.body(17, weight: .bold))
+                .tracking(1.6)
+                .padding(.bottom, 16)
+            Image(systemName: "heart.fill")
+                .font(.system(size: 27))
+                .foregroundStyle(Color(hex: 0x159EF0))
+                .padding(.bottom, 12)
+            Text(lastHR.map(String.init) ?? "—")
+                .font(StrapTypography.metric(58, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(Color.appFG)
+            Text("BPM")
+                .font(StrapTypography.body(17, weight: .bold))
+                .foregroundStyle(Color.appMuted)
+                .padding(.top, 1)
+            Text(zoneText)
+                .font(StrapTypography.body(17, weight: .semibold))
+                .foregroundStyle(Color.appMuted)
+                .padding(.top, 18)
             if demo || series.count >= 2 {
                 liveHeartRateChart
+                    .padding(.top, -195)
+                    .allowsHitTesting(false)
             } else {
-                EmptyState(
-                    title: "needs a capture",
-                    detail: "Waiting for live heart-rate readings from the band."
-                )
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+                Rectangle()
+                    .fill(Color.appMuted.opacity(0.25))
+                    .frame(width: 175, height: 3)
+                    .padding(.top, 20)
             }
-
-            Hint(demo
-                 ? "Sample series — not measured data."
-                 : series.isEmpty
-                    ? "No HR series yet — connect the band to stream live readings."
-                    : "Heart-rate graph — live while connected, otherwise last capture.")
+            if !demo {
+                Text(liveHRDiagnostic)
+                    .font(StrapTypography.body(10))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 12)
+            }
         }
+        .padding(.horizontal, 18)
+        .padding(.top, 20)
+        .padding(.bottom, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.appBG)
     }
 
     private var liveHeartRateChart: some View {
         let values = demo ? SampleData.hrSeries : series
-        let lower = (values.min() ?? 60) - 5
-        let upper = (values.max() ?? 90) + 5
+        let lower = (values.min() ?? 60) - 8
+        let upper = (values.max() ?? 90) + 8
         return GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
-            let chartHeight = height - 25
             let points: [CGPoint] = values.enumerated().map { index, value in
                 CGPoint(x: width * CGFloat(index) / CGFloat(max(1, values.count - 1)),
-                        y: chartHeight * CGFloat(1 - (value - lower) / max(1, upper - lower)))
+                        y: height * CGFloat(1 - (value - lower) / max(1, upper - lower)))
             }
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
-                    let spacing: CGFloat = 23
+                    let spacing: CGFloat = 24
                     var grid = Path()
                     for x in stride(from: CGFloat(0), through: size.width, by: spacing) {
                         grid.move(to: CGPoint(x: x, y: 0))
-                        grid.addLine(to: CGPoint(x: x, y: chartHeight))
+                        grid.addLine(to: CGPoint(x: x, y: size.height))
                     }
-                    for y in stride(from: CGFloat(0), through: chartHeight, by: spacing) {
+                    for y in stride(from: CGFloat(0), through: size.height, by: spacing) {
                         grid.move(to: CGPoint(x: 0, y: y))
                         grid.addLine(to: CGPoint(x: size.width, y: y))
                     }
-                    context.stroke(grid, with: .color(Color.white.opacity(0.055)), lineWidth: 0.6)
+                    context.stroke(grid, with: .color(Color.white.opacity(0.055)), lineWidth: 0.65)
                 }
                 if points.count >= 2 {
                     let path = Path { path in
                         path.move(to: points[0])
                         for point in points.dropFirst() { path.addLine(to: point) }
                     }
-                    path.stroke(Color(hex: 0x18A6F5).opacity(0.32),
-                                style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
-                        .blur(radius: 7)
+                    path.stroke(Color(hex: 0x18A6F5).opacity(0.35),
+                                style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
+                        .blur(radius: 9)
                     path.stroke(Color(hex: 0x22AFFF),
-                                style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                                style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
                     if let last = points.last {
                         Path { path in
                             path.move(to: CGPoint(x: last.x, y: 0))
-                            path.addLine(to: CGPoint(x: last.x, y: chartHeight))
+                            path.addLine(to: CGPoint(x: last.x, y: height))
                         }
-                        .stroke(Color.white.opacity(0.4), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                        Circle().fill(.white).frame(width: 11, height: 11)
-                            .shadow(color: Color(hex: 0x22AFFF), radius: 5)
+                        .stroke(Color.white.opacity(0.55),
+                                style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                        Circle().fill(.white).frame(width: 12, height: 12)
+                            .shadow(color: .white.opacity(0.7), radius: 6)
                             .position(last)
                     }
                 }
-                HStack {
-                    Text(demo ? "SAMPLE" : (xLabels.first ?? ""))
-                    Spacer()
-                    Text(demo ? "PREVIEW" : (xLabels.last ?? ""))
-                }
-                .font(StrapTypography.body(10))
-                .foregroundStyle(Color.appMuted)
-                .offset(y: chartHeight + 5)
             }
         }
-        .frame(height: 170)
-        .accessibilityLabel("Heart-rate trend; current value shown at the right endpoint")
+        .frame(height: 195)
+        .accessibilityLabel("Live heart rate trend, with current reading at the right endpoint")
     }
 
     private var rrDiagnosticPanel: some View {
