@@ -1700,6 +1700,11 @@ extension BandLink: CBCentralManagerDelegate {
         restored.delegate = self
         bandName = restored.name ?? preferredBandName
         status = .connecting(bandName ?? "Restored strap")
+        // CoreBluetooth may restore an already-connected peripheral without
+        // delivering didConnect again. Rebuild GATT and restart history sync.
+        if restored.state == .connected {
+            centralManager(central, didConnect: restored)
+        }
     }
 
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
