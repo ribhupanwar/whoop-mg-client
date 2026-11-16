@@ -104,7 +104,6 @@ enum SleepDetect {
             // trim the false early onset to the first sustained band sleep
             // declaration instead. Keep the rest of the night available.
             var verifiedStart = run[0].unix
-            let informativeStateRows = stateRows.filter { $0.sleepState != 0 }
             if (18..<24).contains(startHour) {
                 let sleepRows = run.filter {
                     $0.sleepState == 2 && $0.wearing && (35...220).contains($0.heartRate)
