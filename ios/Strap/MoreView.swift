@@ -164,9 +164,11 @@ struct MoreView: View {
             }
         let plist = try PropertyListSerialization.data(fromPropertyList: safeSettings,
                                                        format: .xml, options: 0)
-        let temp = fm.temporaryDirectory.appendingPathComponent("strap-settings-\(UUID().uuidString).plist")
+        let tempFolder = fm.temporaryDirectory.appendingPathComponent("strap-export-\(UUID().uuidString)", isDirectory: true)
+        try fm.createDirectory(at: tempFolder, withIntermediateDirectories: true)
+        let temp = tempFolder.appendingPathComponent("strap-settings.plist")
         try plist.write(to: temp, options: .atomic)
-        defer { try? fm.removeItem(at: temp) }
+        defer { try? fm.removeItem(at: tempFolder) }
         try archive.addEntry(with: "strap-settings.plist", relativeTo: temp.deletingLastPathComponent(),
                              compressionMethod: .deflate)
         return destination
