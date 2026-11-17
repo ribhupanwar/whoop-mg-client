@@ -87,7 +87,7 @@ enum PersistenceDiagnostics {
             "strap.live.rr.samples.v1", "strap.history.retained.count.v1", "strap.history.lastComplete.v1",
             SleepCorrectionStore.defaultsKey, "strap.settings.v1", "strap.activities.v1", "strap.journal.entries.v1", "strap.live.sessions.v1", "strap.detected.activities.v1",
             "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1",
-            WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
+            WeeklyWakeSchedule.entriesKey, WeeklyWakeSchedule.activeKey, WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
             "strap.wake.alarm.minutes.v1", "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"]
         return exact.contains(key) || ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains { key == "strap.whoop.import." + $0 + ".v1" }
     }

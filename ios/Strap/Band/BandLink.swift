@@ -170,9 +170,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var buzzMessage = ""
     @Published private(set) var testingBuzz = false
     private var nextBandAlarm: Date?
-    private var syncedAlarmMinutes: Int?
     private var alarmWasDisabled = false
-    private var alarmWritePending = false
+    private var alarmDelivery = AlarmDeliveryState()
     private var lastBuzzAt: Date?
     private var lastAlarmAttempt: Date?
 
@@ -206,36 +205,41 @@ final class BandLink: NSObject, ObservableObject {
             bandAlarmMessage = WakeAlarm.isEnabled ? "Reconnect to send the next wake alarm to your band." : "Alarm off. Reconnect to cancel any previously sent band alarm."
             return
         }
-        guard !alarmWritePending else { return }
-        if !force, let lastAlarmAttempt, Date().timeIntervalSince(lastAlarmAttempt) < 30 { return }
         let on = WakeAlarm.isEnabled
-        let minutes = WakeAlarm.wakeMinutes
+        let next = on ? WakeAlarm.nextWakeDate() : nil
+        guard !on || next != nil else { bandAlarmMessage = "No valid next wake time. Check enabled weekdays and saved schedule."; return }
+        let target = AlarmTarget(enabled: on, date: next)
+        guard !alarmDelivery.deferIfPending(target) else { return }
+        if !force, let lastAlarmAttempt, Date().timeIntervalSince(lastAlarmAttempt) < 30 { return }
         if !force {
-            if on, syncedAlarmMinutes == minutes, let nextBandAlarm, nextBandAlarm > Date() { return }
+            if on, nextBandAlarm == next, let nextBandAlarm, nextBandAlarm > Date() { return }
             if !on && alarmWasDisabled { return }
         }
-        let next = on ? BandHaptics.nextWake(minutes: minutes) : nil
-        guard !on || next != nil else { bandAlarmMessage = "Could not calculate the next wake time."; return }
         let body = next.flatMap(BandHaptics.alarmBody) ?? BandHaptics.disableBody
         let opcode = on ? BandHaptics.alarmOpcode : BandHaptics.disableOpcode
-        alarmWritePending = true
+        alarmDelivery.start(target)
         lastAlarmAttempt = Date()
         bandAlarmMessage = on ? "Sending the next wake alarm to your band…" : "Cancelling the band alarm…"
         commandQueue.append(PendingCommand(opcode: opcode, body: body, expectResponse: true,
             onWrite: { [weak self] in
                 guard let self else { return }
-                self.alarmWritePending = false
+                let requestedRefresh = self.alarmDelivery.finish()
                 self.nextBandAlarm = next
-                self.syncedAlarmMinutes = on ? minutes : nil
                 self.alarmWasDisabled = !on
                 self.bandAlarmMessage = next.map {
                     "Alarm sent to band for " + $0.formatted(date: .abbreviated, time: .shortened) + ". Wrist verification pending."
                 } ?? "Band alarm cancellation delivered."
                 // A preference may have changed while this write was queued.
-                if WakeAlarm.isEnabled != on || WakeAlarm.wakeMinutes != minutes { self.syncWakeAlarm(force: true) }
+                if requestedRefresh || WakeAlarm.isEnabled != on || WakeAlarm.nextWakeDate() != next {
+                    DispatchQueue.main.async { [weak self] in self?.syncWakeAlarm(force: true) }
+                }
             }, onFailure: { [weak self] error in
-                self?.alarmWritePending = false
-                self?.bandAlarmMessage = "Band alarm could not be sent: " + error
+                guard let self else { return }
+                let requestedRefresh = self.alarmDelivery.finish()
+                self.bandAlarmMessage = "Band alarm could not be sent: " + error
+                if requestedRefresh {
+                    DispatchQueue.main.async { [weak self] in self?.syncWakeAlarm(force: true) }
+                }
             }))
         pump()
     }
@@ -1187,10 +1191,9 @@ final class BandLink: NSObject, ObservableObject {
         commandQueue.forEach { $0.onFailure?("Band disconnected. Reconnect and try again.") }
         commandQueue = []
         commandInFlight = false
-        alarmWritePending = false
+        alarmDelivery.reset()
         testingBuzz = false
         nextBandAlarm = nil
-        syncedAlarmMinutes = nil
         alarmWasDisabled = false
         lastAlarmAttempt = nil
         commandSeq = 1

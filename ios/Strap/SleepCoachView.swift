@@ -9,6 +9,7 @@ import SwiftUI
 /// tonight". This is our own published-science coach, not a proprietary one.
 struct SleepCoachView: View {
     @EnvironmentObject private var store: AppStore
+    @ObservedObject private var phoneAlarm = WakeAlarmDelivery.shared
 
     @State private var wakeMinutes = 7 * 60
     @State private var intent: SleepIntent = .easy
@@ -57,14 +58,16 @@ struct SleepCoachView: View {
             }.presentationDetents([.height(300)])
         }
         .onAppear {
-            if !seeded {
-                wakeMinutes = demo ? SampleData.demoWakeMinutes : store.settings.wakeTimeMinutes
-                intent = store.settings.sleepIntent
-                alarmOn = WakeAlarm.isEnabled
-                seeded = true
-            }
+            if !seeded { intent = store.settings.sleepIntent; seeded = true }
+            if demo { wakeMinutes = SampleData.demoWakeMinutes }
+            else if WakeAlarm.usesWeeklySchedule, let next = WakeAlarm.nextWakeDate() {
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: next)
+                wakeMinutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+            } else { wakeMinutes = store.settings.wakeTimeMinutes }
+            alarmOn = WakeAlarm.isEnabled
         }
         .onChange(of: wakeMinutes) { _, newValue in
+            guard !WakeAlarm.usesWeeklySchedule else { return }
             if store.settings.wakeTimeMinutes != newValue {
                 store.settings.wakeTimeMinutes = newValue
             }
@@ -140,7 +143,7 @@ struct SleepCoachView: View {
                     Text(CoachFormat.clock(wakeMinutes))
                         .font(StrapTypography.metric(26, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                }.buttonStyle(.plain).accessibilityLabel("Change wake time")
+                }.buttonStyle(.plain).accessibilityLabel("Change wake time").disabled(WakeAlarm.usesWeeklySchedule)
                 Text("YOUR WAKE\nTIME")
                     .font(StrapTypography.body(9.5))
                     .tracking(0.7)
@@ -226,6 +229,9 @@ struct SleepCoachView: View {
                 coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
             }
 
+            NavigationLink("Different wake time per weekday") { WeeklyWakeScheduleView() }
+                .font(StrapTypography.body(12)).padding(.vertical, 8)
+            if WakeAlarm.usesWeeklySchedule { Hint("Weekly schedule active. Edit each weekday in the schedule above.") }
             Button("OK") {
                 WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
                 store.band.syncWakeAlarm(force: true)
@@ -241,6 +247,7 @@ struct SleepCoachView: View {
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appGood)
             }
+            Text(phoneAlarm.status).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
             Text(store.band.bandAlarmMessage)
                 .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).padding(.top, 10)
             Button { store.band.testBuzz() } label: {
