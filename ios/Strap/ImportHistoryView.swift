@@ -4,21 +4,25 @@ struct ImportHistoryView: View {
     @State private var sections: [(String, [WhoopCSVImport.SupplementalRecord])] = []
     @State private var exportURL: URL?
     @State private var status = ""
+    @State private var limitDates = false
+    @State private var from = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+    @State private var through = Date()
     var body: some View {
         List {
             Section {
                 Text("Original WHOOP fields and timestamps are retained as source records. Exported stage totals are not a timestamped hypnogram. Imported records remain distinct from local band estimates.")
                 Text(status)
-                if let exportURL { ShareLink("Save source records JSON", item: exportURL) }
-                Button("Export individual source records JSON") {
-                    do {
-                        let records = sections.flatMap { $0.1 }
-                        let url = FileManager.default.temporaryDirectory.appendingPathComponent("WHOOP-source-records-\(UUID().uuidString).json")
-                        let encoder = JSONEncoder(); encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-                        try encoder.encode(records).write(to: url, options: .atomic)
-                        exportURL = url
-                    } catch { status = error.localizedDescription }
+                Toggle("Limit exported dates", isOn: $limitDates)
+                if limitDates {
+                    DatePicker("From", selection: $from, displayedComponents: .date)
+                    DatePicker("Through", selection: $through, displayedComponents: .date)
                 }
+                Text("Cycles and sleeps use wake date when available. Journal uses a matching cycle's wake date, otherwise original cycle date. Workouts use start date. Dates follow the original source clock.")
+                if let exportURL { ShareLink("Save exported source records", item: exportURL) }
+                Button("Export source records JSON") { export(asCSV: false) }
+                    .disabled(limitDates && from > through)
+                Button("Export source records CSV") { export(asCSV: true) }
+                    .disabled(limitDates && from > through)
             }
             ForEach(sections.indices, id: \.self) { index in
                 Section("\(sections[index].0) · \(sections[index].1.count) records") {
@@ -46,6 +50,24 @@ struct ImportHistoryView: View {
             } catch { status = "Original import bytes retained; decoding failed: " + error.localizedDescription }
         }
     }
+    private func export(asCSV: Bool) {
+        do {
+            let sources = Dictionary(uniqueKeysWithValues: sections.map { ($0.0, $0.1) })
+            let formatter = DateFormatter(); formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.calendar = Calendar(identifier: .gregorian); formatter.dateFormat = "yyyy-MM-dd"
+            let selected = WhoopSourceExport.select(sources,
+                from: limitDates ? formatter.string(from: from) : nil,
+                through: limitDates ? formatter.string(from: through) : nil)
+            let data: Data
+            if asCSV { data = WhoopSourceExport.csv(selected.records) }
+            else { data = try WhoopSourceExport.json(selected.records) }
+            let url = FileManager.default.temporaryDirectory.appendingPathComponent("WHOOP-source-records-\(UUID().uuidString).\(asCSV ? "csv" : "json")")
+            try data.write(to: url, options: .atomic)
+            exportURL = url
+            status = "Exported \(selected.records.count) source records. \(selected.undated) undated records \(limitDates ? "excluded by date filter" : "included without date filtering")."
+        } catch { status = error.localizedDescription }
+    }
+
 }
 
 struct AppleHealthImportView: View {
