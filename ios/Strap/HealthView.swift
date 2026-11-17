@@ -10,6 +10,7 @@ struct HealthView: View {
 
     private var demo: Bool { store.isPreview }
     @State private var clock = Date()
+    @State private var capturedChartPoints: [HeartRateChartPoint] = []
 
     var body: some View {
         Screen {
@@ -22,6 +23,9 @@ struct HealthView: View {
         }
         .navigationTitle("Health monitor")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: refreshCapturedChartPoints)
+        .onChange(of: store.band.summary?.lastUnix) { _, _ in refreshCapturedChartPoints() }
+        .onChange(of: store.band.lastHistoryRecordCount) { _, _ in refreshCapturedChartPoints() }
         .task {
             // A one-second timer invalidated the entire health screen, including charts and\n            // the diagnostics panel. BLE updates still publish live HR independently;\n            // check staleness at a lower cadence to reduce main-thread rendering.
             while !Task.isCancelled {
@@ -35,11 +39,14 @@ struct HealthView: View {
         Panel {
             SectionTitle("Heart rate")
             HStack(alignment: .bottom, spacing: 10) {
-                Text(lastHR.map { "\($0)" } ?? "—")
-                    .font(StrapTypography.body(36, weight: .medium))
+                Text(displayedHR.map { "\($0)" } ?? "—")
+                    .font(StrapTypography.metric(36, weight: .regular))
                     .foregroundStyle(Color.appFG)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(freshLiveHR != nil ? "bpm · live" : "bpm · waiting for live")
+                    Text(demo ? "bpm · sample"
+                         : freshLiveHR != nil ? "bpm · live"
+                         : displayedHR != nil ? "bpm · last reading"
+                         : "bpm · waiting for live")
                         .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                     Text(zoneText)
@@ -50,46 +57,23 @@ struct HealthView: View {
                 Spacer()
             }
             .padding(.bottom, 6)
-            if !demo {
-                Text(liveHRDiagnostic)
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted)
-                    .padding(.bottom, 8)
-            }
 
-            if demo {
-                LineChart(
-                    values: SampleData.hrSeries,
-                    color: .appAccent,
-                    minY: 60,
-                    maxY: 90,
-                    height: 140,
-                    yLabels: ["90", "75", "60"],
-                    xLabels: ["09:13", "10:01"]
-                )
-            } else if series.count >= 2 {
-                LineChart(
-                    values: series,
-                    color: .appAccent,
-                    minY: (series.min() ?? 0) - 4,
-                    maxY: (series.max() ?? 0) + 4,
-                    height: 140,
-                    yLabels: yLabels,
-                    xLabels: xLabels
+            if !chartPoints.isEmpty {
+                HeartRateChart(
+                    points: chartPoints,
+                    source: demo ? "Sample" : usingLiveSeries ? "Live" : "Recorded"
                 )
             } else {
                 EmptyState(
-                    title: "needs a capture",
-                    detail: "Waiting for live heart-rate readings from the band."
+                    title: displayedHR == nil ? "No heart-rate readings" : "Chart unavailable",
+                    detail: displayedHR == nil
+                        ? "Waiting for live heart-rate readings from the band."
+                        : "A timestamped series is not available for this saved reading."
                 )
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
             }
 
-            Hint(demo
-                 ? "Sample series — not measured data."
-                 : series.isEmpty
-                    ? "No HR series yet — connect the band to stream live readings."
-                    : "Heart-rate graph — live while connected, otherwise last capture.")
+            Hint(chartHint)
         }
     }
 
@@ -222,31 +206,73 @@ struct HealthView: View {
     private var freshLiveHR: Int? {
         guard store.band.isConnected,
               let last = store.band.lastLiveHRAt,
-              clock.timeIntervalSince(last) <= 8 else { return nil }
+              isFreshLiveTimestamp(last),
+              let sample = store.band.recentLiveHR.last,
+              isFreshLiveTimestamp(Date(timeIntervalSince1970: TimeInterval(sample.unix))) else { return nil }
         return store.band.liveHeartRate
+    }
+
+    private func isFreshLiveTimestamp(_ timestamp: Date) -> Bool {
+        let age = max(clock, Date()).timeIntervalSince(timestamp)
+        return (0...8).contains(age)
     }
 
     private var lastHR: Int? { freshLiveHR }
 
-    private var liveHRDiagnostic: String {
-        guard store.band.isConnected else { return "Strap disconnected · connect to stream live HR" }
-        let count = store.band.liveHRNotificationCount
-        guard let last = store.band.lastLiveHRAt else {
-            return "HR packets: 0 · \(store.band.hrConnectionDiagnostic)"
+    private var displayedHR: Int? {
+        if demo { return SampleData.hrSeries.last.map { Int($0.rounded()) } }
+        return freshLiveHR ?? capturedChartPoints.last?.bpm ?? summary?.lastHeartRate
+    }
+
+    private var chartPoints: [HeartRateChartPoint] {
+        if demo {
+            let values = SampleData.hrSeries
+            let start = Calendar.current.startOfDay(for: Date()).addingTimeInterval(9 * 3600 + 13 * 60)
+            let span: TimeInterval = 48 * 60
+            return normalizedHeartRatePoints(values.enumerated().map { index, value in
+                let fraction = Double(index) / Double(max(1, values.count - 1))
+                return HeartRateChartPoint(
+                    unix: Int(start.timeIntervalSince1970 + span * fraction),
+                    bpm: Int(value.rounded())
+                )
+            })
         }
-        let seconds = max(0, Int(clock.timeIntervalSince(last)))
-        return "HR packets: \(count) · last packet \(seconds)s ago"
+
+        if usingLiveSeries {
+            return normalizedHeartRatePoints(store.band.recentLiveHR.map {
+                HeartRateChartPoint(unix: $0.unix, bpm: $0.heartRate)
+            })
+        }
+
+        return capturedChartPoints
     }
 
     private var usingLiveSeries: Bool {
-        guard let last = store.band.recentLiveHR.last else { return false }
-        return store.band.isConnected && clock.timeIntervalSince1970 - Double(last.unix) <= 15
-            && store.band.recentLiveHR.count >= 2
+        freshLiveHR != nil && !store.band.recentLiveHR.isEmpty
     }
 
-    private var series: [Double] {
-        if usingLiveSeries { return store.band.recentLiveHR.map { Double($0.heartRate) } }
-        return summary?.heartRateSeries ?? []
+    private func refreshCapturedChartPoints() {
+        capturedChartPoints = normalizedHeartRatePoints(store.band.capturedHeartRateReadings.map {
+            HeartRateChartPoint(unix: $0.unix, bpm: $0.bpm)
+        })
+    }
+
+    private var chartHint: String {
+        if demo { return "Sample series — not measured data." }
+        guard let first = chartPoints.first, let last = chartPoints.last else {
+            return displayedHR == nil
+                ? "No recorded HR series yet — connect the band to stream live readings."
+                : "A timestamped series is unavailable for this saved reading."
+        }
+        if usingLiveSeries {
+            return "Live readings through \(Self.timestampLabel(last.unix)). Gaps indicate intervals without a received sample."
+        }
+        return "Recorded readings \(Self.timestampLabel(first.unix))–\(Self.timestampLabel(last.unix)). Gaps indicate missing recorded samples."
+    }
+
+    private static func timestampLabel(_ unix: Int) -> String {
+        Date(timeIntervalSince1970: TimeInterval(unix))
+            .formatted(date: .abbreviated, time: .shortened)
     }
 
     private var baselineChip: String {
@@ -327,7 +353,10 @@ struct HealthView: View {
     }
 
     private var zoneText: String {
-        guard let hr = lastHR, let zones = store.liveZones else {
+        guard let hr = lastHR else {
+            return "zone needs live HR"
+        }
+        guard let zones = store.liveZones else {
             return "zone needs resting + max HR"
         }
         if let zone = zones.first(where: {
@@ -336,22 +365,6 @@ struct HealthView: View {
             return zone.name
         }
         return "below Z1"
-    }
-
-    private var yLabels: [String] {
-        guard let low = series.min(), let high = series.max() else { return [] }
-        return [String(format: "%.0f", high), String(format: "%.0f", (high + low) / 2), String(format: "%.0f", low)]
-    }
-
-    private var xLabels: [String] {
-        if usingLiveSeries, let first = store.band.recentLiveHR.first,
-           let last = store.band.recentLiveHR.last {
-            return [Self.clock(first.unix), Self.clock(last.unix)]
-        }
-        guard let summary, let first = summary.firstUnix, let last = summary.lastUnix else {
-            return []
-        }
-        return [Self.clock(first), Self.clock(last)]
     }
 
     private var respirationChip: String {
@@ -373,9 +386,248 @@ struct HealthView: View {
         return String(format: "absolute · %.1f–%.1f", low, high)
     }
 
+}
+
+private struct HeartRateChartPoint: Identifiable {
+    let unix: Int
+    let bpm: Int
+    var id: Int { unix }
+}
+
+private func normalizedHeartRatePoints(_ points: [HeartRateChartPoint]) -> [HeartRateChartPoint] {
+    let ordered = points.enumerated().sorted {
+        if $0.element.unix == $1.element.unix {
+            return $0.offset < $1.offset
+        }
+        return $0.element.unix < $1.element.unix
+    }
+
+    var result: [HeartRateChartPoint] = []
+    for item in ordered {
+        if result.last?.unix == item.element.unix {
+            result[result.count - 1] = item.element
+        } else {
+            result.append(item.element)
+        }
+    }
+    return result
+}
+
+private struct HeartRateChart: View {
+    let points: [HeartRateChartPoint]
+    let source: String
+
+    private var sortedPoints: [HeartRateChartPoint] {
+        normalizedHeartRatePoints(points)
+    }
+
+    // Both live capture and v18 history retain one reading per whole Unix second.
+    // A 1.5-second limit keeps consecutive seconds together and splits a missing second.
+    private static let sampleCadenceSeconds = 1.0
+    private static let maxContinuousIntervalSeconds = sampleCadenceSeconds * 1.5
+
+    private func segments(for points: [HeartRateChartPoint]) -> [[HeartRateChartPoint]] {
+        var result: [[HeartRateChartPoint]] = []
+        for point in points {
+            guard let previous = result.last?.last else {
+                result.append([point])
+                continue
+            }
+            if Double(point.unix - previous.unix) > Self.maxContinuousIntervalSeconds {
+                result.append([point])
+            } else {
+                result[result.count - 1].append(point)
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        GeometryReader { geometry in
+            let ordered = sortedPoints
+            let contiguousSegments = segments(for: ordered)
+            let leftInset: CGFloat = 30
+            let topInset: CGFloat = 8
+            let bottomInset: CGFloat = 27
+            let plot = CGRect(
+                x: leftInset,
+                y: topInset,
+                width: max(1, geometry.size.width - leftInset - 4),
+                height: max(1, geometry.size.height - topInset - bottomInset)
+            )
+            let bounds = Self.bpmBounds(for: ordered)
+            let firstUnix = ordered.first?.unix ?? 0
+            let lastUnix = ordered.last?.unix ?? firstUnix
+            let line = chartPath(
+                segments: contiguousSegments, in: plot, bounds: bounds,
+                firstUnix: firstUnix, lastUnix: lastUnix, closingAtBottom: false
+            )
+            let area = chartPath(
+                segments: contiguousSegments, in: plot, bounds: bounds,
+                firstUnix: firstUnix, lastUnix: lastUnix, closingAtBottom: true
+            )
+            let last = ordered.last
+
+            ZStack(alignment: .topLeading) {
+                area
+                    .fill(LinearGradient(
+                        colors: [Color.appAccent.opacity(0.24), Color.appAccent.opacity(0.01)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    ))
+                ForEach(0..<3, id: \.self) { index in
+                    let fraction = CGFloat(index) / 2
+                    let y = plot.minY + plot.height * fraction
+                    Path { path in
+                        path.move(to: CGPoint(x: plot.minX, y: y))
+                        path.addLine(to: CGPoint(x: plot.maxX, y: y))
+                    }
+                    .stroke(Color.appLine, lineWidth: 1)
+
+                    Text(axisValue(at: index, bounds: bounds))
+                        .font(StrapTypography.body(9))
+                        .foregroundStyle(Color.appMuted)
+                        .frame(width: leftInset - 5, alignment: .trailing)
+                        .position(x: (leftInset - 5) / 2, y: y)
+                }
+                line
+                    .stroke(Color.appAccent, style: StrokeStyle(
+                        lineWidth: 1.7,
+                        lineCap: .round,
+                        lineJoin: .round
+                    ))
+                    .shadow(color: Color.appAccent.opacity(0.25), radius: 3)
+
+                ForEach(Array(contiguousSegments.enumerated()), id: \.offset) { entry in
+                    if entry.element.count == 1, let point = entry.element.first {
+                        Circle()
+                            .fill(Color.appAccent)
+                            .frame(width: 4, height: 4)
+                            .position(location(
+                                for: point, in: plot, bounds: bounds,
+                                firstUnix: firstUnix, lastUnix: lastUnix
+                            ))
+                    }
+                }
+                if let last {
+                    Circle()
+                        .fill(Color.appAccent)
+                        .frame(width: 7, height: 7)
+                        .position(location(
+                            for: last, in: plot, bounds: bounds,
+                            firstUnix: firstUnix, lastUnix: lastUnix
+                        ))
+                }
+
+                HStack {
+                    if let first = ordered.first, let last {
+                        Text(Self.clock(first.unix))
+                        Spacer()
+                        if first.unix != last.unix {
+                            Text(Self.clock(last.unix))
+                        }
+                    }
+                }
+                .font(StrapTypography.body(9))
+                .foregroundStyle(Color.appMuted)
+                .frame(width: plot.width)
+                .position(x: plot.midX, y: plot.maxY + bottomInset / 2)
+            }
+        }
+        .frame(height: 150)
+        .clipped()
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    private var accessibilityDescription: String {
+        guard let first = sortedPoints.first, let last = sortedPoints.last,
+              let low = sortedPoints.map(\.bpm).min(),
+              let high = sortedPoints.map(\.bpm).max() else {
+            return "Heart-rate chart has no readings"
+        }
+        return "\(source) heart rate from \(Self.timestampLabel(first.unix)) to \(Self.timestampLabel(last.unix)), \(low) to \(high) beats per minute, \(sortedPoints.count) readings. Missing intervals are gaps."
+    }
+
+    private func chartPath(
+        segments: [[HeartRateChartPoint]],
+        in rect: CGRect,
+        bounds: (lower: Double, upper: Double),
+        firstUnix: Int,
+        lastUnix: Int,
+        closingAtBottom: Bool
+    ) -> Path {
+        Path { path in
+            for segment in segments where segment.count > 1 {
+                let locations = segment.map {
+                    location(for: $0, in: rect, bounds: bounds, firstUnix: firstUnix, lastUnix: lastUnix)
+                }
+                guard let first = locations.first, let last = locations.last else { continue }
+                if closingAtBottom {
+                    path.move(to: CGPoint(x: first.x, y: rect.maxY))
+                    path.addLine(to: first)
+                } else {
+                    path.move(to: first)
+                }
+
+                for index in 0..<(locations.count - 1) {
+                    let start = locations[index]
+                    let end = locations[index + 1]
+                    let previous = index > 0 ? locations[index - 1] : start
+                    let next = index + 2 < locations.count ? locations[index + 2] : end
+                    let control1 = CGPoint(
+                        x: start.x + (end.x - previous.x) / 6,
+                        y: start.y + (end.y - previous.y) / 6
+                    )
+                    let control2 = CGPoint(
+                        x: end.x - (next.x - start.x) / 6,
+                        y: end.y - (next.y - start.y) / 6
+                    )
+                    path.addCurve(to: end, control1: control1, control2: control2)
+                }
+
+                if closingAtBottom {
+                    path.addLine(to: CGPoint(x: last.x, y: rect.maxY))
+                    path.closeSubpath()
+                }
+            }
+        }
+    }
+
+    private static func bpmBounds(for points: [HeartRateChartPoint]) -> (lower: Double, upper: Double) {
+        let values = points.map { Double($0.bpm) }
+        let lower = floor(max(0, (values.min() ?? 0) - 5) / 5) * 5
+        let upper = ceil(((values.max() ?? 10) + 5) / 5) * 5
+        return (lower, max(lower + 10, upper))
+    }
+
+    private func location(
+        for point: HeartRateChartPoint,
+        in rect: CGRect,
+        bounds: (lower: Double, upper: Double),
+        firstUnix: Int,
+        lastUnix: Int
+    ) -> CGPoint {
+        let x = firstUnix == lastUnix
+            ? rect.midX
+            : rect.minX + rect.width * CGFloat(Double(point.unix - firstUnix) / Double(lastUnix - firstUnix))
+        let fraction = (bounds.upper - Double(point.bpm)) / (bounds.upper - bounds.lower)
+        return CGPoint(x: x, y: rect.minY + rect.height * CGFloat(fraction))
+    }
+
+    private func axisValue(at index: Int, bounds: (lower: Double, upper: Double)) -> String {
+        let fraction = Double(index) / 2
+        return String(format: "%.0f", bounds.upper - (bounds.upper - bounds.lower) * fraction)
+    }
+
     private static func clock(_ unix: Int) -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+    }
+
+    private static func timestampLabel(_ unix: Int) -> String {
+        Date(timeIntervalSince1970: TimeInterval(unix))
+            .formatted(date: .abbreviated, time: .shortened)
     }
 }

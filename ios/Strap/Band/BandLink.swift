@@ -109,6 +109,16 @@ final class BandLink: NSObject, ObservableObject {
               session.version == SleepSession.algorithmVersion else { return nil }
         return session
     }
+
+    /// Timestamped, on-wrist history for the Health Monitor chart.
+    /// Keep the chart on the same recent 30-minute window as live readings.
+    var capturedHeartRateReadings: [(unix: Int, bpm: Int)] {
+        guard let latest = retainedHistoricalSamples.last(where: \.wearing)?.unix else { return [] }
+        return retainedHistoricalSamples
+            .filter { $0.wearing && $0.unix >= latest - 1_800 }
+            .map { (unix: $0.unix, bpm: $0.heartRate) }
+    }
+
     @Published private(set) var days: [DayMetrics] = []
     @Published private(set) var drainStats = DrainStats()
     @Published private(set) var lastCapturePath: String?
