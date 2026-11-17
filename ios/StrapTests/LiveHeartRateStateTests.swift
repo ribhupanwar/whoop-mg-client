@@ -59,6 +59,31 @@ final class LiveHeartRateStateTests: XCTestCase {
         XCTAssertEqual(Type40HeartRate.parse(prefix + [5] + [UInt8](repeating: 0, count: 10))?.rrMS, [])
     }
 
+    func testType40ZeroCountAndInvalidIntervalsKeepOnlyMeasuredBPM() {
+        let prefix: [UInt8] = [0x28, 0, 0, 0, 0, 0, 0, 0, 82]
+        XCTAssertEqual(Type40HeartRate.parse(prefix + [0])?.rrMS, [])
+        // Zero, 199 ms, and 3001 ms are not valid measured RR intervals.
+        let invalid = prefix + [3, 0x00, 0x00, 0xC7, 0x00, 0xB9, 0x0B]
+        XCTAssertEqual(Type40HeartRate.parse(invalid)?.rrMS, [])
+        XCTAssertEqual(Type40HeartRate.parse(invalid)?.bpm, 82)
+        // A malformed RR count must not discard a separately valid live HR.
+        XCTAssertEqual(Type40HeartRate.parse(prefix + [255])?.bpm, 82)
+        XCTAssertEqual(Type40HeartRate.parse(prefix + [255])?.rrMS, [])
+    }
+
+    func testType40DoesNotTreatHistoryOrInvalidHeartRateAsLive() {
+        let frame: [UInt8] = [0x28, 0, 0, 0, 0, 0, 0, 0, 82, 1, 0x20, 0x03]
+        XCTAssertEqual(Type40HeartRate.parse(frame)?.rrMS, [800])
+        var history = frame
+        history[0] = 0x2F
+        XCTAssertNil(Type40HeartRate.parse(history))
+        var noHeartRate = frame
+        noHeartRate[8] = 0
+        XCTAssertNil(Type40HeartRate.parse(noHeartRate))
+        noHeartRate[8] = 231
+        XCTAssertNil(Type40HeartRate.parse(noHeartRate))
+    }
+
     func testStandardWireValueIsPreservedButImplausibleHRIsNeverLive() {
         XCTAssertEqual(StandardHeartRate.parse(Data([0, 82]))?.heartRate, 82)
         let decoded = StandardHeartRate.parse(Data([1, 0xff, 0xff]))?.heartRate
