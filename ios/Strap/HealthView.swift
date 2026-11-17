@@ -252,7 +252,7 @@ struct HealthView: View {
                 Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
-                Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)\n                Recognized motion buffers: \(store.band.historyIMUBuffers) · History frames undecodable: \(store.band.historyUndecodableFrames) · versions: \(store.band.historyVersionCounts.sorted { $0.key < $1.key }.map { "v\($0.key):\($0.value)" }.joined(separator: ", "))")
+                Text("History R–R declared: \(store.band.historyRRDeclared) · accepted: \(store.band.historyRRAccepted) · rejected: \(store.band.historyRRRejected)\n                Recognized motion buffers: \(store.band.historyIMUBuffers) · optical: \(store.band.historyOpticalBuffers) · research: \(store.band.historyResearchBuffers) · History frames undecodable: \(store.band.historyUndecodableFrames) · versions: \(store.band.historyVersionCounts.sorted { $0.key < $1.key }.map { "v\($0.key):\($0.value)" }.joined(separator: ", "))")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text(store.band.liveRRQualityDiagnostic)

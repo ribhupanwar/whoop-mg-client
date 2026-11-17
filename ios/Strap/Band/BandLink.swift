@@ -110,6 +110,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRRejected = 0
     @Published private(set) var historyUndecodableFrames = 0
     @Published private(set) var historyIMUBuffers = 0
+    @Published private(set) var historyOpticalBuffers = 0
+    @Published private(set) var historyResearchBuffers = 0
     @Published private(set) var historyVersionCounts: [Int: Int] = [:]
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
@@ -1466,6 +1468,8 @@ final class BandLink: NSObject, ObservableObject {
         historyRRRejected = 0
         historyUndecodableFrames = 0
         historyIMUBuffers = 0
+        historyOpticalBuffers = 0
+        historyResearchBuffers = 0
         historyVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
@@ -1765,7 +1769,12 @@ final class BandLink: NSObject, ObservableObject {
                 historyIMUBuffers += 1
                 return // Original frame was captured before dispatch; never add motion to HR/RR.
             }
-            if Gen5V26Record.decode(inner) != nil { return }
+            if Gen5OpticalBuffer.decode(inner) != nil || Gen5V26Record.decode(inner) != nil {
+                historyOpticalBuffers += 1; return
+            }
+            if Gen5ResearchBuffer.decode(inner) != nil {
+                historyResearchBuffers += 1; return
+            }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1
                 return
