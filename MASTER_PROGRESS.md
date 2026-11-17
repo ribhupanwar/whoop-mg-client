@@ -184,3 +184,8 @@ No item is marked complete merely because it compiles. Multiple labels capture d
 - Weekly coach follow-up keeps planned time visible while delivery is off; injected-defaults test verifies no alarm is armed. Run 44080216158 ended with cancelled runner and no test steps, so is not counted as a test pass. Python suite: 287 passed after follow-up.
 
 - Import memory follow-up: CSV parsing walks the original string without allocating an additional full `[Character]` array. A 20,000-row synthetic Unicode/escaped-quote/embedded-CRLF regression checks full preservation and rejects a malformed final row. This reduces one allocation; measured peak memory and physical-device import responsiveness remain DEVICE VALIDATION PENDING.
+
+### Motion protocol batch (native verification pending)
+
+- B1/B7: IMPLEMENTED verified 1232-byte IMU shape decoder (`ios/Strap/Protocol/Gen5IMUBuffer.swift`), signed/scaled axes and bounded declared counts, independent of version byte. Historical dispatch recognizes it before biometric decode and exposes diagnostic count; original raw frames remain captured. No IMU-derived HR/RR/staging/wear/SpO2 added. V20/V22 and type 0x34 framing remain BLOCKED pending separate implementation/evidence.
+- `Gen5IMUBufferTests.swift` covers partial counts, negative acceleration, stale capacity rejection, both verified packet routes, malformed sizes/counts, unverified type rejection, and separation from V18. Native execution pending. Corrected stale V18 coarse-sleep comment; these states are not sleep stages. Real-device buffer verification remains DEVICE VALIDATION PENDING.

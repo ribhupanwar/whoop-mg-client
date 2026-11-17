@@ -109,6 +109,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRAccepted = 0
     @Published private(set) var historyRRRejected = 0
     @Published private(set) var historyUndecodableFrames = 0
+    @Published private(set) var historyIMUBuffers = 0
     @Published private(set) var historyVersionCounts: [Int: Int] = [:]
     @Published private(set) var liveSamples: [LiveSample] = []
     @Published private(set) var sessionStartedUnix: Int?
@@ -1464,6 +1465,7 @@ final class BandLink: NSObject, ObservableObject {
         historyRRAccepted = 0
         historyRRRejected = 0
         historyUndecodableFrames = 0
+        historyIMUBuffers = 0
         historyVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
@@ -1759,6 +1761,10 @@ final class BandLink: NSObject, ObservableObject {
             }
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
+            if Gen5IMUBuffer.decode(inner) != nil {
+                historyIMUBuffers += 1
+                return // Original frame was captured before dispatch; never add motion to HR/RR.
+            }
             if Gen5V26Record.decode(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 historyUndecodableFrames += 1

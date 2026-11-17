@@ -36,8 +36,8 @@ struct V18Sample: Equatable, Codable {
     let tempAux1C: Double?
     let tempAux2C: Double?
     let sleepStateByte: Int?
-    /// Bits 4-5 of the sleep-state byte. The enum is NOT established, so it is
-    /// reported but never named or used to decide sleep.
+    /// Coarse band sleep-envelope bits 4-5: 0 wake, 1 still, 2 sleep, 3 up
+    /// (OpenStrap protocol). These are not REM/deep/light sleep stages.
     let sleepState: Int?
     let cardiacFlags: Int?
     let hrQualityFlags: Int?
