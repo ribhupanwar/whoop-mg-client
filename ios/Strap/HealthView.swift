@@ -131,16 +131,11 @@ struct HealthView: View {
                 .font(StrapTypography.body(17, weight: .semibold))
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 18)
-            if demo || series.count >= 2 {
-                liveHeartRateChart
-                    .padding(.top, -195)
-                    .allowsHitTesting(false)
-            } else {
-                Rectangle()
-                    .fill(Color.appMuted.opacity(0.25))
-                    .frame(width: 175, height: 3)
-                    .padding(.top, 20)
-            }
+            // Keep the live monitor distinct from the historical HR trace.
+            // A connected band with stale packets must never look live.
+            liveHeartRateChart
+                .padding(.top, -195)
+                .allowsHitTesting(false)
             if !demo {
                 Text(liveHRDiagnostic)
                     .font(StrapTypography.body(10))
@@ -156,16 +151,16 @@ struct HealthView: View {
     }
 
     private var liveHeartRateChart: some View {
-        let values = demo ? SampleData.hrSeries : series
-        let lower = (values.min() ?? 60) - 8
-        let upper = (values.max() ?? 90) + 8
+        // This is an instantaneous indicator, not a historical time-series.
+        // Use a stable physiological display scale so the line moves vertically
+        // when the latest fresh HR changes; never substitute archived samples.
+        let current = demo ? 82 : freshLiveHR
         return GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
-            let points: [CGPoint] = values.enumerated().map { index, value in
-                CGPoint(x: width * CGFloat(index) / CGFloat(max(1, values.count - 1)),
-                        y: height * CGFloat(1 - (value - lower) / max(1, upper - lower)))
-            }
+            let bpm = Double(current ?? 82)
+            let fraction = min(1.0, max(0.0, (bpm - 40.0) / 140.0))
+            let y = height * CGFloat(1.0 - fraction)
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
                     let spacing: CGFloat = 24
@@ -174,38 +169,32 @@ struct HealthView: View {
                         grid.move(to: CGPoint(x: x, y: 0))
                         grid.addLine(to: CGPoint(x: x, y: size.height))
                     }
-                    for y in stride(from: CGFloat(0), through: size.height, by: spacing) {
-                        grid.move(to: CGPoint(x: 0, y: y))
-                        grid.addLine(to: CGPoint(x: size.width, y: y))
+                    for row in stride(from: CGFloat(0), through: size.height, by: spacing) {
+                        grid.move(to: CGPoint(x: 0, y: row))
+                        grid.addLine(to: CGPoint(x: size.width, y: row))
                     }
                     context.stroke(grid, with: .color(Color.white.opacity(0.055)), lineWidth: 0.65)
                 }
-                if points.count >= 2 {
-                    let path = Path { path in
-                        path.move(to: points[0])
-                        for point in points.dropFirst() { path.addLine(to: point) }
+                if current != nil {
+                    Path { path in
+                        path.move(to: CGPoint(x: width * 0.32, y: y))
+                        path.addLine(to: CGPoint(x: width - 7, y: y))
                     }
-                    path.stroke(Color(hex: 0x18A6F5).opacity(0.35),
-                                style: StrokeStyle(lineWidth: 11, lineCap: .round, lineJoin: .round))
-                        .blur(radius: 9)
-                    path.stroke(Color(hex: 0x22AFFF),
-                                style: StrokeStyle(lineWidth: 2.8, lineCap: .round, lineJoin: .round))
-                    if let last = points.last {
-                        Path { path in
-                            path.move(to: CGPoint(x: last.x, y: 0))
-                            path.addLine(to: CGPoint(x: last.x, y: height))
-                        }
-                        .stroke(Color.white.opacity(0.55),
-                                style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
-                        Circle().fill(.white).frame(width: 12, height: 12)
-                            .shadow(color: .white.opacity(0.7), radius: 6)
-                            .position(last)
+                    .stroke(Color(hex: 0x22AFFF), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    .shadow(color: Color(hex: 0x18A6F5).opacity(0.7), radius: 6)
+                    Path { path in
+                        path.move(to: CGPoint(x: width - 7, y: 0))
+                        path.addLine(to: CGPoint(x: width - 7, y: height))
                     }
+                    .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
+                    Circle().fill(.white).frame(width: 12, height: 12)
+                        .shadow(color: .white.opacity(0.7), radius: 6)
+                        .position(x: width - 7, y: y)
                 }
             }
         }
         .frame(height: 195)
-        .accessibilityLabel("Live heart rate trend, with current reading at the right endpoint")
+        .accessibilityLabel(current.map { "Current heart rate, \($0) beats per minute" } ?? "Live heart rate unavailable")
     }
 
     private var rrDiagnosticPanel: some View {
