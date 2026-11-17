@@ -143,6 +143,25 @@ struct HealthView: View {
                             context.stroke(trace, with: .color(Color(hex: 0x159EF0)), lineWidth: 2.5)
                         }
                     }
+                    // The reference has a soft cyan wash *below* the line,
+                    // separate from the narrow glow around the stroke.
+                    if lastHR != nil {
+                        LinearGradient(
+                            colors: [
+                                Color(hex: 0x159EF0).opacity(0.20),
+                                Color(hex: 0x159EF0).opacity(0.075),
+                                Color(hex: 0x159EF0).opacity(0)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                        .frame(width: max(0, markerX - width * 0.30), height: height * 0.35)
+                        .position(
+                            x: (width * 0.30 + markerX) / 2,
+                            y: graphY + height * 0.175
+                        )
+                        .allowsHitTesting(false)
+                    }
                     VStack(alignment: .leading, spacing: 0) {
                         Text("HEART RATE")
                             .font(StrapTypography.body(17, weight: .bold))
