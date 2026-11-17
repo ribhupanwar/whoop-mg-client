@@ -120,6 +120,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historicalRestQualityReason = "Loading retained historical records…"
     private var metricsRequest = 0
     private var metricsRefreshPending = false
+    private var sleepCorrectionRevision = 0
     private var lastCheckpointCount = 0
     private var lastCheckpointAt = Date.distantPast
     private lazy var archiveWriter = HistoricalArchiveWriter(url: historicalArchiveURL)
@@ -405,6 +406,7 @@ final class BandLink: NSObject, ObservableObject {
         lastHistorySyncAt = UserDefaults.standard.object(forKey: "strap.history.lastComplete.v1") as? Date
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
+        applySavedSleepBounds()
         central = CBCentralManager(delegate: self, queue: nil,
             options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
         recoverSavedCaptures()
@@ -480,6 +482,7 @@ final class BandLink: NSObject, ObservableObject {
             return
         }
         let request = metricsRequest
+        let correctionRevision = sleepCorrectionRevision
         isAnalyzingHistory = true
         let began = Date()
         historyProgress = HistoryProgress(stage: .preparing, completed: 0, total: 0, reused: 0,
@@ -606,6 +609,14 @@ final class BandLink: NSObject, ObservableObject {
             let checkpointError = cacheSetupError ?? cache?.lastError
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
+                guard self.sleepCorrectionRevision == correctionRevision else {
+                    // Never publish/persist a calculation begun before a new edit.
+                    self.isAnalyzingHistory = false
+                    self.historyProgress = nil
+                    self.metricsRefreshPending = false
+                    self.recalculateRetainedMetrics()
+                    return
+                }
                 self.historicalRestQualityReason = restReason
                 self.summary = finalFresh
                 self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
@@ -664,7 +675,36 @@ final class BandLink: NSObject, ObservableObject {
     var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
     func notifySleepCorrectionChanged() {
-        recalculateRetainedMetrics()
+        sleepCorrectionRevision += 1
+        applySavedSleepBounds()
+        guard let session = latestSleepSession else { recalculateRetainedMetrics(); return }
+        let revision = sleepCorrectionRevision
+        // Edited nights can be older than the active 72-hour analysis window.
+        // Load their own durable samples rather than requiring a new BLE drain.
+        archiveWriter.samples(from: session.startUnix, through: session.endUnix - 1) { [weak self] result in
+            guard let self, self.sleepCorrectionRevision == revision else { return }
+            switch result {
+            case .success(let rows):
+                self.retainedHistoricalSamples = HistoricalCaptureRecovery.merged(self.retainedHistoricalSamples + rows)
+                    .values.sorted { $0.unix < $1.unix }
+            case .failure(let error):
+                self.historySyncError = "Saved sleep times preserved; sensor history could not be read: \(error.localizedDescription)"
+            }
+            self.recalculateRetainedMetrics()
+        }
+    }
+
+    private func applySavedSleepBounds() {
+        guard var saved = summary, let sessions = saved.sleepSessions else { return }
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let updated = sessions.map { $0.applyingSavedBounds(overrides) }
+        guard updated != sessions else { return }
+        saved.sleepSessions = updated
+        saved.sleepStaging = saved.latestSleepSession?.staging
+        summary = saved
+        lastSleepAnalysis = nil
+        preferencesWriter.remove(forKey: Keys.sleepAnalysis)
+        persist(saved)
     }
 
     /// Returning from the lock screen must use the data already received,
@@ -692,7 +732,10 @@ final class BandLink: NSObject, ObservableObject {
         let nightKey = latestSleepSession.map {
             JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)))
         }
-        let night = days.first { $0.dateKey == nightKey }
+        let night = days.first {
+            $0.dateKey == nightKey && $0.sleepStartUnix == latestSleepSession?.startUnix
+                && $0.sleepEndUnix == latestSleepSession.map { $0.endUnix - 1 }
+        }
         return Recovery.score(
             lnRMSSD: night?.lnRMSSD,
             rhr: night?.restingHR,
@@ -1559,33 +1602,7 @@ final class BandLink: NSObject, ObservableObject {
                 previous: previous, fresh: day, coverageStart: coverageStart, coverageEnd: coverageEnd,
                 isEdited: editedDays.contains(day.dateKey)
             )
-            map[day.dateKey] = DayMetrics(
-                dateKey: day.dateKey,
-                state: day.state == "sleep" ? day.state : previous.state,
-                restingHR: day.restingHR ?? previous.restingHR,
-                lnRMSSD: day.lnRMSSD ?? previous.lnRMSSD,
-                hrvWindowSeconds: max(day.hrvWindowSeconds, previous.hrvWindowSeconds),
-                // Recomputed sleep is authoritative when a detected night is present.
-                // A max() merge would permanently preserve the older inflated value.
-                sleepHours: replacesSleep ? day.sleepHours : previous.sleepHours,
-                sleepStartUnix: replacesSleep ? day.sleepStartUnix : previous.sleepStartUnix,
-                sleepEndUnix: replacesSleep ? day.sleepEndUnix : previous.sleepEndUnix,
-                // Strain is a recomputed score, not an additive counter.
-                // Keeping the historical maximum permanently locks in an
-                // overestimated value after HR/sleep quality improves.
-                // Prefer a fresh, valid recomputation; preserve the prior
-                // score only when this capture cannot calculate one.
-                strain: day.strain.flatMap { $0.isFinite && (0...21).contains($0) ? $0 : nil }
-                    ?? previous.strain,
-                steps: day.steps == nil && previous.steps == nil ? nil :
-                    max(day.steps ?? 0, previous.steps ?? 0),
-                sleepDurationReliable: replacesSleep ? day.sleepDurationReliable : previous.sleepDurationReliable,
-                respiratoryRate: replacesSleep ? day.respiratoryRate : previous.respiratoryRate,
-                sleepPerformancePct: replacesSleep ? day.sleepPerformancePct : previous.sleepPerformancePct,
-                zoneSeconds: day.zoneSeconds ?? previous.zoneSeconds,
-                awakeLnRMSSD: day.awakeLnRMSSD ?? previous.awakeLnRMSSD,
-                awakeRestingHR: day.awakeRestingHR ?? previous.awakeRestingHR
-            )
+            map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
         preferencesWriter.write(days, forKey: Keys.days)

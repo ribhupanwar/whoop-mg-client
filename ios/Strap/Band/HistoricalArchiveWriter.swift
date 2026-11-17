@@ -33,6 +33,14 @@ final class HistoricalArchiveWriter {
         }
     }
 
+    func samples(from start: Int, through end: Int,
+                 completion: @escaping (Result<[V18Sample], Error>) -> Void) {
+        queue.async {
+            let result = Result { try self.open().samples(from: start, through: end) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+
     private func open() throws -> HistoryDatabase {
         if let database { return database }
         let opened = try HistoryDatabase(url: databaseURL)

@@ -55,6 +55,20 @@ struct SleepSession: Codable, Equatable {
         return nil
     }
 
+    /// Apply authoritative saved bounds immediately, without doing staging on
+    /// the UI thread or briefly restoring an older persisted score on relaunch.
+    func applyingSavedBounds(_ overrides: [String: [Int]]) -> SleepSession {
+        guard let times = SleepCorrectionStore.times(for: sourcePeriod, overrides: overrides) else { return self }
+        let changed = times[0] != startUnix || times[1] != endUnix
+        let pending = SleepStaging(segments: [], deepMinutes: 0, lightMinutes: 0,
+            remMinutes: 0, wakeMinutes: 0, epochs: 0, hrCoverage: 0,
+            reason: "Recalculating the saved sleep window from recorded sensor data.")
+        return SleepSession(version: version, sourceStartUnix: sourceStartUnix,
+            startUnix: times[0], endUnix: times[1], staging: changed ? pending : staging,
+            heartRate: changed ? heartRate.filter { times[0] <= $0.unix && $0.unix < times[1] } : heartRate,
+            movementBouts: changed ? 0 : movementBouts, isEdited: true, sourceEndUnix: sourceEndUnix ?? endUnix)
+    }
+
     /// Resolve each edit once, replacing overlapping detector fragments rather
     /// than summing the same corrected night twice.
     static func makeAll(

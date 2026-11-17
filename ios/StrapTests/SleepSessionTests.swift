@@ -2,6 +2,54 @@ import XCTest
 @testable import Strap
 
 final class SleepSessionTests: XCTestCase {
+    func testSavedBoundsSurviveColdReloadWithoutStaleStagesOrScores() throws {
+        let rows = (0..<3600).map { sample(start + $0) }
+        let old = SleepSession.make(samples: rows, period: period(3600))
+        let times = [start + 300, start + 3300]
+        let overrides = [String(start): times]
+        let immediate = old.applyingSavedBounds(overrides)
+        XCTAssertEqual(immediate.startUnix, times[0])
+        XCTAssertEqual(immediate.endUnix, times[1])
+        XCTAssertTrue(immediate.isEdited)
+        XCTAssertNil(immediate.asleepHours, "Old stages do not describe newly edited bounds")
+        let reopened = try JSONDecoder().decode(SleepSession.self, from: JSONEncoder().encode(immediate))
+        XCTAssertEqual(reopened.applyingSavedBounds(overrides), immediate)
+        let fresh = SleepSession.makeAll(samples: rows, periods: [period(3600)], overrides: overrides)
+        let retained = SleepSession.retainingUncovered(previous: [reopened], fresh: fresh,
+            coverageStart: start, coverageEnd: start + 3599, samples: rows, overrides: overrides)
+        let corrected = try XCTUnwrap(retained.first)
+        XCTAssertEqual(corrected.startUnix, times[0])
+        XCTAssertEqual(corrected.endUnix, times[1])
+        let report = try XCTUnwrap(SleepReport.analyze(samples: rows, session: corrected, needHours: 8,
+                                                      nights: [], sleepBaseline: nil))
+        XCTAssertEqual(report.hours, try XCTUnwrap(corrected.asleepHours), accuracy: 1e-9)
+        XCTAssertLessThan(report.hours, try XCTUnwrap(old.asleepHours))
+        XCTAssertEqual(report.hoursVsNeededPct, report.hours / 8 * 100, accuracy: 1e-9)
+        let baseline = Baseline.fromDaily(lnRMSSD: Array(repeating: log(28.0), count: 7), rhr: Array(repeating: 60, count: 7))
+        let recovery = Recovery.score(lnRMSSD: log(28), rhr: 60, sleepHours: corrected.asleepHours,
+                                      sleepNeedHours: 8, baseline: baseline)
+        XCTAssertEqual(try XCTUnwrap(recovery.sleepComponent), Stats.rounded(report.hoursVsNeededPct, 1))
+    }
+
+    func testAuthoritativeNightMergeClearsObsoleteBiometricsButKeepsRecordedSteps() {
+        let old = DayMetrics(dateKey: "2026-11-17", state: "sleep", restingHR: 63, lnRMSSD: log(28),
+            hrvWindowSeconds: 600, sleepHours: 7, sleepStartUnix: start, sleepEndUnix: start + 8 * 3600,
+            strain: 4, steps: 9000, sleepDurationReliable: true)
+        let edited = DayMetrics(dateKey: old.dateKey, state: "sleep", restingHR: nil, lnRMSSD: nil,
+            hrvWindowSeconds: 0, sleepHours: 0, sleepStartUnix: start + 300, sleepEndUnix: start + 3600,
+            strain: nil, steps: nil, sleepDurationReliable: false)
+        let merged = DailyAnalysis.mergeDay(previous: old, fresh: edited, replacesSleep: true)
+        XCTAssertNil(merged.restingHR)
+        XCTAssertNil(merged.lnRMSSD)
+        XCTAssertEqual(merged.hrvWindowSeconds, 0)
+        XCTAssertEqual(merged.sleepStartUnix, edited.sleepStartUnix)
+        XCTAssertEqual(merged.steps, 9000)
+        let partial = DailyAnalysis.mergeDay(previous: old, fresh: edited, replacesSleep: false)
+        XCTAssertEqual(partial.restingHR, 63)
+        XCTAssertEqual(partial.lnRMSSD, old.lnRMSSD)
+        XCTAssertEqual(partial.sleepStartUnix, old.sleepStartUnix)
+    }
+
     private let start = 1_800_000_000
 
     private func sample(_ unix: Int, hr: Int = 55) -> V18Sample {

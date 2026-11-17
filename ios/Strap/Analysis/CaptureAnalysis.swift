@@ -312,6 +312,38 @@ enum DailyAnalysis {
         return result.sorted { $0.dateKey < $1.dateKey }
     }
 
+    /// A corrected night owns its biometric inputs, including unavailable ones.
+    /// Keep unrelated recorded totals when a partial sync cannot replace them.
+    static func mergeDay(previous: DayMetrics, fresh: DayMetrics, replacesSleep: Bool) -> DayMetrics {
+        return DayMetrics(
+                dateKey: fresh.dateKey,
+                state: fresh.state == "sleep" ? fresh.state : previous.state,
+                restingHR: replacesSleep ? fresh.restingHR : previous.restingHR,
+                lnRMSSD: replacesSleep ? fresh.lnRMSSD : previous.lnRMSSD,
+                hrvWindowSeconds: replacesSleep ? fresh.hrvWindowSeconds : previous.hrvWindowSeconds,
+                // Recomputed sleep is authoritative when a detected night is present.
+                // A max() merge would permanently preserve the older inflated value.
+                sleepHours: replacesSleep ? fresh.sleepHours : previous.sleepHours,
+                sleepStartUnix: replacesSleep ? fresh.sleepStartUnix : previous.sleepStartUnix,
+                sleepEndUnix: replacesSleep ? fresh.sleepEndUnix : previous.sleepEndUnix,
+                // Strain is a recomputed score, not an additive counter.
+                // Keeping the historical maximum permanently locks in an
+                // overestimated value after HR/sleep quality improves.
+                // Prefer a fresh, valid recomputation; preserve the prior
+                // score only when this capture cannot calculate one.
+                strain: fresh.strain.flatMap { $0.isFinite && (0...21).contains($0) ? $0 : nil }
+                    ?? previous.strain,
+                steps: fresh.steps == nil && previous.steps == nil ? nil :
+                    max(fresh.steps ?? 0, previous.steps ?? 0),
+                sleepDurationReliable: replacesSleep ? fresh.sleepDurationReliable : previous.sleepDurationReliable,
+                respiratoryRate: replacesSleep ? fresh.respiratoryRate : previous.respiratoryRate,
+                sleepPerformancePct: replacesSleep ? fresh.sleepPerformancePct : previous.sleepPerformancePct,
+                zoneSeconds: fresh.zoneSeconds ?? previous.zoneSeconds,
+                awakeLnRMSSD: fresh.awakeLnRMSSD ?? previous.awakeLnRMSSD,
+                awakeRestingHR: fresh.awakeRestingHR ?? previous.awakeRestingHR
+            )
+    }
+
     /// Sleep measurements cannot stand in for an awake-quiet stress baseline.
     static func awakeBaseline(from days: [DayMetrics]) -> Baseline? {
         let pairs = days.compactMap { day -> (Double, Double)? in
