@@ -10,7 +10,7 @@ final class LiveHeartRateChartTests: XCTestCase {
         XCTAssertEqual(value.label, "150")
         let indicator = app.otherElements["health.live.indicator"]
         XCTAssertTrue(indicator.exists)
-        XCTAssertEqual(indicator.value as? String, "0.786")
+        XCTAssertEqual(indicator.value as? String, "live")
         XCTAssertLessThan(indicator.frame.maxX, app.frame.maxX + 1)
     }
     func testStaleStateHasNeitherBPMNorLiveIndicator() {
