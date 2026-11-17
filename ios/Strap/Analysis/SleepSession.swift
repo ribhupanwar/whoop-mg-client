@@ -10,7 +10,7 @@ struct SleepHRPoint: Codable, Equatable, Identifiable {
 /// The sole source of sleep durations on every screen. All ends here are exclusive.
 /// A missing interval is unknown, never an awakening and never sleep debt.
 struct SleepSession: Codable, Equatable {
-    static let algorithmVersion = 4
+    static let algorithmVersion = 5
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
@@ -21,6 +21,19 @@ struct SleepSession: Codable, Equatable {
     let isEdited: Bool
     /// Original detector wake (exclusive), retained even if an edit excludes its tail.
     var sourceEndUnix: Int? = nil
+    /// Recorded evidence, rather than duration or inactivity, identifies a nap.
+    var bandSleepConfirmed: Bool? = nil
+    var timezoneIdentifier: String? = nil
+
+    enum Classification { case overnight, nap, pendingCandidate }
+    var classification: Classification {
+        var calendar = Calendar.current
+        if let timezoneIdentifier, let zone = TimeZone(identifier: timezoneIdentifier) { calendar.timeZone = zone }
+        let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: Double(startUnix)))
+        guard (8..<18).contains(hour) else { return .overnight }
+        return bandSleepConfirmed == true || isEdited ? .nap : .pendingCandidate
+    }
+
 
     var sourcePeriod: SleepPeriod {
         SleepPeriod(startUnix: sourceStartUnix,
@@ -66,7 +79,8 @@ struct SleepSession: Codable, Equatable {
         return SleepSession(version: version, sourceStartUnix: sourceStartUnix,
             startUnix: times[0], endUnix: times[1], staging: changed ? pending : staging,
             heartRate: changed ? heartRate.filter { times[0] <= $0.unix && $0.unix < times[1] } : heartRate,
-            movementBouts: changed ? 0 : movementBouts, isEdited: true, sourceEndUnix: sourceEndUnix ?? endUnix)
+            movementBouts: changed ? 0 : movementBouts, isEdited: true, sourceEndUnix: sourceEndUnix ?? endUnix,
+            bandSleepConfirmed: bandSleepConfirmed, timezoneIdentifier: timezoneIdentifier)
     }
 
     /// Resolve each edit once, replacing overlapping detector fragments rather
@@ -247,7 +261,10 @@ struct SleepSession: Codable, Equatable {
             startUnix: start, endUnix: end,
             staging: SleepStager.stage(samples: night, period: window),
             heartRate: hr, movementBouts: bouts, isEdited: times != nil,
-            sourceEndUnix: period.endUnix + 1
+            sourceEndUnix: period.endUnix + 1,
+            bandSleepConfirmed: Hrv.contiguousRuns(night.filter {
+                $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2
+            }).contains { $0.count >= 300 }, timezoneIdentifier: TimeZone.current.identifier
         )
     }
 }

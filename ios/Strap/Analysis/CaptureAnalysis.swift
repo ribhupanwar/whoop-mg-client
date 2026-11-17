@@ -27,7 +27,10 @@ struct CaptureSummary: Codable, Equatable {
     /// Versioned, window-bound results; nil on older saved captures.
     var sleepSessions: [SleepSession]? = nil
 
-    var latestSleepSession: SleepSession? { sleepSessions?.last }
+    var latestSleepSession: SleepSession? {
+        sleepSessions?.filter { $0.classification == .overnight && $0.endUnix > $0.startUnix }
+            .max { $0.endUnix < $1.endUnix }
+    }
     let activities: [ActivitySession]
     /// Awake 5-minute stress share against the awake baseline. nil when the
     /// capture predates the baseline or the field (older persisted summary).

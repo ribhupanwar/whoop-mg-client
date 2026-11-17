@@ -19,6 +19,7 @@ enum PersistenceDiagnostics {
     }
     struct Manifest: Codable {
         let formatVersion: Int
+        let purpose: String
         let createdAt: Date
         let bundleIdentifier: String
         let build: String
@@ -40,14 +41,17 @@ enum PersistenceDiagnostics {
         let exact: Set<String> = ["strap.days.v1", "strap.capture.summary.v1", "strap.sleep.analysis.v1",
             "strap.live.rr.samples.v1", "strap.history.retained.count.v1", "strap.history.lastComplete.v1",
             SleepCorrectionStore.defaultsKey, "strap.settings.v1", "strap.activities.v1", "strap.journal.entries.v1", "strap.live.sessions.v1", "strap.detected.activities.v1",
-            "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1"]
+            "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1",
+            "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
+            "strap.wake.alarm.minutes.v1", "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"]
         return exact.contains(key) || ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains { key == "strap.whoop.import." + $0 + ".v1" }
     }
 
     static func write(support: URL, documents: URL, preferences: [String: Any],
-                      destinationDirectory: URL = FileManager.default.temporaryDirectory) throws -> URL {
+                      destinationDirectory: URL = FileManager.default.temporaryDirectory,
+                      fullBackup: Bool = false) throws -> URL {
         let fm = FileManager.default
-        let folder = destinationDirectory.appendingPathComponent("STRAP-diagnostics-\(UUID().uuidString)", isDirectory: true)
+        let folder = destinationDirectory.appendingPathComponent("STRAP-\(fullBackup ? "backup" : "diagnostics")-\(UUID().uuidString)", isDirectory: true)
         try fm.createDirectory(at: folder, withIntermediateDirectories: true)
         defer { try? fm.removeItem(at: folder) }
         var files: [FileRecord] = []
@@ -94,6 +98,12 @@ enum PersistenceDiagnostics {
                 try record(relative)
             }
         }
+        let gps = support.appendingPathComponent("Strap/gps-runs-v2.json")
+        if fm.fileExists(atPath: gps.path) {
+            try fm.createDirectory(at: folder.appendingPathComponent("Strap"), withIntermediateDirectories: true)
+            try fm.copyItem(at: gps, to: folder.appendingPathComponent("Strap/gps-runs-v2.json"))
+            try record("Strap/gps-runs-v2.json")
+        }
         let vault = support.appendingPathComponent("sleep-recovery", isDirectory: true)
         if fm.fileExists(atPath: vault.path) {
             try fm.copyItem(at: vault, to: folder.appendingPathComponent("sleep-recovery", isDirectory: true))
@@ -101,11 +111,11 @@ enum PersistenceDiagnostics {
                 try record("sleep-recovery/" + url.lastPathComponent)
             }
         }
-        let manifest = Manifest(formatVersion: 1, createdAt: Date(),
+        let manifest = Manifest(formatVersion: 1, purpose: fullBackup ? "strap-backup" : "diagnostics", createdAt: Date(),
             bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown", build: BuildInfo.revision,
             algorithmVersion: SleepSession.algorithmVersion, database: database,
             files: files.sorted { $0.path < $1.path }, missing: missing,
-            note: "Read-only diagnostic evidence; health data is private. Source sidecar checksums are observations, not a cross-file snapshot. history.sqlite is a consistent committed snapshot. No authentication data is included. Not a full restorable backup.")
+            note: "Versioned persisted-record snapshot; health data is private. Source sidecar checksums are observations, not a cross-file snapshot. history.sqlite is a consistent committed snapshot. No authentication data is included. Restore merges missing raw seconds and missing storage keys; existing values and manual corrections take precedence. Derived caches remain evidence and may be recomputed.")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601

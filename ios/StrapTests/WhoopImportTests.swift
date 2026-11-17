@@ -50,3 +50,25 @@ final class WhoopImportTests: XCTestCase {
         XCTAssertThrowsError(try WhoopCSVImport.parse(Data("Date,Recovery\n2026-11-01,80".utf8)))
     }
 }
+
+extension WhoopImportTests {
+    func testSupplementalImportsAreAdditiveIdempotentAndKeepSourceRevisions() throws {
+        let first = WhoopCSVImport.SupplementalRecord(source: "sleeps", fields: ["Sleep onset": "2026-11-16 23:28:00", "Nap": "false", "REM duration (min)": "113"])
+        let second = WhoopCSVImport.SupplementalRecord(source: "sleeps", fields: ["Sleep onset": "2026-11-17 23:28:00", "Nap": "false"])
+        let initial = try WhoopCSVImport.mergeSupplemental([first], existing: nil)
+        let repeated = try WhoopCSVImport.mergeSupplemental([first, second], existing: initial.data)
+        XCTAssertEqual(repeated.count, 1)
+        let records = try JSONDecoder().decode([WhoopCSVImport.SupplementalRecord].self, from: repeated.data)
+        XCTAssertEqual(records, [first, second])
+        XCTAssertEqual(try WhoopCSVImport.mergeSupplemental([second, first], existing: repeated.data).count, 0)
+        XCTAssertThrowsError(try WhoopCSVImport.mergeSupplemental([first], existing: Data("incompatible original".utf8)))
+    }
+
+    func testSupplementalDateRangeKeepsExactSourceTimestamp() throws {
+        let row = WhoopCSVImport.SupplementalRecord(source: "sleeps", fields: ["Sleep onset": "2026-11-16 23:28:00", "Cycle timezone": "UTC+05:30"])
+        XCTAssertEqual(try WhoopCSVImport.mergeSupplemental([row], existing: nil, fromDate: "2026-11-17").count, 0)
+        let accepted = try WhoopCSVImport.mergeSupplemental([row], existing: nil, fromDate: "2026-11-16", throughDate: "2026-11-16")
+        XCTAssertEqual(accepted.count, 1)
+        XCTAssertEqual(try JSONDecoder().decode([WhoopCSVImport.SupplementalRecord].self, from: accepted.data).first, row)
+    }
+}

@@ -578,3 +578,26 @@ final class SleepSessionTests: XCTestCase {
                        "Quiet run found; R-R: 0 beats in 0s, but insufficient clean consecutive pairs")
     }
 }
+
+extension SleepSessionTests {
+    func testDaytimeLegacyCandidateCannotReplaceRecordedOvernightSleep() {
+        let night = knownNight()
+        // Use the source timezone so traveling does not reclassify a saved nap.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let noon = Int(utc.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 13, minute: 9))!.timeIntervalSince1970)
+        let candidate = SleepSession(version: 4, sourceStartUnix: noon, startUnix: noon,
+            endUnix: noon + 7200, staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: false, timezoneIdentifier: "UTC")
+        XCTAssertEqual(candidate.classification, .pendingCandidate)
+        var summary = CaptureSummary.empty
+        summary.sleepSessions = [candidate]
+        XCTAssertNil(summary.latestSleepSession)
+        let nap = SleepSession(version: SleepSession.algorithmVersion, sourceStartUnix: noon,
+            startUnix: noon, endUnix: noon + 7200, staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: false, bandSleepConfirmed: true, timezoneIdentifier: "UTC")
+        XCTAssertEqual(nap.classification, .nap)
+        summary.sleepSessions = [nap]
+        XCTAssertNil(summary.latestSleepSession, "Confirmed naps cannot become the night's Sleep/Recovery source")
+    }
+}

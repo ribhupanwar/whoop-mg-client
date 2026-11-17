@@ -33,7 +33,8 @@ enum WhoopCSVImport {
         func column(_ candidates: [String]) -> Int? {
             names.firstIndex(where: { candidates.contains($0) })
         }
-        guard let date = column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)),
+        guard let date = column(["wakeonset", "cycleendtime", "cycleend"])
+                ?? column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)),
               let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms", "heartratevariabilityrmssd", "heartratevariabilityrmssdms", "heartratevariabilityms", "heartratevariabilitymilliseconds"].map(normalized)),
               let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm", "restingheartratebeatsperminute"].map(normalized))
         else { throw ImportError.unsupportedColumns }
@@ -53,14 +54,16 @@ enum WhoopCSVImport {
 
     /// Preserves the complete exported sleep, workout and journal rows locally.
     /// These are source records, not band-measured sessions or Recovery inputs.
-    struct SupplementalRecord: Codable {
+    struct SupplementalRecord: Codable, Equatable {
         let source: String
         let fields: [String: String]
     }
 
-    static func importSupplemental(_ data: Data, source: String) throws -> Int {
+    static func importSupplemental(_ data: Data, source: String,
+                                   defaults: UserDefaults = .standard,
+                                   fromDate: String? = nil, throughDate: String? = nil) throws -> Int {
         let category = source.lowercased()
-        guard ["sleeps", "workouts", "journal_entries"].contains(category) else {
+        guard ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains(category) else {
             throw ImportError.unsupportedColumns
         }
         let string = String(data: data, encoding: .utf8)
@@ -75,9 +78,35 @@ enum WhoopCSVImport {
         }
         guard !rows.isEmpty else { throw ImportError.noValidRows }
         let key = "strap.whoop.import." + category + ".v1"
-        let encoded = try JSONEncoder().encode(rows)
-        UserDefaults.standard.set(encoded, forKey: key)
-        return rows.count
+        let added = try mergeSupplemental(rows, existing: defaults.data(forKey: key),
+                                         fromDate: fromDate, throughDate: throughDate)
+        defaults.set(added.data, forKey: key)
+        return added.count
+    }
+
+    /// Stable content identity preserves original columns/timestamps and conflicting
+    /// source revisions. Repeated or overlapping exports never replace prior files.
+    static func mergeSupplemental(_ incoming: [SupplementalRecord], existing: Data?,
+                                  fromDate: String? = nil, throughDate: String? = nil) throws -> (data: Data, count: Int) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        // An incompatible existing import is evidence, not an empty collection.
+        var records = try existing.map { try JSONDecoder().decode([SupplementalRecord].self, from: $0) } ?? []
+        var seen = Set(try records.map { PersistenceDiagnostics.digest(try encoder.encode($0)) })
+        var added = 0
+        for row in incoming {
+            if fromDate != nil || throughDate != nil {
+                let date = row.fields.first { key, _ in
+                    ["cyclestarttime", "sleeponset", "workoutstarttime", "date"].contains(
+                        key.lowercased().filter { $0.isLetter || $0.isNumber })
+                }.flatMap { dateKey($0.value) }
+                guard let date, fromDate.map({ date >= $0 }) ?? true,
+                      throughDate.map({ date <= $0 }) ?? true else { continue }
+            }
+            let identity = PersistenceDiagnostics.digest(try encoder.encode(row))
+            if seen.insert(identity).inserted { records.append(row); added += 1 }
+        }
+        return (try encoder.encode(records), added)
     }
 
     private static func dateKey(_ raw: String) -> String? {

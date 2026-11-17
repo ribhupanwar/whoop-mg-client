@@ -1589,6 +1589,12 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    func flushPersistedCaches() async {
+        await withCheckedContinuation { continuation in
+            preferencesWriter.flush { continuation.resume() }
+        }
+    }
+
     /// Explicit recovery only; archived evidence remains available for reversal.
     func restoreSavedSleep(_ candidate: SleepRecoveryVault.Candidate) throws {
         let encoder = JSONEncoder()

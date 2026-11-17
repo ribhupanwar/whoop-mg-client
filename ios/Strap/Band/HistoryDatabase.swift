@@ -102,6 +102,26 @@ final class HistoryDatabase {
         bind(data, to: s, column: 3)
         guard sqlite3_step(s) == SQLITE_DONE else { throw failure() }
     }
+    /// Backup restore never replaces a retained second. The marker and raw rows
+    /// commit together; accompanying startup-only writes have a recovery journal.
+    func restoreMissing(_ rows: [V18Sample], token: String, accompanyingWrites: () throws -> Void) throws {
+        try transaction {
+            let lookup = try prepare("SELECT 1 FROM history_sample WHERE unix = ?")
+            defer { sqlite3_finalize(lookup) }
+            var missing: [V18Sample] = []
+            for row in rows {
+                sqlite3_reset(lookup)
+                sqlite3_bind_int64(lookup, 1, Int64(row.unix))
+                let result = sqlite3_step(lookup)
+                if result == SQLITE_DONE { missing.append(row) }
+                else if result != SQLITE_ROW { throw failure() }
+            }
+            _ = try insert(missing)
+            try accompanyingWrites()
+            try setMetadata("restore:" + token, value: "committed")
+        }
+    }
+
     private func insert(_ rows: [V18Sample]) throws -> Int {
         let lookup = try prepare("SELECT payload FROM history_sample WHERE unix = ?")
         defer { sqlite3_finalize(lookup) }

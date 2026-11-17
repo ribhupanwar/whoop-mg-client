@@ -1,5 +1,6 @@
 import SwiftUI
 import ZIPFoundation
+import UniformTypeIdentifiers
 
 /// Utility and account hub, not another copy of Home or Health metrics.
 /// Inspired by the navigation structure of WHOOP and offline-first clients.
@@ -8,6 +9,9 @@ struct MoreView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var preparingExport = false
+    @State private var showRestoreImporter = false
+    @State private var restorePreview: StrapBackup.Preview?
+    @State private var restoreStatus: String?
 
     var body: some View {
         Screen {
@@ -101,6 +105,33 @@ struct MoreView: View {
                         moreRow("Export persisted records & diagnostics", icon: "square.and.arrow.up")
                     }
                     .disabled(preparingExport)
+                    Button {
+                        exportURL = nil
+                        exportError = nil
+                        preparingExport = true
+                        Task {
+                            // Drain queued cache writes before snapshotting preferences.
+                            await store.band.flushPersistedCaches()
+                            let preferences = UserDefaults.standard.dictionaryRepresentation()
+                            do {
+                                let fm = FileManager.default
+                                let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                                let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                                exportURL = try await Task.detached {
+                                    try PersistenceDiagnostics.write(support: support, documents: documents,
+                                        preferences: preferences, fullBackup: true)
+                                }.value
+                            } catch { exportError = error.localizedDescription }
+                            preparingExport = false
+                        }
+                    } label: { moreRow("Export Full STRAP Backup", icon: "externaldrive.badge.checkmark") }
+                    .disabled(preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory)
+                    Text("Disconnect the band and let analysis finish before a full backup, so all stores describe the same saved state.")
+                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                    Button { showRestoreImporter = true } label: {
+                        moreRow("Restore STRAP Backup", icon: "arrow.counterclockwise")
+                    }
+                    if let restoreStatus { Text(restoreStatus).font(StrapTypography.body(11)) }
                     if let exportURL {
                         ShareLink(item: exportURL) {
                             moreRow("Save export to Files or iCloud", icon: "externaldrive")
@@ -134,6 +165,29 @@ struct MoreView: View {
             }
         }
         .strapTabTypography("More")
+        .fileImporter(isPresented: $showRestoreImporter, allowedContentTypes: [.zip]) { result in
+            do {
+                let url = try result.get()
+                let scoped = url.startAccessingSecurityScopedResource()
+                Task {
+                    defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                    do { restorePreview = try await Task.detached { try StrapBackup.inspect(url) }.value }
+                    catch { restoreStatus = error.localizedDescription }
+                }
+            } catch { restoreStatus = error.localizedDescription }
+        }
+        .alert("Restore preview", isPresented: Binding(get: { restorePreview != nil }, set: { if !$0 { restorePreview = nil } })) {
+            Button("Stage for next launch") {
+                guard let preview = restorePreview else { return }
+                do {
+                    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                    try StrapBackup.stage(preview, support: support)
+                    restoreStatus = "Backup validated and staged. Close and reopen STRAP to restore. Existing values take precedence; the original backup is retained."
+                } catch { restoreStatus = error.localizedDescription }
+                restorePreview = nil
+            }
+            Button("Cancel", role: .cancel) { restorePreview = nil }
+        } message: { Text(restorePreview?.description ?? "") }
     }
 
     private func moreRow(_ title: String, icon: String) -> some View {

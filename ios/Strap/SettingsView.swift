@@ -78,8 +78,13 @@ struct SettingsView: View {
                             }
                             recognizedFiles.append(name)
                             if name.contains("physiological") || name.contains("cycle") {
-                                let rows = try WhoopCSVImport.parse(data)
-                                importedDays += store.band.importWhoopHistory(rows)
+                                let count = try WhoopCSVImport.importSupplemental(data, source: "physiological_cycles")
+                                supplementalCounts.append("physiological_cycles: \(count)")
+                                // Partial cycles still retain every exported field even when
+                                // both biometric inputs needed for a baseline are unavailable.
+                                if let rows = try? WhoopCSVImport.parse(data) {
+                                    importedDays += store.band.importWhoopHistory(rows)
+                                }
                             } else {
                                 let category: String? = name.contains("journal") ? "journal_entries" :
                                     (name.contains("workout") ? "workouts" :
@@ -112,9 +117,10 @@ struct SettingsView: View {
                         let count = try WhoopCSVImport.importSupplemental(data, source: category)
                         whoopImportStatus = "Saved \(count) \(category) records locally. Activity/Recovery mapping pending."
                     } else {
-                        let rows = try WhoopCSVImport.parse(data)
+                        let count = try WhoopCSVImport.importSupplemental(data, source: "physiological_cycles")
+                        let rows = (try? WhoopCSVImport.parse(data)) ?? []
                         let added = store.band.importWhoopHistory(rows)
-                        whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
+                        whoopImportStatus = "Retained \(count) new cycle source rows; completed \(added) HRV/RHR days. Original exported fields remain separate from band estimates."
                     }
                 }
             } catch {
