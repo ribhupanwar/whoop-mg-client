@@ -16,7 +16,16 @@ struct HealthView: View {
             VStack(alignment: .leading, spacing: 0) {
                 hrPanel
                 fiveMetricGrid
-                if !demo { rrDiagnosticPanel }
+                if !demo {
+                    NavigationLink {
+                        Screen { rrDiagnosticPanel }
+                            .navigationTitle("R–R diagnostics")
+                    } label: {
+                        Label("R–R signal diagnostics", systemImage: "waveform.path.ecg")
+                            .font(StrapTypography.body(13))
+                    }
+                    .padding(.bottom, 14)
+                }
                 Hint("Personal ranges use at least seven qualifying prior sleep nights. Respiratory rate is an RSA estimate; SpO₂ and skin temperature remain unvalidated sensor candidates. Recorded personal ranges are not clinical limits.")
             }
         }
@@ -59,9 +68,6 @@ struct HealthView: View {
                          unit: "bpm", reading: monitor[.rhr])
             healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
                          unit: "ms", reading: monitor[.hrv])
-            healthMetric("SKIN TEMP (FROM BASELINE)", symbol: "thermometer.medium",
-                         value: demo ? "+0.2" : monitor[.temperature].value.map { String(format: "%+.1f", $0) } ?? "—",
-                         unit: "°C", reading: monitor[.temperature])
         }
         .padding(.bottom, 18)
     }

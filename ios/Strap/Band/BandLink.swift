@@ -127,9 +127,8 @@ final class BandLink: NSObject, ObservableObject {
     private let analysisQueue = DispatchQueue(label: "strap.history.analysis", qos: .userInitiated)
 
     var latestSleepSession: SleepSession? {
-        guard let session = summary?.latestSleepSession,
-              session.version == SleepSession.algorithmVersion else { return nil }
-        return session
+        // Recipe versions invalidate calculation caches, not the recorded night.
+        summary?.latestSleepSession
     }
     @Published private(set) var days: [DayMetrics] = []
     @Published private(set) var drainStats = DrainStats()
@@ -1588,6 +1587,42 @@ final class BandLink: NSObject, ObservableObject {
                 }
             }
         }
+    }
+
+    func flushPersistedCaches() async {
+        await withCheckedContinuation { continuation in
+            preferencesWriter.flush { continuation.resume() }
+        }
+    }
+
+    /// Explicit recovery only; archived evidence remains available for reversal.
+    func restoreSavedSleep(_ candidate: SleepRecoveryVault.Candidate) throws {
+        let encoder = JSONEncoder()
+        if let previous = summary {
+            try SleepRecoveryVault.preserve(encoder.encode(previous), key: Keys.summary)
+        }
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let restored = candidate.session.applyingSavedBounds(overrides)
+        guard restored.endUnix > restored.startUnix else {
+            throw PersistenceDiagnostics.Failure(message: "Invalid recorded sleep bounds.")
+        }
+        // Cancel in-flight analysis so it cannot undo the reviewed selection.
+        metricsRequest += 1
+        sleepCorrectionRevision += 1
+        var updated = summary ?? .empty
+        var sessions = updated.sleepSessions ?? []
+        sessions.removeAll { max($0.startUnix, restored.startUnix) < min($0.endUnix, restored.endUnix) }
+        sessions.append(restored)
+        updated.sleepSessions = sessions.sorted { $0.endUnix < $1.endUnix }
+        updated.sleepStaging = updated.latestSleepSession?.staging
+        try SleepRecoveryVault.preserve(encoder.encode(updated), key: Keys.summary)
+        summary = updated
+        lastSleepAnalysis = nil
+        isAnalyzingHistory = false
+        historyProgress = nil
+        persist(updated)
+        preferencesWriter.remove(forKey: Keys.sleepAnalysis)
+        // Recalculation is separate: recovery does not invent HRV or Recovery.
     }
 
     private func persist(_ summary: CaptureSummary) {

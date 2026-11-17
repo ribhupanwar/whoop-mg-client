@@ -12,6 +12,9 @@ final class BackgroundPreferencesWriter {
             let saved: Bool
             do {
                 let data = try JSONEncoder().encode(value)
+                if SleepRecoveryVault.keys.contains(key), let previous = self.defaults.data(forKey: key), previous != data {
+                    try SleepRecoveryVault.preserve(previous, key: key)
+                }
                 self.defaults.set(data, forKey: key)
                 saved = true
             } catch { saved = false }
@@ -19,7 +22,14 @@ final class BackgroundPreferencesWriter {
         }
     }
     func remove(forKey key: String) {
-        queue.async { self.defaults.removeObject(forKey: key) }
+        queue.async {
+            do {
+                if SleepRecoveryVault.keys.contains(key), let previous = self.defaults.data(forKey: key) {
+                    try SleepRecoveryVault.preserve(previous, key: key)
+                }
+                self.defaults.removeObject(forKey: key)
+            } catch { /* Keep the original if evidence could not be preserved. */ }
+        }
     }
 
     func flush(completion: @escaping () -> Void) {

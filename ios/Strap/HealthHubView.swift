@@ -221,16 +221,22 @@ struct HealthHubView: View {
                     Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                 }
                 HStack(alignment: .top, spacing: 0) {
+                    TimelineView(.periodic(from: .now, by: 3)) { context in
+                        let bpm = LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
+                            connected: store.band.isConnected, now: context.date)
+                        monitorCheck("HR", icon: "heart.fill", reading: HealthReading(vital: .rhr,
+                            value: bpm.map(Double.init), status: bpm == nil ? .unavailable : .calibrating,
+                            baselineDays: 0, reference: nil), status: bpm == nil ? "UNAVAILABLE" : "LIVE")
+                    }
                     monitorCheck("RESP", icon: "lungs.fill", reading: store.healthMonitor[.respiration])
                     monitorCheck("SPO₂", icon: "drop", reading: store.healthMonitor[.oxygen])
                     monitorCheck("RHR", icon: "heart", reading: store.healthMonitor[.rhr])
                     monitorCheck("HRV", icon: "waveform.path.ecg", reading: store.healthMonitor[.hrv])
-                    monitorCheck("TEMP", icon: "thermometer.medium", reading: store.healthMonitor[.temperature])
                 }
                 HStack(spacing: 10) {
-                    Image(systemName: monitorCount == 5 ? "checkmark.square.fill" : "exclamationmark.square")
-                        .foregroundStyle(monitorCount == 5 ? Color.appGood : Color.appMuted)
-                    Text("\(store.healthMonitor.withinCount)/5 within personal range")
+                    Image(systemName: monitorCount == 4 ? "checkmark.square.fill" : "exclamationmark.square")
+                        .foregroundStyle(monitorCount == 4 ? Color.appGood : Color.appMuted)
+                    Text("\(monitorCount)/4 nightly metrics within personal range")
                         .font(StrapTypography.body(12, weight: .semibold))
                     Spacer()
                 }
@@ -276,10 +282,10 @@ struct HealthHubView: View {
         demo || store.lastCapture?.skinTempMean != nil
     }
     private var monitorCount: Int {
-        store.healthMonitor.withinCount
+        store.healthMonitor.readings.filter { $0.vital != .temperature && $0.verifiedWithinRange }.count
     }
 
-    private func monitorCheck(_ label: String, icon: String, reading: HealthReading) -> some View {
+    private func monitorCheck(_ label: String, icon: String, reading: HealthReading, status: String? = nil) -> some View {
         let present = demo || reading.value != nil
         let verified = !demo && reading.verifiedWithinRange
         return VStack(spacing: 9) {
@@ -307,7 +313,7 @@ struct HealthHubView: View {
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(reading.statusText)")
+        .accessibilityLabel("\(label), \(status ?? reading.statusText)")
     }
 
     // MARK: Stress Monitor card (drill-in)

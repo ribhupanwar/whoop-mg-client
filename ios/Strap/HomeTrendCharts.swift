@@ -5,7 +5,7 @@ struct CombinedLoadChart: View {
     private var points: [MetricDay] {
         if store.isPreview { return MetricTimeline.preview(ending: Date(), count: 7) }
         return MetricTimeline.make(days: store.band.days, live: [], manual: [], caloriesByDay: [:],
-                            ending: Date(), count: 7, sleepNeedHours: store.settings.sleepNeedHours)
+                            ending: Date(), count: 7, sleepNeedHours: store.settings.sleepNeedHours, imported: store.whoopImportedDays)
     }
     var body: some View {
         let days = points

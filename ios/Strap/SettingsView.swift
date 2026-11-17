@@ -13,6 +13,10 @@ struct SettingsView: View {
     @State private var weightText = ""
     @State private var heightText = ""
     @State private var showWhoopImporter = false
+    @State private var importingWhoop = false
+    @State private var limitWhoopDates = false
+    @State private var whoopFrom = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+    @State private var whoopThrough = Date()
     @State private var whoopImportStatus = "No WHOOP file imported"
 
     var body: some View {
@@ -31,100 +35,34 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
-        .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.zip, .commaSeparatedText, .plainText]) { result in
-            do {
-                let url = try result.get()
-                guard url.startAccessingSecurityScopedResource() else {
-                    whoopImportStatus = "File permission denied — choose the CSV again."
-                    return
-                }
-                defer { url.stopAccessingSecurityScopedResource() }
-                if url.pathExtension.lowercased() == "zip" {
-                    let archive = try Archive(url: url, accessMode: .read)
-                    var importedDays = 0
-                    let maxArchiveBytes: UInt64 = 100_000_000
-                    let maxCSVBytes: UInt64 = 50_000_000
-                    var totalCSVBytes: UInt64 = 0
-                    var csvEntries = 0
-                    var supplementalCounts: [String] = []
-                    var recognizedFiles: [String] = []
-                    var failures: [String] = []
-                    for entry in archive where entry.type == .file {
-                        let name = (entry.path as NSString).lastPathComponent.lowercased()
-                        guard name.hasSuffix(".csv") else { continue }
-                        // Bound cumulative extraction before allocating any CSV buffers.
-                        csvEntries += 1
-                        if csvEntries > 1000 {
-                            failures.append("Archive has too many CSV files (limit 1000)")
-                            break
-                        }
-                        let declaredBytes = UInt64(entry.uncompressedSize)
-                        if declaredBytes > maxCSVBytes {
-                            failures.append("\(name): exceeds 50 MB limit")
-                            continue
-                        }
-                        guard totalCSVBytes <= maxArchiveBytes - declaredBytes else {
-                            failures.append("Archive exceeds 100 MB cumulative CSV limit")
-                            break
-                        }
-                        totalCSVBytes += declaredBytes
-                        do {
-                            var data = Data()
-                            _ = try archive.extract(entry) { chunk in
-                                guard data.count <= Int(maxCSVBytes) - chunk.count else {
-                                    throw WhoopImportSafetyError.extractionLimit
-                                }
-                                data.append(chunk)
-                            }
-                            recognizedFiles.append(name)
-                            if name.contains("physiological") || name.contains("cycle") {
-                                let rows = try WhoopCSVImport.parse(data)
-                                importedDays += store.band.importWhoopHistory(rows)
-                            } else {
-                                let category: String? = name.contains("journal") ? "journal_entries" :
-                                    (name.contains("workout") ? "workouts" :
-                                    (name.contains("sleep") ? "sleeps" : nil))
-                                if let category {
-                                    let count = try WhoopCSVImport.importSupplemental(data, source: category)
-                                    supplementalCounts.append("\(category): \(count)")
-                                } else {
-                                    failures.append("\(name): unsupported WHOOP CSV category")
-                                }
-                            }
-                        } catch {
-                            failures.append("\(name): \(error.localizedDescription)")
-                        }
-                    }
-                    let outcome = failures.isEmpty ? "All recognized files processed." :
-                        "Not imported: " + failures.joined(separator: "; ")
-                    whoopImportStatus = "ZIP: \(recognizedFiles.count) CSV files · \(importedDays) HRV/RHR days · \(supplementalCounts.joined(separator: ", ")). \(outcome) Supplemental rows are stored locally; activity/Recovery mapping pending."
-                } else {
-                    let attrs = try FileManager.default.attributesOfItem(atPath: url.path)
-                    guard (attrs[.size] as? NSNumber)?.uint64Value ?? UInt64.max <= 50_000_000 else {
-                        throw WhoopImportSafetyError.extractionLimit
-                    }
-                    let data = try Data(contentsOf: url)
-                    let name = url.lastPathComponent.lowercased()
-                    let category: String? = name.contains("journal") ? "journal_entries" :
-                        (name.contains("workout") ? "workouts" :
-                        (name.contains("sleep") ? "sleeps" : nil))
-                    if let category {
-                        let count = try WhoopCSVImport.importSupplemental(data, source: category)
-                        whoopImportStatus = "Saved \(count) \(category) records locally. Activity/Recovery mapping pending."
-                    } else {
-                        let rows = try WhoopCSVImport.parse(data)
-                        let added = store.band.importWhoopHistory(rows)
-                        whoopImportStatus = "Imported or completed \(added) days · \(store.band.baseline?.days ?? 0)/7 HRV + RHR baseline days"
-                    }
-                }
-            } catch {
-                whoopImportStatus = "Import failed: \(error.localizedDescription)"
-            }
-        }
+        .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.zip, .commaSeparatedText, .plainText], onCompletion: importWhoopFile)
         .onAppear {
             weightText = store.settings.weightKG.map { String(format: "%g", $0) } ?? ""
             heightText = store.settings.heightCM.map { String(format: "%g", $0) } ?? ""
         }
+    }
+
+    private func importWhoopFile(_ result: Result<URL, Error>) {
+        do {
+            let url = try result.get()
+            let scoped = url.startAccessingSecurityScopedResource()
+            let from = limitWhoopDates ? JournalStore.dayKey(for: whoopFrom) : nil
+            let through = limitWhoopDates ? JournalStore.dayKey(for: whoopThrough) : nil
+            importingWhoop = true
+            whoopImportStatus = "Reading and validating all WHOOP files…"
+            Task {
+                defer { if scoped { url.stopAccessingSecurityScopedResource() }; importingWhoop = false }
+                do {
+                    let plan = try await Task.detached(priority: .userInitiated) {
+                        try WhoopImportBatch.prepare(url, fromDate: from, throughDate: through)
+                    }.value
+                    try plan.commit()
+                    let updated = store.band.importWhoopHistory(plan.biometricRows)
+                    store.refreshWhoopImportedHistory()
+                    whoopImportStatus = plan.summary(updatedDays: updated)
+                } catch { whoopImportStatus = "Import failed; existing source records preserved: " + error.localizedDescription }
+            }
+        } catch { whoopImportStatus = "Import failed: " + error.localizedDescription }
     }
 
     // MARK: Profile
@@ -560,17 +498,24 @@ struct SettingsView: View {
     private var whoopImportPanel: some View {
         Panel {
             SectionTitle("Import WHOOP history")
+            Toggle("Limit imported dates", isOn: $limitWhoopDates)
+            if limitWhoopDates {
+                DatePicker("From", selection: $whoopFrom, displayedComponents: .date)
+                DatePicker("Through", selection: $whoopThrough, displayedComponents: .date)
+            }
             Button("Import WHOOP data ZIP or CSV") {
                 showWhoopImporter = true
             }
             .font(StrapTypography.body(12, weight: .bold))
             .foregroundStyle(Color.appAccent)
+            .disabled(importingWhoop || (limitWhoopDates && whoopFrom > whoopThrough))
             Text(whoopImportStatus)
                 .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 6)
-            Hint("Select the original WHOOP export ZIP directly. The importer reads CSVs locally and currently imports physiological-cycle HRV/RHR values; sleep, workout and journal rows are recognized but not yet mapped. Existing measured band values are preserved.")
+            NavigationLink("View imported WHOOP data") { ImportHistoryView() }
+            Hint("Select the whole WHOOP ZIP once. All four source categories are retained together. New and already-saved counts are shown separately; repeated imports add no duplicates. Dated WHOOP Recovery, Strain and Sleep values appear in history charts. Existing band measurements and edited sleep take precedence.")
         }
     }
 
@@ -625,7 +570,7 @@ struct SettingsView: View {
         .padding(.bottom, 10)
     }
 }
-private enum WhoopImportSafetyError: LocalizedError {
+enum WhoopImportSafetyError: LocalizedError {
     case extractionLimit
     var errorDescription: String? { "WHOOP import exceeds the safe 50 MB per-file limit." }
 }

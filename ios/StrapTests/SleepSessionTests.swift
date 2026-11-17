@@ -578,3 +578,57 @@ final class SleepSessionTests: XCTestCase {
                        "Quiet run found; R-R: 0 beats in 0s, but insufficient clean consecutive pairs")
     }
 }
+
+extension SleepSessionTests {
+    func testDaytimeLegacyCandidateCannotReplaceRecordedOvernightSleep() {
+        let night = knownNight()
+        // Use the source timezone so traveling does not reclassify a saved nap.
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = TimeZone(secondsFromGMT: 0)!
+        let noon = Int(utc.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 13, minute: 9))!.timeIntervalSince1970)
+        let candidate = SleepSession(version: 4, sourceStartUnix: noon, startUnix: noon,
+            endUnix: noon + 7200, staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: false, timezoneIdentifier: "UTC")
+        XCTAssertEqual(candidate.classification, .pendingCandidate)
+        var summary = CaptureSummary.empty
+        summary.sleepSessions = [candidate]
+        XCTAssertNil(summary.latestSleepSession)
+        let nap = SleepSession(version: SleepSession.algorithmVersion, sourceStartUnix: noon,
+            startUnix: noon, endUnix: noon + 7200, staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: false, bandSleepConfirmed: true, timezoneIdentifier: "UTC")
+        XCTAssertEqual(nap.classification, .nap)
+        summary.sleepSessions = [nap]
+        XCTAssertNil(summary.latestSleepSession, "Confirmed naps cannot become the night's Sleep/Recovery source")
+    }
+}
+
+extension SleepSessionTests {
+    func testBackgroundQuietTailCannotDriftSavedWakeBoundary() {
+        let old = knownNight()
+        let unedited = SleepSession(version: old.version, sourceStartUnix: old.sourceStartUnix,
+            startUnix: old.startUnix, endUnix: old.endUnix, staging: old.staging,
+            heartRate: [], movementBouts: 0, isEdited: false, sourceEndUnix: old.endUnix)
+        let drifted = SleepSession(version: old.version, sourceStartUnix: old.sourceStartUnix,
+            startUnix: old.startUnix, endUnix: old.endUnix + 3600, staging: old.staging,
+            heartRate: [], movementBouts: 0, isEdited: false, sourceEndUnix: old.endUnix + 3600)
+        let retained = SleepSession.retainingUncovered(previous: [unedited], fresh: [drifted],
+            coverageStart: old.startUnix, coverageEnd: drifted.endUnix, samples: [])
+        XCTAssertEqual(retained, [unedited])
+    }
+}
+
+extension SleepSessionTests {
+    func testEmptyReanalysisCannotEraseCompleteCachedNightDespiteArchiveEndpoints() {
+        let current = knownNight()
+        let stored = SleepSession(version: 1, sourceStartUnix: current.sourceStartUnix,
+            startUnix: current.startUnix, endUnix: current.endUnix, staging: current.staging,
+            heartRate: [], movementBouts: current.movementBouts, isEdited: false,
+            sourceEndUnix: current.endUnix)
+        // Two distant packets span the night but supply no usable overnight
+        // evidence. A new recipe cannot treat these endpoints as full coverage.
+        let rows = [sample(stored.startUnix - 10), sample(stored.endUnix + 10)]
+        let retained = SleepSession.retainingUncovered(previous: [stored], fresh: [],
+            coverageStart: rows.first?.unix, coverageEnd: rows.last?.unix, samples: rows)
+        XCTAssertEqual(retained, [stored])
+    }
+}

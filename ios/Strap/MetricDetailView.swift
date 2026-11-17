@@ -86,7 +86,7 @@ struct MetricDetailView: View {
     private var points: [MetricDay] {
         if store.isPreview { return MetricTimeline.preview(ending: endDate) }
         return MetricTimeline.make(days: store.band.days, live: store.liveActivities, manual: store.manualActivities,
-                            caloriesByDay: energy, ending: endDate, sleepNeedHours: store.settings.sleepNeedHours)
+                            caloriesByDay: energy, ending: endDate, sleepNeedHours: store.settings.sleepNeedHours, imported: store.whoopImportedDays)
     }
 
     var body: some View {
@@ -95,6 +95,9 @@ struct MetricDetailView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 hero(current, history: history)
+                if current?.usesWHOOP(mainMetric) == true {
+                    Hint("WHOOP imported · original source value for this date")
+                }
                 summary(current, history: history)
                 if recoveryMode { behaviorCard } else { activities }
                 Text("Weekly Trends").font(StrapTypography.body(19, weight: .semibold)).padding(.vertical, 18)
@@ -130,7 +133,7 @@ struct MetricDetailView: View {
         .alert("About these measurements", isPresented: $showInfo) {
             Button("OK", role: .cancel) { }
         } message: {
-            Text("Recovery and strain are local estimates from your recorded data. The white strain-ring marker is the previous 30-day recorded average. Recovery requires earlier baseline days. Zone time is recorded HR coverage; calories are active session estimates, not a full-day total. Missing data stays blank. The values are not WHOOP's proprietary scores.")
+            Text("Band Recovery and Strain are local estimates. WHOOP imported scores fill missing chart values and are labelled separately. The white strain-ring marker is the previous 30-day recorded average. Recovery requires earlier baseline days. Zone time is recorded HR coverage; calories are active session estimates, not a full-day total. Missing data stays blank. Local estimates are not WHOOP scores; imported WHOOP values are preserved as reported.")
         }
         .navigationDestination(item: $detail) { metric in
             MetricHistoryView(metric: metric)

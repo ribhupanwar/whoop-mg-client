@@ -74,7 +74,7 @@ struct DashboardView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         let first = formatter.string(from: from)
         let last = formatter.string(from: through)
-        return store.band.days.filter { $0.dateKey >= first && $0.dateKey <= last }
+        return store.historyDays.filter { $0.dateKey >= first && $0.dateKey <= last }
     }
 
     private func mean(_ values: [Double]) -> Double? {
@@ -110,7 +110,7 @@ struct DashboardView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         let first = formatter.string(from: from)
         let last = formatter.string(from: start)
-        return store.band.days.filter { $0.dateKey >= first && $0.dateKey <= last }
+        return store.historyDays.filter { $0.dateKey >= first && $0.dateKey <= last }
     }
 
     private var averageSleepText: String {
@@ -187,7 +187,7 @@ struct DashboardView: View {
         formatter.dateFormat = "yyyy-MM-dd"
         let startKey = formatter.string(from: start)
         let endKey = formatter.string(from: today)
-        return store.band.days
+        return store.historyDays
             .filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
             .sorted { $0.dateKey < $1.dateKey }
     }
@@ -199,6 +199,7 @@ struct DashboardView: View {
                 .font(StrapTypography.body(12, weight: .bold))
                 .tracking(0.8)
                 .foregroundStyle(Color.appMuted)
+            if !store.whoopImportedDays.isEmpty { Hint("WHOOP imported history fills missing dates. Local measurements and edited Sleep take precedence.") }
             Picker("Chart period", selection: $trendWindow) {
                 Text("7D").tag(7)
                 Text("30D").tag(30)
@@ -254,24 +255,25 @@ struct DashboardView: View {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.dateFormat = "yyyy-MM-dd"
-        let daysByKey = Dictionary(uniqueKeysWithValues: store.band.days.map { ($0.dateKey, $0) })
+        let daysByKey = Dictionary(uniqueKeysWithValues: store.historyDays.map { ($0.dateKey, $0) })
         let end = calendar.startOfDay(for: Date())
         return (0..<trendWindow).compactMap { offset -> (date: Date, score: Double?)? in
             guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }
             let key = formatter.string(from: date)
-            guard let day = daysByKey[key] else { return (date: date, score: nil) }
+            guard daysByKey[key] != nil else { return (date: date, score: nil) }
             let earlier = store.band.days
                 .filter { $0.dateKey < key && $0.lnRMSSD != nil && $0.restingHR != nil }
                 .sorted { $0.dateKey < $1.dateKey }
             let baseline = DailyAnalysis.baseline(from: Array(earlier.suffix(30)))
+            let local = store.band.days.first { $0.dateKey == key }
             let result = Recovery.score(
-                lnRMSSD: day.lnRMSSD,
-                rhr: day.restingHR,
-                sleepHours: day.reliableSleepHours,
+                lnRMSSD: local?.lnRMSSD,
+                rhr: local?.restingHR,
+                sleepHours: local?.reliableSleepHours,
                 sleepNeedHours: store.settings.sleepNeedHours,
                 baseline: baseline
             )
-            return (date: date, score: result.score)
+            return (date: date, score: result.score ?? store.whoopImportedDays[key]?.recovery)
         }
     }
 
@@ -498,7 +500,7 @@ struct DashboardView: View {
         let formatter = DateFormatter()
         formatter.calendar = calendar
         formatter.dateFormat = "yyyy-MM-dd"
-        let values = Dictionary(uniqueKeysWithValues: store.band.days.map { ($0.dateKey, $0.strain) })
+        let values = Dictionary(uniqueKeysWithValues: store.historyDays.map { ($0.dateKey, $0.strain) })
         let end = calendar.startOfDay(for: Date())
         return (0..<trendWindow).compactMap { offset -> (date: Date, strain: Double?)? in
             guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }

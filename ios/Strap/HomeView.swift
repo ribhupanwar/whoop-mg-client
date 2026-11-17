@@ -532,10 +532,17 @@ struct HomeView: View {
 
     // MARK: Today's activities
 
+    private var todayNaps: [SleepSession] {
+        (store.band.summary?.sleepSessions ?? []).filter {
+            $0.classification == .nap && Calendar.current.isDateInToday(Date(timeIntervalSince1970: Double($0.endUnix - 1)))
+        }
+    }
+
     private var activitiesCard: some View {
         Panel {
             CardHead(title: "TODAY'S ACTIVITIES", trailing: "⤢")
 
+            if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
@@ -571,7 +578,13 @@ struct HomeView: View {
                 }
             }
             .padding(.bottom, 10)
+            }
             VStack(spacing: 8) {
+                if !demo {
+                    ForEach(todayNaps, id: \.sourceStartUnix) { session in
+                        activityRow(icon: "moon.zzz.fill", name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
+                    }
+                }
                 if demo {
                     activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
                     activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands")
