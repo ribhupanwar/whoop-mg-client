@@ -404,7 +404,7 @@ struct HealthView: View {
     private var rhrTrendChip: String {
         guard store.hasRecoveryBaseline,
               let baseline = store.band.baseline,
-              let current = store.measuredRestingHR,
+              let current = displayedNightRHR,
               current.isFinite else { return baselineChip }
         let difference = current - baseline.rhrMean
         if abs(difference) < 0.5 { return "→ near personal norm" }
