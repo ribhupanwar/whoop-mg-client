@@ -1327,7 +1327,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
             }
             second.fulfill()
         }
-        wait(for: [first, second], timeout: 5, enforceOrder: true)
+        wait(for: [first, second], timeout: 20, enforceOrder: true)
         let saved = try HistoryDatabase(url: writer.databaseURL).samples(from: start, through: start + 2)
         XCTAssertEqual(saved.map(\.unix), [start, start + 1, start + 2])
     }
@@ -1343,7 +1343,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
             if case .failure(let error) = result { XCTFail("\(error)") }
             initial.fulfill()
         }
-        wait(for: [initial], timeout: 5)
+        wait(for: [initial], timeout: 20)
 
         // Force a deterministic transaction failure without unlinking an open
         // SQLite database (which corrupts WAL state on the simulator).
@@ -1357,7 +1357,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
             if case .success = result { XCTFail("Must not publish unsaved records") }
             failed.fulfill()
         }
-        wait(for: [failed], timeout: 5)
+        wait(for: [failed], timeout: 20)
         XCTAssertEqual(try HistoryDatabase(url: writer.databaseURL)
             .samples(from: 1_790_000_000, through: 1_790_000_002).map(\.unix),
                        [1_790_000_000], "Failed transaction must preserve prior durable history")
@@ -1372,7 +1372,7 @@ final class HistoricalArchiveWriterTests: XCTestCase {
             }
             recovered.fulfill()
         }
-        wait(for: [recovered], timeout: 5)
+        wait(for: [recovered], timeout: 20)
     }
 }
 
@@ -1393,7 +1393,7 @@ extension HistoricalArchiveWriterTests {
             }
             rebuilt.fulfill()
         }
-        wait(for: [rebuilt], timeout: 5)
+        wait(for: [rebuilt], timeout: 20)
         let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
         let backup = try XCTUnwrap(files.first { $0.lastPathComponent.contains("invalid-") })
         XCTAssertEqual(try Data(contentsOf: backup), invalid)
@@ -1416,7 +1416,7 @@ extension HistoricalArchiveWriterTests {
             if case .success = result { XCTFail("Expected disk failure") }
             failed.fulfill()
         }
-        wait(for: [failed], timeout: 5)
+        wait(for: [failed], timeout: 20)
         try FileManager.default.removeItem(at: directory)
         let retried = expectation(description: "empty next drain saves pending records")
         writer.merge([]) { result in
@@ -1426,7 +1426,7 @@ extension HistoricalArchiveWriterTests {
             }
             retried.fulfill()
         }
-        wait(for: [retried], timeout: 5)
+        wait(for: [retried], timeout: 20)
         let saved = try HistoryDatabase(url: writer.databaseURL).samples(from: 1_790_000_000, through: 1_790_000_000)
         XCTAssertEqual(saved.map(\.unix), [1_790_000_000])
     }

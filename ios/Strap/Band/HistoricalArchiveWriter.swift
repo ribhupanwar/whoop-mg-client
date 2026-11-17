@@ -5,7 +5,7 @@ import Foundation
 final class HistoricalArchiveWriter {
     let databaseURL: URL
     private let legacyURL: URL
-    private let queue = DispatchQueue(label: "strap.history.archive", qos: .utility)
+    private let queue = DispatchQueue(label: "strap.history.archive", qos: .userInitiated)
     private var database: HistoryDatabase?
     private var pending: [Int: V18Sample] = [:]
 
@@ -46,8 +46,16 @@ final class HistoricalArchiveWriter {
             if let old = pending[sample.unix], !HistoricalRecordSelection.prefers(sample, over: old) { continue }
             pending[sample.unix] = sample
         }
-        let changed = try open().commit(Array(pending.values), token: token)
-        pending.removeAll(keepingCapacity: true)
-        return changed
+        do {
+            let changed = try open().commit(Array(pending.values), token: token)
+            pending.removeAll(keepingCapacity: true)
+            return changed
+        } catch {
+            // Reopen after a storage failure: don't reuse a connection whose
+            // rollback may itself have failed. Pending rows survive the retry;
+            // the existing database, WAL and legacy archive stay intact.
+            database = nil
+            throw error
+        }
     }
 }

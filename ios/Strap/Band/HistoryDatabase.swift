@@ -22,9 +22,13 @@ final class HistoryDatabase {
             sqlite3_busy_timeout(db, 5000)
             try execute("PRAGMA journal_mode=WAL")
             try execute("PRAGMA synchronous=FULL")
-            try execute("CREATE TABLE IF NOT EXISTS history_sample (unix INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
-            try execute("CREATE TABLE IF NOT EXISTS history_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
-            try execute("CREATE TABLE IF NOT EXISTS analysis_checkpoint (key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result BLOB NOT NULL)")
+            // One durable schema commit, rather than a FULL fsync for every
+            // table during the first morning sync or retry on a slow device.
+            try transaction {
+                try execute("CREATE TABLE IF NOT EXISTS history_sample (unix INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
+                try execute("CREATE TABLE IF NOT EXISTS history_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                try execute("CREATE TABLE IF NOT EXISTS analysis_checkpoint (key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result BLOB NOT NULL)")
+            }
         } catch { sqlite3_close(db); db = nil; throw error }
     }
     deinit { sqlite3_close(db) }

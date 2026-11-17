@@ -214,4 +214,38 @@ final class HistoryDatabaseTests: XCTestCase {
         }
         wait(for: [done], timeout: 10)
     }
+
+    func testFailedTransactionRetriesAllPendingChunksWithoutAdvancingCursor() throws {
+        let writer = HistoricalArchiveWriter(url: directory.appendingPathComponent("old.json"))
+        func commit(_ rows: [V18Sample], token: String) throws -> Int {
+            let done = expectation(description: "durable chunk completion")
+            var outcome: Result<Int, Error>?
+            writer.persistChunk(rows, token: token) { outcome = $0; done.fulfill() }
+            wait(for: [done], timeout: 20)
+            return try XCTUnwrap(outcome).get()
+        }
+        XCTAssertEqual(try commit([historySample(1000)], token: "initial"), 1)
+        var probe: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(writer.databaseURL.path, &probe), SQLITE_OK)
+        defer { sqlite3_close(probe) }
+        let sql = "CREATE TRIGGER reject_retry BEFORE INSERT ON history_sample WHEN NEW.unix=1001 BEGIN SELECT RAISE(ABORT, 'fixture transaction failure'); END"
+        XCTAssertEqual(sqlite3_exec(probe, sql, nil, nil, nil), SQLITE_OK)
+        XCTAssertThrowsError(try commit([historySample(1001)], token: "failed-a"))
+        XCTAssertThrowsError(try commit([historySample(1002)], token: "failed-b"))
+        let stored = try HistoryDatabase(url: writer.databaseURL)
+        XCTAssertEqual(try stored.metadata("last_history_chunk"), "initial")
+        XCTAssertEqual(try stored.recentSamples(), [historySample(1000)])
+        XCTAssertEqual(sqlite3_exec(probe, "DROP TRIGGER reject_retry", nil, nil, nil), SQLITE_OK)
+        let retried = expectation(description: "empty retry recovers every pending chunk")
+        writer.merge([]) { result in
+            do {
+                let rows = try result.get()
+                XCTAssertEqual(rows, [historySample(1000), historySample(1001), historySample(1002)])
+            } catch { XCTFail("Retry failed: \(error)") }
+            retried.fulfill()
+        }
+        wait(for: [retried], timeout: 20)
+        XCTAssertEqual(try commit([historySample(1001), historySample(1002)], token: "replayed"), 0)
+        XCTAssertEqual(try stored.metadata("last_history_chunk"), "replayed")
+    }
 }
