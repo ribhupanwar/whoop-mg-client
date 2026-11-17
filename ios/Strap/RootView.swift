@@ -168,6 +168,7 @@ struct RootView: View {
                     .accessibilityValue(selected ? "Selected" : "Not selected")
                     .accessibilityHint("Switch to \(item.label) tab")
                     .accessibilityIdentifier("tab.\(item.rawValue)")
+                    .accessibilityAddTraits(.isButton)
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
