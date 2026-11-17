@@ -182,9 +182,8 @@ struct LiveSessionView: View {
     // MARK: Helpers
 
     private func freshHeartRate(now: Date) -> Int? {
-        guard let last = store.band.lastLiveHRAt,
-              now.timeIntervalSince(last) <= 8 else { return nil }
-        return store.band.liveHeartRate
+        LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
+                                 connected: store.band.isConnected, now: now)
     }
 
     private func elapsedSeconds(now: Date) -> Int {

@@ -19,7 +19,10 @@ enum StandardHeartRate {
             heartRate = Int(bytes[1]) | (Int(bytes[2]) << 8)
             index = 3
         }
-        if flags & 0x08 != 0 { index += 2 }
+        if flags & 0x08 != 0 {
+            guard bytes.count >= index + 2 else { return nil }
+            index += 2
+        }
         var rrMS: [Int] = []
         if flags & 0x10 != 0 {
             while index + 1 < bytes.count {

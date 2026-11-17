@@ -122,6 +122,7 @@ struct HealthView: View {
             Text(lastHR.map(String.init) ?? "—")
                 .font(StrapTypography.metric(58, weight: .bold))
                 .monospacedDigit()
+                .accessibilityIdentifier("health.live.bpm")
                 .foregroundStyle(Color.appFG)
             Text("BPM")
                 .font(StrapTypography.body(17, weight: .bold))
@@ -154,13 +155,13 @@ struct HealthView: View {
         // This is an instantaneous indicator, not a historical time-series.
         // Use a stable physiological display scale so the line moves vertically
         // when the latest fresh HR changes; never substitute archived samples.
-        let current = demo ? 82 : freshLiveHR
+        let current = lastHR
         return GeometryReader { geometry in
             let width = geometry.size.width
             let height = geometry.size.height
             let bpm = Double(current ?? 82)
-            let fraction = min(1.0, max(0.0, (bpm - 40.0) / 140.0))
-            let y = height * CGFloat(1.0 - fraction)
+            let fraction = LiveHeartRateState.indicatorFraction(bpm: Int(bpm))
+            let y = 6 + max(0, height - 12) * CGFloat(1.0 - fraction)
             ZStack(alignment: .topLeading) {
                 Canvas { context, size in
                     let spacing: CGFloat = 24
@@ -194,6 +195,9 @@ struct HealthView: View {
             }
         }
         .frame(height: 195)
+        .accessibilityElement(children: .ignore)
+        .accessibilityIdentifier("health.live.indicator")
+        .accessibilityValue(current.map { String(format: "%.3f", LiveHeartRateState.indicatorFraction(bpm: $0)) } ?? "unavailable")
         .accessibilityLabel(current.map { "Current heart rate, \($0) beats per minute" } ?? "Live heart rate unavailable")
     }
 
@@ -324,13 +328,22 @@ struct HealthView: View {
 
 
     private var freshLiveHR: Int? {
-        guard store.band.isConnected,
-              let last = store.band.lastLiveHRAt,
-              clock.timeIntervalSince(last) <= 8 else { return nil }
-        return store.band.liveHeartRate
+        LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
+                                 connected: store.band.isConnected, now: max(clock, Date()))
     }
 
-    private var lastHR: Int? { freshLiveHR }
+    private var lastHR: Int? {
+        guard demo else { return freshLiveHR }
+        #if DEBUG
+        let args = ProcessInfo.processInfo.arguments
+        if args.contains("--preview-hr-stale") { return nil }
+        if let argument = args.first(where: { $0.hasPrefix("--preview-live-bpm=") }),
+           let bpm = Int(argument.dropFirst("--preview-live-bpm=".count)) {
+            return (25...230).contains(bpm) ? bpm : nil
+        }
+        #endif
+        return 82
+    }
 
     private var liveHRDiagnostic: String {
         guard store.band.isConnected else { return "Strap disconnected · connect to stream live HR" }

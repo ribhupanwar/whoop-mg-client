@@ -91,6 +91,14 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveRRIntervalsMS: [Int] = []
     @Published private(set) var archivedLiveRRSamples: [LiveSample] = []
     @Published private(set) var type40RRPackets = 0
+    @Published private(set) var type40HRPackets = 0
+    @Published private(set) var standardHRPackets = 0
+    private var lastType40HRAt: Date?
+    private var staleHRReconnects = 0
+    private var commandDeadline: DispatchWorkItem?
+    private var currentWriteID: UUID?
+    private var commandWriteTimedOut = false
+    private var linkGeneration = UUID()
     @Published private(set) var standardRRPackets = 0
     @Published private(set) var historyRRRecords = 0
     @Published private(set) var historyRRDeclared = 0
@@ -738,6 +746,8 @@ final class BandLink: NSObject, ObservableObject {
     // MARK: - Connection
 
     func connect(sex: Sex, maxHR: Double?, needHours: Double) {
+        staleHRReconnects = 0
+        hrRecoveryAttempts = 0
         configure(sex: sex, maxHR: maxHR, needHours: needHours)
         stopPicker()
         wantsConnection = true
@@ -1047,6 +1057,14 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func resetLink() {
+        linkGeneration = UUID()
+        commandDeadline?.cancel()
+        commandDeadline = nil
+        currentWriteID = nil
+        commandWriteTimedOut = false
+        lastType40HRAt = nil
+        type40HRPackets = 0
+        standardHRPackets = 0
         persistLiveRRArchive(force: true)
         // Status can already be .failed after a rejected BLE command.
         // The drain clock, not the presentation status, owns its lifecycle.
@@ -1207,7 +1225,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startHRWatchdog() {
         liveHRWatchdog?.invalidate()
-        liveHRWatchdog = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 5, repeats: true) { [weak self] _ in
             guard let self, self.isConnected else { return }
             self.syncWakeAlarm()
             let now = Date()
@@ -1222,14 +1240,23 @@ final class BandLink: NSObject, ObservableObject {
             // existing packet timestamp alone can leave the UI stuck forever.
             // NOOP confirms standard 0x2A37 can stream before the vendor
             // handshake/bond. Do not gate its recovery on CLIENT_HELLO.
-            guard self.hrRecoveryAttempts < 4,
-                  let confirmed = self.hrSubscriptionConfirmedAt ?? self.hrConnectedAt,
-                  now.timeIntervalSince(max(confirmed, self.lastLiveHRAt ?? confirmed)) >= 30,
-                  self.lastHRRecoveryAt.map({ now.timeIntervalSince($0) >= 45 }) ?? true,
-                  !self.hrResubscribePending
-            else { return }
+            let action = LiveHeartRateState.recovery(now: now, connectedAt: self.hrConnectedAt,
+                receivedAt: self.lastLiveHRAt, lastAttempt: self.lastHRRecoveryAt,
+                attempts: self.hrRecoveryAttempts, reconnects: self.staleHRReconnects)
+            if action == .reconnect, let peripheral = self.peripheral {
+                self.staleHRReconnects += 1
+                self.lastMessage = "HR stream stayed silent after re-arming; reconnecting the strap."
+                self.central.cancelPeripheralConnection(peripheral)
+                return
+            }
+            if action == .unavailable {
+                self.lastMessage = "Live HR unavailable after bounded recovery. Check wrist contact and reconnect."
+                return
+            }
+            guard action == .rearm else { return }
             self.lastHRRecoveryAt = now
             self.hrRecoveryAttempts += 1
+            self.hrResubscribePending = false // A missing CCCD callback cannot lock recovery forever.
 
             if let hr = self.hrCharacteristic {
                 // The CCCD can remain enabled even when 0x2A37 stops sending.
@@ -1239,9 +1266,6 @@ final class BandLink: NSObject, ObservableObject {
                     self.peripheral?.setNotifyValue(false, for: hr)
                 } else if !hr.isNotifying && !self.hrResubscribePending {
                     self.peripheral?.setNotifyValue(true, for: hr)
-                }
-                if hr.properties.contains(.read) {
-                    self.peripheral?.readValue(for: hr)
                 }
             } else if self.hrDiscoveryRequestedAt.map({
                 now.timeIntervalSince($0) >= 20
@@ -1260,6 +1284,8 @@ final class BandLink: NSObject, ObservableObject {
             }
             self.lastMessage = "No fresh HR packets · recovery attempt \(self.hrRecoveryAttempts). Check live packet count."
         }
+        liveHRWatchdog = timer
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     private func enqueue(_ opcode: UInt8, body: [UInt8] = [], response: Bool = true) {
@@ -1271,20 +1297,39 @@ final class BandLink: NSObject, ObservableObject {
         guard !commandInFlight, let next = commandQueue.first,
               let peripheral, let characteristic = commandCharacteristic else { return }
         commandInFlight = true
+        let writeID = UUID()
+        currentWriteID = writeID
         let inner: [UInt8] = [BandPacket.command, commandSeq, next.opcode] + next.body
         commandSeq &+= 1
         let frame = Gen5Frame.build(inner)
         if next.expectResponse {
+            let timeout = DispatchWorkItem { [weak self] in
+                guard let self, self.currentWriteID == writeID, self.commandInFlight,
+                      let peripheral = self.peripheral else { return }
+                self.commandWriteTimedOut = true
+                self.liveHeartRate = nil
+                self.lastMessage = "WHOOP command write timed out; reconnecting without discarding saved history."
+                // Do not advance a timed-out ATT queue: a late write callback
+                // could otherwise acknowledge the wrong subsequent command.
+                self.central.cancelPeripheralConnection(peripheral)
+            }
+            commandDeadline?.cancel()
+            commandDeadline = timeout
+            DispatchQueue.main.asyncAfter(deadline: .now() + (next.opcode == BandCommand.clientHello.rawValue ? 30 : 10), execute: timeout)
             peripheral.writeValue(Data(frame), for: characteristic, type: .withResponse)
         } else {
             peripheral.writeValue(Data(frame), for: characteristic, type: .withoutResponse)
             DispatchQueue.main.asyncAfter(deadline: .now() + Self.commandSpacing) { [weak self] in
-                self?.completeCommandSent()
+                guard let self, self.currentWriteID == writeID else { return }
+                self.completeCommandSent()
             }
         }
     }
 
     private func completeCommandSent() {
+        commandDeadline?.cancel()
+        commandDeadline = nil
+        currentWriteID = nil
         guard !commandQueue.isEmpty else {
             commandInFlight = false
             return
@@ -1575,26 +1620,12 @@ final class BandLink: NSObject, ObservableObject {
             lastFrameAt = Date()
         }
         if type == BandPacket.realtimeData {
-            // Gen5 frame header is stripped by FrameReassembler. PulseForge
-            // observed HR at absolute frame byte 16 => inner byte 8.
-            guard inner.count > 8 else { return }
-            let bpm = Int(inner[8])
-            guard (25...230).contains(bpm) else { return }
-            // NOOP's verified Type-40 map: absolute frame byte 17 is the
-            // count; RR words start at byte 18 and are milliseconds on WHOOP 5.
-            // FrameReassembler removes the 8-byte envelope and CRC trailer.
-            let rrCount = inner.count > 9 ? Int(inner[9]) : 0
-            var rrMS: [Int] = []
-            if rrCount > 0 && rrCount <= 4 && inner.count >= 10 + rrCount * 2 {
-                for i in 0..<rrCount {
-                    let offset = 10 + 2 * i
-                    let ms = Int(inner[offset]) | (Int(inner[offset + 1]) << 8)
-                    if ms == 0 { continue } // NOOP Whoop5RR: words are already milliseconds.
-                    if (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(ms) {
-                        rrMS.append(ms)
-                    }
-                }
-            }
+            guard let reading = Type40HeartRate.parse(inner) else { return }
+            let bpm = reading.bpm
+            let rrMS = reading.rrMS
+            lastType40HRAt = Date()
+            type40HRPackets += 1
+            staleHRReconnects = 0
             liveHeartRate = bpm
             recordLiveHR(bpm)
             lastLiveHRAt = Date()
@@ -1659,7 +1690,13 @@ final class BandLink: NSObject, ObservableObject {
 
     private func handleHeartRate(_ characteristic: CBCharacteristic) {
         guard let value = characteristic.value,
-              let reading = StandardHeartRate.parse(value) else { return }
+              let reading = StandardHeartRate.parse(value),
+              (25...230).contains(reading.heartRate) else { return }
+        standardHRPackets += 1
+        // Prefer the Gen5 stream while it is fresh; SIG remains a live fallback.
+        guard LiveHeartRateState.fresh(liveHeartRate, receivedAt: lastType40HRAt,
+                                       connected: isConnected, now: Date()) == nil else { return }
+        staleHRReconnects = 0
         liveHeartRate = reading.heartRate
         recordLiveHR(reading.heartRate)
         lastLiveHRAt = Date()
@@ -1935,6 +1972,7 @@ extension BandLink: CBPeripheralDelegate {
         didUpdateNotificationStateFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        guard peripheral === self.peripheral else { return }
         if let error {
             if characteristic.uuid == BandUUID.heartRateMeasurement {
                 hrResubscribePending = false
@@ -1977,7 +2015,7 @@ extension BandLink: CBPeripheralDelegate {
         didUpdateValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        guard error == nil else { return }
+        guard error == nil, peripheral === self.peripheral, peripheral.state == .connected else { return }
         switch characteristic.uuid {
         case BandUUID.heartRateMeasurement:
             handleHeartRate(characteristic)
@@ -2004,7 +2042,10 @@ extension BandLink: CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
-        guard characteristic == commandCharacteristic else { return }
+        guard peripheral === self.peripheral, characteristic == commandCharacteristic,
+              !commandWriteTimedOut else { return }
+        commandDeadline?.cancel()
+        commandDeadline = nil
         if let error {
             commandInFlight = false
             if isAuthenticationError(error), helloAttempts < 2 {
@@ -2052,10 +2093,12 @@ extension BandLink: CBPeripheralDelegate {
             }
             hrSubscribedBeforeBond = false
             status = .authenticating
+            let generation = linkGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                self?.beginDrainRequests()
-                self?.ensureHeartRateStream()
-                self?.syncWakeAlarm(force: true)
+                guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }
+                self.beginDrainRequests()
+                self.ensureHeartRateStream()
+                self.syncWakeAlarm(force: true)
             }
         }
     }

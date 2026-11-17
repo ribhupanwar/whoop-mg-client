@@ -103,7 +103,8 @@ struct RootView: View {
         .onAppear {
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
-            if args.contains("--preview-recovery") { homePath = [.recovery] }
+            if args.contains("--preview-health-monitor") { homePath = [.health] }
+            else if args.contains("--preview-recovery") { homePath = [.recovery] }
             else if args.contains("--preview-strain") { homePath = [.strain] }
             else if args.contains("--preview-sleep") { homePath = [.sleepAnalysis] }
             else if args.contains("--preview-healthspan") { homePath = [.healthspan] }
