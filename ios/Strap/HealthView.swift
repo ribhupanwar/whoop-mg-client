@@ -110,100 +110,93 @@ struct HealthView: View {
         .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
     }
 
-    // WHOOP-inspired full-bleed presentation, retaining STRAP's measured HR.
+    // Full-bleed WHOOP-style monitor. Sensor readings are never synthesized.
     private var hrPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("HEART RATE")
-                .font(StrapTypography.body(17, weight: .bold))
-                .tracking(1.6)
-                .padding(.bottom, 16)
-            Image(systemName: "heart.fill")
-                .font(.system(size: 27))
-                .foregroundStyle(Color(hex: 0x159EF0))
-                .padding(.bottom, 12)
-            Text(lastHR.map(String.init) ?? "—")
-                .font(StrapTypography.metric(58, weight: .bold))
-                .monospacedDigit()
-                .accessibilityIdentifier("health.live.bpm")
-                .foregroundStyle(Color.appFG)
-            Text("BPM")
-                .font(StrapTypography.body(17, weight: .bold))
-                .foregroundStyle(Color.appMuted)
-                .padding(.top, 1)
-            Text(zoneText)
-                .font(StrapTypography.body(17, weight: .semibold))
-                .foregroundStyle(Color.appMuted)
-                .padding(.top, 18)
-            // A dedicated chart row prevents graph strokes from obscuring BPM labels.
-            liveHeartRateChart
-                .allowsHitTesting(false)
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let height = geometry.size.height
+                let graphY = height * 0.56
+                let markerX = width - 30
+                ZStack(alignment: .topLeading) {
+                    Canvas { context, size in
+                        var grid = Path()
+                        stride(from: CGFloat(0), through: size.width, by: 26).forEach { x in
+                            grid.move(to: CGPoint(x: x, y: 0))
+                            grid.addLine(to: CGPoint(x: x, y: size.height))
+                        }
+                        stride(from: CGFloat(0), through: size.height, by: 26).forEach { y in
+                            grid.move(to: CGPoint(x: 0, y: y))
+                            grid.addLine(to: CGPoint(x: size.width, y: y))
+                        }
+                        context.stroke(grid, with: .color(.white.opacity(0.045)), lineWidth: 0.7)
+                        if lastHR != nil {
+                            var guide = Path()
+                            guide.move(to: CGPoint(x: markerX, y: 12))
+                            guide.addLine(to: CGPoint(x: markerX, y: size.height - 12))
+                            context.stroke(guide, with: .color(.white.opacity(0.5)),
+                                           style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                            var trace = Path()
+                            trace.move(to: CGPoint(x: width * 0.30, y: graphY))
+                            trace.addLine(to: CGPoint(x: markerX, y: graphY))
+                            context.stroke(trace, with: .color(Color(hex: 0x159EF0).opacity(0.22)), lineWidth: 12)
+                            context.stroke(trace, with: .color(Color(hex: 0x159EF0)), lineWidth: 2.5)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("HEART RATE")
+                            .font(StrapTypography.body(17, weight: .bold))
+                            .tracking(1.6)
+                            .padding(.bottom, 16)
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 27))
+                            .foregroundStyle(Color(hex: 0x159EF0))
+                            .padding(.bottom, 12)
+                        Text(lastHR.map(String.init) ?? "—")
+                            .font(StrapTypography.metric(58, weight: .bold))
+                            .monospacedDigit()
+                            .accessibilityIdentifier("health.live.bpm")
+                            .foregroundStyle(Color.appFG)
+                        Text("BPM")
+                            .font(StrapTypography.body(17, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                        Text(zoneText)
+                            .font(StrapTypography.body(17, weight: .semibold))
+                            .foregroundStyle(Color.appMuted)
+                            .padding(.top, 18)
+                        HStack(spacing: 4) {
+                            ForEach(0..<5, id: \.self) { _ in
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.14))
+                                    .frame(width: 34, height: 3)
+                            }
+                        }
+                        .padding(.top, 16)
+                    }
+                    .padding(.leading, 18)
+                    .padding(.top, 20)
+                    if lastHR != nil {
+                        Circle()
+                            .fill(.white)
+                            .frame(width: 12, height: 12)
+                            .shadow(color: .black.opacity(0.7), radius: 7)
+                            .position(x: markerX, y: graphY)
+                    }
+                }
+            }
+            .frame(height: 270)
+            .accessibilityIdentifier("health.live.indicator")
             if !demo {
                 Text(liveHRDiagnostic)
                     .font(StrapTypography.body(10))
                     .foregroundStyle(Color.appMuted)
-                    .padding(.top, 12)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 8)
             }
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 20)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.appBG)
-    }
-
-    private var liveHeartRateChart: some View {
-        // A WHOOP-style blue time-series, with explicit provenance. Never
-        // present an archived capture as a live heart-rate measurement.
-        let live = usingLiveSeries
-        let values = (live ? store.band.recentLiveHR.map { Double($0.heartRate) } : (summary?.heartRateSeries ?? []))
-            .filter { $0.isFinite && $0 >= 25 && $0 <= 230 }
-        return VStack(alignment: .leading, spacing: 8) {
-            Text(live ? "LIVE HEART RATE" : "RECORDED HEART RATE")
-                .font(StrapTypography.body(10, weight: .bold))
-                .tracking(1)
-                .foregroundStyle(Color.appMuted)
-            GeometryReader { geometry in
-                let width = geometry.size.width
-                let height = geometry.size.height
-                let low = max(25, (values.min() ?? 60) - 10)
-                let high = min(230, (values.max() ?? 110) + 10)
-                let span = max(1, high - low)
-                ZStack {
-                    Canvas { context, size in
-                        var grid = Path()
-                        for fraction in [CGFloat(0), 0.25, 0.5, 0.75, 1] {
-                            let y = size.height * fraction
-                            grid.move(to: CGPoint(x: 0, y: y))
-                            grid.addLine(to: CGPoint(x: size.width, y: y))
-                        }
-                        context.stroke(grid, with: .color(.white.opacity(0.07)), lineWidth: 0.7)
-                    }
-                    if values.count >= 2 {
-                        Path { path in
-                            for (index, bpm) in values.enumerated() {
-                                let x = width * CGFloat(index) / CGFloat(values.count - 1)
-                                let y = height * CGFloat(1 - (bpm - low) / span)
-                                if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
-                                else { path.addLine(to: CGPoint(x: x, y: y)) }
-                            }
-                        }
-                        .stroke(Color(hex: 0x22AFFF), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
-                        .shadow(color: Color(hex: 0x18A6F5).opacity(0.65), radius: 5)
-                        if live {
-                            Circle().fill(.white).frame(width: 10, height: 10)
-                                .position(x: width, y: height * CGFloat(1 - ((values.last ?? low) - low) / span))
-                        }
-                    } else {
-                        Text("No heart-rate trace available")
-                            .font(StrapTypography.body(12))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                }
-            }
-            .frame(height: 170)
-            .accessibilityIdentifier("health.live.indicator")
-            .accessibilityLabel(live ? "Live heart rate history" : "Recorded heart rate history")
-        }
     }
 
     private var rrDiagnosticPanel: some View {
