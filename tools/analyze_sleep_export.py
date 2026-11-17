@@ -13,7 +13,7 @@ import json
 import math
 from pathlib import Path
 import statistics
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 def instant(value):
@@ -101,10 +101,24 @@ def load(path):
     return rows, start, end, next(iter(versions)), hashlib.sha256(data).hexdigest()
 
 
+def display_zone(name, start):
+    try:
+        return ZoneInfo(name)
+    except ZoneInfoNotFoundError:
+        # Windows need not ship an IANA database. India has used UTC+05:30
+        # throughout the post-1970 unsigned Unix range of band exports.
+        # Do not generalize this fallback to historical/DST-bearing zones.
+        if name in ('UTC', 'Etc/UTC'):
+            return dt.timezone.utc
+        if name == 'Asia/Kolkata' and start >= 0:
+            return dt.timezone(dt.timedelta(hours=5, minutes=30), 'Asia/Kolkata')
+        raise
+
+
 def audit(rows, start, end, timezone='Asia/Kolkata'):
     if end <= start:
         raise ValueError('Window end must be after its start')
-    zone = ZoneInfo(timezone)
+    zone = display_zone(timezone, start)
     def local(second):
         return dt.datetime.fromtimestamp(second, zone).isoformat()
     selected = [row for row in rows if start <= row['unix'] < end]

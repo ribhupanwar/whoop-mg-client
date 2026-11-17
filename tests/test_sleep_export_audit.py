@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import unittest
+from unittest import mock
 
 spec = importlib.util.spec_from_file_location('sleep_audit', Path(__file__).parents[1] / 'tools/analyze_sleep_export.py')
 audit = importlib.util.module_from_spec(spec)
@@ -13,6 +14,21 @@ def row(second, hr=76, rr=None):
 
 
 class SleepExportAuditTests(unittest.TestCase):
+    def test_windows_without_iana_data_uses_verified_modern_ist_and_utc(self):
+        with mock.patch.object(audit, 'ZoneInfo', side_effect=audit.ZoneInfoNotFoundError):
+            start = 1794852769
+            result = audit.audit([row(start)], start, start + 1)
+            self.assertEqual(result['start'], '2026-11-16T23:42:49+05:30')
+            utc = audit.audit([row(start)], start, start + 1, 'UTC')
+            self.assertEqual(utc['start'], '2026-11-16T18:12:49+00:00')
+
+    def test_missing_timezone_data_does_not_invent_other_or_historical_offsets(self):
+        with mock.patch.object(audit, 'ZoneInfo', side_effect=audit.ZoneInfoNotFoundError):
+            with self.assertRaises(audit.ZoneInfoNotFoundError):
+                audit.audit([], 0, 60, 'Europe/London')
+            with self.assertRaises(audit.ZoneInfoNotFoundError):
+                audit.audit([], -100, -50, 'Asia/Kolkata')
+
     def test_ist_instant_and_naive_timestamp_rejection(self):
         self.assertEqual(audit.instant('2026-11-16T23:42:49+05:30'), 1794852769)
         with self.assertRaises(ValueError):
