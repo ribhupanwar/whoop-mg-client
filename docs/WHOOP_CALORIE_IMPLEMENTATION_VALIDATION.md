@@ -33,6 +33,23 @@ An independent decimal fixture (synthetic profile 70 kg, 1.75 m, age 30; raw bas
 
 For an explicit 0.2 kcal/s reference at maxHR 187 and restingHR 55, threshold is 94.6. HR [60,150,187] at times [0,1,3] integrates 0.275170227673561 kcal over 3 observed seconds. Explicit final-interval repetition adds 2 seconds and 0.4 kcal. These values were calculated independently with Python `decimal`, not by copying the Swift implementation into its tests.
 
+## Explicit synthetic research call
+
+The following is a synthetic scenario, not the user's profile or a production default. It **chooses** the workout-at-maximum reference anchor as an experiment; that upstream call-site assumption still requires verification.
+
+```swift
+let profile = WhoopRecoveredCalories.Profile(
+    weightKg: 70, heightMeters: 1.75, ageYears: 30, baseline: .raw0)
+let reference = try WhoopRecoveredCalories.workoutKcalPerSecond(
+    hr: 187, maxHR: 187, profile: profile)
+let estimate = try WhoopRecoveredCalories.integrate(
+    heartRates: [60, 150, 187], timestamps: [0, 1, 3], profile: profile,
+    restingHR: 55, maxHR: 187, referenceRate: reference,
+    tailPolicy: .observedIntervalsOnly)
+// estimate.integratedKcal is covered-window energy including resting energy.
+// estimate.netAboveRestingKcal is not an established WHOOP active-energy field.
+```
+
 ## Real uploaded WHOOP export audit
 
 The user-supplied original ZIP was inspected locally, without publishing its health values, dates or journal notes:
@@ -56,5 +73,5 @@ Both expose `score.kilojoule` in examples; those pages do not define separate ac
 - Deterministic XCTest coverage: independent resting/workout numeric anchors, raw-baseline mean/clamps, capped workout HR, threshold equality and slope/intercept, above/below threshold, weighted sums, explicit tail policies, three-second cap, empty/singleton/duplicates, missing HR/time, invalid order/counts, nonfinite inputs/overflow and unchanged production arithmetic.
 - Native GitHub Actions [44118166379](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44118166379): **SUCCESS**, 471 unit tests (all 13 new recovered-calorie tests passed), 3 UI tests, simulator build, device archive, licensed fonts/HealthKit checks and IPA packaging. Tested code revision `7c178587fcec332e6f3b94c3ce557539bbd485fb`; subsequent documentation-only changes do not modify app/test source.
 - Real matched workout/cycle comparison: BLOCKED by missing full HR/profile/anchor and explicit active-versus-total reference evidence. Percentage error is not reported without comparable inputs.
-- Native research IPA artifact: `14343589739`; workflow-recorded SHA-256 `eb3a959d35e72ac8e184a4dbfc33383a7000c61a11a09222e112f3a12993b88f`. This is the isolated main-based research build; consolidated master validation is tracked separately in `MASTER_PROGRESS.md`.
+- Native research IPA artifact: `14343589739`; workflow-recorded SHA-256 `eb3a959d35e72ac8e184a4dbfc33383a7000c61a11a09222e112f3a12993b88f`. This is the isolated main-based research build; consolidated master validation is tracked separately in [the master progress ledger](https://github.com/ribhupanwar/whoop-mg-client/blob/codex/master-progress-20261117/MASTER_PROGRESS.md).
 - Production integration: disabled. It requires passed native tests, resolved call-site/enum/tail semantics and matched real data comparisons first.
