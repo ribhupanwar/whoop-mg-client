@@ -76,7 +76,7 @@ struct MoreView: View {
                 }
 
                 Panel {
-                    SectionTitle("Privacy & data")
+                    SectionTitle("Data Management")
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
@@ -86,14 +86,19 @@ struct MoreView: View {
                         exportURL = nil
                         exportError = nil
                         preparingExport = true
-                        defer { preparingExport = false }
-                        do {
-                            exportURL = try makePortableDataExport()
-                        } catch {
-                            exportError = error.localizedDescription
+                        Task {
+                            do {
+                                let preferences = UserDefaults.standard.dictionaryRepresentation()
+                                let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                                let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                                exportURL = try await Task.detached(priority: .userInitiated) {
+                                    try PersistenceDiagnostics.write(support: support, documents: documents, preferences: preferences)
+                                }.value
+                            } catch { exportError = error.localizedDescription }
+                            preparingExport = false
                         }
                     } label: {
-                        moreRow("Export raw history & settings", icon: "square.and.arrow.up")
+                        moreRow("Export persisted records & diagnostics", icon: "square.and.arrow.up")
                     }
                     .disabled(preparingExport)
                     if let exportURL {
@@ -104,8 +109,13 @@ struct MoreView: View {
                     if let exportError {
                         Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn)
                     }
-                    Text("Partial export: includes retained raw JSON history and STRAP settings, not the SQLite database or a restorable full backup. Save outside this app before uninstalling.")
+                    Text("Includes a read-only SQLite snapshot, sleep caches, corrections, raw captures and checksums. Contains private health records. Save outside this app. This is diagnostic evidence, not a full restorable backup.")
                         .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                    NavigationLink {
+                        SleepRecoveryView()
+                    } label: {
+                        moreRow("Preview & recover saved sleep", icon: "clock.arrow.circlepath")
+                    }
                     NavigationLink(value: Route.dataQuality) {
                         moreRow("Data quality & diagnostics", icon: "waveform.path.ecg")
                     }
@@ -141,38 +151,6 @@ struct MoreView: View {
         }
         .padding(.vertical, 9)
         .contentShape(Rectangle())
-    }
-    /// Read-only portable export. Never mutate the live database or claim restore support.
-    private func makePortableDataExport() throws -> URL {
-        let fm = FileManager.default
-        let destination = fm.temporaryDirectory.appendingPathComponent("STRAP-partial-export-\(UUID().uuidString).zip")
-        let archive = try Archive(url: destination, accessMode: .create)
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        let history = support.appendingPathComponent("strap-history-v18.json")
-        if fm.fileExists(atPath: history.path) {
-            try archive.addEntry(with: "strap-history-v18.json", relativeTo: support)
-        }
-        let settings = UserDefaults.standard.dictionaryRepresentation()
-        let safeSettings = settings.filter { $0.key.hasPrefix("strap.") }
-            .compactMapValues { value -> Any? in
-                switch value {
-                case is String, is Int, is Double, is Bool, is Date, is Data: return value
-                case let list as [String]: return list
-                case let list as [Int]: return list
-                case let map as [String: [Int]]: return map
-                default: return nil
-                }
-            }
-        let plist = try PropertyListSerialization.data(fromPropertyList: safeSettings,
-                                                       format: .xml, options: 0)
-        let tempFolder = fm.temporaryDirectory.appendingPathComponent("strap-export-\(UUID().uuidString)", isDirectory: true)
-        try fm.createDirectory(at: tempFolder, withIntermediateDirectories: true)
-        let temp = tempFolder.appendingPathComponent("strap-settings.plist")
-        try plist.write(to: temp, options: .atomic)
-        defer { try? fm.removeItem(at: tempFolder) }
-        try archive.addEntry(with: "strap-settings.plist", relativeTo: temp.deletingLastPathComponent(),
-                             compressionMethod: .deflate)
-        return destination
     }
 
 }

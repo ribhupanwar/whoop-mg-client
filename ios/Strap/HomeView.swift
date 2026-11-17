@@ -536,6 +536,7 @@ struct HomeView: View {
         Panel {
             CardHead(title: "TODAY'S ACTIVITIES", trailing: "⤢")
 
+            if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
                     HStack(spacing: 7) {
@@ -571,6 +572,7 @@ struct HomeView: View {
                 }
             }
             .padding(.bottom, 10)
+            }
             VStack(spacing: 8) {
                 if demo {
                     activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
