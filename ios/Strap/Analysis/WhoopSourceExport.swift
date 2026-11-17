@@ -54,7 +54,9 @@ enum WhoopSourceExport {
         let headers = Set(records.flatMap { $0.fields.keys }).sorted()
         func quoted(_ value: String) -> String { "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
         // Separate provenance column; even an original field called source remains intact.
-        let rows = [["STRAP export source category"] + headers] + records.map { record in
+        var provenance = "STRAP export source category"
+        while headers.contains(provenance) { provenance += " #" }
+        let rows = [[provenance] + headers] + records.map { record in
             [record.source] + headers.map { record.fields[$0] ?? "" }
         }
         return Data((rows.map { $0.map(quoted).joined(separator: ",") }.joined(separator: "\r\n") + "\r\n").utf8)

@@ -173,23 +173,24 @@ enum WhoopCSVImport {
         var quoted = false
         // Swift represents CRLF as one Character. Recognize it explicitly
         // while preserving embedded CRLF inside quoted source notes.
-        let chars = Array(text)
-        var i = 0
-        while i < chars.count {
-            let c = chars[i]
+        var characters = text.makeIterator()
+        var current = characters.next()
+        while let c = current {
+            let next = characters.next()
             if c == "\"" {
-                if quoted && i + 1 < chars.count && chars[i + 1] == "\"" {
-                    field.append("\""); i += 1
+                if quoted && next == "\"" {
+                    field.append("\"")
+                    current = characters.next()
+                    continue
                 } else { quoted.toggle() }
             } else if c == "," && !quoted {
                 row.append(field); field = ""
             } else if (c == "\n" || c == "\r" || c == "\r\n") && !quoted {
-                if c == "\r" && i + 1 < chars.count && chars[i + 1] == "\n" { i += 1 }
                 row.append(field); field = ""
                 if row.contains(where: { !$0.isEmpty }) { records.append(row) }
                 row = []
             } else { field.append(c) }
-            i += 1
+            current = next
         }
         guard !quoted else { throw ImportError.unsupportedColumns }
         row.append(field)

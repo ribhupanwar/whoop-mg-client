@@ -80,3 +80,16 @@ extension WhoopImportTests {
         XCTAssertThrowsError(try WhoopCSVImport.parse(Data("Date,HRV,RHR\n\"2026-11-17,28,76".utf8)))
     }
 }
+
+extension WhoopImportTests {
+    func testLargeMultilineUnicodeSourceRetainsEveryRowAndRejectsTrailingBrokenQuote() throws {
+        let notes = "हां, \"quoted\"\r\nnext line"
+        let escaped = notes.replacingOccurrences(of: "\"", with: "\"\"")
+        let csv = "Date,Notes\r\n" + (0..<20_000).map { "2026-10-02,\"\(escaped) \($0)\"" }.joined(separator: "\r\n")
+        let records = try WhoopCSVImport.parseSupplemental(Data(csv.utf8), source: "journal_entries")
+        XCTAssertEqual(records.count, 20_000)
+        XCTAssertEqual(records.first?.fields["Notes"], notes + " 0")
+        XCTAssertEqual(records.last?.fields["Notes"], notes + " 19999")
+        XCTAssertThrowsError(try WhoopCSVImport.parseSupplemental(Data((csv + "\r\n2026-10-03,\"broken").utf8), source: "journal_entries"))
+    }
+}
