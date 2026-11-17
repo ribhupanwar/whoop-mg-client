@@ -326,7 +326,33 @@ enum SleepStager {
     }
 
     /// Peakedness of RSA power in 0.15-0.40 Hz over a 4 Hz resampled tachogram.
-    private static func respRegularity(_ beats: [(t: Double, rr: Double)]) -> Double? {
+    static func respRegularity(_ beats: [(t: Double, rr: Double)]) -> Double? {
+        // The packet's second is known even when within-second beat timing is
+        // approximate. Empty RR packets or missing seconds are not measured RSA:
+        // do not interpolate a tachogram across them, including long dropouts.
+        var runs: [[(t: Double, rr: Double)]] = []
+        for beat in beats {
+            guard beat.t.isFinite, beat.rr.isFinite else { continue }
+            if let previous = runs.last?.last,
+               beat.t > previous.t, floor(beat.t) - floor(previous.t) <= 1 {
+                runs[runs.count - 1].append(beat)
+            } else {
+                runs.append([beat])
+            }
+        }
+        // A long flat or insufficient fragment must not hide a shorter usable
+        // measured run. Equal-length ties retain chronological acquisition order.
+        let ordered = runs.enumerated().sorted {
+            $0.element.count == $1.element.count ? $0.offset < $1.offset
+                : $0.element.count > $1.element.count
+        }
+        for run in ordered {
+            if let value = contiguousRespRegularity(run.element) { return value }
+        }
+        return nil
+    }
+
+    private static func contiguousRespRegularity(_ beats: [(t: Double, rr: Double)]) -> Double? {
         guard beats.count >= minBeatsPerEpoch else { return nil }
         // The caller supplies chronological seconds and original within-packet order.
         guard let first = beats.first, let last = beats.last else { return nil }

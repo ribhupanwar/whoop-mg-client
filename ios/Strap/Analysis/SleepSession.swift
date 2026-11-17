@@ -10,7 +10,7 @@ struct SleepHRPoint: Codable, Equatable, Identifiable {
 /// The sole source of sleep durations on every screen. All ends here are exclusive.
 /// A missing interval is unknown, never an awakening and never sleep debt.
 struct SleepSession: Codable, Equatable {
-    static let algorithmVersion = 3
+    static let algorithmVersion = 4
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int

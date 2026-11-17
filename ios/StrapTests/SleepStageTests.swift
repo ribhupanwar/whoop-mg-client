@@ -76,6 +76,35 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
+    func testRespirationDoesNotInterpolateAcrossMissingRRSeconds() throws {
+        let first = (0..<45).map { index in
+            (t: Double(index), rr: 800.0 + 30 * sin(Double(index) * 1.2))
+        }
+        let later = (0..<20).map { index in
+            (t: Double(index + 146), rr: 1100.0 + 20 * sin(Double(index) * 0.9))
+        }
+        let expected = try XCTUnwrap(SleepStager.respRegularity(first))
+        XCTAssertEqual(try XCTUnwrap(SleepStager.respRegularity(first + later)), expected, accuracy: 1e-12)
+        // Even a single empty RR second breaks interpolation, without relabeling HR as missing.
+        let adjacent = later.map { (t: $0.t - 100, rr: $0.rr) }
+        XCTAssertEqual(try XCTUnwrap(SleepStager.respRegularity(first + adjacent)), expected, accuracy: 1e-12)
+    }
+
+    func testRespirationCannotPoolInsufficientFragmentsAcrossGap() {
+        let fragments = (0..<6).map { (t: Double($0), rr: 800.0 + Double($0 * 2)) }
+            + (0..<6).map { (t: Double($0 + 107), rr: 900.0 + Double($0 * 3)) }
+        XCTAssertNil(SleepStager.respRegularity(fragments))
+    }
+
+    func testRespirationSkipsUnusableFlatFragmentWithoutChangingBeatOrder() throws {
+        let flat = (0..<60).map { (t: Double($0), rr: 800.0) }
+        let usable = (0..<45).map { index in
+            (t: Double(index + 161), rr: 900.0 + 30 * sin(Double(index) * 1.2))
+        }
+        XCTAssertEqual(try XCTUnwrap(SleepStager.respRegularity(flat + usable)),
+                       try XCTUnwrap(SleepStager.respRegularity(usable)), accuracy: 1e-12)
+    }
+
     func testOptimizedSpectralPowerMatchesDirectDFT() {
         // Non-power-of-two lengths include the clipped boundary RSA windows.
         for count in [16, 65, 479, 840] {
