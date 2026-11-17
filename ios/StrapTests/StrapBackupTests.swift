@@ -1,4 +1,5 @@
 import XCTest
+import ZIPFoundation
 @testable import Strap
 
 final class StrapBackupTests: XCTestCase {
@@ -32,6 +33,9 @@ final class StrapBackupTests: XCTestCase {
         let preferences: [String: Any] = [SleepCorrectionStore.defaultsKey: ["100": [100, 201]], "strap.days.v1": Data("[]".utf8)]
         let backup = try PersistenceDiagnostics.write(support: source, documents: documents,
             preferences: preferences, destinationDirectory: root, fullBackup: true)
+        let packaged = try Archive(url: backup, accessMode: .read)
+        XCTAssertTrue(packaged.allSatisfy { $0.path == "manifest.json" || StrapBackup.allowedPath($0.path) },
+            "A generated full backup must contain only restore-supported manifest entries")
         let preview = try StrapBackup.inspect(backup)
         defer { try? fm.removeItem(at: preview.folder) }
         XCTAssertEqual(preview.manifest.database?.rows, 2)

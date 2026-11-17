@@ -21,7 +21,7 @@ enum StrapBackup {
     static func allowedPath(_ path: String) -> Bool {
         guard !path.hasPrefix("/"), !path.contains("\\"), !path.split(separator: "/").contains("..") else { return false }
         return ["persisted-records.plist", "history.sqlite", "strap-history-v18.json", "Strap/gps-runs-v2.json"].contains(path)
-            || (path.hasPrefix("captures/") && path.hasSuffix(".jsonl"))
+            || (path.hasPrefix("captures/") && ["bin", "json", "raw", "jsonl"].contains((path as NSString).pathExtension.lowercased()))
             || (path.hasPrefix("sleep-recovery/") && path.hasSuffix(".json"))
     }
     static func inspect(_ url: URL) throws -> Preview {
@@ -38,7 +38,7 @@ enum StrapBackup {
                 guard count <= 100_000, entry.type != .symlink else { throw failure("Unsupported backup entries.") }
                 if entry.type == .directory { continue }
                 guard entry.path == "manifest.json" || allowedPath(entry.path), paths.insert(entry.path).inserted else {
-                    throw failure("Unsafe, unknown or duplicate backup path.")
+                    throw failure("Unsafe, unknown or duplicate backup path: " + entry.path)
                 }
                 let bytes = UInt64(entry.uncompressedSize)
                 guard bytes <= 1_000_000_000, size <= 2_000_000_000 - bytes else { throw failure("Backup exceeds 2 GB extraction limit.") }

@@ -164,7 +164,14 @@ enum PersistenceDiagnostics {
         try encoder.encode(manifest).write(to: folder.appendingPathComponent("manifest.json"), options: .atomic)
         let destination = destinationDirectory.appendingPathComponent(folder.lastPathComponent + ".zip")
         do {
-            try fm.zipItem(at: folder, to: destination, shouldKeepParent: false)
+            // Package only checksum-manifest entries. Platform-generated SQLite
+            // sidecars or filesystem metadata must not leak into the ZIP and
+            // produce a backup its own strict restore preflight cannot accept.
+            let archive = try Archive(url: destination, accessMode: .create)
+            for file in manifest.files where !file.path.hasPrefix("source-inventory/") {
+                try archive.addEntry(with: file.path, relativeTo: folder, compressionMethod: .deflate)
+            }
+            try archive.addEntry(with: "manifest.json", relativeTo: folder, compressionMethod: .deflate)
             return destination
         } catch { try? fm.removeItem(at: destination); throw error }
     }
@@ -186,6 +193,12 @@ enum PersistenceDiagnostics {
         let finished = sqlite3_backup_finish(backup)
         guard status == SQLITE_DONE, finished == SQLITE_OK else {
             throw Failure(message: "History changed or is busy; retry diagnostics after sync finishes.")
+        }
+        // The source remains WAL/read-only. Normalize only the new standalone
+        // copy, so opening the exported file read-only cannot create unlisted
+        // WAL/SHM files inside a staged restore after validation.
+        guard sqlite3_exec(output, "PRAGMA journal_mode=DELETE", nil, nil, nil) == SQLITE_OK else {
+            throw Failure(message: "Cannot finalize portable diagnostic snapshot.")
         }
         func query(_ sql: String) throws -> [[String?]] {
             var statement: OpaquePointer?

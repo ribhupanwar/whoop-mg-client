@@ -21,6 +21,8 @@ final class PersistenceDiagnosticsTests: XCTestCase {
         XCTAssertEqual(result.oldestUnix, 100)
         XCTAssertEqual(result.latestUnix, 200)
         XCTAssertEqual(try Data(contentsOf: wal), before, "Diagnostics must not checkpoint the source WAL")
+        let snapshotBytes = try Data(contentsOf: destination)
+        XCTAssertEqual(snapshotBytes[18], 1, "Exported database must be standalone rollback-journal mode")
         XCTAssertEqual(result.schema.count, 1, "Do not create app tables during read-only diagnostics")
     }
 
