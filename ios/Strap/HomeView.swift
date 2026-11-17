@@ -7,6 +7,7 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     let openPlan: () -> Void
 
+    @State private var appOpenDays = AppOpenDayTracker.count()
     @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
@@ -46,6 +47,9 @@ struct HomeView: View {
                 CombinedLoadChart()
                 discoverSection
             }
+        }
+        .onAppear {
+            appOpenDays = AppOpenDayTracker.recordOpen()
         }
         .coordinateSpace(name: "home-scroll")
         .onPreferenceChange(HomeHeroPosition.self) { value in
@@ -174,10 +178,10 @@ struct HomeView: View {
             }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
             HStack(spacing: 4) {
                 Image(systemName: "flame.fill").foregroundStyle(Color.orange)
-                Text("\(store.recordedDayCount)").font(StrapTypography.body(11, weight: .bold))
+                Text("\(appOpenDays)").font(StrapTypography.metric(14, weight: .bold))
             }.padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("\(store.recordedDayCount) recorded days")
+                .accessibilityLabel("\(appOpenDays) distinct days STRAP was opened")
 
             Spacer()
 
@@ -827,7 +831,10 @@ struct HomeView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
-                        .font(StrapTypography.body(21, weight: .medium))
+                        .font(StrapTypography.metric(24, weight: .bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .foregroundStyle(Color.appFG)
                     Text(WakeAlarm.isEnabled ? "ALARM ON\nEXACT TIME" : "ALARM OFF\nEXACT TIME")
                         .font(StrapTypography.body(9.5))
@@ -1104,5 +1111,30 @@ private struct PlanOrbitView: View {
                 }.frame(width: index == 0 ? 46 : 30, height: index == 0 ? 46 : 30).position(positions[index])
             }
         }.accessibilityHidden(true)
+    }
+}
+
+// Count distinct calendar days on which STRAP was opened. This is intentionally
+// not the number of historical WHOOP days, and not a consecutive-day streak.
+// Persist locally; do not fabricate visits before this counter was introduced.
+enum AppOpenDayTracker {
+    static let key = "strap.app.open.days.v1"
+
+    static func dayKey(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
+    }
+
+    static func count(defaults: UserDefaults = .standard) -> Int {
+        Set(defaults.stringArray(forKey: key) ?? []).count
+    }
+
+    @discardableResult
+    static func recordOpen(at date: Date = Date(), defaults: UserDefaults = .standard,
+                           calendar: Calendar = .current) -> Int {
+        var days = Set(defaults.stringArray(forKey: key) ?? [])
+        days.insert(dayKey(date, calendar: calendar))
+        defaults.set(days.sorted(), forKey: key)
+        return days.count
     }
 }

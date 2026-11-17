@@ -11,7 +11,21 @@ final class TabResponsivenessTests: XCTestCase {
             return false
         }
         app.launch()
-        XCTAssertTrue(app.buttons["tab.home"].waitForExistence(timeout: 15))
+        let homeButton = app.buttons["tab.home"]
+        if !homeButton.waitForExistence(timeout: 15) {
+            // Preserve the accessibility tree on CI failures so a missing
+            // identifier can be distinguished from a hidden or delayed tab bar.
+            let hierarchy = XCTAttachment(string: app.debugDescription)
+            hierarchy.name = "Tab navigation accessibility hierarchy"
+            hierarchy.lifetime = .keepAlways
+            add(hierarchy)
+            let screenshot = XCTAttachment(screenshot: app.screenshot())
+            screenshot.name = "Tab navigation at launch"
+            screenshot.lifetime = .keepAlways
+            add(screenshot)
+            XCTFail("Home tab button unavailable; inspect attached hierarchy and screenshot")
+            return
+        }
         var durations: [Double] = []
         for _ in 0..<3 {
             for tab in ["health", "train", "plan", "more", "home"] {

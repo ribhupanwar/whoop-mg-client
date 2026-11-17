@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Charcoal surfaces and blue accents from the owner's screenshot reference.
+/// WHOOP-inspired charcoal surface tokens; keep independent STRAP artwork and licensed fonts.
 /// Stage and score colours retain their semantic roles.
 extension Color {
     init(hex: UInt32) {
@@ -13,10 +13,10 @@ extension Color {
         )
     }
 
-    static let appCanvasTop = Color(hex: 0x252C31)
-    static let appBG = Color(hex: 0x111619)
-    static let appSurface = Color(hex: 0x292F33)
-    static let appRaised = Color(hex: 0x343A3F)
+    static let appCanvasTop = Color(hex: 0x253038)
+    static let appBG = Color(hex: 0x121518)
+    static let appSurface = Color(hex: 0x25292C)
+    static let appRaised = Color(hex: 0x31363A)
     static let appFG = Color(hex: 0xFFFFFF)
     static let appMuted = Color(hex: 0xAEB3B8)
     static let appLine = Color(hex: 0x596166).opacity(0.45)
@@ -39,10 +39,10 @@ enum AppLayout {
     static let metricRadius: CGFloat = 15
 }
 
-/// Subtle gray card shading shared by every tab and detail page.
+/// Low-contrast charcoal card shading shared by every tab and detail page.
 extension LinearGradient {
     static var appCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x2B3236), Color(hex: 0x202629)],
+        LinearGradient(colors: [Color(hex: 0x292E32), Color(hex: 0x25292C)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 }

@@ -22,3 +22,15 @@ extension TypographyTests {
         }
     }
 }
+
+extension TypographyTests {
+    func testSleepChartRejectsOutOfWindowAndNonFiniteSamplesAndSorts() {
+        let points: [(unix: Int, bpm: Double)] = [
+            (150, 63), (99, 60), (120, .nan), (110, 61),
+            (205, 68), (170, .infinity), (150, 65), (180, 0)
+        ]
+        XCTAssertEqual(SleepHeartRateChart.sanitizedIndices(points, start: 100, end: 200),
+                       [3, 0, 6])
+        XCTAssertTrue(SleepHeartRateChart.sanitizedIndices(points, start: 200, end: 100).isEmpty)
+    }
+}

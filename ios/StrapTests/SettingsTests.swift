@@ -78,6 +78,26 @@ final class SettingsTests: XCTestCase {
         XCTAssertEqual(decoded.heightCM, 178)
     }
 
+    func testAppOpenDaysCountsUniqueCalendarDaysNotHistoricalDays() {
+        let suite = "strap.app.open.days.tests"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            XCTFail("Could not create isolated defaults")
+            return
+        }
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let calendar = Calendar(identifier: .gregorian)
+        let first = calendar.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 9))!
+        let sameDay = calendar.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 21))!
+        let nextDay = calendar.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 9))!
+        XCTAssertEqual(AppOpenDayTracker.count(defaults: defaults), 0)
+        XCTAssertEqual(AppOpenDayTracker.recordOpen(at: first, defaults: defaults, calendar: calendar), 1)
+        XCTAssertEqual(AppOpenDayTracker.recordOpen(at: sameDay, defaults: defaults, calendar: calendar), 1)
+        XCTAssertEqual(AppOpenDayTracker.recordOpen(at: nextDay, defaults: defaults, calendar: calendar), 2)
+        XCTAssertEqual(AppOpenDayTracker.count(defaults: defaults), 2)
+    }
+
     func testBodyTextFieldParsing() {
         XCTAssertEqual(SettingsView.parsedNumber("72.5"), 72.5)
         XCTAssertEqual(SettingsView.parsedNumber("72,5"), 72.5)

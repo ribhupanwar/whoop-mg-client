@@ -226,7 +226,23 @@ struct SleepCoachView: View {
                 coachButton("ALARM SET TO \(alarmOn ? "ON" : "OFF")") {
                     alarmOn.toggle()
                 }
-                coachTile("WAKE TIME \(CoachFormat.clock(wakeMinutes))")
+                VStack(spacing: 3) {
+                    Text("WAKE TIME")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundStyle(Color.appMuted)
+                    Text(CoachFormat.clock(wakeMinutes))
+                        .font(StrapTypography.metric(19, weight: .bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                        .foregroundStyle(Color.appFG)
+                }
+                .frame(maxWidth: .infinity, minHeight: 52)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+                .accessibilityElement(children: .combine)
+                .accessibilityIdentifier("alarm.wakeTime")
             }
 
             NavigationLink("Different wake time per weekday") { WeeklyWakeScheduleView() }
