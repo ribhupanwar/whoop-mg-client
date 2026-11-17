@@ -82,6 +82,37 @@ final class SleepSessionTests: XCTestCase {
                             startUnix: start, endUnix: end, staging: staging,
                             heartRate: [], movementBouts: 29, isEdited: true, sourceEndUnix: end)
     }
+    func testAlgorithmUpgradeRetainsOlderNightAndManualBoundsWithPartialCoverage() {
+        let current = knownNight()
+        for edited in [false, true] {
+            let legacy = SleepSession(version: 1, sourceStartUnix: current.sourceStartUnix,
+                startUnix: current.startUnix, endUnix: current.endUnix, staging: current.staging,
+                heartRate: current.heartRate, movementBouts: current.movementBouts,
+                isEdited: edited, sourceEndUnix: current.sourceEndUnix)
+            let kept = SleepSession.retainingUncovered(previous: [legacy], fresh: [],
+                coverageStart: legacy.startUnix + 3600, coverageEnd: legacy.endUnix - 1)
+            XCTAssertEqual(kept, [legacy], "A recipe upgrade must not delete a retained night")
+        }
+    }
+
+    func testAlgorithmUpgradeRecalculatesOlderEditedNightOnlyWithCompleteCoverage() {
+        let rows = (0..<600).map { sample(start + $0) }
+        let current = SleepSession.make(samples: rows, period: period(600),
+                                       correctedTimes: [start, start + 600])
+        let legacy = SleepSession(version: 1, sourceStartUnix: current.sourceStartUnix,
+            startUnix: current.startUnix, endUnix: current.endUnix, staging: current.staging,
+            heartRate: current.heartRate, movementBouts: current.movementBouts,
+            isEdited: true, sourceEndUnix: current.sourceEndUnix)
+        let refreshed = SleepSession.retainingUncovered(previous: [legacy], fresh: [],
+            coverageStart: start, coverageEnd: start + 599, samples: rows)
+        XCTAssertEqual(refreshed.count, 1)
+        XCTAssertEqual(refreshed.first?.version, SleepSession.algorithmVersion)
+        XCTAssertEqual(refreshed.first?.startUnix, legacy.startUnix)
+        XCTAssertEqual(refreshed.first?.endUnix, legacy.endUnix)
+        XCTAssertEqual(refreshed.first?.isEdited, true)
+        XCTAssertTrue(refreshed.first?.isComplete == true)
+    }
+
     func testDiagnosticCSVUsesEditedBoundsAndDoesNotFillMissingSeconds() throws {
         let rows = [1700, 1800, 1801, 2000, 3000].map { sample(start + $0) }
         let edited = SleepSession.make(samples: rows, period: period(3600),

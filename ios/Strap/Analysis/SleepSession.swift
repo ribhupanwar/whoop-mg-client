@@ -153,7 +153,9 @@ struct SleepSession: Codable, Equatable {
         }
         var result = fresh
         let latestPrevious = previous.max { $0.endUnix < $1.endUnix }
-        for old in previous where old.version == algorithmVersion {
+        // Algorithm upgrades invalidate calculation caches, not saved history.
+        // Keep older canonical windows/edits until their full data can be staged.
+        for old in previous {
             let source = old.sourcePeriod
             let sourceEnd = source.endUnix + 1
             let savedEdit = SleepCorrectionStore.times(for: source, overrides: overrides)
