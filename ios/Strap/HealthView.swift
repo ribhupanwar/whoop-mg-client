@@ -176,13 +176,17 @@ struct HealthView: View {
                             .foregroundStyle(Color(hex: 0x159EF0))
                             .padding(.bottom, 12)
                         Text(lastHR.map(String.init) ?? "—")
-                            .font(StrapTypography.metric(58, weight: .bold))
+                            .font(StrapTypography.metric(62, weight: .bold))
                             .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.85)
+                            .fixedSize(horizontal: true, vertical: false)
                             .accessibilityIdentifier("health.live.bpm")
                             .foregroundStyle(Color.appFG)
                         Text("BPM")
-                            .font(StrapTypography.body(17, weight: .bold))
+                            .font(StrapTypography.body(16, weight: .bold))
                             .foregroundStyle(Color.appMuted)
+                            .padding(.top, 2)
                         Text(zoneText)
                             .font(StrapTypography.body(17, weight: .semibold))
                             .foregroundStyle(Color.appMuted)
@@ -197,7 +201,8 @@ struct HealthView: View {
                         .padding(.top, 16)
                     }
                     .padding(.leading, 18)
-                    .padding(.top, 20)
+                    .padding(.top, 26)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     if lastHR != nil {
                         Circle()
                             .fill(.white)
@@ -207,7 +212,7 @@ struct HealthView: View {
                     }
                 }
             }
-            .frame(height: 270)
+            .frame(height: 306)
             // Keep the chart's accessibility separate from the BPM Text.
             // Applying an identifier to the GeometryReader overrides child
             // identifiers on iOS and makes the BPM UI tests unqueryable.
