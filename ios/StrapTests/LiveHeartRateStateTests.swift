@@ -43,6 +43,22 @@ final class LiveHeartRateStateTests: XCTestCase {
         XCTAssertEqual(Type40HeartRate.parse(Array(frame.prefix(9)))?.bpm, 82)
         XCTAssertNil(Type40HeartRate.parse(Array(frame.prefix(8))))
     }
+    func testType40RRBoundariesAndTruncatedPayloadDoNotInventBeats() {
+        // Synthetic protocol fixtures: assert parser safety, not device-level validation.
+        let prefix: [UInt8] = [0x28, 0, 0, 0, 0, 0, 0, 0, 82]
+        let fourBeats = prefix + [4, 0xC8, 0x00, 0x20, 0x03, 0xB8, 0x0B, 0xB9, 0x0B]
+        XCTAssertEqual(Type40HeartRate.parse(fourBeats)?.rrMS, [200, 800, 3000])
+        XCTAssertEqual(Type40HeartRate.parse(fourBeats)?.bpm, 82)
+
+        // A declared RR count with insufficient bytes must not return partial beats.
+        XCTAssertEqual(Type40HeartRate.parse(Array(fourBeats.dropLast()))?.rrMS, [])
+        XCTAssertEqual(Type40HeartRate.parse(Array(fourBeats.dropLast()))?.bpm, 82)
+
+        // Out-of-range intervals and an unsupported count must not become HRV inputs.
+        XCTAssertEqual(Type40HeartRate.parse(prefix + [1, 0xC7, 0x00])?.rrMS, [])
+        XCTAssertEqual(Type40HeartRate.parse(prefix + [5] + [UInt8](repeating: 0, count: 10))?.rrMS, [])
+    }
+
     func testStandardWireValueIsPreservedButImplausibleHRIsNeverLive() {
         XCTAssertEqual(StandardHeartRate.parse(Data([0, 82]))?.heartRate, 82)
         let decoded = StandardHeartRate.parse(Data([1, 0xff, 0xff]))?.heartRate
