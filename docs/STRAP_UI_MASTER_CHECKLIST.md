@@ -48,7 +48,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## BLE decoding, RR and sensor fidelity
 - [x] **DONE (code)** Added synthetic Type-40 RR boundary, malformed-count and truncated-packet regression tests in `ios/StrapTests/LiveHeartRateStateTests.swift` (commit `8d03fa3`); no production decoder offsets or historical data were changed.
-- [ ] **VERIFY** Run the latest `main` iOS XCTest/IPA GitHub Actions after commit `8d03fa3`; PR-filtered workflow lookup returned no runs, which is not evidence of success or failure.
+- [x] **DONE (code)** Batch 1: added synthetic Type-40 tests for zero/invalid RR, malformed count, historical packet exclusion and invalid live HR (commit `9d47d8f`); no sensor decoding offsets or saved data changed.
+- [ ] **VERIFY** Run the latest `main` iOS XCTest/IPA GitHub Actions after commits `8d03fa3` and `9d47d8f`; no successful latest-HEAD run has been established.
 - [ ] **BLOCKED** Validate Type-40 RR units/offsets and V18 RR decoding against timestamped, CRC-checked WHOOP 5.0/MG BLE capture with independent beat reference; synthetic tests alone do not establish HRV accuracy.
 - [ ] **TODO** Investigate RR buffering/deduplication and HRV/RHR calculation against actual captured beat intervals, preserving missing data rather than inventing beats.
 - [ ] **VERIFY** V20/V21/V26 record handling against real-device fixtures before using these records for scored metrics. Do not send persistent Gen5 R22 configuration writes automatically; OpenStrap warns some settings may be irreversible.
