@@ -204,7 +204,17 @@ struct HealthView: View {
                 }
             }
             .frame(height: 270)
-            .accessibilityIdentifier("health.live.indicator")
+            // Keep the chart's accessibility separate from the BPM Text.
+            // Applying an identifier to the GeometryReader overrides child
+            // identifiers on iOS and makes the BPM UI tests unqueryable.
+            .overlay(alignment: .bottomTrailing) {
+                Color.clear
+                    .frame(width: 1, height: 1)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Heart rate indicator")
+                    .accessibilityValue(lastHR == nil ? "unavailable" : "live")
+                    .accessibilityIdentifier("health.live.indicator")
+            }
             if !demo {
                 Text(liveHRDiagnostic)
                     .font(StrapTypography.body(10))
