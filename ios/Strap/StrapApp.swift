@@ -16,6 +16,7 @@ struct StrapApp: App {
         // Resolve/register the bundled Proxima Nova and DIN Pro files before
         // SwiftUI creates text and native UIKit controls for the first screen.
         StrapTypography.configureUIKitAppearance()
+        if restoreIssue == nil { OSDiagnosticArchive.shared.start() }
     }
 
     var body: some Scene {
