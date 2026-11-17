@@ -49,14 +49,31 @@ enum StrapBackup {
                 guard !entry.path.hasPrefix("/"), !entry.path.contains("\\"),
                       !entry.path.split(separator: "/").contains("..") else { throw failure("Unsafe backup path.") }
             }
-            try fm.unzipItem(at: url, to: folder)
+            var extracted: UInt64 = 0
+            for entry in archive where entry.type == .file {
+                let target = folder.appendingPathComponent(entry.path)
+                try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                guard fm.createFile(atPath: target.path, contents: nil) else { throw failure("Cannot stage backup file.") }
+                let handle = try FileHandle(forWritingTo: target)
+                defer { try? handle.close() }
+                var actual: UInt64 = 0
+                _ = try archive.extract(entry) { chunk in
+                    actual += UInt64(chunk.count)
+                    extracted += UInt64(chunk.count)
+                    guard actual <= UInt64(entry.uncompressedSize), extracted <= 2_000_000_000 else {
+                        throw failure("Backup extraction exceeds declared size.")
+                    }
+                    try handle.write(contentsOf: chunk)
+                }
+                guard actual == UInt64(entry.uncompressedSize) else { throw failure("Incomplete backup file.") }
+            }
             return try validate(folder)
         } catch {
             try? fm.removeItem(at: folder)
             throw error
         }
     }
-    static func validate(_ folder: URL) throws -> Preview {
+    static func validate(_ folder: URL, allowJournal: Bool = false) throws -> Preview {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(PersistenceDiagnostics.Manifest.self,
@@ -68,6 +85,18 @@ enum StrapBackup {
             let data = try Data(contentsOf: folder.appendingPathComponent(record.path), options: .mappedIfSafe)
             guard data.count == record.bytes, PersistenceDiagnostics.digest(data) == record.sha256 else {
                 throw failure("Backup checksum mismatch: " + record.path)
+            }
+        }
+        if let entries = FileManager.default.enumerator(at: folder, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]) {
+            for case let url as URL in entries {
+                let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
+                guard values.isSymbolicLink != true else { throw failure("Backup contains a symbolic link.") }
+                if values.isRegularFile == true {
+                    let path = String(url.path.dropFirst(folder.path.count + 1))
+                    guard path == "manifest.json" || paths.contains(path) || (allowJournal && path == "restore-journal.json") else {
+                        throw failure("Backup file is missing from the checksum manifest.")
+                    }
+                }
             }
         }
         guard paths.contains("persisted-records.plist") else { throw failure("Backup has no persisted-record snapshot.") }
@@ -87,7 +116,7 @@ enum StrapBackup {
         try FileManager.default.copyItem(at: preview.folder, to: staging)
         try FileManager.default.moveItem(at: staging, to: pending)
     }
-    static func samples(_ url: URL) throws -> [V18Sample] {
+    static func streamSamples(_ url: URL, accept: ([V18Sample]) throws -> Void) throws {
         var db: OpaquePointer?
         guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
             sqlite3_close(db); throw failure("Cannot read backup history.")
@@ -101,10 +130,11 @@ enum StrapBackup {
         var result: [V18Sample] = []
         while true {
             let status = sqlite3_step(statement)
-            if status == SQLITE_DONE { return result }
+            if status == SQLITE_DONE { if !result.isEmpty { try accept(result) }; return }
             guard status == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { throw failure("Unreadable backup record.") }
             let data = Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 0)))
             result.append(try JSONDecoder().decode(V18Sample.self, from: data))
+            if result.count >= 1000 { try accept(result); result.removeAll(keepingCapacity: true) }
         }
     }
     /// Crash recovery uses the SQLite commit marker to distinguish rollback
@@ -113,7 +143,7 @@ enum StrapBackup {
         let fm = FileManager.default
         let pending = support.appendingPathComponent("restore-pending", isDirectory: true)
         guard fm.fileExists(atPath: pending.path) else { return }
-        let preview = try validate(pending)
+        let preview = try validate(pending, allowJournal: true)
         let preferences = try PropertyListSerialization.propertyList(from: Data(contentsOf: pending.appendingPathComponent("persisted-records.plist")), format: nil) as! [String: Any]
         let journalURL = pending.appendingPathComponent("restore-journal.json")
         let database = try HistoryDatabase(url: support.appendingPathComponent("strap-history-v18.sqlite"))
@@ -161,17 +191,19 @@ enum StrapBackup {
         let journal = Journal(token: UUID().uuidString, absentKeys: absent, createdFiles: files)
         let source = pending.appendingPathComponent("history.sqlite")
         let legacy = pending.appendingPathComponent("strap-history-v18.json")
-        let rows: [V18Sample]
-        if fm.fileExists(atPath: source.path) { rows = try samples(source) }
-        else if fm.fileExists(atPath: legacy.path) { rows = try JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: legacy)) }
-        else { rows = [] }
         try JSONEncoder().encode(journal).write(to: journalURL, options: .atomic)
         do {
-            try database.restoreMissing(rows, token: journal.token) {
+            try database.restoreMissing(token: journal.token, stream: { accept in
+                if fm.fileExists(atPath: source.path) { try streamSamples(source, accept: accept) }
+                else if fm.fileExists(atPath: legacy.path) {
+                    try accept(JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: legacy)))
+                }
+            }) {
                 for file in files {
                     let target = destination(file.path)
                     try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-                    try fm.copyItem(at: pending.appendingPathComponent(file.path), to: target)
+                    try Data(contentsOf: pending.appendingPathComponent(file.path), options: .mappedIfSafe)
+                        .write(to: target, options: .atomic)
                 }
                 for key in absent { defaults.set(preferences[key], forKey: key) }
                 guard defaults.synchronize() else { throw failure("Cannot persist restored preferences; SQLite restore rolled back.") }

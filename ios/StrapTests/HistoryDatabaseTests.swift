@@ -262,3 +262,24 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertEqual(try stored.metadata("last_history_chunk"), "replayed")
     }
 }
+
+extension HistoryDatabaseTests {
+    func testInvalidLegacyFileDoesNotMarkMigrationCompleteAndCanBeRetried() throws {
+        let legacy = directory.appendingPathComponent("history.json")
+        let damaged = Data("{interrupted-json".utf8)
+        try damaged.write(to: legacy)
+        do {
+            let database = try HistoryDatabase(url: url)
+            try database.migrateLegacyJSON(at: legacy)
+            XCTAssertNil(try database.metadata("legacy_json_imported"))
+            XCTAssertEqual(try Data(contentsOf: legacy), damaged)
+            try database.commit([historySample(2000)])
+        }
+        let repaired = [historySample(1000)]
+        try JSONEncoder().encode(repaired).write(to: legacy)
+        let reopened = try HistoryDatabase(url: url)
+        try reopened.migrateLegacyJSON(at: legacy)
+        XCTAssertEqual(try reopened.samples(from: 0, through: 3000), repaired + [historySample(2000)])
+        XCTAssertEqual(try reopened.metadata("legacy_json_imported"), "1")
+    }
+}

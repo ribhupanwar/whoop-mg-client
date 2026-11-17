@@ -601,3 +601,18 @@ extension SleepSessionTests {
         XCTAssertNil(summary.latestSleepSession, "Confirmed naps cannot become the night's Sleep/Recovery source")
     }
 }
+
+extension SleepSessionTests {
+    func testBackgroundQuietTailCannotDriftSavedWakeBoundary() {
+        let old = knownNight()
+        let unedited = SleepSession(version: old.version, sourceStartUnix: old.sourceStartUnix,
+            startUnix: old.startUnix, endUnix: old.endUnix, staging: old.staging,
+            heartRate: [], movementBouts: 0, isEdited: false, sourceEndUnix: old.endUnix)
+        let drifted = SleepSession(version: old.version, sourceStartUnix: old.sourceStartUnix,
+            startUnix: old.startUnix, endUnix: old.endUnix + 3600, staging: old.staging,
+            heartRate: [], movementBouts: 0, isEdited: false, sourceEndUnix: old.endUnix + 3600)
+        let retained = SleepSession.retainingUncovered(previous: [unedited], fresh: [drifted],
+            coverageStart: old.startUnix, coverageEnd: drifted.endUnix, samples: [])
+        XCTAssertEqual(retained, [unedited])
+    }
+}

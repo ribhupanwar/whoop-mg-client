@@ -47,14 +47,19 @@ final class HistoryDatabase {
     /// rows, so interruption cannot mark a partially imported file as complete.
     func migrateLegacyJSON(at url: URL) throws {
         guard try metadata("legacy_json_imported") == nil else { return }
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
         var rows: [V18Sample] = []
         if FileManager.default.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
             do { rows = try decoder.decode([V18Sample].self, from: data) }
             catch is DecodingError {
-                let backup = url.deletingPathExtension().appendingPathExtension("invalid-\(UUID().uuidString).json")
-                try FileManager.default.copyItem(at: url, to: backup)
-                // BandLink also recovers durable raw captures before analysis.
+                let backup = url.deletingPathExtension().appendingPathExtension("invalid-\(PersistenceDiagnostics.digest(data)).json")
+                if !FileManager.default.fileExists(atPath: backup.path) {
+                    try FileManager.default.copyItem(at: url, to: backup)
+                }
+                // An unreadable file is not a completed migration. Keep it,
+                // allow raw BLE writes, and retry the legacy source on reopen.
+                return
             }
         }
         try transaction {
@@ -105,18 +110,25 @@ final class HistoryDatabase {
     /// Backup restore never replaces a retained second. The marker and raw rows
     /// commit together; accompanying startup-only writes have a recovery journal.
     func restoreMissing(_ rows: [V18Sample], token: String, accompanyingWrites: () throws -> Void) throws {
+        try restoreMissing(token: token, stream: { accept in try accept(rows) }, accompanyingWrites: accompanyingWrites)
+    }
+
+    func restoreMissing(token: String, stream: (_ accept: ([V18Sample]) throws -> Void) throws -> Void,
+                        accompanyingWrites: () throws -> Void) throws {
         try transaction {
             let lookup = try prepare("SELECT 1 FROM history_sample WHERE unix = ?")
             defer { sqlite3_finalize(lookup) }
-            var missing: [V18Sample] = []
-            for row in rows {
-                sqlite3_reset(lookup)
-                sqlite3_bind_int64(lookup, 1, Int64(row.unix))
-                let result = sqlite3_step(lookup)
-                if result == SQLITE_DONE { missing.append(row) }
-                else if result != SQLITE_ROW { throw failure() }
+            try stream { rows in
+                var missing: [V18Sample] = []
+                for row in rows {
+                    sqlite3_reset(lookup)
+                    sqlite3_bind_int64(lookup, 1, Int64(row.unix))
+                    let result = sqlite3_step(lookup)
+                    if result == SQLITE_DONE { missing.append(row) }
+                    else if result != SQLITE_ROW { throw failure() }
+                }
+                _ = try insert(missing)
             }
-            _ = try insert(missing)
             try accompanyingWrites()
             try setMetadata("restore:" + token, value: "committed")
         }

@@ -177,7 +177,15 @@ struct SleepSession: Codable, Equatable {
             // A manually edited canonical night is authoritative even when
             // a later BLE replay covers the entire old interval. Only an
             // explicit newly saved correction may change its bounds.
-            guard old.isEdited || editedBoundsChanged || first > old.startUnix || last < old.endUnix - 1 else { continue }
+            let unsupportedExtension = fresh.contains { candidate in
+                guard candidate.startUnix < old.endUnix, old.startUnix < candidate.endUnix,
+                      candidate.endUnix > old.endUnix, !candidate.isEdited else { return false }
+                let tail = samples.filter { $0.unix >= old.endUnix && $0.unix < candidate.endUnix
+                    && $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2 }
+                return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
+            }
+            guard old.isEdited || editedBoundsChanged || unsupportedExtension
+                    || first > old.startUnix || last < old.endUnix - 1 else { continue }
             // Keep intersecting source windows and the latest saved night, not a growing archive.
             guard (source.startUnix <= last && first < sourceEnd)
                     || old == latestPrevious else { continue }
