@@ -2,7 +2,7 @@
 
 Complete supplied master scope is retained here: **126 numbered items** across A–I (the request calls it the 120-requirement list). No item is dropped.
 
-Updated: 17 November 2026. Baseline main: `2727b64`. Tested repair baseline: `21e4525`; ZIP/chart batch `49583d4` is merged to main as `c372b26`. Future master changes remain draft.
+Updated: 17 November 2026. Baseline main: `2727b64`. Tested repair baseline: `21e4525`; ZIP/chart batch `49583d4` is merged to main as `c372b26`. Calorie research PR #47 was subsequently explicitly approved and merged as `2fc4ae0`; broader master PR #46 remains draft.
 
 ## State rules
 
@@ -246,3 +246,10 @@ No item is marked complete merely because it compiles. Multiple labels capture d
 - [Consolidated IPA artifact 14346176961](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273/artifacts/14346176961): independently downloaded and verified SHA-256 `af16b97241e721d8a18dd3e42adae00b7a070810beb5275b51d24935158bcedd`, bundle `com.ribhupanwar.strap`, embedded revision `20b7ad5c60d46464beabd315a6ce087a48888769`, all eleven bundled TTF fonts. Later documentation-only commits have identical tested iOS/workflow source.
 - Research PR #47 and master PR #46 remain drafts targeting main; neither has merge approval. Main is unchanged. Last-night Sleep/user data are not reset, deleted or recomputed by the isolated calorie module.
 - Real WHOOP calorie parity, raw enum/tail/upstream-anchor semantics, Type-52 framing, cross-provider mirror identity, Strava authorization, physical validation and scientific limits remain explicit in `MASTER_LIMITATIONS.md` and the calorie validation document. No feature is called complete from compilation or a synthetic fixture alone.
+
+### Continued completion batch — date coherence, raw-stream liveness and visual evidence
+
+- IMPLEMENTED; native validation pending: `WhoopSourceDates.swift` provides a shared indexed source-date policy for filtered import, projection, journal and reports. Overnight cycle/sleep/journal selects its original wake date; workouts keep start date. All incoming and existing cycle context is available before filtering, independent of CSV order. Conflicting revisions/timezone mismatches do not guess a journal wake date. Legacy generic CSV dates remain supported and original fields stay unchanged. `WhoopSourceDatesTests.swift` adds four regression cases across all four categories, incremental context, ambiguity and missing/invalid dates.
+- IMPLEMENTED; DEVICE VALIDATION PENDING: `HistoryStreamActivity.swift` counts observed raw type-52 history traffic and refreshes the existing drain idle clock without interpreting its body or feeding it to HR/RR. Original capture still occurs first. `HistoryStreamActivityTests.swift` verifies that ongoing IMU history cannot look like an idle drain and that live HR packets do not refresh history liveness. Type-52 framing remains BLOCKED: NOOP's `HistoricalStreamsUnhandledTypeTest.kt` also explicitly identifies it as unmapped; no decoder semantics are invented.
+- IMPLEMENTED; visual/device comparison pending: `ScreenCaptureTests.swift` captures all five real native tabs using explicitly labelled synthetic preview data, asserting selected tab and provenance banner. Actual screenshot attachments are retained for review; this is not a claim of pixel parity with missing reference screenshots.
+- Approval update: user explicitly approved PR #47 merge; it is merged as `2fc4ae0`, and post-merge main run 44126968654 passed. PR #46 has no explicit merge approval and stays draft. Its earlier approval notes/ledger entries describe the historical state at those checkpoints.

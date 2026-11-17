@@ -92,12 +92,15 @@ enum WhoopImportBatch {
                   catch WhoopCSVImport.ImportError.unsupportedColumns { /* Source columns remain readable without biometrics. */ }
             }
         }
+        var context = existing
+        for (category, records) in grouped { context[category, default: []].append(contentsOf: records) }
+        let dates = WhoopSourceDates(sources: context)
         var sources = existing
         var results: [CategoryResult] = []
         let encoder = JSONEncoder()
         for category in WhoopCSVImport.sourceCategories {
             guard let rows = grouped[category] else { continue }
-            let filtered = rows.filter { WhoopCSVImport.inRange($0, fromDate: fromDate, throughDate: throughDate) }
+            let filtered = rows.filter { dates.includes($0, from: fromDate, through: throughDate) }
             let merged = try WhoopCSVImport.mergeSupplemental(filtered, existing: sources[category].map { try encoder.encode($0) })
             let saved = try JSONDecoder().decode([WhoopCSVImport.SupplementalRecord].self, from: merged.data)
             sources[category] = saved

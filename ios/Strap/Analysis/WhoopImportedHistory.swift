@@ -54,6 +54,7 @@ enum WhoopImportedHistory {
     static func normalized(_ text: String) -> String { text.lowercased().filter { $0.isLetter || $0.isNumber } }
     static func make(_ sources: [String: [WhoopCSVImport.SupplementalRecord]]) -> [String: WhoopImportedDay] {
         var result: [String: WhoopImportedDay] = [:]
+        let dates = WhoopSourceDates(sources: sources)
         for category in ["physiological_cycles", "sleeps"] {
             for record in sources[category] ?? [] {
                 let fields = Dictionary(record.fields.map { (normalized($0.key), $0.value) }, uniquingKeysWith: { first, _ in first })
@@ -61,7 +62,7 @@ enum WhoopImportedHistory {
                     fields[normalized(name)].flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                 }
                 if category == "sleeps", let nap = text("Nap"), ["true", "yes", "1"].contains(nap.lowercased()) { continue }
-                guard let key = dateKey(text("Wake onset") ?? text("Cycle start time")) else { continue }
+                guard let key = dates.dateKey(for: record) else { continue }
                 var day = result[key] ?? WhoopImportedDay(dateKey: key)
                 func number(_ name: String, _ range: ClosedRange<Double>) -> Double? {
                     guard let raw = text(name), let value = Double(raw), value.isFinite, range.contains(value) else { return nil }

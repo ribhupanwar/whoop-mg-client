@@ -62,3 +62,9 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 6. If CI or physical-device verification is unavailable, leave the item as **VERIFY** or **BLOCKED**, not completed.
 
 Sources: user-supplied WHOOP design notes, official WHOOP brand guidance, NOOP design-language reference, OpenStrap, and `ribhupanwar/dsta`. Palette and layout require screenshot verification; third-party design values are not official universal tokens.
+
+## Continued master completion evidence
+
+- **IMPLEMENTED / native pending:** `ScreenCaptureTests.swift` captures Home/Health/Train/Plan/More with selected-tab and visible synthetic provenance assertions. Screenshots are retained as XCTest attachments, without asserting unavailable reference pixel parity.
+- Existing licensed-font packaging and native UI test evidence: consolidated 511 unit + 3 UI tests passed before this follow-up. Physical screenshot, touch and sensor accuracy remain VERIFY.
+- Sleep/manual-data persistence, weekday alarms, backups and exports are implemented/tested in the master draft; per-item evidence is maintained in root `MASTER_PROGRESS.md`. Earlier TODO labels in this UI backlog do not override that newer functional evidence.

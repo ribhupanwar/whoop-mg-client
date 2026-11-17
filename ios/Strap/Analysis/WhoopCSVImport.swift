@@ -123,8 +123,9 @@ enum WhoopCSVImport {
         var records = try existing.map { try JSONDecoder().decode([SupplementalRecord].self, from: $0) } ?? []
         var seen = Set(try records.map { PersistenceDiagnostics.digest(try encoder.encode($0)) })
         var added = 0
+        let dates = WhoopSourceDates(sources: [:])
         for row in incoming {
-            guard inRange(row, fromDate: fromDate, throughDate: throughDate) else { continue }
+            guard dates.includes(row, from: fromDate, through: throughDate) else { continue }
             let identity = PersistenceDiagnostics.digest(try encoder.encode(row))
             if seen.insert(identity).inserted { records.append(row); added += 1 }
         }
@@ -133,14 +134,7 @@ enum WhoopCSVImport {
 
     static func inRange(_ row: SupplementalRecord, fromDate: String?, throughDate: String?) -> Bool {
         if fromDate == nil && throughDate == nil { return true }
-                let candidates = row.source == "sleeps" ? ["sleeponset", "cyclestarttime", "date"] :
-                    (row.source == "workouts" ? ["workoutstarttime", "cyclestarttime", "date"] : ["cyclestarttime", "date"])
-                let date = candidates.lazy.compactMap { wanted in
-                    row.fields.first { key, _ in key.lowercased().filter { $0.isLetter || $0.isNumber } == wanted }
-                        .flatMap { dateKey($0.value) }
-                }.first
-                guard let date else { return false }
-                return (fromDate.map { date >= $0 } ?? true) && (throughDate.map { date <= $0 } ?? true)
+        return WhoopSourceDates(sources: [:]).includes(row, from: fromDate, through: throughDate)
     }
 
     private static func dateKey(_ raw: String) -> String? {

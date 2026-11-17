@@ -109,6 +109,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var historyRRAccepted = 0
     @Published private(set) var historyRRRejected = 0
     @Published private(set) var historyUndecodableFrames = 0
+    @Published private(set) var historyStreamActivity = HistoryStreamActivity()
     @Published private(set) var historyIMUBuffers = 0
     @Published private(set) var historyOpticalBuffers = 0
     @Published private(set) var historyResearchBuffers = 0
@@ -1467,6 +1468,7 @@ final class BandLink: NSObject, ObservableObject {
         historyRRAccepted = 0
         historyRRRejected = 0
         historyUndecodableFrames = 0
+        historyStreamActivity = HistoryStreamActivity()
         historyIMUBuffers = 0
         historyOpticalBuffers = 0
         historyResearchBuffers = 0
@@ -1726,9 +1728,9 @@ final class BandLink: NSObject, ObservableObject {
         if type == BandPacket.historicalData {
             historicalRecordFrames += 1
         }
-        if type == BandPacket.historicalData || type == BandPacket.metadata {
+        if historyStreamActivity.receive(type: type, at: Date()) {
             drainFrames += 1
-            lastFrameAt = Date()
+            lastFrameAt = historyStreamActivity.lastReceivedAt
         }
         if type == BandPacket.realtimeData {
             guard let reading = Type40HeartRate.parse(inner) else { return }

@@ -28,14 +28,14 @@ This accompanies the complete 126-item `MASTER_PROGRESS.md`. Implementation, det
 
 - Measured band/local values and edited sleep bounds take precedence over imported display fallbacks. Official source rows remain intact and can be inspected/exported.
 - Manual merge is explicit, same date/type and reversible. Self-reported minutes are summed with overlap explicitly unknown; it never invents continuous measured activity, HR, strain or calories. Measured/cross-provider sessions remain separate.
-- CSV/JSON reports are filtered reports, not restore packages. Local records use their recorded day; activities/HealthKit/GPS use start, saved sleep uses wake, raw seconds/RR use stored timestamps. WHOOP report filtering uses original wake-date/cycle linkage; the existing import-date limit uses original start/date columns, so an overnight row can cross those reporting boundaries. Undated rows are counted/excluded by filtered export rather than assigned fabricated dates.
+- CSV/JSON reports are filtered reports, not restore packages. Local records use their recorded day; activities/HealthKit/GPS use start, saved sleep uses wake, raw seconds/RR use stored timestamps. Shared source-date resolution now aligns import, charts, journal and report filtering to original wake-date/cycle linkage; workouts retain their original start day. New overnight/incremental regression tests await native validation. Undated rows are counted/excluded by filtered export rather than assigned fabricated dates.
 - Report exports include loaded canonical derived records and committed raw SQLite history. Unsupported raw packets, older recovery revisions, OS reports and full persistence evidence remain in full diagnostics/backup. An in-flight unsaved record can appear after persistence.
 - Restore merges missing raw seconds/UUIDs and missing storage keys; existing keys/manual edits win. Conflicting incoming collections remain archived, rather than silently overwriting an existing collection. Restore remains a physical-device validation item.
 - Raw live RR retention has no artificial display-window retention cap; actual durable storage is finite. UI/analysis windows stay bounded. An OS kill before an in-flight write can lose that uncommitted interval; successful persistence and pre-ACK history capture are separately tracked.
 
 ## Approval boundary
 
-PR #45's ZIP/chart merge was explicitly approved and completed. PR #44 is closed unmerged. All subsequent master changes remain in draft PR #46; no new merge is authorized. Integrating existing main into the draft does not modify main. No private WHOOP ZIP, health values or journal notes were published as repository/CI fixtures.
+PR #45's ZIP/chart merge was explicitly approved and completed. PR #44 is closed unmerged. Calorie research PR #47 was explicitly approved and merged as `2fc4ae0`. Broader master changes remain in draft PR #46 without merge approval. Integrating existing main into the draft does not modify main. No private WHOOP ZIP, health values or journal notes were published as repository/CI fixtures.
 
 ## Calorie research validation
 
