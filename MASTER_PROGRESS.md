@@ -215,3 +215,8 @@ No item is marked complete merely because it compiles. Multiple labels capture d
 ### V20/V22 audit follow-up (native verification pending)
 
 - `Gen5ResearchBuffers.swift` adds strict V20 optical arrays/metadata and V22 header/tag/original-body diagnostics. `Gen5ResearchBufferTests.swift` checks exact sizes, signed 20-bit extremes, declared count bounds, metadata retention, unknown tags, unsupported route rejection and refusal by V18 decoder. No optical/research field is fed to clinical/HRV analysis. Geometry/source/firmware boundaries documented in `docs/engineering/gen5-format-audit.md`.
+
+### Latest-main integration (draft branch only)
+
+- Integrated main through `26715c6` into the master draft without changing main, preserving the newer UI palette, accessible tabs, DIN alarm typography, finite/in-window sleep HR chart, More header and actual app-open day tracker. Added its single explicit persistence key to the safe diagnostic/backup allowlist; authentication/unknown keys stay excluded. Consolidated simulator/UI/archive validation pending after integration.
+- Verified prior combined IPA bytes separately: bundle `com.ribhupanwar.strap`, embedded revision `268649eacefa5378ddaecfcf213b872114199da5`, SHA-256 `fe54208a554c9d94794e45adf325250f92d3c1879f53e8015bec558d59511bdc`. This is a tested intermediate build, not the final manual-merge/protocol/latest-main build.

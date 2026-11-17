@@ -32,6 +32,7 @@ final class PersistenceDiagnosticsTests: XCTestCase {
         }
         XCTAssertTrue(PersistenceDiagnostics.permittedKey(SleepCorrectionStore.defaultsKey))
         XCTAssertTrue(PersistenceDiagnostics.permittedKey("strap.capture.summary.v1"))
+        XCTAssertTrue(PersistenceDiagnostics.permittedKey(AppOpenDayTracker.key))
     }
 
     func testVaultPreservesUndecodableCacheIdempotently() throws {
