@@ -19,7 +19,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **VERIFY** Tab sizes, selected states, safe area, VoiceOver and tap targets on device.
 - [ ] **VERIFY** CI regression: run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; removed `.accessibilityElement(children: .ignore)` from custom tab Button in commit `bfed00f`; rerun required.
 - [x] **DONE (code)** Missing-tab UI test now attaches the full accessibility hierarchy and launch screenshot on failure for actionable CI diagnosis (commit `f505c64`).
-- [ ] **VERIFY** Rerun tab responsiveness UI test and inspect XCTest attachments if `tab.home` still cannot be found; no passing rerun confirmed.
+- [x] **DONE (verified CI)** Tab responsiveness regression passed as part of the three UI tests in consolidated run `44120344273` at revision `20b7ad5`; physical-device tap targets/VoiceOver remain **VERIFY**.
 - [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
 - [ ] **TODO** Today activity card ordering, duplication, swipe actions and visual match.
 - [ ] **TODO** Trends: 7-day, 30-day and longer baseline views, only with real available data.
@@ -47,7 +47,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **TODO** Profile, device, Settings and empty/loading/error states.
 
 ## Verification and safety
-- [ ] **VERIFY** GitHub Actions successful iOS build for latest main commit. GitHub commit combined-status endpoint returned no statuses; that is **not** evidence of a passing build.
+- [x] **DONE (verified CI)** Consolidated native Actions run [44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) succeeded for tested revision `20b7ad5c60d46464beabd315a6ce087a48888769`: 511 unit tests, 3 UI tests, simulator/device archive and IPA packaging (evidence in `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`; workflow job conclusion independently checked).
+- [ ] **VERIFY** Latest `main` HEAD after subsequent merges/commits is covered by a successful Actions build; passing an earlier revision is not proof for newer code.
 - [ ] **VERIFY** Install latest IPA and compare screenshots on target iPhone.
 - [ ] **TODO** Add accessible screenshot/layout tests and font checks.
 - [ ] **TODO** Validate export/backup before reinstall/uninstall; never delete historical records.
