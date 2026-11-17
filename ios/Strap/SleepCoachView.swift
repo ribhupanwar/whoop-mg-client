@@ -60,7 +60,7 @@ struct SleepCoachView: View {
         .onAppear {
             if !seeded { intent = store.settings.sleepIntent; seeded = true }
             if demo { wakeMinutes = SampleData.demoWakeMinutes }
-            else if WakeAlarm.usesWeeklySchedule, let next = WakeAlarm.nextWakeDate() {
+            else if WakeAlarm.usesWeeklySchedule, let next = WakeAlarm.plannedWakeDate() {
                 let parts = Calendar.current.dateComponents([.hour, .minute], from: next)
                 wakeMinutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
             } else { wakeMinutes = store.settings.wakeTimeMinutes }

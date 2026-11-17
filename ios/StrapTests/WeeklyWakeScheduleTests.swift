@@ -89,3 +89,18 @@ extension WeeklyWakeScheduleTests {
             "Disabling must not rewrite unreadable original settings")
     }
 }
+
+extension WeeklyWakeScheduleTests {
+    func testCoachRetainsPlannedWeeklyWakeWhileAlarmIsOffWithoutArmingBand() throws {
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "WeeklyPlan-" + UUID().uuidString))
+        defer {
+            for key in [WeeklyWakeSchedule.entriesKey, WeeklyWakeSchedule.activeKey, "strap.wake.alarm.enabled.v1"] { defaults.removeObject(forKey: key) }
+        }
+        try WeeklyWakeSchedule.save(slots([2: 480]), active: true, defaults: defaults)
+        defaults.set(false, forKey: "strap.wake.alarm.enabled.v1")
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = utc("2026-11-22T12:00:00Z")
+        XCTAssertEqual(WakeAlarm.plannedWakeDate(after: now, calendar: calendar, defaults: defaults), utc("2026-11-23T08:00:00Z"))
+        XCTAssertNil(WakeAlarm.nextWakeDate(after: now, calendar: calendar, defaults: defaults))
+    }
+}

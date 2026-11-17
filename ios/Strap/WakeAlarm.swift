@@ -33,13 +33,19 @@ enum WakeAlarm {
 
     static var usesWeeklySchedule: Bool { UserDefaults.standard.bool(forKey: WeeklyWakeSchedule.activeKey) }
     private static var notificationGeneration = 0
-    static func nextWakeDate(after now: Date = Date(), calendar: Calendar = .current) -> Date? {
-        guard isEnabled else { return nil }
-        if usesWeeklySchedule {
-            guard let slots = try? WeeklyWakeSchedule.load() else { return nil }
+    static func nextWakeDate(after now: Date = Date(), calendar: Calendar = .current,
+                             defaults: UserDefaults = .standard) -> Date? {
+        guard defaults.bool(forKey: enabledKey) else { return nil }
+        return plannedWakeDate(after: now, calendar: calendar, defaults: defaults)
+    }
+    static func plannedWakeDate(after now: Date = Date(), calendar: Calendar = .current,
+                                defaults: UserDefaults = .standard) -> Date? {
+        if defaults.bool(forKey: WeeklyWakeSchedule.activeKey) {
+            guard let slots = try? WeeklyWakeSchedule.load(defaults: defaults) else { return nil }
             return try? WeeklyWakeSchedule.next(after: now, slots: slots, calendar: calendar)
         }
-        return BandHaptics.nextWake(minutes: wakeMinutes, after: now, calendar: calendar)
+        let minutes = defaults.object(forKey: "strap.wake.alarm.minutes.v1") as? Int ?? 420
+        return BandHaptics.nextWake(minutes: minutes, after: now, calendar: calendar)
     }
 
     /// Persist the choice and (re)schedule or cancel the daily notification.
