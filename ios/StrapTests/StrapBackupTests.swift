@@ -25,6 +25,8 @@ final class StrapBackupTests: XCTestCase {
         let rows = [sample(100), sample(200)]
         let database = try HistoryDatabase(url: source.appendingPathComponent("strap-history-v18.sqlite"))
         try database.commit(rows)
+        try JSONEncoder().encode([sample(50), sample(100, hr: 90)])
+            .write(to: source.appendingPathComponent("strap-history-v18.json"))
         let captured = Data("{\"fixture\":true}\n".utf8)
         try captured.write(to: documents.appendingPathComponent("captures/fixture.jsonl"))
         let preferences: [String: Any] = [SleepCorrectionStore.defaultsKey: ["100": [100, 201]], "strap.days.v1": Data("[]".utf8)]
@@ -39,7 +41,9 @@ final class StrapBackupTests: XCTestCase {
         try StrapBackup.stage(preview, support: destination)
         try StrapBackup.activatePending(support: destination, documents: restoredDocuments, defaults: defaults)
         let restored = try HistoryDatabase(url: destination.appendingPathComponent("strap-history-v18.sqlite"))
-        XCTAssertEqual(try restored.samples(from: 0, through: 300), rows)
+        XCTAssertEqual(try restored.samples(from: 0, through: 300), [sample(50)] + rows)
+        XCTAssertFalse(fm.fileExists(atPath: destination.appendingPathComponent("strap-history-v18.json").path),
+            "Older backup packets must not enter the live migration path")
         XCTAssertEqual(defaults.data(forKey: "strap.days.v1"), preferences["strap.days.v1"] as? Data)
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [100, 201]])
         XCTAssertEqual(try Data(contentsOf: restoredDocuments.appendingPathComponent("captures/fixture.jsonl")), captured)
@@ -49,7 +53,7 @@ final class StrapBackupTests: XCTestCase {
         defaults.set(["100": [110, 190]], forKey: SleepCorrectionStore.defaultsKey)
         try StrapBackup.stage(preview, support: destination)
         try StrapBackup.activatePending(support: destination, documents: restoredDocuments, defaults: defaults)
-        XCTAssertEqual(try restored.samples(from: 0, through: 300).count, 3)
+        XCTAssertEqual(try restored.samples(from: 0, through: 300).count, 4)
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [110, 190]])
     }
 

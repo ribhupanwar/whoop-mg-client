@@ -9,7 +9,7 @@ enum StrapBackup {
         let folder: URL
         let manifest: PersistenceDiagnostics.Manifest
         var description: String {
-            "\(manifest.database?.rows ?? 0) raw records · \(manifest.files.filter { !$0.path.hasPrefix("source-inventory/") }.count) files. Existing raw seconds and storage keys are retained. Conflicting collections are kept in the recovery archive, not silently replaced. Apply on next app launch."
+            "\(manifest.database?.rows ?? 0) SQLite records plus retained legacy/capture evidence · \(manifest.files.filter { !$0.path.hasPrefix("source-inventory/") }.count) files. Existing raw seconds and storage keys are retained. Conflicting collections are kept in the recovery archive, not silently replaced. Apply on next app launch."
         }
     }
     struct Journal: Codable {
@@ -185,7 +185,7 @@ enum StrapBackup {
         }
         let absent = preferences.keys.filter { defaults.object(forKey: $0) == nil }.sorted()
         let files = preview.manifest.files.filter { record in
-            allowedPath(record.path) && !["persisted-records.plist", "history.sqlite"].contains(record.path)
+            allowedPath(record.path) && !["persisted-records.plist", "history.sqlite", "strap-history-v18.json"].contains(record.path)
                 && !fm.fileExists(atPath: destination(record.path).path)
         }
         let journal = Journal(token: UUID().uuidString, absentKeys: absent, createdFiles: files)
@@ -194,10 +194,20 @@ enum StrapBackup {
         try JSONEncoder().encode(journal).write(to: journalURL, options: .atomic)
         do {
             try database.restoreMissing(token: journal.token, stream: { accept in
-                if fm.fileExists(atPath: source.path) { try streamSamples(source, accept: accept) }
-                else if fm.fileExists(atPath: legacy.path) {
-                    try accept(JSONDecoder().decode([V18Sample].self, from: Data(contentsOf: legacy)))
+                let hasDatabase = fm.fileExists(atPath: source.path)
+                if hasDatabase { try streamSamples(source, accept: accept) }
+                if fm.fileExists(atPath: legacy.path) {
+                    let bytes = try Data(contentsOf: legacy)
+                    if let rows = try? JSONDecoder().decode([V18Sample].self, from: bytes) {
+                        try accept(rows)
+                    } else if !hasDatabase {
+                        throw failure("No decodable history source; original backup retained.")
+                    }
                 }
+                // The legacy source remains in restore-history, never at the
+                // live migration path: later startup must not reimport older
+                // backup packets over existing valid seconds.
+
             }) {
                 for file in files {
                     let target = destination(file.path)
