@@ -13,7 +13,7 @@ extension Color {
         )
     }
 
-    static let appCanvasTop = Color(hex: 0x121518)
+    static let appCanvasTop = Color(hex: 0x253038)
     static let appBG = Color(hex: 0x121518)
     static let appSurface = Color(hex: 0x25292C)
     static let appRaised = Color(hex: 0x31363A)
