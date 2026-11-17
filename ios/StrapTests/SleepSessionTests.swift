@@ -616,3 +616,19 @@ extension SleepSessionTests {
         XCTAssertEqual(retained, [unedited])
     }
 }
+
+extension SleepSessionTests {
+    func testEmptyReanalysisCannotEraseCompleteCachedNightDespiteArchiveEndpoints() {
+        let current = knownNight()
+        let stored = SleepSession(version: 1, sourceStartUnix: current.sourceStartUnix,
+            startUnix: current.startUnix, endUnix: current.endUnix, staging: current.staging,
+            heartRate: [], movementBouts: current.movementBouts, isEdited: false,
+            sourceEndUnix: current.endUnix)
+        // Two distant packets span the night but supply no usable overnight
+        // evidence. A new recipe cannot treat these endpoints as full coverage.
+        let rows = [sample(stored.startUnix - 10), sample(stored.endUnix + 10)]
+        let retained = SleepSession.retainingUncovered(previous: [stored], fresh: [],
+            coverageStart: rows.first?.unix, coverageEnd: rows.last?.unix, samples: rows)
+        XCTAssertEqual(retained, [stored])
+    }
+}

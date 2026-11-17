@@ -184,7 +184,13 @@ struct SleepSession: Codable, Equatable {
                     && $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2 }
                 return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
             }
-            guard old.isEdited || editedBoundsChanged || unsupportedExtension
+            // Archive endpoints do not prove usable data throughout a night.
+            // An empty/partial detector result is not evidence that a previously
+            // complete recorded session vanished after a recipe upgrade.
+            let missingReliableReplacement = old.isComplete && !fresh.contains {
+                $0.isComplete && max($0.startUnix, old.startUnix) < min($0.endUnix, old.endUnix)
+            }
+            guard old.isEdited || editedBoundsChanged || unsupportedExtension || missingReliableReplacement
                     || first > old.startUnix || last < old.endUnix - 1 else { continue }
             // Keep intersecting source windows and the latest saved night, not a growing archive.
             guard (source.startUnix <= last && first < sourceEnd)
