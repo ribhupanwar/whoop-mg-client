@@ -91,6 +91,23 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
 // MARK: - HRV
 
 final class HrvTests: XCTestCase {
+    func testOvernightRMSSD28MillisecondsKeepsRRUnits() throws {
+        let rows = (0..<600).map { makeSample(5000 + $0, hr: 76, accel: 0.01, rr: [800, 828]) }
+        let result = Hrv.restingHRV(rows, minWindowS: 300)
+        XCTAssertEqual(result.windowSeconds, 600)
+        XCTAssertEqual(try XCTUnwrap(result.result.rmssdMS), 28, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(result.result.lnRMSSD), log(28), accuracy: 0.000001)
+    }
+
+    func testQuietWindowDiagnosticExplainsMinimumVersusWholeNightMean() throws {
+        let rows = (0..<600).map { makeSample(5000 + $0, hr: $0 < 300 ? 63 : 89, accel: 0.01, rr: [800, 828]) }
+        let run = try XCTUnwrap(Hrv.restingWindowDiagnostics(rows).first)
+        XCTAssertEqual(run.durationSeconds, 600)
+        XCTAssertEqual(run.meanHeartRate, 76, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(run.minimumRollingHeartRate), 63, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(run.rmssdMS), 28, accuracy: 0.000001)
+    }
+
     func testStreamingRRRejectsUnconfirmedLeadingArtefact() {
         let clean = (0..<40).map { second in
             makeSample(5000 + second, hr: 65, accel: 0.01,
