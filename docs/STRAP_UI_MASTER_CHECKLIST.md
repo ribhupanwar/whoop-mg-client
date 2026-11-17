@@ -18,6 +18,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Daily Insights accessibility hint and stable UI-test identifier (commit `ee1393d`).
 - [ ] **VERIFY** Tab sizes, selected states, safe area, VoiceOver and tap targets on device.
 - [ ] **VERIFY** CI regression: run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; removed `.accessibilityElement(children: .ignore)` from custom tab Button in commit `bfed00f`; rerun required.
+- [x] **DONE (code)** Missing-tab UI test now attaches the full accessibility hierarchy and launch screenshot on failure for actionable CI diagnosis (commit `f505c64`).
+- [ ] **VERIFY** Rerun tab responsiveness UI test and inspect XCTest attachments if `tab.home` still cannot be found; no passing rerun confirmed.
 - [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
 - [ ] **TODO** Today activity card ordering, duplication, swipe actions and visual match.
 - [ ] **TODO** Trends: 7-day, 30-day and longer baseline views, only with real available data.
