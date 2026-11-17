@@ -25,6 +25,8 @@ struct TrainView: View {
             VStack(alignment: .leading, spacing: 0) {
                 NavigationLink("WHOOP workout history") { WhoopWorkoutHistoryView() }
                     .padding(.vertical, 12)
+                NavigationLink("Edit or merge manual activities") { ManualActivityHistoryView() }
+                    .padding(.bottom, 12)
                 inputsPanel
                 zonesPanel
                 NavigationLink(value: Route.gpsRun) {

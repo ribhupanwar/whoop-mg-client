@@ -186,6 +186,7 @@ struct MoreView: View {
             NavigationLink { SleepRecoveryView() } label: { moreRow("Preview & recover saved sleep", icon: "clock.arrow.circlepath") }
             NavigationLink { ImportHistoryView() } label: { moreRow("Export Individual JSON", icon: "doc.text") }
             NavigationLink(value: Route.sleepAnalysis) { moreRow("Export Individual Sleep CSV", icon: "moon.stars") }
+            NavigationLink { FilteredRecordsExportView() } label: { moreRow("Date-filtered CSV / JSON", icon: "calendar") }
             NavigationLink { OSDiagnosticsView() } label: { moreRow("OS crash & performance reports", icon: "stethoscope") }
             NavigationLink(value: Route.dataQuality) { moreRow("Data quality & diagnostics", icon: "waveform.path.ecg") }
             NavigationLink(value: Route.settings) { moreRow("Health permissions & app information", icon: "lock.shield") }

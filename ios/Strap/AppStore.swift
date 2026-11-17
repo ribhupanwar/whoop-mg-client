@@ -205,6 +205,20 @@ final class AppStore: ObservableObject {
         manualActivities = activities.manualActivities()
     }
 
+    func mergeManualActivities(ids: Set<UUID>, name: String) throws {
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("captures/activity-revisions", isDirectory: true)
+        try activities.mergeManual(ids: ids, name: name, archiveDirectory: folder)
+        manualActivities = activities.manualActivities()
+    }
+
+    func undoManualActivityMerge(id: UUID) throws {
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("captures/activity-revisions", isDirectory: true)
+        try activities.undoManualMerge(id: id, archiveDirectory: folder)
+        manualActivities = activities.manualActivities()
+    }
+
     func deleteActivity(id: UUID) {
         activities.deleteManual(id: id)
         manualActivities = activities.manualActivities()

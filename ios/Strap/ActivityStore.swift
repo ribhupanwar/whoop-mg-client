@@ -138,6 +138,7 @@ struct ManualActivity: Codable, Equatable, Identifiable {
     var minutes: Int
     var sets: [WorkSet]
     var notes: String
+    let mergedFrom: [ManualActivity]?
 
     init(
         id: UUID = UUID(),
@@ -146,7 +147,8 @@ struct ManualActivity: Codable, Equatable, Identifiable {
         name: String,
         minutes: Int,
         sets: [WorkSet] = [],
-        notes: String = ""
+        notes: String = "",
+        mergedFrom: [ManualActivity]? = nil
     ) {
         self.id = id
         self.dateKey = dateKey
@@ -155,6 +157,7 @@ struct ManualActivity: Codable, Equatable, Identifiable {
         self.minutes = minutes
         self.sets = sets
         self.notes = notes
+        self.mergedFrom = mergedFrom
     }
 
     var totalReps: Int { sets.reduce(0) { $0 + $1.reps } }
@@ -334,6 +337,69 @@ final class ActivityStore {
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: manualKey)
         }
+    }
+
+    /// Explicit manual-only merge. Retains every original entry and the full
+    /// previous encoded collection before replacing selected display rows.
+    @discardableResult
+    func mergeManual(ids: Set<UUID>, name: String, archiveDirectory: URL) throws -> ManualActivity {
+        guard ids.count >= 2, let original = defaults.data(forKey: manualKey) else {
+            throw PersistenceDiagnostics.Failure(message: "Select at least two manual entries.")
+        }
+        let items = try JSONDecoder().decode([ManualActivity].self, from: original)
+        let selected = items.filter { ids.contains($0.id) }
+        guard selected.count == ids.count, let first = selected.first,
+              selected.allSatisfy({ $0.dateKey == first.dateKey && $0.kind == first.kind && $0.minutes >= 0 }) else {
+            throw PersistenceDiagnostics.Failure(message: "Merge only existing manual entries of the same type and date.")
+        }
+        var minutes = 0
+        for item in selected {
+            let sum = minutes.addingReportingOverflow(item.minutes)
+            guard !sum.overflow else { throw PersistenceDiagnostics.Failure(message: "Combined duration is too large.") }
+            minutes = sum.partialValue
+        }
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let merged = ManualActivity(dateKey: first.dateKey, kind: first.kind,
+            name: title.isEmpty ? first.kind.label + " (merged)" : title, minutes: minutes,
+            sets: selected.flatMap(\.sets), notes: selected.map { $0.name + ": " + $0.notes }.joined(separator: "\n"),
+            mergedFrom: selected)
+        let updated = items.filter { !ids.contains($0.id) } + [merged]
+        let bytes = try JSONEncoder().encode(updated)
+        try archiveManualRevision(original, directory: archiveDirectory)
+        defaults.set(bytes, forKey: manualKey)
+        return merged
+    }
+
+    func undoManualMerge(id: UUID, archiveDirectory: URL) throws {
+        guard let original = defaults.data(forKey: manualKey) else {
+            throw PersistenceDiagnostics.Failure(message: "Manual history is unavailable.")
+        }
+        let items = try JSONDecoder().decode([ManualActivity].self, from: original)
+        guard let merged = items.first(where: { $0.id == id }),
+              let retained = merged.mergedFrom, !retained.isEmpty else {
+            throw PersistenceDiagnostics.Failure(message: "No retained merge originals found.")
+        }
+        var updated = items.filter { $0.id != id }
+        for row in retained {
+            if let existing = updated.first(where: { $0.id == row.id }) {
+                guard existing == row else {
+                    throw PersistenceDiagnostics.Failure(message: "An original entry was changed separately; undo cancelled to preserve it.")
+                }
+            } else { updated.append(row) }
+        }
+        let bytes = try JSONEncoder().encode(updated)
+        try archiveManualRevision(original, directory: archiveDirectory)
+        defaults.set(bytes, forKey: manualKey)
+    }
+
+    private func archiveManualRevision(_ original: Data, directory: URL) throws {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archive = directory.appendingPathComponent(PersistenceDiagnostics.digest(original) + ".json")
+        if FileManager.default.fileExists(atPath: archive.path) {
+            guard try Data(contentsOf: archive) == original else {
+                throw PersistenceDiagnostics.Failure(message: "Activity archive conflict; merge cancelled.")
+            }
+        } else { try original.write(to: archive, options: .atomic) }
     }
 
     func deleteManual(id: UUID) {

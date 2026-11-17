@@ -13,6 +13,16 @@ struct ActivityLoggerView: View {
     @State private var notes = ""
     @State private var activitySearch = ""
 
+    private let original: ManualActivity?
+    init(editing activity: ManualActivity? = nil) {
+        original = activity
+        _kind = State(initialValue: activity?.kind ?? .lift)
+        _name = State(initialValue: activity?.name ?? "")
+        _minutes = State(initialValue: activity?.minutes ?? 45)
+        _sets = State(initialValue: activity?.sets ?? [WorkSet(reps: 8, loadKG: 60)])
+        _notes = State(initialValue: activity?.notes ?? "")
+    }
+
     private let today = JournalStore.dayKey(for: Date())
 
     var body: some View {
@@ -27,7 +37,7 @@ struct ActivityLoggerView: View {
                     Hint("Manual entries stay self-reported. The band measures heart rate and movement; it never sees load, so nothing from this sheet becomes strain or recovery.")
                 }
             }
-            .navigationTitle("Add activity")
+            .navigationTitle(original == nil ? "Add activity" : "Edit activity")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -216,12 +226,14 @@ struct ActivityLoggerView: View {
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let activity = ManualActivity(
-            dateKey: today,
+            id: original?.id ?? UUID(),
+            dateKey: original?.dateKey ?? today,
             kind: kind,
             name: trimmed.isEmpty ? kind.label : trimmed,
             minutes: minutes,
             sets: kind.usesSets ? sets.filter { $0.reps > 0 } : [],
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+            mergedFrom: original?.mergedFrom
         )
         store.addActivity(activity)
         dismiss()
