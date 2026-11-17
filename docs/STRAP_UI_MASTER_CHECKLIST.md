@@ -21,7 +21,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## Health Monitor
 - [x] **DONE (code)** HR panel typography and validated-unavailable skin-temperature placeholder (commit `2f02a7e`).
-- [x] **DONE (code)** Live connection banner based on actual band state (commit `b1290c9`).
+- [x] **DONE (code)** Removed redundant Connected banner above live HR chart to match reference (commit `31070f7`); BLE connection logic unchanged.
 - [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
 - [ ] **TODO** Accurate range/status visualizations; never invent SpO2, respiratory rate or skin temperature.
 
