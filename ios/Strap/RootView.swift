@@ -164,7 +164,6 @@ struct RootView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
                     .accessibilityLabel(item.label)
                     .accessibilityValue(selected ? "Selected" : "Not selected")
                     .accessibilityHint("Switch to \(item.label) tab")
