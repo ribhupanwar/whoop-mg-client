@@ -82,15 +82,19 @@ struct HealthView: View {
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: unit == "%" ? 1 : 4) {
                 Text(value)
                     .font(StrapTypography.metric(31, weight: .bold))
                     .foregroundStyle(Color.appFG)
+                    .monospacedDigit()
                     .minimumScaleFactor(0.75)
                     .lineLimit(1)
-                Text(value == "—" ? "" : unit)
-                    .font(StrapTypography.body(12))
-                    .foregroundStyle(Color.appFG)
+                if value != "—" {
+                    Text(unit)
+                        .font(unit == "%" ? StrapTypography.metric(25, weight: .bold) : StrapTypography.body(12))
+                        .foregroundStyle(Color.appFG)
+                        .baselineOffset(unit == "%" ? 0 : 1)
+                }
             }
             HStack(spacing: 4) {
                 Image(systemName: reading.verifiedWithinRange ? "checkmark.circle.fill" : "circle")
