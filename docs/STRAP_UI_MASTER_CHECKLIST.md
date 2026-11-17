@@ -58,6 +58,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## Verification and safety
 - [x] **DONE (verified CI)** Consolidated native Actions run [44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) succeeded for tested revision `20b7ad5c60d46464beabd315a6ce087a48888769`: 511 unit tests, 3 UI tests, simulator/device archive and IPA packaging (evidence in `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`; workflow job conclusion independently checked).
+- [x] **DONE (verified PR CI, not merged)** Draft PR #46 branch `codex/master-progress-20261117` at `5a48da5` passed native iOS simulator tests, GPX/FIT validation, IPA packaging, font and HealthKit checks ([iOS run 44177160708](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44177160708)); six-platform Python protocol matrix also passed ([run 44177160390](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44177160390)). These results validate the PR branch only, not `main` or real-device data fidelity. PR #46 remains **VERIFY** for isolated persistence review and device tests before any merge.
 - [ ] **VERIFY** Obtain a successful native iOS Actions build at the exact latest `main` HEAD (the successful run `44141781672` tested `9d47d8f`; later `b991e13` changed documentation only). New code merges require a new native run.
 - [ ] **VERIFY** Install latest IPA and compare screenshots on target iPhone.
 - [ ] **TODO** Add accessible screenshot/layout tests and font checks.
