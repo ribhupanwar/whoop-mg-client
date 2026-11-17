@@ -87,3 +87,7 @@ Inspected `ios/Strap/Analysis/Calories.swift` and `ios/StrapTests/CaloriesTests.
 - [ ] Decide production integration only after evidence.
 
 **Do not mark calorie parity complete or replace the current calculator solely from these excerpts.**
+
+## Implementation follow-up
+
+An isolated `WhoopRecoveredCalories.swift` research API and deterministic `WhoopRecoveredCaloriesTests.swift` now exist. Production `Calories` and all call sites remain unchanged. Exact policies, independent arithmetic anchors, local real-export audit, public documentation evidence and unresolved active/total validation are recorded in [WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md](WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md). Native execution remains pending; no parity or production approval is implied.
