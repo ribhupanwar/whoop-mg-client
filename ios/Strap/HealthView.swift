@@ -68,8 +68,41 @@ struct HealthView: View {
                          unit: "bpm", reading: monitor[.rhr])
             healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
                          unit: "ms", reading: monitor[.hrv])
+            skinTemperatureCard
         }
         .padding(.bottom, 18)
+    }
+
+    // No validated relative-to-baseline temperature is available yet.
+    // Show the WHOOP-style tile without inventing a +°C delta from raw skin ADC.
+    private var skinTemperatureCard: some View {
+        VStack(alignment: .leading, spacing: 15) {
+            HStack(alignment: .top, spacing: 7) {
+                Image(systemName: "thermometer")
+                    .font(.system(size: 16, weight: .light))
+                    .foregroundStyle(Color.appMuted)
+                    .frame(width: 20)
+                Text("SKIN TEMP\n(FROM BASELINE)")
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .tracking(0.6)
+                    .foregroundStyle(Color.appMuted)
+                Spacer(minLength: 0)
+            }
+            Spacer(minLength: 0)
+            Text("—")
+                .font(StrapTypography.metric(31, weight: .bold))
+                .foregroundStyle(Color.appFG)
+                .accessibilityIdentifier("health.skinTemperature.delta")
+            Text("BUILDING BASELINE")
+                .font(StrapTypography.body(10, weight: .semibold))
+                .foregroundStyle(Color.appMuted)
+            Text("No validated temperature delta")
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
+        }
+        .padding(15)
+        .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
@@ -126,7 +159,7 @@ struct HealthView: View {
             GeometryReader { geometry in
                 let width = geometry.size.width
                 let height = geometry.size.height
-                let graphY = height * 0.56
+                let graphY = height * 0.535
                 let markerX = width - 30
                 ZStack(alignment: .topLeading) {
                     Canvas { context, size in
@@ -174,15 +207,15 @@ struct HealthView: View {
                     }
                     VStack(alignment: .leading, spacing: 0) {
                         Text("HEART RATE")
-                            .font(StrapTypography.body(17, weight: .bold))
-                            .tracking(1.6)
-                            .padding(.bottom, 16)
+                            .font(StrapTypography.body(16, weight: .bold))
+                            .tracking(1.4)
+                            .padding(.bottom, 14)
                         Image(systemName: "heart.fill")
                             .font(.system(size: 27))
                             .foregroundStyle(Color(hex: 0x159EF0))
-                            .padding(.bottom, 12)
+                            .padding(.bottom, 10)
                         Text(lastHR.map(String.init) ?? "—")
-                            .font(StrapTypography.metric(62, weight: .bold))
+                            .font(StrapTypography.metric(49, weight: .bold))
                             .monospacedDigit()
                             .lineLimit(1)
                             .minimumScaleFactor(0.85)
@@ -196,7 +229,7 @@ struct HealthView: View {
                         Text(zoneText)
                             .font(StrapTypography.body(17, weight: .semibold))
                             .foregroundStyle(Color.appMuted)
-                            .padding(.top, 18)
+                            .padding(.top, 16)
                         HStack(spacing: 4) {
                             ForEach(0..<5, id: \.self) { _ in
                                 Rectangle()
@@ -207,7 +240,7 @@ struct HealthView: View {
                         .padding(.top, 16)
                     }
                     .padding(.leading, 18)
-                    .padding(.top, 26)
+                    .padding(.top, 18)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if lastHR != nil {
                         Circle()
@@ -218,7 +251,7 @@ struct HealthView: View {
                     }
                 }
             }
-            .frame(height: 306)
+            .frame(height: 258)
             // Keep the chart's accessibility separate from the BPM Text.
             // Applying an identifier to the GeometryReader overrides child
             // identifiers on iOS and makes the BPM UI tests unqueryable.
