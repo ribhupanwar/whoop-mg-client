@@ -15,6 +15,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var whoopImportedWorkouts: [WhoopActivityHistory] = []
     @Published private(set) var whoopImportReadError: String?
     @Published private(set) var journalEntries: [String: JournalEntry] = [:]
+    @Published private(set) var liveWriteError: String?
+    @Published private(set) var liveRecoveryURL: URL?
+    @Published private(set) var activityWriteError: String?
     @Published private(set) var manualActivities: [ManualActivity] = []
     @Published private(set) var liveActivities: [LiveActivityRecord] = []
     /// Band-detected sessions, kept across syncs so a walk logged yesterday
@@ -200,9 +203,23 @@ final class AppStore: ObservableObject {
         return zones
     }
 
-    func addActivity(_ activity: ManualActivity) {
-        activities.save(activity)
+    @discardableResult
+    func addActivity(_ activity: ManualActivity) -> Bool {
+        let saved = activities.save(activity)
+        activityWriteError = activities.lastManualWriteError
+        if saved { manualActivities = activities.manualActivities() }
+        return saved
+    }
+    func restoreMissingManualActivity(_ activity: ManualActivity) throws -> Bool {
+        let restored = try activities.restoreMissingManual(activity)
         manualActivities = activities.manualActivities()
+        return restored
+    }
+
+    func restoreMissingLiveActivity(_ record: LiveActivityRecord) throws -> Bool {
+        let restored = try activities.restoreMissingLive(record)
+        liveActivities = activities.liveActivities()
+        return restored // Local recovery does not automatically write to HealthKit.
     }
 
     func mergeManualActivities(ids: Set<UUID>, name: String) throws {
@@ -219,14 +236,20 @@ final class AppStore: ObservableObject {
         manualActivities = activities.manualActivities()
     }
 
-    func deleteActivity(id: UUID) {
-        activities.deleteManual(id: id)
-        manualActivities = activities.manualActivities()
+    @discardableResult
+    func deleteActivity(id: UUID) -> Bool {
+        let saved = activities.deleteManual(id: id)
+        activityWriteError = activities.lastManualWriteError
+        if saved { manualActivities = activities.manualActivities() }
+        return saved
     }
 
-    func deleteLiveActivity(id: UUID) {
-        activities.deleteLive(id: id)
-        liveActivities = activities.liveActivities()
+    @discardableResult
+    func deleteLiveActivity(id: UUID) -> Bool {
+        let saved = activities.deleteLive(id: id)
+        liveWriteError = activities.lastLiveWriteError
+        if saved { liveActivities = activities.liveActivities() }
+        return saved
     }
 
     func deleteDetectedActivity(_ session: ActivitySession) {
@@ -244,14 +267,19 @@ final class AppStore: ObservableObject {
         }
     }
 
-    func addLiveSession(_ record: LiveActivityRecord) {
-        activities.saveLive(record)
+    @discardableResult
+    func addLiveSession(_ record: LiveActivityRecord) -> Bool {
+        let saved = activities.saveLive(record)
+        liveWriteError = activities.lastLiveWriteError
+        liveRecoveryURL = activities.lastLiveRecoveryURL
+        guard saved else { return false }
         liveActivities = activities.liveActivities()
         if settings.healthKitEnabled, health.state.isOn {
             Task { [weak self] in
                 await self?.health.export(live: record)
             }
         }
+        return true
     }
 
     // MARK: - Dashboard layout

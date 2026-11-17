@@ -506,7 +506,7 @@ struct HomeView: View {
                 Spacer()
                 Button { showLogger = true } label: {
                     Image(systemName: "plus").font(StrapTypography.body(21, weight: .medium))
-                        .foregroundStyle(Color.appBG).frame(width: 40, height: 40)
+                        .foregroundStyle(Color.appBG).frame(width: 44, height: 44)
                         .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
                 }.buttonStyle(.plain).accessibilityLabel("Add activity")
             }
@@ -612,6 +612,7 @@ struct HomeView: View {
                             }
                         }
                         .contentShape(Rectangle())
+                        .modifier(ActivityDeleteReveal { deleteActivityRow(row) })
                         .contextMenu {
                             Button(role: .destructive) {
                                 deleteActivityRow(row)
@@ -625,7 +626,8 @@ struct HomeView: View {
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
                             .contentShape(Rectangle())
-                            .contextMenu {
+                            .modifier(ActivityDeleteReveal { deleteActivityRow(row) })
+                        .contextMenu {
                                 Button(role: .destructive) {
                                     deleteActivityRow(row)
                                 } label: {
@@ -643,6 +645,9 @@ struct HomeView: View {
                 }
             }
             .padding(.bottom, 16)
+            if store.activityWriteError != nil || store.liveWriteError != nil {
+                Hint("Activity change could not be saved. Original history was preserved; check storage and retry.")
+            }
             HStack(spacing: 10) {
                 Button { showLogger = true } label: {
                     Label("ADD ACTIVITY", systemImage: "plus")

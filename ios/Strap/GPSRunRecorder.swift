@@ -121,6 +121,12 @@ final class GPSRunRecorder: NSObject, ObservableObject, CLLocationManagerDelegat
         savedRuns = history.all()
     }
 
+    func restoreRun(_ record: GPSRunRecord) throws -> Bool {
+        let restored = try history.restoreMissing(record)
+        savedRuns = history.all()
+        return restored
+    }
+
     func refreshElapsed() {
         guard recording else { return }
         let active = paused ? 0 : Date().timeIntervalSince(activeSince ?? Date())

@@ -301,14 +301,25 @@ private struct DeletedDetectedActivity: Codable, Equatable {
 final class ActivityStore {
     private let detectedLock = NSRecursiveLock()
     private let defaults: UserDefaults
+    private let manualRevisionDirectory: URL
+    private(set) var lastManualWriteError: String?
+    private(set) var lastLiveWriteError: String?
+    private(set) var lastLiveRecoveryURL: URL?
+    static var revisionArchiveDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("captures/activity-revisions", isDirectory: true)
+    }
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
     private let detectedKey = "strap.detected.activities.v1"
     private let deletedDetectedKey = "strap.detected.activities.deleted.v1"
     private let whoopKey = "strap.whoop.official.workouts.v1"
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, revisionDirectory: URL? = nil) {
         self.defaults = defaults
+        self.manualRevisionDirectory = revisionDirectory ?? (defaults === UserDefaults.standard
+            ? Self.revisionArchiveDirectory
+            : FileManager.default.temporaryDirectory.appendingPathComponent("STRAP-activity-revisions-" + UUID().uuidString))
     }
 
     func manualActivities() -> [ManualActivity] {
@@ -327,16 +338,39 @@ final class ActivityStore {
         return saved.sorted { $0.startedUnix < $1.startedUnix }
     }
 
-    func save(_ activity: ManualActivity) {
-        var items = manualActivities()
-        if let index = items.firstIndex(where: { $0.id == activity.id }) {
-            items[index] = activity
-        } else {
-            items.append(activity)
+    private func strictManualActivities() throws -> [ManualActivity] {
+        guard let original = defaults.object(forKey: manualKey) else { return [] }
+        guard let bytes = original as? Data else {
+            throw PersistenceDiagnostics.Failure(message: "Original activity history could not be read; it was preserved.")
         }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: manualKey)
+        return try JSONDecoder().decode([ManualActivity].self, from: bytes)
+    }
+    private func persistManual(_ items: [ManualActivity]) throws {
+        let bytes = try JSONEncoder().encode(items)
+        if let original = defaults.data(forKey: manualKey) {
+            try archiveManualRevision(original, directory: manualRevisionDirectory)
         }
+        defaults.set(bytes, forKey: manualKey)
+    }
+    @discardableResult
+    func save(_ activity: ManualActivity) -> Bool {
+        do {
+            var items = try strictManualActivities()
+            if let index = items.firstIndex(where: { $0.id == activity.id }) { items[index] = activity }
+            else { items.append(activity) }
+            try persistManual(items)
+            lastManualWriteError = nil
+            return true
+        } catch { lastManualWriteError = error.localizedDescription; return false }
+    }
+    /// Restores only a missing identity; a current edit always wins.
+    @discardableResult
+    func restoreMissingManual(_ activity: ManualActivity) throws -> Bool {
+        var items = try strictManualActivities()
+        guard !items.contains(where: { $0.id == activity.id }) else { return false }
+        items.append(activity)
+        try persistManual(items)
+        return true
     }
 
     /// Explicit manual-only merge. Retains every original entry and the full
@@ -392,40 +426,74 @@ final class ActivityStore {
         defaults.set(bytes, forKey: manualKey)
     }
 
-    private func archiveManualRevision(_ original: Data, directory: URL) throws {
+    @discardableResult
+    private func archiveManualRevision(_ original: Data, directory: URL) throws -> URL {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let archive = directory.appendingPathComponent(PersistenceDiagnostics.digest(original) + ".json")
         if FileManager.default.fileExists(atPath: archive.path) {
             guard try Data(contentsOf: archive) == original else {
-                throw PersistenceDiagnostics.Failure(message: "Activity archive conflict; merge cancelled.")
+                throw PersistenceDiagnostics.Failure(message: "Activity archive conflict; original history preserved.")
             }
         } else { try original.write(to: archive, options: .atomic) }
+        return archive
     }
 
-    func deleteManual(id: UUID) {
-        let items = manualActivities().filter { $0.id != id }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: manualKey)
-        }
+    @discardableResult
+    func deleteManual(id: UUID) -> Bool {
+        do {
+            let items = try strictManualActivities()
+            guard items.contains(where: { $0.id == id }) else { lastManualWriteError = nil; return true }
+            try persistManual(items.filter { $0.id != id })
+            lastManualWriteError = nil
+            return true
+        } catch { lastManualWriteError = error.localizedDescription; return false }
     }
 
-    func saveLive(_ record: LiveActivityRecord) {
-        var items = liveActivities()
-        if let index = items.firstIndex(where: { $0.id == record.id }) {
-            items[index] = record
-        } else {
-            items.append(record)
+    private func strictLiveActivities() throws -> [LiveActivityRecord] {
+        guard let original = defaults.object(forKey: liveKey) else { return [] }
+        guard let data = original as? Data else {
+            throw PersistenceDiagnostics.Failure(message: "Original live history could not be read; it was preserved.")
         }
-        if let data = try? JSONEncoder().encode(items) {
+        return try JSONDecoder().decode([LiveActivityRecord].self, from: data)
+    }
+    @discardableResult
+    func saveLive(_ record: LiveActivityRecord) -> Bool {
+        lastLiveRecoveryURL = nil
+        do {
+            let directory = manualRevisionDirectory.appendingPathComponent("live-sessions", isDirectory: true)
+            let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+            // Keep the newly stopped measurement even if existing history is unreadable.
+            lastLiveRecoveryURL = try archiveManualRevision(encoder.encode([record]), directory: directory)
+            var items = try strictLiveActivities()
+            if let index = items.firstIndex(where: { $0.id == record.id }) { items[index] = record }
+            else { items.append(record) }
+            let data = try encoder.encode(items)
+            if let original = defaults.data(forKey: liveKey) { try archiveManualRevision(original, directory: directory) }
             defaults.set(data, forKey: liveKey)
-        }
+            lastLiveWriteError = nil; return true
+        } catch { lastLiveWriteError = error.localizedDescription; return false }
+    }
+    @discardableResult
+    func deleteLive(id: UUID) -> Bool {
+        do {
+            let items = try strictLiveActivities()
+            guard items.contains(where: { $0.id == id }) else { lastLiveWriteError = nil; return true }
+            let data = try JSONEncoder().encode(items.filter { $0.id != id })
+            if let original = defaults.data(forKey: liveKey) {
+                try archiveManualRevision(original, directory: manualRevisionDirectory.appendingPathComponent("live-sessions", isDirectory: true))
+            }
+            defaults.set(data, forKey: liveKey)
+            lastLiveWriteError = nil; return true
+        } catch { lastLiveWriteError = error.localizedDescription; return false }
     }
 
-    func deleteLive(id: UUID) {
-        let items = liveActivities().filter { $0.id != id }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: liveKey)
+    @discardableResult
+    func restoreMissingLive(_ record: LiveActivityRecord) throws -> Bool {
+        guard !(try strictLiveActivities()).contains(where: { $0.id == record.id }) else { return false }
+        guard saveLive(record) else {
+            throw PersistenceDiagnostics.Failure(message: lastLiveWriteError ?? "Original live history preserved; restore failed.")
         }
+        return true
     }
 
     func whoopWorkouts() -> [WhoopWorkout] {

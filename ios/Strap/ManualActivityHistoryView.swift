@@ -5,6 +5,7 @@ struct ManualActivityHistoryView: View {
     @State private var selected: Set<UUID> = []
     @State private var name = ""
     @State private var status = ""
+    @State private var creating = false
     @State private var editing: ManualActivity?
     var body: some View {
         List {
@@ -18,12 +19,27 @@ struct ManualActivityHistoryView: View {
                     } catch { status = error.localizedDescription }
                 }.disabled(selected.count < 2)
                 Text(status)
+                if let error = store.activityWriteError { Text("Existing history preserved: " + error) }
+                NavigationLink("Recover deleted manual entries") { ManualActivityRevisionsView() }
             }
             ForEach(store.manualActivities) { record in
                 Section("\(record.dateKey) · \(record.name)") {
                     Toggle(record.summary, isOn: Binding(
                         get: { selected.contains(record.id) },
                         set: { if $0 { selected.insert(record.id) } else { selected.remove(record.id) } }))
+                    .accessibilityLabel(record.name + ", " + record.summary)
+                    .accessibilityIdentifier("manual.row." + record.id.uuidString)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        Button("Delete", role: .destructive) {
+                            if store.deleteActivity(id: record.id) { selected.remove(record.id) }
+                        }
+                    }
+                    .contextMenu {
+                        Button("Edit entry") { editing = record }
+                        Button("Delete entry", role: .destructive) {
+                            if store.deleteActivity(id: record.id) { selected.remove(record.id) }
+                        }
+                    }
                     Button("Edit entry") { editing = record }
                     if let originals = record.mergedFrom {
                         Button("Undo merge and restore original entries") {
@@ -39,6 +55,12 @@ struct ManualActivityHistoryView: View {
                 }
             }
         }.navigationTitle("Manual activity history")
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button("Add entry") { creating = true }.accessibilityIdentifier("manual.history.add")
+                }
+            }
+            .sheet(isPresented: $creating) { ActivityLoggerView().environmentObject(store) }
             .sheet(item: $editing) { ActivityLoggerView(editing: $0).environmentObject(store) }
     }
 }

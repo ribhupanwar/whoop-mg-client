@@ -12,6 +12,7 @@ struct ActivityLoggerView: View {
     @State private var sets: [WorkSet] = [WorkSet(reps: 8, loadKG: 60.0)]
     @State private var notes = ""
     @State private var activitySearch = ""
+    @State private var saveFailed = false
 
     private let original: ManualActivity?
     init(editing activity: ManualActivity? = nil) {
@@ -36,6 +37,11 @@ struct ActivityLoggerView: View {
                     }
                     Hint("Manual entries stay self-reported. The band measures heart rate and movement; it never sees load, so nothing from this sheet becomes strain or recovery.")
                 }
+            }
+            .alert("Activity not saved", isPresented: $saveFailed) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("Existing history was preserved. " + (store.activityWriteError ?? "Please retry after checking available storage."))
             }
             .navigationTitle(original == nil ? "Add activity" : "Edit activity")
             .navigationBarTitleDisplayMode(.inline)
@@ -112,6 +118,7 @@ struct ActivityLoggerView: View {
             SectionTitle("Details")
             row(label: "Name") {
                 TextField(kind.label, text: $name)
+                    .accessibilityIdentifier("manual.name")
                     .multilineTextAlignment(.trailing)
                     .font(StrapTypography.body(15))
                     .foregroundStyle(Color.appFG)
@@ -235,7 +242,7 @@ struct ActivityLoggerView: View {
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
             mergedFrom: original?.mergedFrom
         )
-        store.addActivity(activity)
-        dismiss()
+        if store.addActivity(activity) { dismiss() }
+        else { saveFailed = true }
     }
 }

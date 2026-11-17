@@ -6,6 +6,9 @@ struct LiveSessionView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
 
+    @State private var pendingRecord: LiveActivityRecord?
+    @State private var saveFailed = false
+
     private let zoneColors: [Color] = [.appMuted, .appGood, .appAccent, .appWarn, .appHigh]
 
     var body: some View {
@@ -44,6 +47,11 @@ struct LiveSessionView: View {
                     }
                 }
             }
+            .alert("Live session not added to history", isPresented: $saveFailed) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text((store.liveWriteError ?? "Please retry saving.") + (store.liveRecoveryURL == nil ? "" : " A recovery copy was retained."))
+            }
             .navigationTitle("Live session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -55,15 +63,15 @@ struct LiveSessionView: View {
                     .foregroundStyle(Color.appMuted)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Stop & save") { stopAndSave() }
+                    Button(pendingRecord == nil ? "Stop & save" : "Retry save") { stopAndSave() }
                         .font(StrapTypography.body(17, weight: .bold))
                         .foregroundStyle(Color.appAccent)
-                        .disabled(!store.band.isLiveSession || elapsedSeconds(now: Date()) < 10)
+                        .disabled(pendingRecord == nil && (!store.band.isLiveSession || elapsedSeconds(now: Date()) < 10))
                 }
             }
         }
         .onAppear {
-            if store.band.isConnected && !store.band.isLiveSession {
+            if pendingRecord == nil && store.band.isConnected && !store.band.isLiveSession {
                 store.band.startLiveSession()
             }
         }
@@ -196,6 +204,10 @@ struct LiveSessionView: View {
     }
 
     private func stopAndSave() {
+        if let pendingRecord {
+            if store.addLiveSession(pendingRecord) { dismiss() } else { saveFailed = true }
+            return
+        }
         let samples = store.band.liveSamples
         let zones = LiveZones.seconds(samples: samples, zones: store.liveZones)
         guard let result = store.band.endLiveSession() else {
@@ -214,7 +226,7 @@ struct LiveSessionView: View {
             hrv: result.hrv,
             zoneSeconds: zones
         )
-        store.addLiveSession(record)
-        dismiss()
+        pendingRecord = record
+        if store.addLiveSession(record) { dismiss() } else { saveFailed = true }
     }
 }

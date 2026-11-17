@@ -225,6 +225,22 @@ jobs:
             archive.log
           if-no-files-found: ignore
 
+      - name: Export native screenshot and source attachments
+        if: always()
+        run: |
+          if [ -d "$RUNNER_TEMP/TestResults.xcresult" ] && [ ! -d "$RUNNER_TEMP/route-attachments" ]; then
+            xcrun xcresulttool export attachments --path "$RUNNER_TEMP/TestResults.xcresult" --output-path "$RUNNER_TEMP/route-attachments"
+          fi
+
+      - name: Upload native screenshot and source attachments
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-native-test-attachments
+          path: ${{ runner.temp }}/route-attachments
+          if-no-files-found: ignore
+          retention-days: 14
+
       - name: Upload test results bundle
         if: always()
         uses: actions/upload-artifact@v4
