@@ -75,3 +75,9 @@ Both expose `score.kilojoule` in examples; those pages do not define separate ac
 - Real matched workout/cycle comparison: BLOCKED by missing full HR/profile/anchor and explicit active-versus-total reference evidence. Percentage error is not reported without comparable inputs.
 - Native research IPA artifact: `14343589739`; workflow-recorded SHA-256 `eb3a959d35e72ac8e184a4dbfc33383a7000c61a11a09222e112f3a12993b88f`. This is the isolated main-based research build; consolidated master validation is tracked separately in [the master progress ledger](https://github.com/ribhupanwar/whoop-mg-client/blob/codex/master-progress-20261117/MASTER_PROGRESS.md).
 - Production integration: disabled. It requires passed native tests, resolved call-site/enum/tail semantics and matched real data comparisons first.
+
+## Consolidated master verification
+
+[Run 44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) passed **511 unit + 3 UI tests**, including all 13 recovered-calorie tests, independent native-output GPX/FIT validation, device archive, fonts/HealthKit checks and IPA packaging. Code revision `20b7ad5c60d46464beabd315a6ce087a48888769` combines the master changes with this same isolated calculator. No production calorie call site was introduced.
+
+Downloaded consolidated IPA artifact `14346176961` and independently verified SHA-256 `af16b97241e721d8a18dd3e42adae00b7a070810beb5275b51d24935158bcedd`, embedded revision `20b7ad5c60d46464beabd315a6ce087a48888769`, bundle `com.ribhupanwar.strap` and all 11 TTF files. Distribution signing/device checks and real WHOOP active/total parity remain separate gates. Documentation-only follow-ups do not change the tested iOS/workflow source.
