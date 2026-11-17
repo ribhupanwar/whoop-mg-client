@@ -13,6 +13,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Bottom navigation styling (commit `3d402e7`).
 - [x] **DONE (code)** Custom tab VoiceOver labels, selected-state announcements and hints (commit `e50d9e1`).
 - [ ] **VERIFY** Tab sizes, selected states, safe area, VoiceOver and tap targets on device.
+- [ ] **VERIFY** CI regression: run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; removed `.accessibilityElement(children: .ignore)` from custom tab Button in commit `bfed00f`; rerun required.
 - [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
 - [ ] **TODO** Today activity card ordering, duplication, swipe actions and visual match.
 - [ ] **TODO** Trends: 7-day, 30-day and longer baseline views, only with real available data.
