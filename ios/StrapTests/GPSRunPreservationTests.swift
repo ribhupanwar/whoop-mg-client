@@ -33,7 +33,7 @@ final class GPSRunPreservationTests: XCTestCase {
         let file = folder.appendingPathComponent("Strap/gps-runs-v2.json")
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         let bad = Data("unreadable current source".utf8); try bad.write(to: file)
-        let legacy = try JSONEncoder().encode([run()]); defaults.set(legacy, forKey: "strap.gps.runs.v1")
+        let legacy = try JSONEncoder().encode([fixtureRun()]); defaults.set(legacy, forKey: "strap.gps.runs.v1")
         let history = GPSRunHistory(defaults: defaults, directory: folder), incoming = fixtureRun()
         XCTAssertTrue(history.all().isEmpty); XCTAssertFalse(history.save(incoming)); XCTAssertFalse(history.delete(id: incoming.id))
         XCTAssertEqual(try Data(contentsOf: file), bad); XCTAssertEqual(defaults.data(forKey: "strap.gps.runs.v1"), legacy)
