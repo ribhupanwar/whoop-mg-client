@@ -144,3 +144,5 @@ The current per-item state and exact evidence live in `MASTER_PROGRESS.md`; rema
 - B1/B7: strict separate IMU/optical/research diagnostics and verified format audit; V20/V22 additions await the consolidated native run. No clinical interpretation from raw optical/research buffers.
 - D14: exact HealthKit UUID identity, repeat-byte idempotence, existing originals win; new source-preservation tests await consolidated native execution. Cross-provider mirror identity remains externally unresolved.
 - Latest-main UI/accessibility/sleep-chart/app-open changes through `26715c6` are incorporated into the draft; consolidated UI/native/archive verification is pending.
+
+Final consolidated native evidence: 44120344273 passed 511 unit + 3 UI tests, independent GPX/FIT validation, device archive, fonts/HealthKit and IPA. Includes the isolated WHOOP calorie research module with 13 deterministic tests and no production call sites; real active/total parity remains unverified. Exact artifact/hash and remaining limits are in the root progress/limitations ledgers.
