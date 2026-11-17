@@ -14,7 +14,6 @@ struct HealthView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                connectionBanner
                 hrPanel
                 fiveMetricGrid
                 if !demo { rrDiagnosticPanel }
@@ -135,10 +134,8 @@ struct HealthView: View {
                 .font(StrapTypography.body(17, weight: .semibold))
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 18)
-            // Keep the live monitor distinct from the historical HR trace.
-            // A connected band with stale packets must never look live.
+            // A dedicated chart row prevents graph strokes from obscuring BPM labels.
             liveHeartRateChart
-                .padding(.top, -195)
                 .allowsHitTesting(false)
             if !demo {
                 Text(liveHRDiagnostic)
@@ -155,53 +152,58 @@ struct HealthView: View {
     }
 
     private var liveHeartRateChart: some View {
-        // This is an instantaneous indicator, not a historical time-series.
-        // Use a stable physiological display scale so the line moves vertically
-        // when the latest fresh HR changes; never substitute archived samples.
-        let current = lastHR
-        return GeometryReader { geometry in
-            let width = geometry.size.width
-            let height = geometry.size.height
-            let bpm = Double(current ?? 82)
-            let fraction = LiveHeartRateState.indicatorFraction(bpm: Int(bpm))
-            let y = 6 + max(0, height - 12) * CGFloat(1.0 - fraction)
-            ZStack(alignment: .topLeading) {
-                Canvas { context, size in
-                    let spacing: CGFloat = 24
-                    var grid = Path()
-                    for x in stride(from: CGFloat(0), through: size.width, by: spacing) {
-                        grid.move(to: CGPoint(x: x, y: 0))
-                        grid.addLine(to: CGPoint(x: x, y: size.height))
+        // A WHOOP-style blue time-series, with explicit provenance. Never
+        // present an archived capture as a live heart-rate measurement.
+        let live = usingLiveSeries
+        let values = (live ? store.band.recentLiveHR.map { Double($0.heartRate) } : (summary?.heartRateSeries ?? []))
+            .filter { $0.isFinite && $0 >= 25 && $0 <= 230 }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(live ? "LIVE HEART RATE" : "RECORDED HEART RATE")
+                .font(StrapTypography.body(10, weight: .bold))
+                .tracking(1)
+                .foregroundStyle(Color.appMuted)
+            GeometryReader { geometry in
+                let width = geometry.size.width
+                let height = geometry.size.height
+                let low = max(25, (values.min() ?? 60) - 10)
+                let high = min(230, (values.max() ?? 110) + 10)
+                let span = max(1, high - low)
+                ZStack {
+                    Canvas { context, size in
+                        var grid = Path()
+                        for fraction in [CGFloat(0), 0.25, 0.5, 0.75, 1] {
+                            let y = size.height * fraction
+                            grid.move(to: CGPoint(x: 0, y: y))
+                            grid.addLine(to: CGPoint(x: size.width, y: y))
+                        }
+                        context.stroke(grid, with: .color(.white.opacity(0.07)), lineWidth: 0.7)
                     }
-                    for row in stride(from: CGFloat(0), through: size.height, by: spacing) {
-                        grid.move(to: CGPoint(x: 0, y: row))
-                        grid.addLine(to: CGPoint(x: size.width, y: row))
+                    if values.count >= 2 {
+                        Path { path in
+                            for (index, bpm) in values.enumerated() {
+                                let x = width * CGFloat(index) / CGFloat(values.count - 1)
+                                let y = height * CGFloat(1 - (bpm - low) / span)
+                                if index == 0 { path.move(to: CGPoint(x: x, y: y)) }
+                                else { path.addLine(to: CGPoint(x: x, y: y)) }
+                            }
+                        }
+                        .stroke(Color(hex: 0x22AFFF), style: StrokeStyle(lineWidth: 2.2, lineCap: .round, lineJoin: .round))
+                        .shadow(color: Color(hex: 0x18A6F5).opacity(0.65), radius: 5)
+                        if live {
+                            Circle().fill(.white).frame(width: 10, height: 10)
+                                .position(x: width, y: height * CGFloat(1 - ((values.last ?? low) - low) / span))
+                        }
+                    } else {
+                        Text("No heart-rate trace available")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appMuted)
                     }
-                    context.stroke(grid, with: .color(Color.white.opacity(0.055)), lineWidth: 0.65)
-                }
-                if current != nil {
-                    Path { path in
-                        path.move(to: CGPoint(x: width * 0.32, y: y))
-                        path.addLine(to: CGPoint(x: width - 7, y: y))
-                    }
-                    .stroke(Color(hex: 0x22AFFF), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                    .shadow(color: Color(hex: 0x18A6F5).opacity(0.7), radius: 6)
-                    Path { path in
-                        path.move(to: CGPoint(x: width - 7, y: 0))
-                        path.addLine(to: CGPoint(x: width - 7, y: height))
-                    }
-                    .stroke(Color.white.opacity(0.55), style: StrokeStyle(lineWidth: 1, dash: [3, 4]))
-                    Circle().fill(.white).frame(width: 12, height: 12)
-                        .shadow(color: .white.opacity(0.7), radius: 6)
-                        .position(x: width - 7, y: y)
                 }
             }
+            .frame(height: 170)
+            .accessibilityIdentifier("health.live.indicator")
+            .accessibilityLabel(live ? "Live heart rate history" : "Recorded heart rate history")
         }
-        .frame(height: 195)
-        .accessibilityElement(children: .ignore)
-        .accessibilityIdentifier("health.live.indicator")
-        .accessibilityValue(current.map { String(format: "%.3f", LiveHeartRateState.indicatorFraction(bpm: $0)) } ?? "unavailable")
-        .accessibilityLabel(current.map { "Current heart rate, \($0) beats per minute" } ?? "Live heart rate unavailable")
     }
 
     private var rrDiagnosticPanel: some View {
