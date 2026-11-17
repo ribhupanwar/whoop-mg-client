@@ -9,6 +9,16 @@ enum AppTab: String, CaseIterable, Hashable {
 
     var label: String { rawValue.capitalized }
 
+    var selectedIcon: String {
+        switch self {
+        case .home: return "house.fill"
+        case .health: return "heart.fill"
+        case .train: return "dumbbell.fill"
+        case .plan: return "calendar"
+        case .more: return "ellipsis.circle.fill"
+        }
+    }
+
     var icon: String {
         switch self {
         case .home: return "house"
@@ -126,36 +136,57 @@ struct RootView: View {
     }
 
     private var floatingNavigation: some View {
+        // Keep all five destinations on a single stable bottom bar.
+        // The selected tab is legible without relying on glass blur alone.
         HStack(spacing: 8) {
             HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { item in
+                    let selected = tab == item
                     Button { tab = item } label: {
                         VStack(spacing: 4) {
-                            Image(systemName: item.icon).font(.system(size: 19, weight: .medium))
+                            Image(systemName: selected ? item.selectedIcon : item.icon)
+                                .font(.system(size: 20, weight: selected ? .semibold : .regular))
+                                .frame(height: 24)
                             Text(item.label)
-                                .font(StrapTypography.body(11, weight: tab == item ? .bold : .medium))
+                                .font(StrapTypography.body(11, weight: selected ? .bold : .medium))
                                 .lineLimit(1)
-                                .minimumScaleFactor(0.75)
-                                .allowsTightening(true)
+                                .minimumScaleFactor(0.85)
                         }
-                        .foregroundStyle(tab == item ? Color.appFG : Color.appMuted)
-                        .frame(maxWidth: .infinity).frame(height: 52)
-                        // Plain buttons otherwise hit-test only the glyphs, leaving
-                        // most of the visually full-width tab target untappable.
+                        .foregroundStyle(selected ? Color.appFG : Color.appMuted)
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: 52)
+                        .background {
+                            if selected {
+                                RoundedRectangle(cornerRadius: 15)
+                                    .fill(Color.white.opacity(0.09))
+                            }
+                        }
                         .contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityIdentifier("tab.\(item.rawValue)")
-                        .accessibilityAddTraits(tab == item ? .isSelected : [])
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("tab.\(item.rawValue)")
+                    .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            .padding(.horizontal, 8).padding(.vertical, 4)
-            .strapLiquidGlass(cornerRadius: 29)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 5)
+            .background(Color.appBG.opacity(0.97), in: RoundedRectangle(cornerRadius: 23))
+            .overlay(RoundedRectangle(cornerRadius: 23)
+                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.7))
             Button { showInsights = true } label: {
-                Image(systemName: "waveform.path.ecg").font(.system(size: 24, weight: .light))
-                    .foregroundStyle(Color.appFG).frame(width: 54, height: 54)
-                    .strapLiquidGlassCircle()
-            }.buttonStyle(.plain).accessibilityLabel("Daily insights")
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 23, weight: .medium))
+                    .foregroundStyle(Color.appFG)
+                    .frame(width: 54, height: 54)
+                    .background(Color.appBG.opacity(0.97), in: Circle())
+                    .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.7))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Daily insights")
         }
-        .padding(.horizontal, 10).padding(.bottom, 4).padding(.top, 5)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 5)
+        .padding(.top, 5)
     }
 
 }
