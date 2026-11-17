@@ -4,7 +4,10 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## Design foundation
 - [x] **DONE (code)** Licensed Proxima Nova/DIN Pro font resolver present in `ios/Strap/Components.swift` (existing implementation).
-- [x] **DONE (code)** Charcoal theme alignment in `ios/Strap/Theme.swift` (commit `a408c3b`).
+- [x] **DONE (code)** Initial charcoal theme in `ios/Strap/Theme.swift` (commit `a408c3b`).
+- [x] **DONE (code)** Home/screen canvas gradient top changed from `#121518` to blue-charcoal `#253038`, retaining bottom `#121518` (commit `35eebc9`).
+- [ ] **VERIFY** Compare canvas gradient and contrast against the user's WHOOP/STRAP side-by-side Home screenshots on device; exact color match is not yet established.
+- [ ] **TODO** Calibrate Home metric card surface/gradient, bottom navigation translucency, sleep/strain ring tracks, and Daily Outlook purple-to-teal gradient from screenshots; do not alter metric-dependent Recovery zone colors to force a visual match.
 - [x] **DONE (code)** Navigation heading kerning (commit `f22d5d7`).
 - [ ] **VERIFY** Exact type hierarchy, text tracking, line height, card spacing and contrast against current WHOOP screenshots.
 - [ ] **TODO** Automated screenshot baselines and regression comparison.
@@ -21,7 +24,10 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## Health Monitor
 - [x] **DONE (code)** HR panel typography and validated-unavailable skin-temperature placeholder (commit `2f02a7e`).
+- [x] **DONE (code)** Health Monitor HR chart grid changed to more visible blue-grey `#667D88` at 17% opacity (commit `58671c6`).
 - [x] **DONE (code)** Removed redundant Connected banner above live HR chart to match reference (commit `31070f7`); BLE connection logic unchanged.
+- [ ] **VERIFY** Health Monitor chart grid/background colors against supplied screenshot on actual iPhone.
+- [ ] **TODO** Match Health Monitor chart height, line placement, typography, and metric tile surface colors to supplied reference without changing real BPM or sensor-derived measurements.
 - [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
 - [ ] **TODO** Accurate range/status visualizations; never invent SpO2, respiratory rate or skin temperature.
 
