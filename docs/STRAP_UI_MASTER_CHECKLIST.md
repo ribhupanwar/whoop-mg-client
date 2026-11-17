@@ -12,6 +12,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 ## Navigation and Home
 - [x] **DONE (code)** Bottom navigation styling (commit `3d402e7`).
 - [x] **DONE (code)** Custom tab VoiceOver labels, selected-state announcements and hints (commit `e50d9e1`).
+- [x] **DONE (code)** Daily Insights accessibility hint and stable UI-test identifier (commit `ee1393d`).
 - [ ] **VERIFY** Tab sizes, selected states, safe area, VoiceOver and tap targets on device.
 - [ ] **VERIFY** CI regression: run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; removed `.accessibilityElement(children: .ignore)` from custom tab Button in commit `bfed00f`; rerun required.
 - [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
