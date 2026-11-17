@@ -12,6 +12,7 @@ final class AppStore: ObservableObject {
         }
     }
     @Published private(set) var whoopImportedDays: [String: WhoopImportedDay] = [:]
+    @Published private(set) var whoopImportedWorkouts: [WhoopActivityHistory] = []
     @Published private(set) var whoopImportReadError: String?
     @Published private(set) var journalEntries: [String: JournalEntry] = [:]
     @Published private(set) var manualActivities: [ManualActivity] = []
@@ -150,7 +151,9 @@ final class AppStore: ObservableObject {
     /// sleep debt stays unknown instead of zero.
     func refreshWhoopImportedHistory() {
         do {
-            whoopImportedDays = WhoopImportedHistory.make(try WhoopCSVImport.loadSources(defaults: defaults))
+            let sources = try WhoopCSVImport.loadSources(defaults: defaults)
+            whoopImportedDays = WhoopImportedHistory.make(sources)
+            whoopImportedWorkouts = WhoopActivityHistory.make(sources["workouts"] ?? [])
             whoopImportReadError = nil
         } catch { whoopImportReadError = "WHOOP import data could not be read; original bytes preserved." }
     }

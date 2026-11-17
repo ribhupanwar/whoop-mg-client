@@ -23,6 +23,8 @@ struct TrainView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                NavigationLink("WHOOP workout history") { WhoopWorkoutHistoryView() }
+                    .padding(.vertical, 12)
                 inputsPanel
                 zonesPanel
                 NavigationLink(value: Route.gpsRun) {

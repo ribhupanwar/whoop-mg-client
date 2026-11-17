@@ -17,6 +17,8 @@ struct JournalView: View {
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                     .padding(.bottom, 10)
+                NavigationLink("Browse original WHOOP journal") { WhoopJournalHistoryView() }
+                    .padding(.bottom, 12)
                 questionsPanel
                 moodPanel
                 saveButton
