@@ -90,6 +90,10 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
     @Published private(set) var archivedLiveRRSamples: [LiveSample] = []
+    @Published private(set) var persistedLiveRRCount: Int?
+    private var pendingLiveRRRecords: [LiveRRRecord] = []
+    private var liveRRFlushWork: DispatchWorkItem?
+    private var liveRRMigrationComplete = false
     @Published private(set) var type40RRPackets = 0
     @Published private(set) var type40HRPackets = 0
     @Published private(set) var standardHRPackets = 0
@@ -400,6 +404,14 @@ final class BandLink: NSObject, ObservableObject {
         if let data = UserDefaults.standard.data(forKey: Keys.liveRRArchive),
            let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
             archivedLiveRRSamples = saved
+        }
+        archiveWriter.importLegacyLiveRR(archivedLiveRRSamples) { [weak self] result in
+            switch result {
+            case .success(let count):
+                self?.persistedLiveRRCount = count
+                self?.liveRRMigrationComplete = true
+            case .failure(let error): self?.historySyncError = "Live R-R archive migration failed; original preferences preserved: " + error.localizedDescription
+            }
         }
         lastCapturePath = UserDefaults.standard.string(forKey: Keys.capturePath)
         lastHistorySyncAt = UserDefaults.standard.object(forKey: "strap.history.lastComplete.v1") as? Date
@@ -949,12 +961,18 @@ final class BandLink: NSObject, ObservableObject {
         peripheral.readValue(for: batteryCharacteristic)
     }
 
-    // Preserve actual beat intervals outside manual live sessions. Keep one
-    // timestamped record per second and bound disk use to the latest hour.
+    // Keep a bounded one-hour analysis window, but retain every original RR
+    // notification in durable SQLite history without a raw-data retention cap.
     // Gaps must not be treated as consecutive beats for RMSSD.
-    private func archiveLiveRR(unix: Int, heartRate: Int, intervals: [Int]) {
+    private func archiveLiveRR(unix: Int, heartRate: Int, intervals: [Int], source: String) {
         guard !intervals.isEmpty else { return }
         let entry = LiveSample(unix: unix, heartRate: heartRate, rrIntervalsMS: intervals)
+        pendingLiveRRRecords.append(.received(entry, source: source))
+        if liveRRFlushWork == nil {
+            let work = DispatchWorkItem { [weak self] in self?.persistLiveRRArchive(force: true) }
+            liveRRFlushWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
+        }
         if archivedLiveRRSamples.last?.unix == unix {
             // Prefer the richer packet, not the last HR-only notification.
             if intervals.count > archivedLiveRRSamples[archivedLiveRRSamples.count - 1].rrIntervalsMS.count {
@@ -971,7 +989,20 @@ final class BandLink: NSObject, ObservableObject {
         guard !archivedLiveRRSamples.isEmpty,
               force || Date().timeIntervalSince(lastLiveRRSaveAt) >= 5 else { return }
         lastLiveRRSaveAt = Date()
-        preferencesWriter.write(archivedLiveRRSamples, forKey: Keys.liveRRArchive)
+        liveRRFlushWork?.cancel(); liveRRFlushWork = nil
+        let records = pendingLiveRRRecords
+        pendingLiveRRRecords = []
+        archiveWriter.persistLiveRR(records) { [weak self] result in
+            switch result {
+            case .success(let count):
+                self?.persistedLiveRRCount = count
+                self?.liveRRMigrationComplete = true
+            case .failure(let error): self?.historySyncError = "Live R-R save failed; pending records retained for retry: " + error.localizedDescription
+            }
+        }
+        // Never replace the original preference archive before migration is
+        // durable; it remains a second source if SQLite cannot be written.
+        if liveRRMigrationComplete { preferencesWriter.write(archivedLiveRRSamples, forKey: Keys.liveRRArchive) }
     }
 
     // Always collect a bounded, timestamped live HR graph, including outside
@@ -1589,9 +1620,18 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
-    func flushPersistedCaches() async {
+    func flushPersistedCaches() async throws {
+        persistLiveRRArchive(force: true)
         await withCheckedContinuation { continuation in
             preferencesWriter.flush { continuation.resume() }
+        }
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            archiveWriter.flush { result in
+                switch result {
+                case .success: continuation.resume(returning: ())
+                case .failure(let error): continuation.resume(throwing: error)
+                }
+            }
         }
     }
 
@@ -1695,7 +1735,7 @@ final class BandLink: NSObject, ObservableObject {
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
                 type40RRPackets += 1
-                archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: bpm, intervals: rrMS)
+                archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: bpm, intervals: rrMS, source: "WHOOP Type-40")
                 liveRRIntervalsMS = Array((liveRRIntervalsMS + rrMS).suffix(120))
             }
             if isLiveSession {
@@ -1767,7 +1807,7 @@ final class BandLink: NSObject, ObservableObject {
         lastMessage = nil
         if !reading.rrMS.isEmpty {
             standardRRPackets += 1
-            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS)
+            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
         guard isLiveSession else { return }

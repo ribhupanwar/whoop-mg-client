@@ -161,9 +161,9 @@ struct MoreView: View {
         exportingBackup = fullBackup
         preparingExport = true
         Task {
-            if fullBackup { await store.band.flushPersistedCaches() }
-            let preferences = UserDefaults.standard.dictionaryRepresentation()
             do {
+                if fullBackup { try await store.band.flushPersistedCaches() }
+                let preferences = UserDefaults.standard.dictionaryRepresentation()
                 let fm = FileManager.default
                 let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]

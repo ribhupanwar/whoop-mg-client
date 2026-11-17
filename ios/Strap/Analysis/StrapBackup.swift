@@ -137,6 +137,35 @@ enum StrapBackup {
             if result.count >= 1000 { try accept(result); result.removeAll(keepingCapacity: true) }
         }
     }
+    static func streamLiveRR(_ url: URL, accept: ([LiveRRRecord]) throws -> Void) throws {
+        var db: OpaquePointer?
+        guard sqlite3_open_v2(url.path, &db, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            sqlite3_close(db); throw failure("Cannot read live R-R backup history.")
+        }
+        defer { sqlite3_close(db) }
+        var check: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='live_rr_record'", -1, &check, nil) == SQLITE_OK else {
+            throw failure("Cannot inspect live R-R backup schema.")
+        }
+        let present = sqlite3_step(check) == SQLITE_ROW
+        sqlite3_finalize(check)
+        guard present else { return } // Backward-compatible with older backups.
+        var statement: OpaquePointer?
+        guard sqlite3_prepare_v2(db, "SELECT payload FROM live_rr_record ORDER BY unix, source_id", -1, &statement, nil) == SQLITE_OK else {
+            throw failure("Unsupported live R-R backup schema.")
+        }
+        defer { sqlite3_finalize(statement) }
+        var batch: [LiveRRRecord] = []
+        while true {
+            let status = sqlite3_step(statement)
+            if status == SQLITE_DONE { if !batch.isEmpty { try accept(batch) }; return }
+            guard status == SQLITE_ROW, let bytes = sqlite3_column_blob(statement, 0) else { throw failure("Unreadable live R-R backup record.") }
+            batch.append(try JSONDecoder().decode(LiveRRRecord.self,
+                from: Data(bytes: bytes, count: Int(sqlite3_column_bytes(statement, 0)))))
+            if batch.count >= 1000 { try accept(batch); batch.removeAll(keepingCapacity: true) }
+        }
+    }
+
     /// Crash recovery uses the SQLite commit marker to distinguish rollback
     /// from completion. On failure the app does not construct its live stores.
     static func activatePending(support: URL, documents: URL, defaults: UserDefaults = .standard) throws {
@@ -208,7 +237,9 @@ enum StrapBackup {
                 // live migration path: later startup must not reimport older
                 // backup packets over existing valid seconds.
 
-            }) {
+            }, liveRRStream: { accept in
+                if fm.fileExists(atPath: source.path) { try streamLiveRR(source, accept: accept) }
+            }, legacyLiveRRImported: preview.manifest.database?.liveRRRecords != nil) {
                 for file in files {
                     let target = destination(file.path)
                     try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
