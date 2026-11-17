@@ -17,9 +17,9 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Custom tab VoiceOver labels, selected-state announcements and hints (commit `e50d9e1`).
 - [x] **DONE (code)** Daily Insights accessibility hint and stable UI-test identifier (commit `ee1393d`).
 - [ ] **VERIFY** Tab sizes, selected states, safe area, VoiceOver and tap targets on device.
-- [ ] **VERIFY** CI regression: run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; removed `.accessibilityElement(children: .ignore)` from custom tab Button in commit `bfed00f`; rerun required.
+- [x] **DONE (verified CI)** Earlier run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; the custom tab accessibility change (`bfed00f`) was subsequently covered by successful consolidated UI tests in run `44120344273`. Physical-device VoiceOver and tap-target checks remain **VERIFY**.
 - [x] **DONE (code)** Missing-tab UI test now attaches the full accessibility hierarchy and launch screenshot on failure for actionable CI diagnosis (commit `f505c64`).
-- [ ] **VERIFY** Rerun tab responsiveness UI test and inspect XCTest attachments if `tab.home` still cannot be found; no passing rerun confirmed.
+- [x] **DONE (verified CI)** Tab responsiveness regression passed as part of the three UI tests in consolidated run `44120344273` at revision `20b7ad5`; physical-device tap targets/VoiceOver remain **VERIFY**.
 - [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
 - [ ] **TODO** Today activity card ordering, duplication, swipe actions and visual match.
 - [ ] **TODO** Trends: 7-day, 30-day and longer baseline views, only with real available data.
@@ -46,8 +46,18 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **TODO** Sleep Coach/strain target layouts.
 - [ ] **TODO** Profile, device, Settings and empty/loading/error states.
 
+## BLE decoding, RR and sensor fidelity
+- [x] **DONE (code)** Added synthetic Type-40 RR boundary, malformed-count and truncated-packet regression tests in `ios/StrapTests/LiveHeartRateStateTests.swift` (commit `8d03fa3`); no production decoder offsets or historical data were changed.
+- [x] **DONE (code)** Batch 1: added synthetic Type-40 tests for zero/invalid RR, malformed count, historical packet exclusion and invalid live HR (commit `9d47d8f`); no sensor decoding offsets or saved data changed.
+- [ ] **VERIFY** Run the latest `main` iOS XCTest/IPA GitHub Actions after commits `8d03fa3` and `9d47d8f`; no successful latest-HEAD run has been established.
+- [ ] **BLOCKED** Validate Type-40 RR units/offsets and V18 RR decoding against timestamped, CRC-checked WHOOP 5.0/MG BLE capture with independent beat reference; synthetic tests alone do not establish HRV accuracy.
+- [ ] **TODO** Investigate RR buffering/deduplication and HRV/RHR calculation against actual captured beat intervals, preserving missing data rather than inventing beats.
+- [ ] **VERIFY** V20/V21/V26 record handling against real-device fixtures before using these records for scored metrics. Do not send persistent Gen5 R22 configuration writes automatically; OpenStrap warns some settings may be irreversible.
+- [ ] **BLOCKED** Validate V18 sleep-state bits and SpO2 candidate mapping against independent overnight references before using them as authoritative sleep stages or clinical SpO2.
+
 ## Verification and safety
-- [ ] **VERIFY** GitHub Actions successful iOS build for latest main commit. GitHub commit combined-status endpoint returned no statuses; that is **not** evidence of a passing build.
+- [x] **DONE (verified CI)** Consolidated native Actions run [44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) succeeded for tested revision `20b7ad5c60d46464beabd315a6ce087a48888769`: 511 unit tests, 3 UI tests, simulator/device archive and IPA packaging (evidence in `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`; workflow job conclusion independently checked).
+- [ ] **VERIFY** Latest `main` HEAD after subsequent merges/commits is covered by a successful Actions build; passing an earlier revision is not proof for newer code.
 - [ ] **VERIFY** Install latest IPA and compare screenshots on target iPhone.
 - [ ] **TODO** Add accessible screenshot/layout tests and font checks.
 - [ ] **TODO** Validate export/backup before reinstall/uninstall; never delete historical records.
