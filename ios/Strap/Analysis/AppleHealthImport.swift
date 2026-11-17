@@ -67,9 +67,16 @@ enum AppleHealthImport {
                     timezone: sample.metadata?[HKMetadataKeyTimeZone] as? String, values: values, unit: unit))
             }
         }
+        return try merge(imported, defaults: defaults)
+    }
+
+    /// Stable HealthKit UUID identity; existing original source records win.
+    /// Cross-provider lookalikes require explicit shared identity, not time guesses.
+    static func merge(_ imported: [Record], defaults: UserDefaults = .standard) throws -> Int {
         var existing = Dictionary(try load(defaults: defaults).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let before = existing.count
         for row in imported where existing[row.id] == nil { existing[row.id] = row }
+        guard existing.count > before else { return 0 }
         let data = try JSONEncoder().encode(existing.values.sorted { $0.startUnix < $1.startUnix })
         defaults.set(data, forKey: key)
         return existing.count - before
