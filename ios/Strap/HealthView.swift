@@ -14,6 +14,7 @@ struct HealthView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                if !demo { connectionBanner }
                 hrPanel
                 fiveMetricGrid
                 if !demo {
@@ -42,20 +43,20 @@ struct HealthView: View {
 
     private var connectionBanner: some View {
         HStack(spacing: 12) {
-            Image(systemName: "applewatch")
+            Image(systemName: "waveform.path.ecg")
                 .font(.system(size: 20))
                 .foregroundStyle(Color.appMuted)
             Text(store.band.isConnected ? "CONNECTED" : "DISCONNECTED")
                 .font(StrapTypography.body(12, weight: .bold))
                 .tracking(1.2)
             Spacer()
-            Image(systemName: store.band.isConnected ? "link" : "xmark")
-                .foregroundStyle(store.band.isConnected ? Color.appSleep : Color.appMuted)
+            Image(systemName: store.band.isConnected ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
                 .font(.system(size: 19, weight: .bold))
         }
-        .padding(19)
-        .background(RoundedRectangle(cornerRadius: 15).fill(Color.black.opacity(0.72)))
-        .padding(.bottom, 18)
+        .padding(14)
+        .background(RoundedRectangle(cornerRadius: 15).fill(Color.appSurface))
+        .padding(.bottom, 12)
     }
 
     private var fiveMetricGrid: some View {
