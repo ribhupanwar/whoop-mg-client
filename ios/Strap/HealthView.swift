@@ -450,15 +450,12 @@ struct HealthView: View {
     }
 
     private var zoneText: String {
-        guard let hr = lastHR, let zones = store.liveZones else {
+        guard let hr = lastHR else { return "Waiting for live HR" }
+        guard let zones = store.liveZones else {
             return "zone needs resting + max HR"
         }
-        if let zone = zones.first(where: {
-            Double(hr) >= $0.lowerBPM && Double(hr) < $0.upperBPM
-        }) {
-            return zone.name
-        }
-        return "below Z1"
+        guard let zone = Karvonen.zoneIndex(heartRate: Double(hr), zones: zones) else { return "Above configured max HR" }
+        return "ZONE \(zone)"
     }
 
     private var yLabels: [String] {

@@ -194,13 +194,16 @@ enum LiveZones {
     static func seconds(samples: [LiveSample], zones: [HRZone]?) -> [Int] {
         guard let zones, !zones.isEmpty else { return [] }
         var buckets = [Int](repeating: 0, count: zones.count)
-        for (index, sample) in samples.enumerated() {
-            let next = index + 1 < samples.count ? samples[index + 1].unix : sample.unix + 1
-            let span = max(1, min(5, next - sample.unix))
+        let valid = samples.filter { (25...230).contains($0.heartRate) }
+        let ordered = Dictionary(valid.map { ($0.unix, $0) }, uniquingKeysWith: { _, last in last })
+            .values.sorted { $0.unix < $1.unix }
+        for (index, sample) in ordered.enumerated() {
+            let next = index + 1 < ordered.count ? ordered[index + 1].unix : sample.unix + 1
+            let gap = next - sample.unix
+            let span = gap > 30 ? 1 : max(1, min(5, gap))
             let hr = Double(sample.heartRate)
-            if let zoneIndex = zones.firstIndex(
-                where: { hr >= $0.lowerBPM && hr < $0.upperBPM }
-            ) {
+            if let index = Karvonen.zoneIndex(heartRate: hr, zones: zones),
+               let zoneIndex = zones.firstIndex(where: { $0.index == index }) {
                 buckets[zoneIndex] += span
             }
         }

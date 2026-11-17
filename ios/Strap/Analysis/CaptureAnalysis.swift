@@ -279,14 +279,18 @@ enum DailyAnalysis {
             let strainResting = awakeResting
             var strain: Double?
             var zoneSeconds: [Int]?
-            if let maxHR, let strainResting, maxHR > strainResting {
-                let zoneSamples = awakeDaySamples.filter { $0.wearing && (35...220).contains($0.heartRate) }
-                if !zoneSamples.isEmpty, let zones = Karvonen.zones(restingHR: strainResting, maxHR: maxHR) {
+            let zoneSamples = awakeDaySamples.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            // Zone calibration can use a verified overnight RHR even when the
+            // day has no five-minute quiet awake run. Strain keeps its own gate.
+            if let maxHR, let zoneResting = resting ?? awakeResting {
+                if !zoneSamples.isEmpty, let zones = Karvonen.zones(restingHR: zoneResting, maxHR: maxHR) {
                     let points = zoneSamples.map {
                         LiveSample(unix: $0.unix, heartRate: $0.heartRate, rrIntervalsMS: [])
                     }
                     zoneSeconds = LiveZones.seconds(samples: points, zones: zones)
                 }
+            }
+            if let maxHR, let strainResting, maxHR > strainResting {
                 strain = WhoopDerivedStrain.score(awakeDaySamples, restingHR: strainResting, maxHR: maxHR)
             }
             let steps = StepCounter.total(daySamples)
@@ -310,7 +314,9 @@ enum DailyAnalysis {
                     skinTemperatureC: temperature.celsius,
                     skinTemperatureSeconds: temperature.seconds,
                     skinTemperatureSource: temperature.celsius == nil ? nil : NightTemperature.source,
-                    oxygenCandidatePct: Recovery.spo2Summary(primaryRows).pct
+                    oxygenCandidatePct: Recovery.spo2Summary(primaryRows).pct,
+                    zoneCoverageStartUnix: zoneSeconds == nil ? nil : zoneSamples.first?.unix,
+                    zoneCoverageEndUnix: zoneSeconds == nil ? nil : zoneSamples.last.map { $0.unix + 1 }
                 )
             )
             if let day = result.last { analysisCache?.save(day, ticket: ticket) }
@@ -353,7 +359,9 @@ enum DailyAnalysis {
                 skinTemperatureC: replacesSleep ? fresh.skinTemperatureC : previous.skinTemperatureC,
                 skinTemperatureSeconds: replacesSleep ? fresh.skinTemperatureSeconds : previous.skinTemperatureSeconds,
                 skinTemperatureSource: replacesSleep ? fresh.skinTemperatureSource : previous.skinTemperatureSource,
-                oxygenCandidatePct: replacesSleep ? fresh.oxygenCandidatePct : previous.oxygenCandidatePct
+                oxygenCandidatePct: replacesSleep ? fresh.oxygenCandidatePct : previous.oxygenCandidatePct,
+                zoneCoverageStartUnix: fresh.zoneSeconds == nil ? previous.zoneCoverageStartUnix : fresh.zoneCoverageStartUnix,
+                zoneCoverageEndUnix: fresh.zoneSeconds == nil ? previous.zoneCoverageEndUnix : fresh.zoneCoverageEndUnix
             )
     }
 

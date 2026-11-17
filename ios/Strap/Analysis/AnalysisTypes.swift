@@ -307,6 +307,8 @@ struct DayMetrics: Identifiable, Equatable, Codable {
     var skinTemperatureSeconds: Int? = nil
     var skinTemperatureSource: String? = nil
     var oxygenCandidatePct: Double? = nil
+    var zoneCoverageStartUnix: Int? = nil
+    var zoneCoverageEndUnix: Int? = nil
 
     var id: String { dateKey }
 

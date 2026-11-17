@@ -63,9 +63,9 @@ final class LiveZonesTests: XCTestCase {
         XCTAssertEqual(buckets, [4, 1, 0, 0, 0])
     }
 
-    func testLongGapsAreClamped() {
+    func testLongGapsDoNotInventUnobservedZoneSeconds() {
         let buckets = LiveZones.seconds(samples: [sample(0, 125), sample(60, 140)], zones: zones)
-        XCTAssertEqual(buckets, [5, 1, 0, 0, 0])
+        XCTAssertEqual(buckets, [1, 1, 0, 0, 0])
     }
 
     func testBelowFirstZoneAndAboveMaxCountForNothing() {
@@ -74,6 +74,11 @@ final class LiveZonesTests: XCTestCase {
             zones: zones
         )
         XCTAssertEqual(buckets, [1, 0, 0, 0, 0])
+    }
+
+    func testReplayOrderAndExactMaximum() {
+        let rows = [sample(2, 190), sample(0, 125), sample(1, 140)]
+        XCTAssertEqual(LiveZones.seconds(samples: rows + rows, zones: zones), [1, 1, 0, 0, 1])
     }
 
     func testNoZonesGivesEmpty() {

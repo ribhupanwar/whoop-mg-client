@@ -775,7 +775,9 @@ final class BandLink: NSObject, ObservableObject {
                     skinTemperatureC: old.skinTemperatureC,
                     skinTemperatureSeconds: old.skinTemperatureSeconds,
                     skinTemperatureSource: old.skinTemperatureSource,
-                    oxygenCandidatePct: old.oxygenCandidatePct
+                    oxygenCandidatePct: old.oxygenCandidatePct,
+                    zoneCoverageStartUnix: old.zoneCoverageStartUnix,
+                    zoneCoverageEndUnix: old.zoneCoverageEndUnix
                 )
             } else {
                 byDate[row.dateKey] = DayMetrics(

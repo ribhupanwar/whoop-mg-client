@@ -340,8 +340,8 @@ final class AppStore: ObservableObject {
             : "Uth 2004 · your measured max HR"
     }
 
-    /// Recorded calendar-week zone time. Prefer raw day coverage and use live
-    /// sessions only for days without it, so one workout is not counted twice.
+    /// Recorded trailing seven calendar days, including known live-session
+    /// intervals outside the last raw sync. Overlaps are never counted twice.
     func weeklyZoneMinutes(high: Bool) -> Double? {
         let days = MetricTimeline.make(days: band.days, live: liveActivities, manual: [],
             caloriesByDay: [:], ending: Date(), count: 7, sleepNeedHours: settings.sleepNeedHours)

@@ -66,6 +66,18 @@ enum MetricTimeline {
             var zones: [Double]?
             if let raw = day?.zoneSeconds, raw.count == 5, raw.allSatisfy({ $0 >= 0 }) {
                 zones = raw.map(Double.init)
+                if let start = day?.zoneCoverageStartUnix, let end = day?.zoneCoverageEndUnix, start < end {
+                    // An afternoon live workout must not disappear behind an
+                    // earlier morning sync. Add only provably disjoint sessions;
+                    // legacy or partially overlapping coverage stays conservative.
+                    let outside = sessions.filter {
+                        ($0.endedUnix <= start || $0.startedUnix >= end)
+                            && $0.zoneSeconds.count == 5 && $0.zoneSeconds.allSatisfy { $0 >= 0 }
+                    }
+                    zones = (0..<5).map { index in
+                        Double(raw[index]) + outside.reduce(0.0) { $0 + Double($1.zoneSeconds[index]) }
+                    }
+                }
             } else {
                 let valid = sessions.filter { $0.zoneSeconds.count == 5 && $0.zoneSeconds.allSatisfy { $0 >= 0 } }
                 if !valid.isEmpty {

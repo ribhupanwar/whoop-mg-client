@@ -64,6 +64,19 @@ final class MetricTimelineTests: XCTestCase {
         XCTAssertEqual(timeline([], live: [record]).last?.value(.zonesLow), 200.0 / 60)
         XCTAssertNil(timeline([]).last?.value(.zonesLow))
     }
+    func testLiveZonesOutsideKnownRawCoverageRemainVisible() {
+        var source = day(10, zones: [60, 0, 0, 0, 0])
+        source.zoneCoverageStartUnix = 100
+        source.zoneCoverageEndUnix = 200
+        func record(_ start: Int, _ end: Int) -> LiveActivityRecord {
+            LiveActivityRecord(dateKey: source.dateKey, startedUnix: start, endedUnix: end,
+                meanHR: 140, maxHR: 160, beats: 200, hrv: .empty, zoneSeconds: [0, 120, 0, 0, 0])
+        }
+        XCTAssertEqual(timeline([source], live: [record(300, 420)]).last?.value(.zonesLow), 3)
+        XCTAssertEqual(timeline([source], live: [record(150, 270)]).last?.value(.zonesLow), 1)
+        XCTAssertEqual(timeline([source], live: [record(100, 200)]).last?.value(.zonesLow), 1)
+    }
+
     func testZeroAndUnknownZonesAreDistinct() {
         XCTAssertEqual(timeline([day(10, zones: [0, 0, 0, 0, 0])]).last?.value(.zonesHigh), 0)
         XCTAssertNil(timeline([day(10)]).last?.value(.zonesHigh))

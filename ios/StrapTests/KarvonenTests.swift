@@ -44,4 +44,14 @@ final class KarvonenTests: XCTestCase {
         XCTAssertEqual(Karvonen.agePredictedMaxHR(age: 30), 187.0, accuracy: 0.0001)
         XCTAssertEqual(Karvonen.agePredictedMaxHR(age: 40), 180.0, accuracy: 0.0001)
     }
+    func testZoneZeroAndMaximumHaveExplicitBoundaries() throws {
+        let zones = try XCTUnwrap(Karvonen.zones(restingHR: 60, maxHR: 190))
+        XCTAssertEqual(Karvonen.zoneIndex(heartRate: 80, zones: zones), 0)
+        XCTAssertEqual(Karvonen.zoneIndex(heartRate: 125, zones: zones), 1)
+        XCTAssertEqual(Karvonen.zoneIndex(heartRate: 138, zones: zones), 2)
+        XCTAssertEqual(Karvonen.zoneIndex(heartRate: 190, zones: zones), 5)
+        XCTAssertNil(Karvonen.zoneIndex(heartRate: 200, zones: zones))
+        XCTAssertNil(Karvonen.zoneIndex(heartRate: .nan, zones: zones))
+        XCTAssertNil(Karvonen.zoneIndex(heartRate: 0, zones: zones))
+    }
 }

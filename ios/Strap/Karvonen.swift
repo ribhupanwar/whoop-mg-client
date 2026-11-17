@@ -23,6 +23,16 @@ enum Karvonen {
 
     static let uses = ["Recovery", "Easy aerobic", "Tempo", "Threshold", "VO2 max"]
 
+    /// Zone 0 is below 50% HR reserve. The configured maximum belongs to Z5;
+    /// an above-maximum reading is not silently mislabeled as Zone 0.
+    static func zoneIndex(heartRate: Double, zones: [HRZone]) -> Int? {
+        guard heartRate.isFinite, heartRate > 0, let first = zones.first,
+              let last = zones.last, heartRate <= last.upperBPM else { return nil }
+        if heartRate < first.lowerBPM { return 0 }
+        if heartRate == last.upperBPM { return last.index }
+        return zones.first { heartRate >= $0.lowerBPM && heartRate < $0.upperBPM }?.index
+    }
+
     /// Returns nil when the inputs cannot produce meaningful zones.
     static func zones(restingHR: Double, maxHR: Double) -> [HRZone]? {
         guard restingHR.isFinite, maxHR.isFinite, restingHR > 0, maxHR > restingHR else {
