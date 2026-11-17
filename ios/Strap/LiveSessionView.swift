@@ -14,6 +14,12 @@ struct LiveSessionView: View {
     var body: some View {
         NavigationStack {
             Screen {
+                if pendingRecord != nil {
+                    Panel {
+                        Text("Stopped session awaiting history save")
+                        if let file = store.liveRecoveryURL { ShareLink("Save recovery copy", item: file) }
+                    }
+                }
                 if store.band.isConnected {
                     TimelineView(.periodic(from: .now, by: 1)) { context in
                         VStack(alignment: .leading, spacing: 0) {
@@ -195,6 +201,7 @@ struct LiveSessionView: View {
     }
 
     private func elapsedSeconds(now: Date) -> Int {
+        if let pendingRecord { return pendingRecord.seconds }
         guard let start = store.band.sessionStartedUnix else { return 0 }
         return max(0, Int(now.timeIntervalSince1970) - start)
     }
