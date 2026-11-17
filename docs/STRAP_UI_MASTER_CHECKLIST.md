@@ -49,7 +49,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 ## BLE decoding, RR and sensor fidelity
 - [x] **DONE (code)** Added synthetic Type-40 RR boundary, malformed-count and truncated-packet regression tests in `ios/StrapTests/LiveHeartRateStateTests.swift` (commit `8d03fa3`); no production decoder offsets or historical data were changed.
 - [x] **DONE (code)** Batch 1: added synthetic Type-40 tests for zero/invalid RR, malformed count, historical packet exclusion and invalid live HR (commit `9d47d8f`); no sensor decoding offsets or saved data changed.
-- [ ] **VERIFY** Run the latest `main` iOS XCTest/IPA GitHub Actions after commits `8d03fa3` and `9d47d8f`; no successful latest-HEAD run has been established.
+- [x] **DONE (verified CI)** Protocol test matrix on `main` at `b991e13` succeeded on rerun attempt 2: all six Python 3.11/3.13 jobs across macOS, Windows and Ubuntu passed ([run 44141804851](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44141804851)). Synthetic RR safety tests are covered; real-device RR accuracy remains **BLOCKED** below.
+- [x] **DONE (verified CI)** Native iOS workflow at production revision `9d47d8f` succeeded ([run 44141781672](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44141781672)); later `b991e13` is a checklist-only commit, not a production code change.
 - [ ] **BLOCKED** Validate Type-40 RR units/offsets and V18 RR decoding against timestamped, CRC-checked WHOOP 5.0/MG BLE capture with independent beat reference; synthetic tests alone do not establish HRV accuracy.
 - [ ] **TODO** Investigate RR buffering/deduplication and HRV/RHR calculation against actual captured beat intervals, preserving missing data rather than inventing beats.
 - [ ] **VERIFY** V20/V21/V26 record handling against real-device fixtures before using these records for scored metrics. Do not send persistent Gen5 R22 configuration writes automatically; OpenStrap warns some settings may be irreversible.
@@ -57,7 +58,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 ## Verification and safety
 - [x] **DONE (verified CI)** Consolidated native Actions run [44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) succeeded for tested revision `20b7ad5c60d46464beabd315a6ce087a48888769`: 511 unit tests, 3 UI tests, simulator/device archive and IPA packaging (evidence in `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`; workflow job conclusion independently checked).
-- [ ] **VERIFY** Latest `main` HEAD after subsequent merges/commits is covered by a successful Actions build; passing an earlier revision is not proof for newer code.
+- [ ] **VERIFY** Obtain a successful native iOS Actions build at the exact latest `main` HEAD (the successful run `44141781672` tested `9d47d8f`; later `b991e13` changed documentation only). New code merges require a new native run.
 - [ ] **VERIFY** Install latest IPA and compare screenshots on target iPhone.
 - [ ] **TODO** Add accessible screenshot/layout tests and font checks.
 - [ ] **TODO** Validate export/backup before reinstall/uninstall; never delete historical records.
