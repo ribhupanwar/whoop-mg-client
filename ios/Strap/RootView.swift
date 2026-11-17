@@ -97,10 +97,15 @@ struct RootView: View {
         .safeAreaInset(edge: .bottom) { floatingNavigation }
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { store.band.resumeHistoryProcessing() }
+            if phase == .active {
+                // Count app launches even when returning to Health, Train, Plan or More.
+                AppOpenDayTracker.recordOpen()
+                store.band.resumeHistoryProcessing()
+            }
             else { store.band.persistLiveRRArchive(force: true) }
         }
         .onAppear {
+            AppOpenDayTracker.recordOpen()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if args.contains("--preview-health-monitor") { homePath = [.health] }
