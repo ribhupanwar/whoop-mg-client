@@ -1281,6 +1281,8 @@ final class DailyMetricQualityTests: XCTestCase {
         XCTAssertEqual(day.hrvWindowSeconds, 0)
         XCTAssertFalse(day.sleepDurationReliable ?? true)
         XCTAssertNil(day.strain, "Exercise load still needs its own quiet awake reference")
+        XCTAssertGreaterThan(try XCTUnwrap(day.zoneSeconds).reduce(0, +), 0,
+                             "Verified overnight RHR can calibrate zones without an awake quiet run")
     }
 }
 
