@@ -187,6 +187,8 @@ struct RootView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Daily insights")
+            .accessibilityHint("Open today's recorded recovery, HRV, resting heart rate and journal")
+            .accessibilityIdentifier("nav.dailyInsights")
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 5)
