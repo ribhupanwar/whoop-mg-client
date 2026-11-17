@@ -46,6 +46,14 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **TODO** Sleep Coach/strain target layouts.
 - [ ] **TODO** Profile, device, Settings and empty/loading/error states.
 
+## BLE decoding, RR and sensor fidelity
+- [x] **DONE (code)** Added synthetic Type-40 RR boundary, malformed-count and truncated-packet regression tests in `ios/StrapTests/LiveHeartRateStateTests.swift` (commit `8d03fa3`); no production decoder offsets or historical data were changed.
+- [ ] **VERIFY** Run the latest `main` iOS XCTest/IPA GitHub Actions after commit `8d03fa3`; PR-filtered workflow lookup returned no runs, which is not evidence of success or failure.
+- [ ] **BLOCKED** Validate Type-40 RR units/offsets and V18 RR decoding against timestamped, CRC-checked WHOOP 5.0/MG BLE capture with independent beat reference; synthetic tests alone do not establish HRV accuracy.
+- [ ] **TODO** Investigate RR buffering/deduplication and HRV/RHR calculation against actual captured beat intervals, preserving missing data rather than inventing beats.
+- [ ] **VERIFY** V20/V21/V26 record handling against real-device fixtures before using these records for scored metrics. Do not send persistent Gen5 R22 configuration writes automatically; OpenStrap warns some settings may be irreversible.
+- [ ] **BLOCKED** Validate V18 sleep-state bits and SpO2 candidate mapping against independent overnight references before using them as authoritative sleep stages or clinical SpO2.
+
 ## Verification and safety
 - [x] **DONE (verified CI)** Consolidated native Actions run [44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) succeeded for tested revision `20b7ad5c60d46464beabd315a6ce087a48888769`: 511 unit tests, 3 UI tests, simulator/device archive and IPA packaging (evidence in `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`; workflow job conclusion independently checked).
 - [ ] **VERIFY** Latest `main` HEAD after subsequent merges/commits is covered by a successful Actions build; passing an earlier revision is not proof for newer code.
