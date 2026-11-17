@@ -831,7 +831,10 @@ struct HomeView: View {
 
                 VStack(alignment: .trailing, spacing: 3) {
                     Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
-                        .font(StrapTypography.body(21, weight: .medium))
+                        .font(StrapTypography.metric(24, weight: .bold))
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                         .foregroundStyle(Color.appFG)
                     Text(WakeAlarm.isEnabled ? "ALARM ON\nEXACT TIME" : "ALARM OFF\nEXACT TIME")
                         .font(StrapTypography.body(9.5))
