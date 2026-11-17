@@ -37,10 +37,9 @@ struct ImportHistoryView: View {
         .task {
             do {
                 var loaded: [(String, [WhoopCSVImport.SupplementalRecord])] = []
-                for category in ["physiological_cycles", "sleeps", "workouts", "journal_entries"] {
-                    if let data = UserDefaults.standard.data(forKey: "strap.whoop.import." + category + ".v1") {
-                        loaded.append((category, try JSONDecoder().decode([WhoopCSVImport.SupplementalRecord].self, from: data)))
-                    }
+                let sources = try WhoopCSVImport.loadSources()
+                for category in WhoopCSVImport.sourceCategories {
+                    if let records = sources[category] { loaded.append((category, records)) }
                 }
                 sections = loaded
                 status = "Apple Health: \(try AppleHealthImport.load().count) retained source samples."

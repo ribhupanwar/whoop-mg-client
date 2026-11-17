@@ -11,6 +11,8 @@ final class AppStore: ObservableObject {
             band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
         }
     }
+    @Published private(set) var whoopImportedDays: [String: WhoopImportedDay] = [:]
+    @Published private(set) var whoopImportReadError: String?
     @Published private(set) var journalEntries: [String: JournalEntry] = [:]
     @Published private(set) var manualActivities: [ManualActivity] = []
     @Published private(set) var liveActivities: [LiveActivityRecord] = []
@@ -62,6 +64,7 @@ final class AppStore: ObservableObject {
         self.manualActivities = activities.manualActivities()
         self.liveActivities = activities.liveActivities()
         self.detectedBandActivities = activities.detectedActivities()
+        refreshWhoopImportedHistory()
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--design-preview") {
             self.settings.designPreview = true
@@ -145,16 +148,34 @@ final class AppStore: ObservableObject {
 
     /// Detected nights from captured history. Empty until a capture lands, so
     /// sleep debt stays unknown instead of zero.
-    var recordedNights: [RecordedNight] {
-        band.days.compactMap { day in
-            guard !band.isAnalyzingHistory, day.sleepDurationReliable == true,
-                  day.sleepHours.isFinite, day.sleepHours >= 0 else { return nil }
-            return RecordedNight(
-                dateKey: day.dateKey,
-                neededHours: settings.sleepNeedHours,
-                actualHours: day.sleepHours
-            )
+    func refreshWhoopImportedHistory() {
+        do {
+            whoopImportedDays = WhoopImportedHistory.make(try WhoopCSVImport.loadSources(defaults: defaults))
+            whoopImportReadError = nil
+        } catch { whoopImportReadError = "WHOOP import data could not be read; original bytes preserved." }
+    }
+
+    /// Display-only union. It never writes WHOOP fields over band history.
+    var historyDays: [DayMetrics] {
+        var result = Dictionary(band.days.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
+        for (key, imported) in whoopImportedDays {
+            result[key] = imported.fillingDisplayGaps(in: result[key])
         }
+        return result.values.sorted { $0.dateKey < $1.dateKey }
+    }
+
+    var recordedNights: [RecordedNight] {
+        var result: [String: RecordedNight] = [:]
+        for day in band.days {
+            guard !band.isAnalyzingHistory, let hours = day.reliableSleepHours else { continue }
+            result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: settings.sleepNeedHours, actualHours: hours)
+        }
+        let protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
+        for (key, day) in whoopImportedDays where result[key] == nil && !protected.contains(key) {
+            guard let hours = day.sleepHours else { continue }
+            result[key] = RecordedNight(dateKey: key, neededHours: day.sleepNeedHours ?? settings.sleepNeedHours, actualHours: hours)
+        }
+        return result.values.sorted { $0.dateKey < $1.dateKey }
     }
 
     func connectBand() {
@@ -307,7 +328,7 @@ final class AppStore: ObservableObject {
         settings.restingHROverride ?? latestOvernightRestingHR
     }
 
-    var recordedDayCount: Int { band.days.count }
+    var recordedDayCount: Int { historyDays.count }
 
     var hasRecoveryBaseline: Bool {
         (band.baseline?.days ?? 0) >= Recovery.minBaselineDays

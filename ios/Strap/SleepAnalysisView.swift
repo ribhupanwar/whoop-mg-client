@@ -6,6 +6,7 @@ import SwiftUI
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showMetricInfo = false
+    @State private var historyWeekOffset = 0
     @State private var sleepExportURL: URL?
     @State private var sleepExportError: String?
     @State private var preparingSleepExport = false
@@ -844,6 +845,14 @@ struct SleepAnalysisView: View {
 
     private var weeklyPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Button("Previous week") { historyWeekOffset -= 1 }
+                Spacer()
+                Button("Next week") { historyWeekOffset = min(0, historyWeekOffset + 1) }.disabled(historyWeekOffset == 0)
+            }.font(StrapTypography.body(12)).padding(.vertical, 10)
+            if !store.whoopImportedDays.isEmpty {
+                Hint("WHOOP imported sleep fills dates without a local night. Reported stage totals are shown as totals, never as an invented timeline.")
+            }
             Text("Weekly Trends").font(StrapTypography.body(20, weight: .semibold))
                 .padding(.vertical, 16)
             weeklyCard("Sleep performance") {
@@ -908,7 +917,7 @@ struct SleepAnalysisView: View {
             let formatter = DateFormatter(); formatter.dateFormat = "yyyy-MM-dd"
             return formatter.date(from: night.dateKey)
         } ?? Date())
-        return (-6...0).compactMap { Calendar.current.date(byAdding: .day, value: $0, to: Calendar.current.startOfDay(for: end)) }
+        return (-6...0).compactMap { Calendar.current.date(byAdding: .day, value: $0 + historyWeekOffset * 7, to: Calendar.current.startOfDay(for: end)) }
     }
 
     private func dayKey(_ date: Date) -> String { JournalStore.dayKey(for: date) }
@@ -931,11 +940,14 @@ struct SleepAnalysisView: View {
     }
     private var weekPerformance: [Double?] {
         demo ? SampleData.weeklySleepPerformance.map(Optional.some) : weekDates.map { date in
-            store.band.days.first { $0.dateKey == dayKey(date) }?.sleepPerformancePct
+            store.historyDays.first { $0.dateKey == dayKey(date) }?.sleepPerformancePct
         }
     }
     private var weekEfficiency: [Double?] {
-        demo ? SampleData.weeklyEfficiency.map(Optional.some) : weekSessions.map { $0?.efficiencyPct }
+        demo ? SampleData.weeklyEfficiency.map(Optional.some) : weekDates.enumerated().map { index, date in
+            if let session = weekSessions[index] { return session.efficiencyPct }
+            return store.whoopImportedDays[dayKey(date)]?.efficiency
+        }
     }
     private var weekConsistency: [Double?] {
         if demo { return SampleData.weeklyConsistency.map(Optional.some) }
@@ -943,7 +955,9 @@ struct SleepAnalysisView: View {
             let spans = (store.band.summary?.sleepSessions ?? []).filter {
                 $0.isComplete && $0.endUnix < Int(date.addingTimeInterval(86400).timeIntervalSince1970)
             }.suffix(7).map { NightSpan(startUnix: $0.startUnix, endUnix: $0.endUnix) }
-            guard weekSessions[weekDates.firstIndex(of: date) ?? 0] != nil else { return nil }
+            guard weekSessions[weekDates.firstIndex(of: date) ?? 0] != nil else {
+                return store.whoopImportedDays[dayKey(date)]?.consistency
+            }
             return SleepReport.consistency(nights: spans).pct
         }
     }
@@ -953,17 +967,26 @@ struct SleepAnalysisView: View {
             let rem = [1.25, 1.30, 1.38, 1.15, 1.33, 1.40, 1.55]
             return (stage == .deep ? deep : rem).map(Optional.some)
         }
-        return weekSessions.map { session in
-            guard let session, session.isComplete else { return nil }
-            return (stage == .deep ? session.staging.deepMinutes : session.staging.remMinutes) / 60
+        return weekDates.enumerated().map { index, date in
+            if let session = weekSessions[index] {
+                guard session.isComplete else { return nil }
+                return (stage == .deep ? session.staging.deepMinutes : session.staging.remMinutes) / 60
+            }
+            let imported = store.whoopImportedDays[dayKey(date)]
+            return (stage == .deep ? imported?.deepMinutes : imported?.remMinutes).map { $0 / 60 }
         }
     }
     private var weekBedWake: [(Double, Double)?] {
         if demo { return SampleData.weeklyBedWake.map { ($0.0 + 180, $0.1 + 180) } }
-        return weekSessions.map { session in
-            guard let session else { return nil }
-            let bed = Double((SleepReport.minutesOfDay(session.startUnix) - 1080 + 1440) % 1440)
-            return (bed, bed + session.timeInBedHours * 60)
+        return weekDates.enumerated().map { index, date in
+            if let session = weekSessions[index] {
+                let bed = Double((SleepReport.minutesOfDay(session.startUnix) - 1080 + 1440) % 1440)
+                return (bed, bed + session.timeInBedHours * 60)
+            }
+            guard let imported = store.whoopImportedDays[dayKey(date)], let onset = imported.onsetClockMinutes,
+                  let duration = imported.timeInBedMinutes else { return nil }
+            let bed = (onset - 1080 + 1440).truncatingRemainder(dividingBy: 1440)
+            return (bed, bed + duration)
         }
     }
     private func bedClock(_ minutes: Double) -> String {

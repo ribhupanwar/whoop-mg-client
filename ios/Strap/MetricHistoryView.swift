@@ -49,7 +49,8 @@ struct MetricHistoryView: View {
             ending: ending,
             count: window,
             sleepNeedHours: store.settings.sleepNeedHours,
-            maxHR: store.settings.ageConfirmed ? (store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)) : nil
+            maxHR: store.settings.ageConfirmed ? (store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)) : nil,
+            imported: store.whoopImportedDays
         )
     }
 
@@ -172,11 +173,14 @@ struct MetricHistoryView: View {
                         HStack {
                             Text(day.date.formatted(date: .abbreviated, time: .omitted))
                             Spacer()
-                            Text(selectedMetric.text(day.value(selectedMetric))).font(StrapTypography.metric(14, weight: .regular))
+                            Text((day.usesWHOOP(selectedMetric) ? "WHOOP · " : "") + selectedMetric.text(day.value(selectedMetric))).font(StrapTypography.metric(14, weight: .regular))
                         }.font(StrapTypography.body(12)).padding(.vertical, 9)
                         Divider().overlay(Color.appLine)
                     }
                     Hint(historyNote)
+                    if points.contains(where: { $0.usesWHOOP(selectedMetric) }) {
+                        Hint("WHOOP imported values fill gaps on their original dates; existing local measurements take precedence.")
+                    }
                     Hint(dayOffset == 0 ? "Average excludes today. Missing measurements are not filled in." : "Only saved measurements are included.")
                 }.font(StrapTypography.body(12)).tint(Color.appMuted).padding(.top, 28)
             }.foregroundStyle(Color.appFG)

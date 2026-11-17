@@ -15,19 +15,34 @@ struct MetricDay: Identifiable {
     let calories: Double?
     let strength: Double?
     var vo2: Double? = nil
+    var imported: WhoopImportedDay? = nil
+    var allowsImportedSleep: Bool { recorded?.sleepStartUnix == nil }
+    func usesWHOOP(_ metric: DetailMetric) -> Bool {
+        guard imported != nil else { return false }
+        switch metric {
+        case .recovery: return recovery == nil && imported?.recovery != nil
+        case .strain: return recorded?.strain == nil && imported?.strain != nil
+        case .sleepPerformance: return allowsImportedSleep && recorded?.sleepPerformancePct == nil && imported?.performance != nil
+        case .hrv: return recorded?.lnRMSSD == nil && imported?.hrvMS != nil
+        case .rhr: return recorded?.restingHR == nil && imported?.restingHR != nil
+        case .respiration: return recorded?.respiratoryRate == nil && imported?.respiratoryRate != nil
+        case .calories: return calories == nil && imported?.energyKcal != nil
+        default: return false
+        }
+    }
     var id: String { key }
 
     func value(_ metric: DetailMetric) -> Double? {
         let result: Double?
         switch metric {
-        case .strain: result = recorded?.strain
-        case .recovery: result = recovery
-        case .hrv: result = recorded?.lnRMSSD.map { exp($0) }
-        case .rhr: result = recorded?.restingHR
-        case .respiration: result = recorded?.respiratoryRate
-        case .sleepPerformance: result = recorded?.sleepPerformancePct
+        case .strain: result = recorded?.strain ?? imported?.strain
+        case .recovery: result = recovery ?? imported?.recovery
+        case .hrv: result = recorded?.lnRMSSD.map { exp($0) } ?? imported?.hrvMS
+        case .rhr: result = recorded?.restingHR ?? imported?.restingHR
+        case .respiration: result = recorded?.respiratoryRate ?? imported?.respiratoryRate
+        case .sleepPerformance: result = recorded?.sleepPerformancePct ?? (allowsImportedSleep ? imported?.performance : nil)
         case .steps: result = recorded?.steps.map(Double.init)
-        case .calories: result = calories
+        case .calories: result = calories ?? imported?.energyKcal
         case .strength: result = strength
         case .vo2: result = vo2
         case .zonesLow: result = zones.map { $0.prefix(3).reduce(0, +) / 60 }
@@ -46,7 +61,8 @@ struct MetricDay: Identifiable {
 enum MetricTimeline {
     static func make(days: [DayMetrics], live: [LiveActivityRecord], manual: [ManualActivity],
                      caloriesByDay: [String: Double], ending: Date, count: Int = 37,
-                     sleepNeedHours: Double, maxHR: Double? = nil, calendar: Calendar = .current) -> [MetricDay] {
+                     sleepNeedHours: Double, maxHR: Double? = nil,
+                     imported: [String: WhoopImportedDay] = [:], calendar: Calendar = .current) -> [MetricDay] {
         let byKey = Dictionary(days.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
         let ordered = byKey.values.sorted { $0.dateKey < $1.dateKey }
         let liveByDay = Dictionary(grouping: live, by: \.dateKey)
@@ -93,7 +109,7 @@ enum MetricTimeline {
                 day?.restingHR.flatMap { resting in Hrv.vo2Max(maxHR: maximum, restingHR: resting) }
             } : nil
             return MetricDay(date: date, key: key, recorded: day, recovery: recovery,
-                             zones: zones, calories: caloriesByDay[key], strength: strength, vo2: vo2)
+                             zones: zones, calories: caloriesByDay[key], strength: strength, vo2: vo2, imported: imported[key])
         }
     }
 

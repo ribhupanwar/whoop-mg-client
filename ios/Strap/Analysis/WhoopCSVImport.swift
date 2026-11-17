@@ -33,8 +33,7 @@ enum WhoopCSVImport {
         func column(_ candidates: [String]) -> Int? {
             names.firstIndex(where: { candidates.contains($0) })
         }
-        guard let date = column(["wakeonset"]) ?? column(["cycleendtime", "cycleend"])
-                ?? column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)),
+        guard let date = column(["wakeonset"]) ?? column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)) ?? column(["cycleendtime", "cycleend"]),
               let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms", "heartratevariabilityrmssd", "heartratevariabilityrmssdms", "heartratevariabilityms", "heartratevariabilitymilliseconds"].map(normalized)),
               let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm", "restingheartratebeatsperminute"].map(normalized))
         else { throw ImportError.unsupportedColumns }
@@ -62,29 +61,56 @@ enum WhoopCSVImport {
     static func importSupplemental(_ data: Data, source: String,
                                    defaults: UserDefaults = .standard,
                                    fromDate: String? = nil, throughDate: String? = nil) throws -> Int {
+        let rows = try parseSupplemental(data, source: source)
+        let old = try loadSources(defaults: defaults)
+        let key = source.lowercased()
+        let encoder = JSONEncoder()
+        let merged = try mergeSupplemental(rows, existing: old[key].map { try encoder.encode($0) },
+                                          fromDate: fromDate, throughDate: throughDate)
+        var updated = old
+        updated[key] = try JSONDecoder().decode([SupplementalRecord].self, from: merged.data)
+        try saveSources(updated, defaults: defaults)
+        return merged.count
+    }
+
+    static let sourceCategories = ["physiological_cycles", "sleeps", "workouts", "journal_entries"]
+    static let bundleKey = "strap.whoop.import.bundle.v1"
+
+    static func loadSources(defaults: UserDefaults = .standard) throws -> [String: [SupplementalRecord]] {
+        var result: [String: [SupplementalRecord]] = [:]
+        if let data = defaults.data(forKey: bundleKey) {
+            result = try JSONDecoder().decode([String: [SupplementalRecord]].self, from: data)
+        }
+        for category in sourceCategories where result[category] == nil {
+            if let data = defaults.data(forKey: "strap.whoop.import." + category + ".v1") {
+                result[category] = try JSONDecoder().decode([SupplementalRecord].self, from: data)
+            }
+        }
+        return result
+    }
+
+    static func saveSources(_ sources: [String: [SupplementalRecord]], defaults: UserDefaults = .standard) throws {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        // A whole batch becomes visible through one preference value. Keep the
+        // original legacy keys intact for recovery and older export evidence.
+        let data = try encoder.encode(sources)
+        defaults.set(data, forKey: bundleKey)
+    }
+
+    static func parseSupplemental(_ data: Data, source: String) throws -> [SupplementalRecord] {
         let category = source.lowercased()
-        guard ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains(category) else {
-            throw ImportError.unsupportedColumns
-        }
-        let string = String(data: data, encoding: .utf8)
-            ?? String(data: data, encoding: .utf16) ?? ""
+        guard sourceCategories.contains(category) else { throw ImportError.unsupportedColumns }
+        let string = String(data: data, encoding: .utf8) ?? String(data: data, encoding: .utf16) ?? ""
         let records = try csvRecords(string)
-        guard let headers = records.first, !headers.isEmpty else {
-            throw ImportError.unsupportedColumns
-        }
-        guard Set(headers).count == headers.count,
+        guard let headers = records.first, !headers.isEmpty,
+              Set(headers).count == headers.count,
               headers.allSatisfy({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
               records.dropFirst().allSatisfy({ $0.count <= headers.count }) else { throw ImportError.unsupportedColumns }
-        let rows = records.dropFirst().filter { !$0.isEmpty }.map { values in
-            SupplementalRecord(source: category, fields: Dictionary(zip(headers, values).map { ($0.0, $0.1) },
-                uniquingKeysWith: { _, latest in latest }))
+        let rows = records.dropFirst().map { values in
+            SupplementalRecord(source: category, fields: Dictionary(zip(headers, values), uniquingKeysWith: { _, last in last }))
         }
         guard !rows.isEmpty else { throw ImportError.noValidRows }
-        let key = "strap.whoop.import." + category + ".v1"
-        let added = try mergeSupplemental(rows, existing: defaults.data(forKey: key),
-                                         fromDate: fromDate, throughDate: throughDate)
-        defaults.set(added.data, forKey: key)
-        return added.count
+        return rows
     }
 
     /// Stable content identity preserves original columns/timestamps and conflicting
@@ -98,20 +124,23 @@ enum WhoopCSVImport {
         var seen = Set(try records.map { PersistenceDiagnostics.digest(try encoder.encode($0)) })
         var added = 0
         for row in incoming {
-            if fromDate != nil || throughDate != nil {
+            guard inRange(row, fromDate: fromDate, throughDate: throughDate) else { continue }
+            let identity = PersistenceDiagnostics.digest(try encoder.encode(row))
+            if seen.insert(identity).inserted { records.append(row); added += 1 }
+        }
+        return (try encoder.encode(records), added)
+    }
+
+    static func inRange(_ row: SupplementalRecord, fromDate: String?, throughDate: String?) -> Bool {
+        if fromDate == nil && throughDate == nil { return true }
                 let candidates = row.source == "sleeps" ? ["sleeponset", "cyclestarttime", "date"] :
                     (row.source == "workouts" ? ["workoutstarttime", "cyclestarttime", "date"] : ["cyclestarttime", "date"])
                 let date = candidates.lazy.compactMap { wanted in
                     row.fields.first { key, _ in key.lowercased().filter { $0.isLetter || $0.isNumber } == wanted }
                         .flatMap { dateKey($0.value) }
                 }.first
-                guard let date, fromDate.map({ date >= $0 }) ?? true,
-                      throughDate.map({ date <= $0 }) ?? true else { continue }
-            }
-            let identity = PersistenceDiagnostics.digest(try encoder.encode(row))
-            if seen.insert(identity).inserted { records.append(row); added += 1 }
-        }
-        return (try encoder.encode(records), added)
+                guard let date else { return false }
+                return (fromDate.map { date >= $0 } ?? true) && (throughDate.map { date <= $0 } ?? true)
     }
 
     private static func dateKey(_ raw: String) -> String? {
@@ -142,6 +171,8 @@ enum WhoopCSVImport {
     private static func csvRecords(_ text: String) throws -> [[String]] {
         var records: [[String]] = [], row: [String] = [], field = ""
         var quoted = false
+        // Swift represents CRLF as one Character. Recognize it explicitly
+        // while preserving embedded CRLF inside quoted source notes.
         let chars = Array(text)
         var i = 0
         while i < chars.count {
@@ -152,7 +183,7 @@ enum WhoopCSVImport {
                 } else { quoted.toggle() }
             } else if c == "," && !quoted {
                 row.append(field); field = ""
-            } else if (c == "\n" || c == "\r") && !quoted {
+            } else if (c == "\n" || c == "\r" || c == "\r\n") && !quoted {
                 if c == "\r" && i + 1 < chars.count && chars[i + 1] == "\n" { i += 1 }
                 row.append(field); field = ""
                 if row.contains(where: { !$0.isEmpty }) { records.append(row) }
