@@ -44,7 +44,6 @@ final class StrapBackupTests: XCTestCase {
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [100, 201]])
         XCTAssertEqual(try Data(contentsOf: restoredDocuments.appendingPathComponent("captures/fixture.jsonl")), captured)
         // A repeat import must retain later valid raw records and manual edits.
-        let newer = sample(100, hr: 70)
         // Use a separate second in the current container as well.
         try restored.commit([sample(300)])
         defaults.set(["100": [110, 190]], forKey: SleepCorrectionStore.defaultsKey)
@@ -52,7 +51,6 @@ final class StrapBackupTests: XCTestCase {
         try StrapBackup.activatePending(support: destination, documents: restoredDocuments, defaults: defaults)
         XCTAssertEqual(try restored.samples(from: 0, through: 300).count, 3)
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [110, 190]])
-        XCTAssertNotEqual(newer, rows[0])
     }
 
     func testRestoreTransactionRollsBackBeforeCommitMarkerOnFailure() throws {
@@ -81,5 +79,41 @@ final class StrapBackupTests: XCTestCase {
         XCTAssertThrowsError(try StrapBackup.inspect(diagnostic))
         XCTAssertFalse(StrapBackup.allowedPath("captures/../../history.sqlite"))
         XCTAssertFalse(StrapBackup.allowedPath("/history.sqlite"))
+    }
+}
+
+extension StrapBackupTests {
+    func testInterruptedRestoreReplaysOnlyMissingPreferencesAfterCommittedMarker() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: root) }
+        let support = root.appendingPathComponent("target")
+        let expected = Data("[]".utf8)
+        let backup = try PersistenceDiagnostics.write(support: root, documents: root,
+            preferences: ["strap.days.v1": expected], destinationDirectory: root, fullBackup: true)
+        let preview = try StrapBackup.inspect(backup)
+        defer { try? fm.removeItem(at: preview.folder) }
+        try StrapBackup.stage(preview, support: support)
+        let journal = StrapBackup.Journal(token: "interrupted", absentKeys: ["strap.days.v1"], createdFiles: [])
+        try JSONEncoder().encode(journal).write(to: support.appendingPathComponent("restore-pending/restore-journal.json"))
+        let database = try HistoryDatabase(url: support.appendingPathComponent("strap-history-v18.sqlite"))
+        try database.restoreMissing([], token: journal.token) {}
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "InterruptedRestore-" + UUID().uuidString))
+        defer { defaults.removeObject(forKey: "strap.days.v1") }
+        try StrapBackup.activatePending(support: support, documents: root.appendingPathComponent("documents"), defaults: defaults)
+        XCTAssertEqual(defaults.data(forKey: "strap.days.v1"), expected)
+        XCTAssertFalse(fm.fileExists(atPath: support.appendingPathComponent("restore-pending").path))
+        XCTAssertEqual(try database.metadata("restore:interrupted"), "committed")
+    }
+
+    func testExistingRawSecondWinsDuringBackupRestore() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let database = try HistoryDatabase(url: root.appendingPathComponent("history.sqlite"))
+        let current = sample(100, hr: 70)
+        try database.commit([current])
+        try database.restoreMissing([sample(100, hr: 63), sample(200)], token: "backup") {}
+        XCTAssertEqual(try database.samples(from: 0, through: 300), [current, sample(200)])
     }
 }

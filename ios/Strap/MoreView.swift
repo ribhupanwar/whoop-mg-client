@@ -9,6 +9,7 @@ struct MoreView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var preparingExport = false
+    @State private var exportingBackup = false
     @State private var showRestoreImporter = false
     @State private var restorePreview: StrapBackup.Preview?
     @State private var restoreStatus: String?
@@ -79,86 +80,7 @@ struct MoreView: View {
                     .buttonStyle(.plain)
                 }
 
-                Panel {
-                    SectionTitle("Data Management")
-                    NavigationLink { SettingsView() } label: { moreRow("Import WHOOP Data", icon: "square.and.arrow.down") }
-                    NavigationLink { AppleHealthImportView() } label: { moreRow("Import Apple Health", icon: "heart.text.square") }
-                    NavigationLink { ImportHistoryView() } label: { moreRow("Import History and Diagnostics", icon: "list.bullet.rectangle") }
-                    Text("Your band history is stored locally. HealthKit export is optional.")
-                        .font(StrapTypography.body(12))
-                        .foregroundStyle(Color.appMuted)
-                    Button {
-                        // Never leave an older export shareable after a failed refresh:
-                        // it could be mistaken for a current uninstall-safety backup.
-                        exportURL = nil
-                        exportError = nil
-                        preparingExport = true
-                        Task {
-                            do {
-                                let preferences = UserDefaults.standard.dictionaryRepresentation()
-                                let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                                let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                                exportURL = try await Task.detached(priority: .userInitiated) {
-                                    try PersistenceDiagnostics.write(support: support, documents: documents, preferences: preferences)
-                                }.value
-                            } catch { exportError = error.localizedDescription }
-                            preparingExport = false
-                        }
-                    } label: {
-                        moreRow("Export persisted records & diagnostics", icon: "square.and.arrow.up")
-                    }
-                    .disabled(preparingExport)
-                    Button {
-                        exportURL = nil
-                        exportError = nil
-                        preparingExport = true
-                        Task {
-                            // Drain queued cache writes before snapshotting preferences.
-                            await store.band.flushPersistedCaches()
-                            let preferences = UserDefaults.standard.dictionaryRepresentation()
-                            do {
-                                let fm = FileManager.default
-                                let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                                let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
-                                exportURL = try await Task.detached {
-                                    try PersistenceDiagnostics.write(support: support, documents: documents,
-                                        preferences: preferences, fullBackup: true)
-                                }.value
-                            } catch { exportError = error.localizedDescription }
-                            preparingExport = false
-                        }
-                    } label: { moreRow("Export Full STRAP Backup", icon: "externaldrive.badge.checkmark") }
-                    .disabled(preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory)
-                    Text("Disconnect the band and let analysis finish before a full backup, so all stores describe the same saved state.")
-                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
-                    Button { showRestoreImporter = true } label: {
-                        moreRow("Restore STRAP Backup", icon: "arrow.counterclockwise")
-                    }
-                    if let restoreStatus { Text(restoreStatus).font(StrapTypography.body(11)) }
-                    if let exportURL {
-                        ShareLink(item: exportURL) {
-                            moreRow("Save export to Files or iCloud", icon: "externaldrive")
-                        }
-                    }
-                    if let exportError {
-                        Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn)
-                    }
-                    Text("Includes a read-only SQLite snapshot, sleep caches, corrections, raw captures and checksums. Contains private health records. Save outside this app. This is diagnostic evidence, not a full restorable backup.")
-                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
-                    NavigationLink {
-                        SleepRecoveryView()
-                    } label: {
-                        moreRow("Preview & recover saved sleep", icon: "clock.arrow.circlepath")
-                    }
-                    NavigationLink(value: Route.dataQuality) {
-                        moreRow("Data quality & diagnostics", icon: "waveform.path.ecg")
-                    }
-                    .buttonStyle(.plain)
-                    NavigationLink(value: Route.settings) {
-                        moreRow("Health permissions & app information", icon: "lock.shield")
-                    }
-                    .buttonStyle(.plain)
-                }
+                dataManagementPanel
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Build " + BuildInfo.revision)
                     Text(StrapTypography.missingBundledFaces.isEmpty
@@ -191,6 +113,82 @@ struct MoreView: View {
             }
             Button("Cancel", role: .cancel) { restorePreview = nil }
         } message: { Text(restorePreview?.description ?? "") }
+    }
+
+    private var dataManagementPanel: some View {
+        Panel {
+            SectionTitle("Data Management")
+            importActions
+            exportActions
+            restoreActions
+            diagnosticsActions
+        }
+    }
+    private var importActions: some View {
+        Group {
+            NavigationLink { SettingsView() } label: { moreRow("Import WHOOP Data", icon: "square.and.arrow.down") }
+            NavigationLink { AppleHealthImportView() } label: { moreRow("Import Apple Health", icon: "heart.text.square") }
+            NavigationLink { ImportHistoryView() } label: { moreRow("Import History and Diagnostics", icon: "list.bullet.rectangle") }
+        }
+    }
+    private var exportActions: some View {
+        Group {
+            Button { prepareExport(fullBackup: false) } label: {
+                moreRow("Export persisted records & diagnostics", icon: "square.and.arrow.up")
+            }.disabled(preparingExport)
+            Button { prepareExport(fullBackup: true) } label: {
+                moreRow("Export All STRAP Data", icon: "square.and.arrow.up.on.square")
+            }.disabled(backupUnavailable)
+            Button { prepareExport(fullBackup: true) } label: {
+                moreRow("Export Full STRAP Backup", icon: "externaldrive.badge.checkmark")
+            }.disabled(backupUnavailable)
+            Text("Disconnect the band and let analysis finish before a full backup.")
+                .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+            if let exportURL { ShareLink(item: exportURL) { moreRow("Save export to Files or iCloud", icon: "externaldrive") } }
+            if let exportError { Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn) }
+            Text(exportingBackup
+                ? "Versioned backup of retained records, SQLite history, raw captures and GPS. Existing records take precedence during restore. Contains private health data; save outside STRAP."
+                : "Read-only diagnostic evidence includes SQLite, saved sleep, corrections, raw captures and checksums. Contains private health data. Diagnostic exports cannot be restored as full backups.")
+                .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+        }
+    }
+    private var backupUnavailable: Bool {
+        preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory
+    }
+    private func prepareExport(fullBackup: Bool) {
+        exportURL = nil
+        exportError = nil
+        exportingBackup = fullBackup
+        preparingExport = true
+        Task {
+            if fullBackup { await store.band.flushPersistedCaches() }
+            let preferences = UserDefaults.standard.dictionaryRepresentation()
+            do {
+                let fm = FileManager.default
+                let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]
+                exportURL = try await Task.detached(priority: .userInitiated) {
+                    try PersistenceDiagnostics.write(support: support, documents: documents,
+                        preferences: preferences, fullBackup: fullBackup)
+                }.value
+            } catch { exportError = error.localizedDescription }
+            preparingExport = false
+        }
+    }
+    private var restoreActions: some View {
+        Group {
+            Button { showRestoreImporter = true } label: { moreRow("Restore STRAP Backup", icon: "arrow.counterclockwise") }
+            if let restoreStatus { Text(restoreStatus).font(StrapTypography.body(11)) }
+        }
+    }
+    private var diagnosticsActions: some View {
+        Group {
+            NavigationLink { SleepRecoveryView() } label: { moreRow("Preview & recover saved sleep", icon: "clock.arrow.circlepath") }
+            NavigationLink { ImportHistoryView() } label: { moreRow("Export Individual JSON", icon: "doc.text") }
+            NavigationLink(value: Route.sleepAnalysis) { moreRow("Export Individual Sleep CSV", icon: "moon.stars") }
+            NavigationLink(value: Route.dataQuality) { moreRow("Data quality & diagnostics", icon: "waveform.path.ecg") }
+            NavigationLink(value: Route.settings) { moreRow("Health permissions & app information", icon: "lock.shield") }
+        }
     }
 
     private func moreRow(_ title: String, icon: String) -> some View {

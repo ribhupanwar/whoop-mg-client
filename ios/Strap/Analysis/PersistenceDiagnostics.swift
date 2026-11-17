@@ -17,6 +17,14 @@ enum PersistenceDiagnostics {
         let oldestUnix: Int64?
         let latestUnix: Int64?
     }
+    struct RecordInventory: Codable {
+        let key: String
+        let decoding: String
+        let counts: [String: Int]
+        let oldestUnix: Int?
+        let latestUnix: Int?
+        let sleepAlgorithmVersions: [Int]
+    }
     struct Manifest: Codable {
         let formatVersion: Int
         let purpose: String
@@ -26,6 +34,7 @@ enum PersistenceDiagnostics {
         let algorithmVersion: Int
         let database: DatabaseRecord?
         let files: [FileRecord]
+        let persistedRecords: [RecordInventory]
         let missing: [String]
         let note: String
     }
@@ -33,6 +42,39 @@ enum PersistenceDiagnostics {
         let message: String
         var errorDescription: String? { message }
     }
+    static func inventory(_ values: [String: Any]) -> [RecordInventory] {
+        values.keys.sorted().map { key in
+            var decoded: Any = values[key]!
+            var status = "property list"
+            if let data = decoded as? Data {
+                if let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {
+                    decoded = json; status = "JSON decoded"
+                } else { status = "undecodable JSON; original bytes preserved" }
+            }
+            var counts: [String: Int] = [:]
+            var starts: [Int] = [], ends: [Int] = [], versions: [Int] = []
+            func inspect(_ object: [String: Any]) {
+                if let start = object["startUnix"] as? Int ?? object["firstUnix"] as? Int ?? object["unix"] as? Int { starts.append(start) }
+                if let end = object["endUnix"] as? Int ?? object["lastUnix"] as? Int ?? object["unix"] as? Int { ends.append(end) }
+            }
+            if let rows = decoded as? [[String: Any]] {
+                counts["records"] = rows.count
+                rows.forEach(inspect)
+            } else if let object = decoded as? [String: Any] {
+                counts["entries"] = object.count
+                inspect(object)
+                for field in ["sleepSessions", "sleepPeriods", "activities"] {
+                    if let rows = object[field] as? [[String: Any]] {
+                        counts[field] = rows.count
+                        if field == "sleepSessions" { versions = rows.compactMap { $0["version"] as? Int } }
+                    }
+                }
+            }
+            return RecordInventory(key: key, decoding: status, counts: counts,
+                oldestUnix: starts.min(), latestUnix: ends.max(), sleepAlgorithmVersions: Array(Set(versions)).sorted())
+        }
+    }
+
     static func digest(_ data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
@@ -114,7 +156,7 @@ enum PersistenceDiagnostics {
         let manifest = Manifest(formatVersion: 1, purpose: fullBackup ? "strap-backup" : "diagnostics", createdAt: Date(),
             bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown", build: BuildInfo.revision,
             algorithmVersion: SleepSession.algorithmVersion, database: database,
-            files: files.sorted { $0.path < $1.path }, missing: missing,
+            files: files.sorted { $0.path < $1.path }, persistedRecords: inventory(safe), missing: missing,
             note: "Versioned persisted-record snapshot; health data is private. Source sidecar checksums are observations, not a cross-file snapshot. history.sqlite is a consistent committed snapshot. No authentication data is included. Restore merges missing raw seconds and missing storage keys; existing values and manual corrections take precedence. Derived caches remain evidence and may be recomputed.")
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]

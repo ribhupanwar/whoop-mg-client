@@ -33,7 +33,7 @@ enum WhoopCSVImport {
         func column(_ candidates: [String]) -> Int? {
             names.firstIndex(where: { candidates.contains($0) })
         }
-        guard let date = column(["wakeonset", "cycleendtime", "cycleend"])
+        guard let date = column(["wakeonset"]) ?? column(["cycleendtime", "cycleend"])
                 ?? column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)),
               let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms", "heartratevariabilityrmssd", "heartratevariabilityrmssdms", "heartratevariabilityms", "heartratevariabilitymilliseconds"].map(normalized)),
               let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm", "restingheartratebeatsperminute"].map(normalized))
