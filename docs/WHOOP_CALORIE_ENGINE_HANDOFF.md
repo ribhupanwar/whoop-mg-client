@@ -81,9 +81,13 @@ Inspected `ios/Strap/Analysis/Calories.swift` and `ios/StrapTests/CaloriesTests.
 - [x] Verify slope/intercept registers and HR interpolation using ARM64.
 - [x] Identify interval cap and last-element append branch.
 - [ ] Resolve interval edge cases and physiological enum semantics.
-- [ ] Implement isolated Swift calculator and deterministic tests.
-- [ ] Run iOS CI and fix any new build/test errors.
+- [x] Implement isolated Swift calculator and deterministic tests.
+- [x] Run iOS CI and fix any new build/test errors (44118166379: 471 unit + 3 UI; archive/font/IPA checks passed).
 - [ ] Validate real WHOOP workouts and active-vs-total semantics.
 - [ ] Decide production integration only after evidence.
 
 **Do not mark calorie parity complete or replace the current calculator solely from these excerpts.**
+
+## Implementation follow-up
+
+An isolated `WhoopRecoveredCalories.swift` research API and deterministic `WhoopRecoveredCaloriesTests.swift` now exist. Production `Calories` and all call sites remain unchanged. Exact policies, independent arithmetic anchors, local real-export audit, public documentation evidence and unresolved active/total validation are recorded in [WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md](WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md). Native run 44118166379 passed all 13 new calorie tests within 471 unit + 3 UI tests, device archive, fonts/HealthKit and IPA packaging. No real parity or production integration approval is implied.

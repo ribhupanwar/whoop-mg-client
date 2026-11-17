@@ -1,0 +1,83 @@
+# Isolated recovered calorie calculator
+
+Code: `ios/Strap/Analysis/WhoopRecoveredCalories.swift`  
+Tests: `ios/StrapTests/WhoopRecoveredCaloriesTests.swift`  
+Basis: `WHOOP_CALORIE_ENGINE_HANDOFF.md` and `WHOOP_CALORIE_BINARY_FINDINGS.md` (WHOOP 5.78.0 ARM64 excerpts).
+
+## Implementation boundary
+
+This is an isolated research API, with **no production call sites**. `Calories.swift`, its consumers, history persistence and licensed fonts are unchanged. No cache is invalidated and no historical estimate is recomputed or replaced.
+
+Implemented recovered arithmetic:
+
+- Resting revised Harris–Benedict rates in kcal/s with height explicitly in meters; raw 0/1 and raw-2 mean of separately clamped rates.
+- Workout HR rate with the recovered coefficients/divisor, maximum-HR cap and per-formula zero clamp. Its standalone raw-baseline helper averages every value other than 0/1, as documented; this does not infer the unresolved resting enum metadata.
+- The 30% HR-reserve threshold and two-register slope/intercept interpolation, not the misleading scalar decompilation.
+- Rate times covered duration, with every observed adjacent timestamp interval capped at 3 seconds.
+
+Explicit application/research policies, **not claims of recovered binary edge-case parity**:
+
+- Known resting baseline codes have numeric names; there is no automatic `Sex` mapping or missing-profile default.
+- Profile guards require finite positive weight/height and finite nonnegative age. They are arithmetic guards, not recovered WHOOP clinical acceptance bounds. Nonfinite/overflowed arithmetic fails closed.
+- The reference rate at the maximum-HR anchor is supplied explicitly. A caller may experiment with the workout helper at maxHR; the provided excerpts do not establish every upstream anchor-construction call site.
+- The workout helper caps HR. The integration interpolation does not silently add another cap to its input; its shown ARM64 multiplies the supplied HR. Upstream HR preprocessing remains unverified.
+- Tail policy is required. `observedIntervalsOnly` leaves the final sample without invented duration. `repeatFinalInterval` explicitly models the recovered append-last experiment, but the binary count predicate is unresolved. Empty/singleton/duplicate/missing endpoints never receive a fabricated one-second duration.
+- Timestamp order is never silently changed. Out-of-order finite timestamps reject the experiment to prevent overlapping/double-billed intervals. Missing/nonfinite timestamps and missing/nonpositive/nonfinite HR break adjacent coverage instead of bridging it. Exact binary behavior for these cases remains unverified.
+- No covered intervals is a missing-result error, not a made-up zero-calorie workout. A computed negative interpolated rate is rejected rather than adding an unsupported clamp.
+
+## Output semantics
+
+`integratedKcal` includes the resting rate during covered low-HR intervals. It is **not active-only** and is **not a whole-day total**. Missing time and long gaps are not backfilled. `restingKcalForCoveredSeconds` uses precisely the same covered duration. Their signed difference, `netAboveRestingKcal`, is a mathematical comparator, **not a verified WHOOP active-energy field**.
+
+An independent decimal fixture (synthetic profile 70 kg, 1.75 m, age 30; raw baseline 0) gives resting 1695.667 kcal/day or 0.019625775462962963 kcal/s. Two covered resting seconds integrate 0.039251550925925926 kcal, while the above-resting difference is zero. This proves the calculator's total-like semantics mathematically; it does not prove which WHOOP UI/API call site exposes that value.
+
+For an explicit 0.2 kcal/s reference at maxHR 187 and restingHR 55, threshold is 94.6. HR [60,150,187] at times [0,1,3] integrates 0.275170227673561 kcal over 3 observed seconds. Explicit final-interval repetition adds 2 seconds and 0.4 kcal. These values were calculated independently with Python `decimal`, not by copying the Swift implementation into its tests.
+
+## Explicit synthetic research call
+
+The following is a synthetic scenario, not the user's profile or a production default. It **chooses** the workout-at-maximum reference anchor as an experiment; that upstream call-site assumption still requires verification.
+
+```swift
+let profile = WhoopRecoveredCalories.Profile(
+    weightKg: 70, heightMeters: 1.75, ageYears: 30, baseline: .raw0)
+let reference = try WhoopRecoveredCalories.workoutKcalPerSecond(
+    hr: 187, maxHR: 187, profile: profile)
+let estimate = try WhoopRecoveredCalories.integrate(
+    heartRates: [60, 150, 187], timestamps: [0, 1, 3], profile: profile,
+    restingHR: 55, maxHR: 187, referenceRate: reference,
+    tailPolicy: .observedIntervalsOnly)
+// estimate.integratedKcal is covered-window energy including resting energy.
+// estimate.netAboveRestingKcal is not an established WHOOP active-energy field.
+```
+
+## Real uploaded WHOOP export audit
+
+The user-supplied original ZIP was inspected locally, without publishing its health values, dates or journal notes:
+
+- 18 physiological cycle rows and 11 workout rows.
+- All 11 workouts match an original cycle by cycle-start/timezone; all 11 matched pairs contain numeric exported energy, and workout energy does not exceed the corresponding cycle energy.
+- Neither CSV provides separate active-energy and total-energy fields.
+- The export has no weight/height/age/baseline profile or full timestamped HR stream. Workout mean/max HR do not reconstruct the observed HR trajectory or 3-second coverage.
+
+This is consistent with different workout/cycle observation windows, but **cannot distinguish active versus total energy**. It does not establish the correct raw baseline enum, configured HR anchors, binary tail branch or model percentage error. No default profile, constant mean-HR trajectory, fabricated measurement or invented error percentage is substituted. User authorization to assume research scenarios does not turn synthetic inputs into real WHOOP validation.
+
+Official public WHOOP data documentation inspected on 17 November 2026:
+
+- https://developer.whoop.com/docs/developing/user-data/workout/
+- https://developer.whoop.com/docs/developing/user-data/cycle/
+
+Both expose `score.kilojoule` in examples; those pages do not define separate active/total fields or resolve the calorie semantics. Unit conversion is kcal = kJ / 4.184; it is not a justification for comparing different energy definitions or time windows.
+
+## Validation gates
+
+- Deterministic XCTest coverage: independent resting/workout numeric anchors, raw-baseline mean/clamps, capped workout HR, threshold equality and slope/intercept, above/below threshold, weighted sums, explicit tail policies, three-second cap, empty/singleton/duplicates, missing HR/time, invalid order/counts, nonfinite inputs/overflow and unchanged production arithmetic.
+- Native GitHub Actions [44118166379](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44118166379): **SUCCESS**, 471 unit tests (all 13 new recovered-calorie tests passed), 3 UI tests, simulator build, device archive, licensed fonts/HealthKit checks and IPA packaging. Tested code revision `7c178587fcec332e6f3b94c3ce557539bbd485fb`; subsequent documentation-only changes do not modify app/test source.
+- Real matched workout/cycle comparison: BLOCKED by missing full HR/profile/anchor and explicit active-versus-total reference evidence. Percentage error is not reported without comparable inputs.
+- Native research IPA artifact: `14343589739`; workflow-recorded SHA-256 `eb3a959d35e72ac8e184a4dbfc33383a7000c61a11a09222e112f3a12993b88f`. This is the isolated main-based research build; consolidated master validation is tracked separately in [the master progress ledger](https://github.com/ribhupanwar/whoop-mg-client/blob/codex/master-progress-20261117/MASTER_PROGRESS.md).
+- Production integration: disabled. It requires passed native tests, resolved call-site/enum/tail semantics and matched real data comparisons first.
+
+## Consolidated master verification
+
+[Run 44120344273](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44120344273) passed **511 unit + 3 UI tests**, including all 13 recovered-calorie tests, independent native-output GPX/FIT validation, device archive, fonts/HealthKit checks and IPA packaging. Code revision `20b7ad5c60d46464beabd315a6ce087a48888769` combines the master changes with this same isolated calculator. No production calorie call site was introduced.
+
+Downloaded consolidated IPA artifact `14346176961` and independently verified SHA-256 `af16b97241e721d8a18dd3e42adae00b7a070810beb5275b51d24935158bcedd`, embedded revision `20b7ad5c60d46464beabd315a6ce087a48888769`, bundle `com.ribhupanwar.strap` and all 11 TTF files. Distribution signing/device checks and real WHOOP active/total parity remain separate gates. Documentation-only follow-ups do not change the tested iOS/workflow source.
