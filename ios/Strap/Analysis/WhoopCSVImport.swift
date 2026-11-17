@@ -24,7 +24,7 @@ enum WhoopCSVImport {
         let string = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .utf16)
             ?? ""
-        let records = csvRecords(string)
+        let records = try csvRecords(string)
         guard let headers = records.first else { throw ImportError.unsupportedColumns }
         func normalized(_ text: String) -> String {
             text.lowercased().filter { $0.isLetter || $0.isNumber }
@@ -68,10 +68,13 @@ enum WhoopCSVImport {
         }
         let string = String(data: data, encoding: .utf8)
             ?? String(data: data, encoding: .utf16) ?? ""
-        let records = csvRecords(string)
+        let records = try csvRecords(string)
         guard let headers = records.first, !headers.isEmpty else {
             throw ImportError.unsupportedColumns
         }
+        guard Set(headers).count == headers.count,
+              headers.allSatisfy({ !$0.trimmingCharacters(in: .whitespaces).isEmpty }),
+              records.dropFirst().allSatisfy({ $0.count <= headers.count }) else { throw ImportError.unsupportedColumns }
         let rows = records.dropFirst().filter { !$0.isEmpty }.map { values in
             SupplementalRecord(source: category, fields: Dictionary(zip(headers, values).map { ($0.0, $0.1) },
                 uniquingKeysWith: { _, latest in latest }))
@@ -96,10 +99,12 @@ enum WhoopCSVImport {
         var added = 0
         for row in incoming {
             if fromDate != nil || throughDate != nil {
-                let date = row.fields.first { key, _ in
-                    ["cyclestarttime", "sleeponset", "workoutstarttime", "date"].contains(
-                        key.lowercased().filter { $0.isLetter || $0.isNumber })
-                }.flatMap { dateKey($0.value) }
+                let candidates = row.source == "sleeps" ? ["sleeponset", "cyclestarttime", "date"] :
+                    (row.source == "workouts" ? ["workoutstarttime", "cyclestarttime", "date"] : ["cyclestarttime", "date"])
+                let date = candidates.lazy.compactMap { wanted in
+                    row.fields.first { key, _ in key.lowercased().filter { $0.isLetter || $0.isNumber } == wanted }
+                        .flatMap { dateKey($0.value) }
+                }.first
                 guard let date, fromDate.map({ date >= $0 }) ?? true,
                       throughDate.map({ date <= $0 }) ?? true else { continue }
             }
@@ -134,7 +139,7 @@ enum WhoopCSVImport {
     }
 
     /// RFC4180-style quoted fields and embedded line breaks.
-    private static func csvRecords(_ text: String) -> [[String]] {
+    private static func csvRecords(_ text: String) throws -> [[String]] {
         var records: [[String]] = [], row: [String] = [], field = ""
         var quoted = false
         let chars = Array(text)
@@ -155,6 +160,7 @@ enum WhoopCSVImport {
             } else { field.append(c) }
             i += 1
         }
+        guard !quoted else { throw ImportError.unsupportedColumns }
         row.append(field)
         if row.contains(where: { !$0.isEmpty }) { records.append(row) }
         return records

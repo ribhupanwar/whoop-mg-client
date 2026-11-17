@@ -72,3 +72,11 @@ extension WhoopImportTests {
         XCTAssertEqual(try JSONDecoder().decode([WhoopCSVImport.SupplementalRecord].self, from: accepted.data).first, row)
     }
 }
+
+extension WhoopImportTests {
+    func testCycleUsesWakeDateWhenExportProvidesItAndRejectsUnterminatedQuotes() throws {
+        let csv = "Cycle start time,Wake onset,Heart rate variability (ms),Resting heart rate (bpm)\n2026-11-16 23:28:00,2026-11-17 07:32:00,28,76"
+        XCTAssertEqual(try WhoopCSVImport.parse(Data(csv.utf8)).first?.dateKey, "2026-11-17")
+        XCTAssertThrowsError(try WhoopCSVImport.parse(Data("Date,HRV,RHR\n\"2026-11-17,28,76".utf8)))
+    }
+}

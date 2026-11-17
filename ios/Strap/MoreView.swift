@@ -81,6 +81,9 @@ struct MoreView: View {
 
                 Panel {
                     SectionTitle("Data Management")
+                    NavigationLink { SettingsView() } label: { moreRow("Import WHOOP Data", icon: "square.and.arrow.down") }
+                    NavigationLink { AppleHealthImportView() } label: { moreRow("Import Apple Health", icon: "heart.text.square") }
+                    NavigationLink { ImportHistoryView() } label: { moreRow("Import History and Diagnostics", icon: "list.bullet.rectangle") }
                     Text("Your band history is stored locally. HealthKit export is optional.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)

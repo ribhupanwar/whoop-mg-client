@@ -13,6 +13,9 @@ struct SettingsView: View {
     @State private var weightText = ""
     @State private var heightText = ""
     @State private var showWhoopImporter = false
+    @State private var limitWhoopDates = false
+    @State private var whoopFrom = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
+    @State private var whoopThrough = Date()
     @State private var whoopImportStatus = "No WHOOP file imported"
 
     var body: some View {
@@ -78,19 +81,19 @@ struct SettingsView: View {
                             }
                             recognizedFiles.append(name)
                             if name.contains("physiological") || name.contains("cycle") {
-                                let count = try WhoopCSVImport.importSupplemental(data, source: "physiological_cycles")
+                                let count = try importWhoopSource(data, source: "physiological_cycles")
                                 supplementalCounts.append("physiological_cycles: \(count)")
                                 // Partial cycles still retain every exported field even when
                                 // both biometric inputs needed for a baseline are unavailable.
                                 if let rows = try? WhoopCSVImport.parse(data) {
-                                    importedDays += store.band.importWhoopHistory(rows)
+                                    importedDays += store.band.importWhoopHistory(rows.filter(withinWhoopRange))
                                 }
                             } else {
                                 let category: String? = name.contains("journal") ? "journal_entries" :
                                     (name.contains("workout") ? "workouts" :
                                     (name.contains("sleep") ? "sleeps" : nil))
                                 if let category {
-                                    let count = try WhoopCSVImport.importSupplemental(data, source: category)
+                                    let count = try importWhoopSource(data, source: category)
                                     supplementalCounts.append("\(category): \(count)")
                                 } else {
                                     failures.append("\(name): unsupported WHOOP CSV category")
@@ -114,12 +117,12 @@ struct SettingsView: View {
                         (name.contains("workout") ? "workouts" :
                         (name.contains("sleep") ? "sleeps" : nil))
                     if let category {
-                        let count = try WhoopCSVImport.importSupplemental(data, source: category)
+                        let count = try importWhoopSource(data, source: category)
                         whoopImportStatus = "Saved \(count) \(category) records locally. Activity/Recovery mapping pending."
                     } else {
-                        let count = try WhoopCSVImport.importSupplemental(data, source: "physiological_cycles")
+                        let count = try importWhoopSource(data, source: "physiological_cycles")
                         let rows = (try? WhoopCSVImport.parse(data)) ?? []
-                        let added = store.band.importWhoopHistory(rows)
+                        let added = store.band.importWhoopHistory(rows.filter(withinWhoopRange))
                         whoopImportStatus = "Retained \(count) new cycle source rows; completed \(added) HRV/RHR days. Original exported fields remain separate from band estimates."
                     }
                 }
@@ -563,14 +566,30 @@ struct SettingsView: View {
 
     // MARK: WHOOP historical import
 
+    private func withinWhoopRange(_ row: WhoopCSVImport.Row) -> Bool {
+        !limitWhoopDates || (row.dateKey >= JournalStore.dayKey(for: whoopFrom)
+            && row.dateKey <= JournalStore.dayKey(for: whoopThrough))
+    }
+    private func importWhoopSource(_ data: Data, source: String) throws -> Int {
+        try WhoopCSVImport.importSupplemental(data, source: source,
+            fromDate: limitWhoopDates ? JournalStore.dayKey(for: whoopFrom) : nil,
+            throughDate: limitWhoopDates ? JournalStore.dayKey(for: whoopThrough) : nil)
+    }
+
     private var whoopImportPanel: some View {
         Panel {
             SectionTitle("Import WHOOP history")
+            Toggle("Limit imported dates", isOn: $limitWhoopDates)
+            if limitWhoopDates {
+                DatePicker("From", selection: $whoopFrom, displayedComponents: .date)
+                DatePicker("Through", selection: $whoopThrough, displayedComponents: .date)
+            }
             Button("Import WHOOP data ZIP or CSV") {
                 showWhoopImporter = true
             }
             .font(StrapTypography.body(12, weight: .bold))
             .foregroundStyle(Color.appAccent)
+            .disabled(limitWhoopDates && whoopFrom > whoopThrough)
             Text(whoopImportStatus)
                 .font(StrapTypography.body(11))
                 .foregroundStyle(Color.appMuted)
