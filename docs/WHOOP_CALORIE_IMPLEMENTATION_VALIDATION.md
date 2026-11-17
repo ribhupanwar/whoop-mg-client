@@ -54,6 +54,7 @@ Both expose `score.kilojoule` in examples; those pages do not define separate ac
 ## Validation gates
 
 - Deterministic XCTest coverage: independent resting/workout numeric anchors, raw-baseline mean/clamps, capped workout HR, threshold equality and slope/intercept, above/below threshold, weighted sums, explicit tail policies, three-second cap, empty/singleton/duplicates, missing HR/time, invalid order/counts, nonfinite inputs/overflow and unchanged production arithmetic.
-- Native GitHub Actions: pending; do not label the module tested until the actual simulator run succeeds.
+- Native GitHub Actions [44118166379](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44118166379): **SUCCESS**, 471 unit tests (all 13 new recovered-calorie tests passed), 3 UI tests, simulator build, device archive, licensed fonts/HealthKit checks and IPA packaging. Tested code revision `7c178587fcec332e6f3b94c3ce557539bbd485fb`; subsequent documentation-only changes do not modify app/test source.
 - Real matched workout/cycle comparison: BLOCKED by missing full HR/profile/anchor and explicit active-versus-total reference evidence. Percentage error is not reported without comparable inputs.
+- Native research IPA artifact: `14343589739`; workflow-recorded SHA-256 `eb3a959d35e72ac8e184a4dbfc33383a7000c61a11a09222e112f3a12993b88f`. This is the isolated main-based research build; consolidated master validation is tracked separately in `MASTER_PROGRESS.md`.
 - Production integration: disabled. It requires passed native tests, resolved call-site/enum/tail semantics and matched real data comparisons first.
