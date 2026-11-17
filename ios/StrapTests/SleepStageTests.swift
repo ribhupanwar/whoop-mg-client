@@ -91,9 +91,13 @@ final class SleepStageTests: XCTestCase {
     }
 
     func testRespirationCannotPoolInsufficientFragmentsAcrossGap() {
-        let fragments = (0..<6).map { (t: Double($0), rr: 800.0 + Double($0 * 2)) }
-            + (0..<6).map { (t: Double($0 + 107), rr: 900.0 + Double($0 * 3)) }
-        XCTAssertNil(SleepStager.respRegularity(fragments))
+        let first: [(t: Double, rr: Double)] = (0..<6).map { index in
+            (t: Double(index), rr: 800.0 + Double(index * 2))
+        }
+        let later: [(t: Double, rr: Double)] = (0..<6).map { index in
+            (t: Double(index + 107), rr: 900.0 + Double(index * 3))
+        }
+        XCTAssertNil(SleepStager.respRegularity(first + later))
     }
 
     func testRespirationSkipsUnusableFlatFragmentWithoutChangingBeatOrder() throws {
