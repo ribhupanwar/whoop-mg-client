@@ -267,6 +267,8 @@ enum DailyAnalysis {
             let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
             let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
             let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
+            let temperature = NightTemperature.measure(ordered, session: longest)
+            let primaryRows = longest.map { night in ordered.filter { night.startUnix <= $0.unix && $0.unix < night.endUnix } } ?? []
             // Training load needs a measured resting reference, not sleep stages
             // or R-R intervals. A verified five-minute daytime rest can supply it.
             let awakeDaySamples = daySamples.filter { sample in
@@ -303,7 +305,12 @@ enum DailyAnalysis {
                     sleepDurationReliable: sleepReliable,
                     zoneSeconds: zoneSeconds,
                     awakeLnRMSSD: awakeWindow.result.lnRMSSD,
-                    awakeRestingHR: awakeResting
+                    awakeRestingHR: awakeResting,
+                    restingHRWindowSeconds: resting == nil ? nil : 300,
+                    skinTemperatureC: temperature.celsius,
+                    skinTemperatureSeconds: temperature.seconds,
+                    skinTemperatureSource: temperature.celsius == nil ? nil : NightTemperature.source,
+                    oxygenCandidatePct: Recovery.spo2Summary(primaryRows).pct
                 )
             )
             if let day = result.last { analysisCache?.save(day, ticket: ticket) }
@@ -340,7 +347,13 @@ enum DailyAnalysis {
                 sleepPerformancePct: replacesSleep ? fresh.sleepPerformancePct : previous.sleepPerformancePct,
                 zoneSeconds: fresh.zoneSeconds ?? previous.zoneSeconds,
                 awakeLnRMSSD: fresh.awakeLnRMSSD ?? previous.awakeLnRMSSD,
-                awakeRestingHR: fresh.awakeRestingHR ?? previous.awakeRestingHR
+                awakeRestingHR: fresh.awakeRestingHR ?? previous.awakeRestingHR,
+                restingHRWindowSeconds: replacesSleep ? fresh.restingHRWindowSeconds : previous.restingHRWindowSeconds,
+                respiratoryWindows: replacesSleep ? fresh.respiratoryWindows : previous.respiratoryWindows,
+                skinTemperatureC: replacesSleep ? fresh.skinTemperatureC : previous.skinTemperatureC,
+                skinTemperatureSeconds: replacesSleep ? fresh.skinTemperatureSeconds : previous.skinTemperatureSeconds,
+                skinTemperatureSource: replacesSleep ? fresh.skinTemperatureSource : previous.skinTemperatureSource,
+                oxygenCandidatePct: replacesSleep ? fresh.oxygenCandidatePct : previous.oxygenCandidatePct
             )
     }
 

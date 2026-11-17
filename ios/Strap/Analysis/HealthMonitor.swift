@@ -1,0 +1,105 @@
+import Foundation
+
+enum HealthVital: String, CaseIterable { case respiration, oxygen, rhr, hrv, temperature }
+
+struct HealthReading {
+    enum Status: Equatable { case unavailable, calibrating, candidate, withinRange, outsideRange }
+    let vital: HealthVital
+    let value: Double?
+    let status: Status
+    let baselineDays: Int
+    let reference: ClosedRange<Double>?
+    var verifiedWithinRange: Bool { status == .withinRange }
+    var statusText: String {
+        switch status {
+        case .unavailable: return "UNAVAILABLE"
+        case .calibrating: return "BUILDING BASELINE"
+        case .candidate: return "UNVALIDATED CANDIDATE"
+        case .withinRange: return "WITHIN PERSONAL RANGE"
+        case .outsideRange: return "OUTSIDE PERSONAL RANGE"
+        }
+    }
+    var referenceText: String {
+        if vital == .oxygen { return "Unvalidated sensor estimate" }
+        guard let reference else { return "Personal baseline: \(baselineDays)/7 prior nights" }
+        let format = vital == .temperature ? "%+.1f to %+.1f °C" :
+            (vital == .respiration ? "%.1f–%.1f rpm" : (vital == .rhr ? "%.0f–%.0f bpm" : "%.0f–%.0f ms"))
+        return "Personal range: " + String(format: format, reference.lowerBound, reference.upperBound)
+    }
+}
+
+struct HealthMonitorSnapshot {
+    let readings: [HealthReading]
+    subscript(_ vital: HealthVital) -> HealthReading { readings.first { $0.vital == vital }! }
+    var withinCount: Int { readings.filter(\.verifiedWithinRange).count }
+    var availableCount: Int { readings.filter { $0.value != nil }.count }
+}
+
+/// Empirical personal ranges from distinct, earlier, qualifying sleep nights.
+/// Data availability, clinical validation and an in-range result are distinct.
+enum HealthMonitor {
+    static func make(days: [DayMetrics], session: SleepSession?, analyzing: Bool = false,
+                     calendar: Calendar = .current) -> HealthMonitorSnapshot {
+        let key = session.map { JournalStore.dayKey(for: Date(timeIntervalSince1970: Double($0.endUnix - 1)), calendar: calendar) }
+        let current = analyzing ? nil : days.first {
+            $0.dateKey == key && $0.state == "sleep" && $0.sleepStartUnix == session?.startUnix
+                && $0.sleepEndUnix == session.map { $0.endUnix - 1 }
+        }
+        let prior = days.filter { $0.state == "sleep" && $0.dateKey < (key ?? "") }
+        let readings = HealthVital.allCases.map { vital -> HealthReading in
+            let value = current.flatMap { measurement($0, vital: vital) }
+            let qualified = prior.filter { measurement($0, vital: vital) != nil }
+            let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
+            let values = distinct.values.sorted { $0.dateKey < $1.dateKey }.suffix(30)
+                .compactMap { measurement($0, vital: vital) }
+            let enough = values.count >= 7
+            let center = enough ? Stats.mean(values) : nil
+            var range: ClosedRange<Double>?
+            if enough, let low = values.min(), let high = values.max() { range = low...high }
+            if vital == .oxygen {
+                return HealthReading(vital: vital, value: value, status: value == nil ? .unavailable : .candidate,
+                                     baselineDays: values.count, reference: nil)
+            }
+            if vital == .temperature {
+                let delta = value.flatMap { reading in center.map { reading - $0 } }
+                let deviationRange = range.flatMap { raw in center.map { (raw.lowerBound - $0)...(raw.upperBound - $0) } }
+                return HealthReading(vital: vital, value: delta,
+                    status: value == nil ? .unavailable : (enough ? .candidate : .calibrating),
+                    baselineDays: values.count, reference: deviationRange)
+            }
+            let status: HealthReading.Status
+            if let value { status = range.map { $0.contains(value) ? .withinRange : .outsideRange } ?? .calibrating }
+            else { status = .unavailable }
+            return HealthReading(vital: vital, value: value, status: status, baselineDays: values.count, reference: range)
+        }
+        return HealthMonitorSnapshot(readings: readings)
+    }
+
+    private static func measurement(_ day: DayMetrics, vital: HealthVital) -> Double? {
+        let value: Double?
+        switch vital {
+        case .rhr:
+            guard (day.restingHRWindowSeconds ?? day.hrvWindowSeconds) >= 300 else { return nil }
+            value = day.restingHR
+        case .hrv:
+            guard day.hrvWindowSeconds >= 300 else { return nil }
+            value = day.lnRMSSD.map { exp($0) }
+        case .respiration:
+            guard (day.respiratoryWindows ?? 0) > 0 else { return nil }
+            value = day.respiratoryRate
+        case .temperature:
+            guard day.sleepDurationReliable == true, (day.skinTemperatureSeconds ?? 0) >= 300,
+                  day.skinTemperatureSource == NightTemperature.source else { return nil }
+            value = day.skinTemperatureC
+        case .oxygen: value = day.oxygenCandidatePct
+        }
+        guard let value, value.isFinite, value > 0 else { return nil }
+        switch vital {
+        case .rhr: return (35...220).contains(value) ? value : nil
+        case .respiration: return (8...25).contains(value) ? value : nil
+        case .temperature: return (20...43).contains(value) ? value : nil
+        case .oxygen: return (70...100).contains(value) ? value : nil
+        case .hrv: return value
+        }
+    }
+}

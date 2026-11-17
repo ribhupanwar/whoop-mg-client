@@ -221,16 +221,16 @@ struct HealthHubView: View {
                     Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
                 }
                 HStack(alignment: .top, spacing: 0) {
-                    monitorCheck("RESP", icon: "lungs.fill", present: respirationAvailable)
-                    monitorCheck("SPO₂", icon: "drop", present: oxygenAvailable)
-                    monitorCheck("RHR", icon: "heart", present: restingAvailable)
-                    monitorCheck("HRV", icon: "waveform.path.ecg", present: hrvAvailable)
-                    monitorCheck("TEMP", icon: "thermometer.medium", present: temperatureAvailable)
+                    monitorCheck("RESP", icon: "lungs.fill", reading: store.healthMonitor[.respiration])
+                    monitorCheck("SPO₂", icon: "drop", reading: store.healthMonitor[.oxygen])
+                    monitorCheck("RHR", icon: "heart", reading: store.healthMonitor[.rhr])
+                    monitorCheck("HRV", icon: "waveform.path.ecg", reading: store.healthMonitor[.hrv])
+                    monitorCheck("TEMP", icon: "thermometer.medium", reading: store.healthMonitor[.temperature])
                 }
                 HStack(spacing: 10) {
                     Image(systemName: monitorCount == 5 ? "checkmark.square.fill" : "exclamationmark.square")
                         .foregroundStyle(monitorCount == 5 ? Color.appGood : Color.appMuted)
-                    Text("\(monitorCount)/5 metrics captured")
+                    Text("\(store.healthMonitor.withinCount)/5 within personal range")
                         .font(StrapTypography.body(12, weight: .semibold))
                     Spacer()
                 }
@@ -276,12 +276,13 @@ struct HealthHubView: View {
         demo || store.lastCapture?.skinTempMean != nil
     }
     private var monitorCount: Int {
-        [respirationAvailable, oxygenAvailable, restingAvailable, hrvAvailable, temperatureAvailable]
-            .filter { $0 }.count
+        store.healthMonitor.withinCount
     }
 
-    private func monitorCheck(_ label: String, icon: String, present: Bool) -> some View {
-        VStack(spacing: 9) {
+    private func monitorCheck(_ label: String, icon: String, reading: HealthReading) -> some View {
+        let present = demo || reading.value != nil
+        let verified = !demo && reading.verifiedWithinRange
+        return VStack(spacing: 9) {
             ZStack {
                 Circle()
                     .fill(present ? Color(hex: 0x163C4B) : Color.appRaised)
@@ -300,13 +301,13 @@ struct HealthHubView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.75)
                 .foregroundStyle(Color.appFG)
-            Image(systemName: present ? "checkmark.circle.fill" : "minus.circle")
+            Image(systemName: verified ? "checkmark.circle.fill" : "minus.circle")
                 .font(.system(size: 17))
-                .foregroundStyle(present ? Color(hex: 0x59D5E8) : Color.appMuted)
+                .foregroundStyle(verified ? Color.appGood : Color.appMuted)
         }
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(present ? "data available" : "data unavailable")")
+        .accessibilityLabel("\(label), \(reading.statusText)")
     }
 
     // MARK: Stress Monitor card (drill-in)
@@ -370,7 +371,7 @@ struct HealthHubView: View {
     private var notMeasuredPanel: some View {
         Panel {
             CardHead(title: "Not measured by this client")
-            Text("Blood pressure is not produced here. Respiratory rate is an RSA estimate from R-R timing, not a chest-band measurement. SpO₂ is only the strap's unvalidated candidate byte and is never a clinical reading. Skin temperature is shown as an absolute reading on the detail screen only.")
+            Text("Blood pressure is not produced here. Respiratory rate is an RSA estimate from R-R timing. SpO₂ and skin temperature remain unvalidated sensor candidates. Temperature deviation needs seven qualifying prior nights; personal ranges are observed readings, not clinical limits.")
                 .font(StrapTypography.body(11.5))
                 .foregroundStyle(Color.appMuted)
                 .lineSpacing(3)

@@ -417,9 +417,9 @@ struct HomeView: View {
                     title: "Health monitor",
                     pill: demo ? "✓" : healthPill,
                     pillColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    state: demo ? "WITHIN RANGE" : (healthCount > 0 ? "CAPTURED" : "WAITING"),
+                    state: demo ? "WITHIN RANGE" : (healthCount > 0 ? "\(healthCount) IN RANGE" : "BASELINE PENDING"),
                     stateColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    detail: demo ? "4/4 metrics · sample" : healthDetail
+                    detail: demo ? "5 metrics · sample" : healthDetail
                 )
             }
             .buttonStyle(.plain)
@@ -440,21 +440,13 @@ struct HomeView: View {
     }
 
     private var healthCount: Int {
-        guard let summary = store.lastCapture else { return 0 }
-        let flags = [
-            summary.hrv.rmssdMS != nil,
-            store.measuredRestingHR != nil,
-            summary.lastHeartRate != nil,
-            summary.steps != nil
-        ]
-        return flags.filter { $0 }.count
+        store.healthMonitor.withinCount
     }
 
-    private var healthPill: String { "\(healthCount)/4" }
+    private var healthPill: String { "\(healthCount)/5" }
 
     private var healthDetail: String {
-        guard let summary = store.lastCapture else { return "needs a capture" }
-        return "last capture · \(summary.sampleCount.formatted()) samples"
+        "\(store.healthMonitor.availableCount)/5 available · personal ranges"
     }
 
     private var stressPill: String {

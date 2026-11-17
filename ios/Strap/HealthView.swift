@@ -18,7 +18,7 @@ struct HealthView: View {
                 hrPanel
                 fiveMetricGrid
                 if !demo { rrDiagnosticPanel }
-                Hint("Range chips compare today against your normal, so they cannot appear before a 7-day baseline exists. Respiratory rate is an RSA estimate from R-R; SpO₂ is the band's unvalidated candidate, not a clinical reading.")
+                Hint("Personal ranges use at least seven qualifying prior sleep nights. Respiratory rate is an RSA estimate; SpO₂ and skin temperature remain unvalidated sensor candidates. Recorded personal ranges are not clinical limits.")
             }
         }
         .navigationTitle("HEALTH MONITOR")
@@ -41,8 +41,8 @@ struct HealthView: View {
                 .font(StrapTypography.body(12, weight: .bold))
                 .tracking(1.2)
             Spacer()
-            Image(systemName: store.band.isConnected ? "checkmark" : "xmark")
-                .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
+            Image(systemName: store.band.isConnected ? "link" : "xmark")
+                .foregroundStyle(store.band.isConnected ? Color.appSleep : Color.appMuted)
                 .font(.system(size: 19, weight: .bold))
         }
         .padding(19)
@@ -52,27 +52,23 @@ struct HealthView: View {
 
     private var fiveMetricGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            healthMetric("RESPIRATORY RATE", symbol: "lungs", value: demo ? "18.4" :
-                         ActivityFormat.whole(summary?.respiration.breathsPerMinute) ?? "—",
-                         unit: "rpm", detail: demo ? "sample" : respirationChip)
-            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: "drop", value: demo ? "95" :
-                         summary?.spo2.pct.map { String(format: "%.0f", $0) } ?? "—",
-                         unit: "%", detail: demo ? "sample" : "Unvalidated candidate · " + spo2Chip)
-            healthMetric("RHR", symbol: "heart", value: demo ? "62" :
-                         ActivityFormat.whole(displayedNightRHR) ?? "—",
-                         unit: "bpm", detail: demo ? "sample" : rhrTrendChip)
-            healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" :
-                         ActivityFormat.whole(latestNightHRV) ?? "—",
-                         unit: "ms", detail: demo ? "sample" : hrvTrendChip)
+            healthMetric("RESPIRATORY RATE", symbol: "lungs", value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
+                         unit: "rpm", reading: monitor[.respiration])
+            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: "drop", value: demo ? "95" : ActivityFormat.whole(monitor[.oxygen].value) ?? "—",
+                         unit: "%", reading: monitor[.oxygen])
+            healthMetric("RHR", symbol: "heart", value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
+                         unit: "bpm", reading: monitor[.rhr])
+            healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
+                         unit: "ms", reading: monitor[.hrv])
             healthMetric("SKIN TEMP (FROM BASELINE)", symbol: "thermometer.medium",
-                         value: demo ? "+0.2" : "—", unit: "°C",
-                         detail: demo ? "sample" : "Baseline deviation not validated")
+                         value: demo ? "+0.2" : monitor[.temperature].value.map { String(format: "%+.1f", $0) } ?? "—",
+                         unit: "°C", reading: monitor[.temperature])
         }
         .padding(.bottom, 18)
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
-                              unit: String, detail: String) -> some View {
+                              unit: String, reading: HealthReading) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: symbol)
@@ -97,11 +93,18 @@ struct HealthView: View {
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appFG)
             }
-            Text(detail)
+            HStack(spacing: 4) {
+                Image(systemName: reading.verifiedWithinRange ? "checkmark.circle.fill" : "circle")
+                Text(demo ? "SAMPLE" : reading.statusText)
+            }
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(Color.appGood)
+                .foregroundStyle(reading.verifiedWithinRange ? Color.appGood :
+                    (reading.status == .outsideRange || reading.status == .candidate ? Color.appWarn : Color.appMuted))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            Text(demo ? "Design preview" : reading.referenceText)
+                .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
+                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(15)
         .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
@@ -310,17 +313,20 @@ struct HealthView: View {
     // MARK: Live values
 
     private var summary: CaptureSummary? { store.band.summary }
+    private var monitor: HealthMonitorSnapshot { store.healthMonitor }
 
     // Use the same validated overnight HRV source as the Home dashboard.
     // A daytime capture must not overwrite the night's recovery metric.
     private var displayedNight: DayMetrics? {
-        guard let session = store.band.latestSleepSession else { return nil }
+        guard !store.band.isAnalyzingHistory, let session = store.band.latestSleepSession else { return nil }
         let key = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)))
-        return store.band.days.first { $0.dateKey == key && $0.state == "sleep" }
+        return store.band.days.first { $0.dateKey == key && $0.state == "sleep"
+            && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1 }
     }
 
     private var latestNightHRV: Double? {
-        guard let lnRMSSD = displayedNight?.lnRMSSD, lnRMSSD.isFinite else { return nil }
+        guard let night = displayedNight, night.hrvWindowSeconds >= 300,
+              let lnRMSSD = night.lnRMSSD, lnRMSSD.isFinite else { return nil }
         return exp(lnRMSSD)
     }
 

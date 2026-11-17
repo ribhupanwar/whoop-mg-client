@@ -596,7 +596,9 @@ final class BandLink: NSObject, ObservableObject {
                     $0.startUnix == day.sleepStartUnix && $0.endUnix - 1 == day.sleepEndUnix
                 }) else { continue }
                 let segment = samples.filter { session.startUnix <= $0.unix && $0.unix < session.endUnix }
-                freshDays[index].respiratoryRate = Respiration.estimate(segment).breathsPerMinute
+                let respiration = Respiration.estimate(segment)
+                freshDays[index].respiratoryRate = respiration.breathsPerMinute
+                freshDays[index].respiratoryWindows = respiration.windows
                 let datedNights = Array(allDays.map { existing in
                     freshDays.first(where: { $0.dateKey == existing.dateKey }) ?? existing
                 }.filter { $0.dateKey <= day.dateKey }.suffix(14)).compactMap(\.night)
@@ -767,7 +769,13 @@ final class BandLink: NSObject, ObservableObject {
                     sleepPerformancePct: old.sleepPerformancePct,
                     zoneSeconds: old.zoneSeconds,
                     awakeLnRMSSD: old.awakeLnRMSSD,
-                    awakeRestingHR: old.awakeRestingHR
+                    awakeRestingHR: old.awakeRestingHR,
+                    restingHRWindowSeconds: old.restingHRWindowSeconds,
+                    respiratoryWindows: old.respiratoryWindows,
+                    skinTemperatureC: old.skinTemperatureC,
+                    skinTemperatureSeconds: old.skinTemperatureSeconds,
+                    skinTemperatureSource: old.skinTemperatureSource,
+                    oxygenCandidatePct: old.oxygenCandidatePct
                 )
             } else {
                 byDate[row.dateKey] = DayMetrics(

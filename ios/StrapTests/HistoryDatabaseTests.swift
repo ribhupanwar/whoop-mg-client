@@ -3,13 +3,14 @@ import SQLite3
 import XCTest
 @testable import Strap
 
-private func historySample(_ unix: Int, hr: Int = 60, rr: [Int] = [900]) -> V18Sample {
+private func historySample(_ unix: Int, hr: Int = 60, rr: [Int] = [900], temp: Double? = 33,
+                           motion: Double? = 0.01) -> V18Sample {
     V18Sample(
         header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
-        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: 0.01,
+        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: motion,
         gravityXG: 0, gravityYG: 0, gravityZG: 1,
         stepCounter: 10, stepCadence: nil, activityClass: 0,
-        skinTempC: 33, tempAux1C: nil, tempAux2C: nil,
+        skinTempC: temp, tempAux1C: nil, tempAux2C: nil,
         sleepStateByte: nil, sleepState: 2, cardiacFlags: nil, hrQualityFlags: 5,
         spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
         signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
@@ -17,6 +18,18 @@ private func historySample(_ unix: Int, hr: Int = 60, rr: [Int] = [900]) -> V18S
 }
 
 final class HistoryDatabaseTests: XCTestCase {
+    func testNightTemperatureRequiresMeasuredCoverageAndDoesNotCountReplays() {
+        let rows = (1000..<1300).map { historySample($0) }
+        let session = SleepSession.make(samples: rows, period: SleepPeriod(startUnix: 1000, endUnix: 1299,
+            quietFraction: 1, meanHR: 60, wakeEvents: 0))
+        let measurement = NightTemperature.measure(rows + rows + [historySample(999, temp: 40)], session: session)
+        XCTAssertEqual(measurement.seconds, 300)
+        XCTAssertEqual(measurement.celsius, 33)
+        XCTAssertNil(NightTemperature.measure(Array(rows.dropLast()), session: session).celsius)
+        let bad = (1000..<1300).map { historySample($0, temp: .nan, motion: nil) }
+        XCTAssertNil(NightTemperature.measure(bad, session: session).celsius)
+        XCTAssertEqual(NightTemperature.measure(bad, session: session).seconds, 0)
+    }
     private var directory: URL!
     private var url: URL { directory.appendingPathComponent("history.sqlite") }
     override func setUpWithError() throws {

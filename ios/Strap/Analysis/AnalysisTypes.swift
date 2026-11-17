@@ -301,6 +301,12 @@ struct DayMetrics: Identifiable, Equatable, Codable {
     var zoneSeconds: [Int]? = nil
     var awakeLnRMSSD: Double? = nil
     var awakeRestingHR: Double? = nil
+    var restingHRWindowSeconds: Int? = nil
+    var respiratoryWindows: Int? = nil
+    var skinTemperatureC: Double? = nil
+    var skinTemperatureSeconds: Int? = nil
+    var skinTemperatureSource: String? = nil
+    var oxygenCandidatePct: Double? = nil
 
     var id: String { dateKey }
 

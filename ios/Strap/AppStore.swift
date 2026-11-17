@@ -28,6 +28,8 @@ final class AppStore: ObservableObject {
     private var bandCancellable: AnyCancellable?
     private var summaryCancellable: AnyCancellable?
     private var healthCancellable: AnyCancellable?
+    private var monitorCancellable: AnyCancellable?
+    @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
     private let activityQueue = DispatchQueue(label: "strap.activities.merge", qos: .utility)
@@ -84,6 +86,11 @@ final class AppStore: ObservableObject {
         healthCancellable = health.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
         }
+        monitorCancellable = Publishers.CombineLatest3(band.$days, band.$summary, band.$isAnalyzingHistory)
+            .map { days, summary, analyzing in
+                HealthMonitor.make(days: days, session: summary?.latestSleepSession, analyzing: analyzing)
+            }
+            .sink { [weak self] snapshot in self?.healthMonitor = snapshot }
         // Fitness comparisons change with saved observations/profile, never
         // with each live pulse or history packet. Work runs on a serial worker.
         fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
