@@ -173,7 +173,7 @@ struct HealthView: View {
                             grid.move(to: CGPoint(x: 0, y: y))
                             grid.addLine(to: CGPoint(x: size.width, y: y))
                         }
-                        context.stroke(grid, with: .color(.white.opacity(0.045)), lineWidth: 0.7)
+                        context.stroke(grid, with: .color(Color(hex: 0x667D88).opacity(0.17)), lineWidth: 0.7)
                         if lastHR != nil {
                             var guide = Path()
                             guide.move(to: CGPoint(x: markerX, y: 12))
