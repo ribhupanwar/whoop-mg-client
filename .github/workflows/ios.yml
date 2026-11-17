@@ -105,6 +105,14 @@ jobs:
             STRAP_BUILD_REVISION="$GITHUB_SHA" CODE_SIGNING_ALLOWED=NO test 2>&1 | tee test.log
           exit ${PIPESTATUS[0]}
 
+      - name: Independently validate recorded-route GPX and FIT exports
+        run: |
+          set -euo pipefail
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/TestResults.xcresult" --output-path "$RUNNER_TEMP/route-attachments"
+          python3 -m venv "$RUNNER_TEMP/route-validator"
+          "$RUNNER_TEMP/route-validator/bin/pip" --no-cache-dir install --quiet fitdecode==0.11.0
+          "$RUNNER_TEMP/route-validator/bin/python" tools/validate_route_exports.py "$RUNNER_TEMP/route-attachments"
+
       - name: Archive and package SideStore-ready ad-hoc signed IPA
         run: |
           set -uo pipefail

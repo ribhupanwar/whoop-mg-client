@@ -4,7 +4,19 @@ import MapKit
 struct GPSRunView: View {
     @ObservedObject private var gps = GPSRunRecorder.shared
     @State private var selectedRun: GPSRunRecord?
+    @State private var exportURL: URL?
+    @State private var exportError: String?
+    @State private var exporting = false
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private func export(_ run: GPSRunRecord, format: GPSRunExport.Format) {
+        exporting = true; exportURL = nil; exportError = nil
+        Task {
+            defer { exporting = false }
+            do { exportURL = try await Task.detached { try GPSRunExport.write(run, format: format) }.value }
+            catch { exportError = error.localizedDescription }
+        }
+    }
 
     var body: some View {
         Screen {
@@ -56,6 +68,9 @@ struct GPSRunView: View {
                 }
                 Panel {
                     SectionTitle("Saved GPS runs")
+                    if let exportURL { ShareLink("Share recorded route", item: exportURL) }
+                    if let exportError { Hint(exportError) }
+                    Hint("GPX and FIT exports contain recorded route points and timestamps. Missing heart rate, altitude and calories stay absent.")
                     if gps.savedRuns.isEmpty {
                         Hint("Finish a run of at least 100 metres to save it locally.")
                     } else {
@@ -75,6 +90,10 @@ struct GPSRunView: View {
                                     Button("Map") { selectedRun = run }
                                         .font(StrapTypography.body(12))
                                 }
+                                Menu("Export") {
+                                    Button("GPX") { export(run, format: .gpx) }
+                                    Button("FIT") { export(run, format: .fit) }
+                                }.disabled(exporting || run.route.count < 2)
                                 Button(role: .destructive) {
                                     gps.deleteRun(id: run.id)
                                 } label: {
