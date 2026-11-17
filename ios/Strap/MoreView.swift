@@ -21,6 +21,37 @@ struct MoreView: View {
                     .font(StrapTypography.body(26, weight: .bold))
                     .foregroundStyle(Color.appFG)
 
+                HStack(spacing: 12) {
+                    Image(systemName: "person.crop.circle.fill")
+                        .font(.system(size: 38, weight: .light))
+                        .foregroundStyle(Color.appAccent)
+                        .frame(width: 58, height: 58)
+                        .background(Color.appAccent.opacity(0.10), in: Circle())
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("YOUR STRAP")
+                            .font(StrapTypography.body(12, weight: .bold))
+                            .tracking(1.2)
+                            .foregroundStyle(Color.appMuted)
+                        Text(store.band.bandName ?? store.band.preferredBandName ?? "Personal dashboard")
+                            .font(StrapTypography.body(18, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                            .lineLimit(1)
+                        Label(store.band.isConnected ? "Band connected" : "Band not connected",
+                              systemImage: store.band.isConnected ? "checkmark.circle.fill" : "circle.dotted")
+                            .font(StrapTypography.body(11, weight: .medium))
+                            .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
+                    }
+                    Spacer(minLength: 0)
+                    NavigationLink(value: Route.settings) {
+                        Image(systemName: "chevron.right")
+                            .font(StrapTypography.body(16, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    .accessibilityLabel("Open profile and settings")
+                }
+                .padding(16)
+                .background(RoundedRectangle(cornerRadius: 18).fill(LinearGradient.appCard))
+
                 Panel {
                     SectionTitle("My band")
                     HStack {
