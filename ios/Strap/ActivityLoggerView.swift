@@ -12,6 +12,18 @@ struct ActivityLoggerView: View {
     @State private var sets: [WorkSet] = [WorkSet(reps: 8, loadKG: 60.0)]
     @State private var notes = ""
     @State private var activitySearch = ""
+    
+    private let editing: ManualActivity?
+    private let today = JournalStore.dayKey(for: Date())
+
+    init(editing: ManualActivity? = nil) {
+        self.editing = editing
+        _kind = State(initialValue: editing?.kind ?? .lift)
+        _name = State(initialValue: editing?.name ?? "")
+        _minutes = State(initialValue: editing?.minutes ?? 45)
+        _sets = State(initialValue: editing?.sets ?? [WorkSet(reps: 8, loadKG: 60.0)])
+        _notes = State(initialValue: editing?.notes ?? "")
+    }
 
     private let today = JournalStore.dayKey(for: Date())
 
@@ -24,6 +36,7 @@ struct ActivityLoggerView: View {
                     if kind.usesSets {
                         setsPanel
                     }
+                    if let error = store.activityWriteError { Hint("Activity was not saved; original history is preserved. " + error) }
                     Hint("Manual entries stay self-reported. The band measures heart rate and movement; it never sees load, so nothing from this sheet becomes strain or recovery.")
                 }
             }
@@ -216,14 +229,14 @@ struct ActivityLoggerView: View {
     private func save() {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let activity = ManualActivity(
-            dateKey: today,
+            id: editing?.id ?? UUID(),
+            dateKey: editing?.dateKey ?? today,
             kind: kind,
             name: trimmed.isEmpty ? kind.label : trimmed,
             minutes: minutes,
             sets: kind.usesSets ? sets.filter { $0.reps > 0 } : [],
             notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        store.addActivity(activity)
-        dismiss()
+        if store.addActivity(activity) { dismiss() }
     }
 }
