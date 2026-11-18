@@ -244,39 +244,51 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 3) {
-                NavigationLink(value: Route.sleepAnalysis) {
-                    trioItem(
-                        label: "SLEEP ›",
-                        text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
-                        progress: demo ? Double(SampleData.sleepRingPercent) / 100.0 : sleepPercent.map { Double($0) / 100.0 },
-                        color: .appSleep
-                    )
-                }
-                .buttonStyle(.plain)
+            // Three 104pt rings with WHOOP-like 18pt spacing fit the larger
+            // screens. Scale the diameter only on narrow screens so the row
+            // never clips or pushes Recovery/Strain outside the viewport.
+            GeometryReader { geometry in
+                let diameter = min(CGFloat(104), max(CGFloat(74), (geometry.size.width - 36) / 3))
+                HStack(spacing: 18) {
+                    NavigationLink(value: Route.sleepAnalysis) {
+                        trioItem(
+                            label: "SLEEP ›",
+                            text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
+                            progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
+                            color: .appSleep,
+                            ringSize: diameter
+                        )
+                    }
+                    .buttonStyle(.plain)
 
-                NavigationLink(value: Route.recovery) {
-                    trioItem(
-                    label: "RECOVERY ›",
-                    text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
-                    progress: demo ? Double(SampleData.recoveryRingPercent) / 100.0 : recoveryScore.map { $0 / 100.0 },
-                    color: DetailMetric.recovery.color(demo ? Double(SampleData.recoveryRingPercent) : recoveryScore)
-                    )
+                    NavigationLink(value: Route.recovery) {
+                        trioItem(
+                            label: "RECOVERY ›",
+                            text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
+                            progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
+                            color: DetailMetric.recovery.color(demo ? Double(SampleData.recoveryRingPercent) : recoveryScore),
+                            ringSize: diameter
+                        )
+                    }
+                    .buttonStyle(.plain)
+
+                    NavigationLink(value: Route.strain) {
+                        trioItem(
+                            label: "STRAIN ›",
+                            text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
+                            progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
+                            color: .appAccent,
+                            ringSize: diameter
+                        )
+                    }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
-                NavigationLink(value: Route.strain) {
-                    trioItem(
-                    label: "STRAIN ›",
-                    text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
-                    progress: demo ? SampleData.strain / 21.0 : strain.map { $0 / 21.0 },
-                    color: .appAccent
-                    )
-                }
-                .buttonStyle(.plain)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
+            .frame(height: 132)
             if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
-        .padding(.bottom, 16)
+        .padding(.bottom, 14)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -337,9 +349,9 @@ struct HomeView: View {
         return "\(battery)%"
     }
 
-    private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
-        VStack(spacing: 7) {
-            RingView(progress: progress, color: color, lineWidth: 7.5, size: 92, centerText: text, centerFont: 22)
+    private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
+        VStack(spacing: 8) {
+            RingView(progress: progress, color: color, lineWidth: 8, size: ringSize, centerText: text, centerFont: 24)
                 .accessibilityHidden(true)
             Text(label)
                 .font(StrapTypography.body(11.5, weight: .bold))
