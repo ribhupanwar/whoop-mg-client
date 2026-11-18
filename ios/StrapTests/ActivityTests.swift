@@ -223,6 +223,14 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(store.detectedActivities().first?.durationS, 1_191)
     }
 
+    func testCorruptDetectedArchiveIsNotOverwrittenByNewSync() {
+        let damaged = Data("unreadable-detected-history".utf8)
+        defaults.set(damaged, forKey: "strap.detected.activities.v1")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        store.mergeDetected([session(start: 1_799_996_400, end: 1_799_997_000)], now: now)
+        XCTAssertEqual(defaults.data(forKey: "strap.detected.activities.v1"), damaged)
+    }
+
     func testHistoricalSessionsSurviveNewSyncAndAppRelaunch() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let old = session(start: 1_700_000_000, end: 1_700_000_600)
