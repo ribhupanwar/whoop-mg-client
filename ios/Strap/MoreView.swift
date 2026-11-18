@@ -160,6 +160,7 @@ struct MoreView: View {
             NavigationLink { SettingsView() } label: { moreRow("Import WHOOP Data", icon: "square.and.arrow.down") }
             NavigationLink { AppleHealthImportView() } label: { moreRow("Import Apple Health", icon: "heart.text.square") }
             NavigationLink { ImportHistoryView() } label: { moreRow("Import History and Diagnostics", icon: "list.bullet.rectangle") }
+            NavigationLink { ManualActivityHistoryView() } label: { moreRow("Manual activity history & recovery", icon: "clock.arrow.circlepath") }
         }
     }
     private var exportActions: some View {
