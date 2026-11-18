@@ -351,7 +351,7 @@ struct HomeView: View {
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label.replacingOccurrences(of: \" ›\", with: \"\")), \(text == \"—\" ? \"unavailable\" : text)")
+        .accessibilityLabel(label.replacingOccurrences(of: " ›", with: "") + ", " + (text == "—" ? "unavailable" : text))
         .accessibilityAddTraits(.isButton)
     }
 
