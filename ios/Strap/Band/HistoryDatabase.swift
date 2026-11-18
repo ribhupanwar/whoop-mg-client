@@ -26,6 +26,8 @@ final class HistoryDatabase {
             // table during the first morning sync or retry on a slow device.
             try transaction {
                 try execute("CREATE TABLE IF NOT EXISTS history_sample (unix INTEGER PRIMARY KEY, payload BLOB NOT NULL)")
+                try execute("CREATE TABLE IF NOT EXISTS live_rr_record (source_id TEXT PRIMARY KEY, unix INTEGER NOT NULL, payload BLOB NOT NULL)")
+                try execute("CREATE INDEX IF NOT EXISTS live_rr_unix ON live_rr_record(unix)")
                 try execute("CREATE TABLE IF NOT EXISTS history_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
                 try execute("CREATE TABLE IF NOT EXISTS analysis_checkpoint (key TEXT PRIMARY KEY, fingerprint TEXT NOT NULL, result BLOB NOT NULL)")
             }
@@ -114,6 +116,8 @@ final class HistoryDatabase {
     }
 
     func restoreMissing(token: String, stream: (_ accept: ([V18Sample]) throws -> Void) throws -> Void,
+                        liveRRStream: (_ accept: ([LiveRRRecord]) throws -> Void) throws -> Void = { _ in },
+                        legacyLiveRRImported: Bool = false,
                         accompanyingWrites: () throws -> Void) throws {
         try transaction {
             let lookup = try prepare("SELECT 1 FROM history_sample WHERE unix = ?")
@@ -128,6 +132,10 @@ final class HistoryDatabase {
                     else if result != SQLITE_ROW { throw failure() }
                 }
                 _ = try insert(missing)
+            }
+            try liveRRStream { _ = try insertLiveRR($0) }
+            if legacyLiveRRImported, try metadata("legacy_live_rr_preferences_imported") == nil {
+                try setMetadata("legacy_live_rr_preferences_imported", value: "1")
             }
             try accompanyingWrites()
             try setMetadata("restore:" + token, value: "committed")
@@ -156,6 +164,52 @@ final class HistoryDatabase {
         }
         return changed
     }
+    func migrateLegacyLiveRR(_ samples: [LiveSample]) throws -> Int {
+        try transaction {
+            if try metadata("legacy_live_rr_preferences_imported") == nil {
+                _ = try insertLiveRR(samples.map { try LiveRRRecord.legacy($0) })
+                try setMetadata("legacy_live_rr_preferences_imported", value: "1")
+            }
+            return try liveRRCount()
+        }
+    }
+    @discardableResult
+    func commitLiveRR(_ rows: [LiveRRRecord]) throws -> Int {
+        try transaction { try insertLiveRR(rows) }
+    }
+    func liveRRCount() throws -> Int {
+        let statement = try prepare("SELECT COUNT(*) FROM live_rr_record")
+        defer { sqlite3_finalize(statement) }
+        guard sqlite3_step(statement) == SQLITE_ROW else { throw failure() }
+        return Int(sqlite3_column_int64(statement, 0))
+    }
+    func liveRR(from start: Int, through end: Int) throws -> [LiveRRRecord] {
+        let statement = try prepare("SELECT payload FROM live_rr_record WHERE unix BETWEEN ? AND ? ORDER BY unix, source_id")
+        defer { sqlite3_finalize(statement) }
+        sqlite3_bind_int64(statement, 1, Int64(start)); sqlite3_bind_int64(statement, 2, Int64(end))
+        var rows: [LiveRRRecord] = []
+        while true {
+            let status = sqlite3_step(statement)
+            if status == SQLITE_DONE { return rows }
+            guard status == SQLITE_ROW else { throw failure() }
+            rows.append(try decoder.decode(LiveRRRecord.self, from: blob(statement, column: 0)))
+        }
+    }
+    private func insertLiveRR(_ rows: [LiveRRRecord]) throws -> Int {
+        let statement = try prepare("INSERT OR IGNORE INTO live_rr_record(source_id, unix, payload) VALUES (?, ?, ?)")
+        defer { sqlite3_finalize(statement) }
+        var changed = 0
+        for row in rows {
+            sqlite3_reset(statement); sqlite3_clear_bindings(statement)
+            sqlite3_bind_text(statement, 1, row.id, -1, transient)
+            sqlite3_bind_int64(statement, 2, Int64(row.sample.unix))
+            bind(try encoder.encode(row), to: statement, column: 3)
+            guard sqlite3_step(statement) == SQLITE_DONE else { throw failure() }
+            changed += Int(sqlite3_changes(db))
+        }
+        return changed
+    }
+
     private func readSamples(_ s: OpaquePointer) throws -> [V18Sample] {
         var rows: [V18Sample] = []
         while true {
