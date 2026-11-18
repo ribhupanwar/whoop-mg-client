@@ -137,8 +137,18 @@ enum Hrv {
     /// contiguous records. Never bridge missing timestamps or disconnect gaps:
     /// doing so creates artificial successive-NN deltas and inflates live HRV.
     static func fromLiveSamples(_ samples: [LiveSample]) -> HrvResult {
-        let ordered = samples.sorted { $0.unix < $1.unix }
-        let runs = contiguousLiveRuns(ordered)
+        // Live reconnect/replay can deliver the same timestamp twice.
+        // Match historical processing: count one record per second, keeping
+        // the one with the most RR intervals instead of duplicating beats.
+        var uniqueBySecond: [Int: LiveSample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let runs = contiguousLiveRuns(Array(uniqueBySecond.values))
         return evaluateRuns(runs) { $0.rrIntervalsMS }
     }
 
