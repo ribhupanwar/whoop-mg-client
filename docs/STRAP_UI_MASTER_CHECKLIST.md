@@ -89,6 +89,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 3 / live RR replay)** `Hrv.fromLiveSamples` now deduplicates same-second live samples before contiguous-run analysis, preferring more RR intervals (`df6e1df`), with duplicate replay / stronger record regression tests (`b09887e`). CI and real WHOOP capture comparison pending; this does not validate RR units, morning HRV/RHR parity, SpO₂ or respiration.
 
+- [ ] **VERIFY (Batch 4 / Home compact score typography)** Aligned Home trio ring DIN numeric center from 25pt override to shared 18pt compact ring scale (`f1d139d`); verify screenshot against WHOOP before marking pixel-accurate. No licensed fonts changed.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
