@@ -2,6 +2,17 @@ import XCTest
 @testable import Strap
 
 final class SleepSessionTests: XCTestCase {
+    func testCorruptedExtremeCorrectionKeysCannotCrashAliasResolution() {
+        let night = period(3600)
+        let edit = [start + 120, start + 3300]
+        let overrides = [String(Int.min): edit, String(Int.max): edit]
+        XCTAssertNil(SleepCorrectionStore.times(for: night, overrides: overrides))
+        let saved = SleepCorrectionStore.saving(edit, for: night, overrides: overrides)
+        XCTAssertEqual(saved[String(night.startUnix)], edit)
+        XCTAssertEqual(saved[String(Int.min)], edit, "Do not destroy unrelated historical overrides")
+        XCTAssertEqual(saved[String(Int.max)], edit)
+    }
+
     func testSavedBoundsSurviveColdReloadWithoutStaleStagesOrScores() throws {
         let rows = (0..<3600).map { sample(start + $0) }
         let old = SleepSession.make(samples: rows, period: period(3600))
