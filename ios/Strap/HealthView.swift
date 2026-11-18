@@ -162,7 +162,7 @@ struct HealthView: View {
                                            style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             // Draw actual recorded HR variation, not a fabricated flat history.
                             // Keep the trace in the right-hand plot area, clear of BPM text.
-                            let readings = Array(series.suffix(90)).filter { $0.isFinite && (35...220).contains($0) }
+                            let readings = HealthChartReadings.valid(Array(liveChartSeries.suffix(90)))
                             if readings.count >= 2 {
                                 let low = max(35.0, (readings.min() ?? 60) - 8)
                                 let high = min(220.0, (readings.max() ?? 100) + 8)
@@ -223,7 +223,7 @@ struct HealthView: View {
                     if lastHR != nil {
                         // A marker is meaningful only when the plotted series
                         // contains at least two actual, valid observations.
-                        let plotted = Array(series.suffix(90)).filter { $0.isFinite && (35...220).contains($0) }
+                        let plotted = HealthChartReadings.valid(Array(liveChartSeries.suffix(90)))
                         if plotted.count >= 2, let latest = plotted.last {
                             let low = max(35.0, (plotted.min() ?? 60) - 8)
                             let high = min(220.0, (plotted.max() ?? 100) + 8)
@@ -426,6 +426,13 @@ struct HealthView: View {
             && store.band.recentLiveHR.count >= 2
     }
 
+    // The LIVE monitor must never plot historical offload values as though
+    // they were current heart-rate observations.
+    private var liveChartSeries: [Double] {
+        guard lastHR != nil, usingLiveSeries else { return [] }
+        return store.band.recentLiveHR.map { Double($0.heartRate) }
+    }
+
     private var series: [Double] {
         if usingLiveSeries { return store.band.recentLiveHR.map { Double($0.heartRate) } }
         return summary?.heartRateSeries ?? []
@@ -556,5 +563,14 @@ struct HealthView: View {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: Date(timeIntervalSince1970: TimeInterval(unix)))
+    }
+}
+
+
+/// Pure chart-input validation. The live chart only renders actual plausible
+/// sensor observations; unavailable or malformed points never become a line.
+enum HealthChartReadings {
+    static func valid(_ values: [Double]) -> [Double] {
+        values.filter { $0.isFinite && (35...220).contains($0) }
     }
 }
