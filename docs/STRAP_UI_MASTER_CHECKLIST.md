@@ -37,9 +37,9 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Alarm wake-time DIN Pro formatting (commit `9ee0ec0`).
 - [x] **DONE (code)** Sleep HR chart valid time-window filtering (commit `f081f76`); regression test added (`606a6a0`).
 - [x] **DONE (verified CI)** Terminal band-up wake boundary regression tests (299s remains, 300s trims) in `SleepWakeTailBoundaryTests.swift` at `72b0490`; native iOS build/test/IPA workflow [44218990787](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44218990787) succeeded on this code revision. Real-device sleep-end accuracy remains **VERIFY**.
-- [ ] **VERIFY** Synthetic regressions for terminal state=0 suffix after sustained wake and short bathroom awakening followed by sleep added in `SleepWakeTailBoundaryTests.swift` (commit `996fa59`); native CI and timestamped device captures remain pending. Synthetic boundary tests do not establish physical-device accuracy.
+- [ ] **VERIFY** Synthetic regressions for terminal state=0 suffix after sustained wake and short bathroom awakening followed by sleep added in `SleepWakeTailBoundaryTests.swift` (commit `996fa59`); native iOS CI [44221683794](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44221683794) passed; timestamped device captures remain pending. Synthetic boundary tests do not establish physical-device accuracy.
 - [ ] **TODO** Sleep stage hypnogram screenshot alignment and validated detection/staging.
-- [ ] **TODO** Verify edited sleep start/end persistence and recomputation of sleep performance/recovery.
+- [ ] **VERIFY** Offline manual sleep wake-edit persistence and stale-score abstention regression added in `SleepSessionTests.swift` (commit `6e31694`); CI and real-device edit/recovery refresh remain pending. Do not mark complete until restored sensor coverage recalculates metrics correctly.
 - [ ] **TODO** Alarm weekly schedule layout and actual band behavior.
 - [ ] **TODO** Recovery baseline/insight presentation with real measurements.
 
