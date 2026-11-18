@@ -93,6 +93,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Health accuracy / respiration replay)** `Respiration.beatSegments` now deduplicates replayed seconds, preferring more complete RR records (`a5063bf`); synthetic regression tests (`6415254`) cover continuity and beat counts. Native CI and WHOOP capture comparison pending. No claim of validated breathing-rate parity.
 
+- [ ] **VERIFY (Sleep alias overflow / makeAll)** Legacy or corrupted `Int.min`/`Int.max` correction keys previously reached unchecked `abs(source - period.startUnix)` in `SleepSession.makeAll`. Replaced with overflow-safe shared source distance (`2c17238`) and regression (`262a83c`); CI/device verification pending. No historical overrides removed.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
