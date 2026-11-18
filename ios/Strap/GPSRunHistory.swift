@@ -75,8 +75,17 @@ final class GPSRunHistory {
         }
     }
 
+    /// Do not mutate a current archive that exists but cannot be decoded.
+    /// Returning false lets callers surface a storage error without data loss.
+    private var currentArchiveReadable: Bool {
+        guard FileManager.default.fileExists(atPath: fileURL.path) else { return true }
+        guard let data = try? Data(contentsOf: fileURL) else { return false }
+        return (try? JSONDecoder().decode([GPSRunRecord].self, from: data)) != nil
+    }
+
     @discardableResult
     func save(_ record: GPSRunRecord) -> Bool {
+        guard currentArchiveReadable else { return false }
         var runs = all()
         if let index = runs.firstIndex(where: { $0.id == record.id }) {
             runs[index] = record
@@ -86,6 +95,7 @@ final class GPSRunHistory {
 
     @discardableResult
     func delete(id: UUID) -> Bool {
+        guard currentArchiveReadable else { return false }
         return persist(all().filter { $0.id != id })
     }
 }
