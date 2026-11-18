@@ -25,7 +25,6 @@ struct ActivityLoggerView: View {
         _notes = State(initialValue: editing?.notes ?? "")
     }
 
-    private let today = JournalStore.dayKey(for: Date())
 
     var body: some View {
         NavigationStack {
