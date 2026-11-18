@@ -35,6 +35,7 @@
 - [ ] Preserve licensed Proxima Nova/DIN Pro files and metric-derived zone colors.
 - [ ] Add screenshot/layout/accessibility regression tests; verify VoiceOver and tap targets.
 
+- [ ] **VERIFY (Batch 4 screenshot audit, 2026-11-18):** Compared same-night STRAP/WHOOP Home and sleep detail screenshots. Home rings show different *measured* values (STRAP sleep 91%, recovery 67%, strain 0.0; WHOOP sleep 78%, recovery 69%, strain 0.1); do not change zone colors to disguise measurement discrepancies. STRAP shows Health Monitor 'baseline pending' and Stress 'unavailable' versus WHOOP 5/5 and Low; this is a data/baseline issue, not a cosmetic fix. WHOOP's Home places My Day after a large notice and uses a 4-item navigation bar; STRAP currently displays a different Home layout/navigation. Sleep-stage totals differ (STRAP Deep 1:05, REM 2:20; WHOOP Deep 1:59, REM 1:43), requiring sensor/model validation before graphical tuning. Existing canvas, licensed fonts, accessibility tabs, and chart fixes remain preserved. Next: measured device screenshot baselines for header/rings, Health cards, activity card and bottom nav; verify target product tab requirements before changing navigation. No duplicate implementation or arbitrary health-value/color overrides.\n
 ## Batch 5 — Data safety and daily workflows
 - [ ] Verify full export/backup restore round-trip, including sleep, activities, raw RR and manual corrections.
 - [ ] Verify uninstall/reinstall recovery path before user relies on backup.
