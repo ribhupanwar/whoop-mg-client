@@ -133,12 +133,15 @@ struct SleepEfficiencyTimeline: View {
             ZStack(alignment: .leading) {
                 SleepHatchedTrack()
                 ForEach(session.staging.segments) { segment in
-                    if (segment.stage == .wake) == awake {
+                    let start = max(session.startUnix, segment.startUnix)
+                    let end = min(session.endUnix, segment.startUnix + segment.durationS)
+                    // Reject out-of-window and empty segments instead of drawing
+                    // a zero-width rectangle beyond the recorded timeline.
+                    if end > start && (segment.stage == .wake) == awake {
                         let span = Double(max(1, session.endUnix - session.startUnix))
-                        let start = max(session.startUnix, segment.startUnix)
-                        let end = min(session.endUnix, segment.startUnix + segment.durationS)
-                        Rectangle().fill(awake ? Color(hex: 0xCCCCCC) : Color.appSleep)
-                            .frame(width: max(0, geometry.size.width * CGFloat(Double(end - start) / span)))
+                        Rectangle()
+                            .fill(awake ? Color(hex: 0xD2D5D7) : Color.appSleep)
+                            .frame(width: geometry.size.width * CGFloat(Double(end - start) / span))
                             .offset(x: geometry.size.width * CGFloat(Double(start - session.startUnix) / span))
                     }
                 }
