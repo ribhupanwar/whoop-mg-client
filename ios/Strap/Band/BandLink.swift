@@ -72,6 +72,7 @@ struct LiveSessionSummary: Codable, Equatable {
 final class BandLink: NSObject, ObservableObject {
     private let preferencesWriter = BackgroundPreferencesWriter()
     private var lastLiveRRSaveAt = Date.distantPast
+    private var backgroundObserver: NSObjectProtocol?
 
     static let commandSpacing: TimeInterval = 0.12
     static let drainIdleSeconds: TimeInterval = 30
@@ -402,6 +403,9 @@ final class BandLink: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: Notification.Name("UIApplicationDidEnterBackgroundNotification"), object: nil, queue: .main
+        ) { [weak self] _ in self?.persistLiveRRArchive(force: true) }
         if let data = UserDefaults.standard.data(forKey: Keys.days),
            let saved = try? JSONDecoder().decode([DayMetrics].self, from: data) {
             days = saved
@@ -434,6 +438,10 @@ final class BandLink: NSObject, ObservableObject {
         central = CBCentralManager(delegate: self, queue: nil,
             options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
         recoverSavedCaptures()
+    }
+
+    deinit {
+        if let backgroundObserver { NotificationCenter.default.removeObserver(backgroundObserver) }
     }
 
     /// Raw chunks are saved before the strap's trim ACK. Recover them after
