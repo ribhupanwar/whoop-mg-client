@@ -77,3 +77,5 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 6. If CI or physical-device verification is unavailable, leave the item as **VERIFY** or **BLOCKED**, not completed.
 
 Sources: user-supplied WHOOP design notes, official WHOOP brand guidance, NOOP design-language reference, OpenStrap, and `ribhupanwar/dsta`. Palette and layout require screenshot verification; third-party design values are not official universal tokens.
+
+- [ ] **VERIFY** Sleep onset 13–15 minute systematic delay: diagnostic CSV now includes up to 30 minutes of actually retained pre-onset records (commits `f03100d`, `8ece896`, `b18dd11`), with a focused coverage/bounds regression test. Native CI pending; compare the exported pre-onset timestamps/states against WHOOP before changing detection thresholds. Never backdate sleep without evidence.
