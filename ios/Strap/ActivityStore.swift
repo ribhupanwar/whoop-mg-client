@@ -402,7 +402,7 @@ final class ActivityStore {
         let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let merged = ManualActivity(dateKey: first.dateKey, kind: first.kind,
             name: title.isEmpty ? first.kind.label + " (merged)" : title, minutes: minutes,
-            sets: selected.flatMap(\\.sets), notes: selected.map { $0.name + ": " + $0.notes }.joined(separator: "\\n"),
+            sets: selected.flatMap(\.sets), notes: selected.map { $0.name + ": " + $0.notes }.joined(separator: "\n"),
             mergedFrom: selected)
         try archiveManualRevision(original)
         let updated = items.filter { !ids.contains($0.id) } + [merged]
