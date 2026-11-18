@@ -223,10 +223,14 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(store.detectedActivities().first?.durationS, 1_191)
     }
 
-    func testSessionsOlderThanSixtyDaysArePruned() {
+    func testHistoricalSessionsSurviveNewSyncAndAppRelaunch() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
-        store.mergeDetected([session(start: 1_700_000_000, end: 1_700_000_600)], now: now)
-        XCTAssertTrue(store.detectedActivities().isEmpty)
+        let old = session(start: 1_700_000_000, end: 1_700_000_600)
+        let recent = session(start: 1_799_996_400, end: 1_799_997_000)
+        store.mergeDetected([old], now: now)
+        store.mergeDetected([recent], now: now)
+        XCTAssertEqual(store.detectedActivities(), [old, recent])
+        XCTAssertEqual(ActivityStore(defaults: defaults).detectedActivities(), [old, recent])
     }
 }
 
