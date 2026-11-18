@@ -440,6 +440,12 @@ final class ActivityStore {
         detectedLock.lock()
         defer { detectedLock.unlock() }
         guard !sessions.isEmpty else { return }
+        // A corrupt existing archive must not be silently replaced by the
+        // latest sync batch. Preserve the original bytes for recovery.
+        if let existing = defaults.data(forKey: detectedKey),
+           (try? JSONDecoder().decode([ActivitySession].self, from: existing)) == nil {
+            return
+        }
         // Replayed history can contain several overlapping variants of the
         // same workout. Deduplicate across both existing and incoming rows,
         // not just the first match; repeat until transitive overlaps collapse.
