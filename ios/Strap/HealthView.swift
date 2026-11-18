@@ -161,11 +161,27 @@ struct HealthView: View {
                             guide.addLine(to: CGPoint(x: markerX, y: size.height - 12))
                             context.stroke(guide, with: .color(.white.opacity(0.5)),
                                            style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                            var trace = Path()
-                            trace.move(to: CGPoint(x: width * 0.30, y: graphY))
-                            trace.addLine(to: CGPoint(x: markerX, y: graphY))
-                            context.stroke(trace, with: .color(Color(hex: 0x159EF0).opacity(0.22)), lineWidth: 12)
-                            context.stroke(trace, with: .color(Color(hex: 0x159EF0)), lineWidth: 2.5)
+                            // Draw actual recorded HR variation, not a fabricated flat history.
+                            // Keep the trace in the right-hand plot area, clear of BPM text.
+                            let readings = Array(series.suffix(90)).filter { $0.isFinite && (35...220).contains($0) }
+                            if readings.count >= 2 {
+                                let low = max(35.0, (readings.min() ?? 60) - 8)
+                                let high = min(220.0, (readings.max() ?? 100) + 8)
+                                let range = max(1, high - low)
+                                let left = width * 0.48
+                                let plotWidth = max(1, markerX - left)
+                                let plotTop = height * 0.35
+                                let plotHeight = height * 0.36
+                                var trace = Path()
+                                for (index, bpm) in readings.enumerated() {
+                                    let x = left + plotWidth * CGFloat(index) / CGFloat(readings.count - 1)
+                                    let y = plotTop + plotHeight * CGFloat((high - bpm) / range)
+                                    if index == 0 { trace.move(to: CGPoint(x: x, y: y)) }
+                                    else { trace.addLine(to: CGPoint(x: x, y: y)) }
+                                }
+                                context.stroke(trace, with: .color(Color(hex: 0x159EF0).opacity(0.22)), lineWidth: 10)
+                                context.stroke(trace, with: .color(Color(hex: 0x159EF0)), lineWidth: 2.5)
+                            }
                         }
                     }
                     // The reference has a soft cyan wash *below* the line,
