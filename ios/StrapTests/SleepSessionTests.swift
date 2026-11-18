@@ -718,3 +718,21 @@ extension SleepSessionTests {
                        [5, 20])
     }
 }
+
+
+extension SleepSessionTests {
+    func testDiagnosticRejectsInvalidEditedSleepWindow() {
+        let night = knownNight()
+        let invalid = SleepSession(
+            version: night.version, sourceStartUnix: night.sourceStartUnix,
+            startUnix: night.endUnix, endUnix: night.startUnix,
+            staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: true, sourceEndUnix: night.sourceEndUnix)
+        XCTAssertThrowsError(try SleepDiagnostics.csv(
+            samples: [sample(night.startUnix)], session: invalid)) { error in
+            guard case SleepDiagnostics.ExportError.noNight = error else {
+                return XCTFail("Invalid window should report noNight, got \(error)")
+            }
+        }
+    }
+}
