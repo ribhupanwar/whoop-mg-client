@@ -64,6 +64,28 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
+    func testSustainedBandUpRunIsNeverReportedAsDeepOrREM() throws {
+        let (original, start) = capture(startHour: 23, startMinute: 51)
+        let upStart = start + 30 * 60
+        let upEnd = upStart + 16 * 60
+        let rows = original.map { sample -> V18Sample in
+            guard upStart <= sample.unix, sample.unix < upEnd else { return sample }
+            return row(sample.unix, seconds: Int(sample.header.recordIndex),
+                       sleeping: true, sleepState: 3)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        let stages = SleepStager.stage(samples: rows, period: night)
+        let duringUp = stages.segments.filter {
+            max($0.startUnix, upStart) < min($0.endUnix, upEnd)
+        }
+        let nonWakeSeconds = duringUp.reduce(0) { acc, segment in
+            acc + (segment.stage == .wake ? 0
+                : max(0, min(segment.endUnix, upEnd) - max(segment.startUnix, upStart)))
+        }
+        XCTAssertLessThanOrEqual(nonWakeSeconds, 30,
+            "Sustained explicit 16-minute band-up evidence must not be labeled Deep or REM")
+    }
+
     func testSleepStateHintDoesNotFabricateMissingMotionRecords() {
         let (rows, _) = capture(startHour: 23, startMinute: 51)
         let invalid = rows.map { sample -> V18Sample in
