@@ -91,6 +91,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 4 / Home compact score typography)** Aligned Home trio ring DIN numeric center from 25pt override to shared 18pt compact ring scale (`f1d139d`); verify screenshot against WHOOP before marking pixel-accurate. No licensed fonts changed.
 
+- [ ] **VERIFY (Health accuracy / respiration replay)** `Respiration.beatSegments` now deduplicates replayed seconds, preferring more complete RR records (`a5063bf`); synthetic regression tests (`6415254`) cover continuity and beat counts. Native CI and WHOOP capture comparison pending. No claim of validated breathing-rate parity.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
