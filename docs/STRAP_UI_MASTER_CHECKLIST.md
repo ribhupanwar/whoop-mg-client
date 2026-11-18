@@ -7,6 +7,7 @@
 - [ ] If native build fails, fix the exact compiler/signing/package failure before starting feature batches.
 
 - [x] **DONE (verified 2026-11-18):** Native iOS build, simulator tests and IPA packaging succeeded for `7a354408`: [iOS run 44289784088](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44289784088), [tests run 44289784107](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44289784107). The `Strap-unsigned-ipa` artifact (ID `14421547125`) and signing-entitlement artifact (ID `14422245658`) are present. This is an ad-hoc signed IPA requiring authorized SideStore/device re-signing; successful CI does not establish physical-device correctness.\n\n## Batch 1 — Reconcile Codex PR #46 safely
+- [ ] **PORTED TO MAIN (2026-11-18):** GPX/FIT export writer and focused tests copied selectively from PR #46; `GPSRunView` now exposes ShareLink export actions. CI validation pending; FIT output still requires independent third-party decoder/device validation. No synthetic HR/elevation/calories are added.
 - [ ] Re-audit each changed file against current `main`; classify already-present, safe-to-port, conflicting, and obsolete.
 - [ ] Integrate activity history/revisions and delete persistence without duplicate actions.
 - [ ] Integrate GPX/FIT export and validate generated files.
