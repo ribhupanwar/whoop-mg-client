@@ -112,7 +112,14 @@ final class HistoryDatabase {
     func migrateLegacyLiveRR(_ samples: [LiveSample]) throws -> Int {
         try transaction {
             if try metadata("legacy_live_rr_preferences_imported") == nil {
-                _ = try insertLiveRR(samples.map { try LiveRRRecord.legacy($0) })
+                // A restored backup may already contain some of these samples.
+                // Merge the still-local preference archive without duplicating
+                // exact sample payloads or discarding additional local seconds.
+                for sample in samples {
+                    let existing = try liveRR(from: sample.unix, through: sample.unix)
+                    guard !existing.contains(where: { $0.sample == sample }) else { continue }
+                    _ = try insertLiveRR([LiveRRRecord.legacy(sample)])
+                }
                 try setMetadata("legacy_live_rr_preferences_imported", value: "1")
             }
             return try liveRRCount()
@@ -163,7 +170,6 @@ final class HistoryDatabase {
 
     func restoreMissing(token: String, stream: (_ accept: ([V18Sample]) throws -> Void) throws -> Void,
                         liveRRStream: (_ accept: ([LiveRRRecord]) throws -> Void) throws -> Void = { _ in },
-                        legacyLiveRRImported: Bool = false,
                         accompanyingWrites: () throws -> Void) throws {
         try transaction {
             let lookup = try prepare("SELECT 1 FROM history_sample WHERE unix = ?")
@@ -180,9 +186,6 @@ final class HistoryDatabase {
                 _ = try insert(missing)
             }
             try liveRRStream { _ = try insertLiveRR($0) }
-            if legacyLiveRRImported, try metadata("legacy_live_rr_preferences_imported") == nil {
-                try setMetadata("legacy_live_rr_preferences_imported", value: "1")
-            }
             try accompanyingWrites()
             try setMetadata("restore:" + token, value: "committed")
         }
