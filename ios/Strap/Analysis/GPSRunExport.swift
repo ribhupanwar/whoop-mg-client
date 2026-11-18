@@ -13,6 +13,7 @@ enum GPSRunExport {
         guard run.route.count >= 2, run.route.count <= 1_000_000,
               run.startedAt.timeIntervalSince1970.isFinite, run.endedAt.timeIntervalSince1970.isFinite,
               run.endedAt > run.startedAt, run.movingSeconds >= 0,
+              Double(run.movingSeconds) <= run.endedAt.timeIntervalSince(run.startedAt),
               run.distanceMeters.isFinite, run.distanceMeters >= 0 else {
             throw Failure(message: "A recorded route with valid workout bounds is required.")
         }
