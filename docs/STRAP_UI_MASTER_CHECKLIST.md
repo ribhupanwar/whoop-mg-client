@@ -87,6 +87,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 2 / sleep edit persistence)** Saved sleep correction alias lookup now uses overflow-safe source timestamp distance, avoiding crashes for extreme corrupt/legacy keys while retaining unrelated saved overrides (`SleepSession.swift`, commit `e321c35`); focused `SleepSessionTests.swift` regression (`2783fbe`). Native CI and device tests pending. This does not resolve sleep onset/staging or Recovery parity.
 
+- [ ] **VERIFY (Batch 3 / live RR replay)** `Hrv.fromLiveSamples` now deduplicates same-second live samples before contiguous-run analysis, preferring more RR intervals (`df6e1df`), with duplicate replay / stronger record regression tests (`b09887e`). CI and real WHOOP capture comparison pending; this does not validate RR units, morning HRV/RHR parity, SpO₂ or respiration.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
