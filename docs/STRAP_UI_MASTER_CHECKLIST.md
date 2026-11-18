@@ -29,7 +29,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Health Monitor HR chart grid changed to more visible blue-grey `#667D88` at 17% opacity (commit `58671c6`).
 - [x] **DONE (code)** Removed redundant Connected banner above live HR chart to match reference (commit `31070f7`); BLE connection logic unchanged.
 - [ ] **VERIFY** Health Monitor chart grid/background colors against supplied screenshot on actual iPhone.
-- [ ] **TODO** Match Health Monitor chart height, line placement, typography, and metric tile surface colors to supplied reference without changing real BPM or sensor-derived measurements.
+- [ ] **VERIFY** Health Monitor HR chart now draws observed HR variation instead of a synthetic flat trace, with endpoint marker aligned to the last plotted observation (commits `90eb17a`, `abcc8f9`); native CI and screenshot comparison pending. Chart height, typography and metric tile colors still **TODO**.
 - [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
 - [ ] **TODO** Accurate range/status visualizations; never invent SpO2, respiratory rate or skin temperature.
 
