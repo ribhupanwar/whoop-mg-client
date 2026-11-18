@@ -5,6 +5,10 @@ import XCTest
 /// must not erase physiological overnight onset, while daytime rest still
 /// requires independently confirmed band sleep evidence.
 final class SleepOvernightOnsetBoundaryTests: XCTestCase {
+    func testChangedSleepStagingRecipeInvalidatesVersionFiveSnapshots() {
+        XCTAssertGreaterThan(SleepSession.algorithmVersion, 5)
+    }
+
     private func row(_ unix: Int, seconds: Int, sleeping: Bool, sleepState: Int?) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80,
