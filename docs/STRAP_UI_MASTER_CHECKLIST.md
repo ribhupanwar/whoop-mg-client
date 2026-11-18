@@ -147,6 +147,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Sleep alias overflow / makeAll)** Legacy or corrupted `Int.min`/`Int.max` correction keys previously reached unchecked `abs(source - period.startUnix)` in `SleepSession.makeAll`. Replaced with overflow-safe shared source distance (`2c17238`) and regression (`262a83c`); CI/device verification pending. No historical overrides removed.
 
+- [ ] **VERIFY (Batch 2 / sustained mid-night wake)** Real 2026-11-18 sensor CSV has a 16-minute V18 band-state=3 interval (04:31–04:47 local) while the estimated hypnogram still labels portions deep/light. Added a conservative stager override: only well-covered (>=80%) contiguous state=3 runs of >=5 minutes are labelled wake; 2–4 minute bathroom/movement intervals do not force wake. Commits `0a1dbe2`, tests `227f129` and `256353a`. CI and comparison with actual wearer/reference sleep diary pending; this is a heuristic, not PSG truth.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
