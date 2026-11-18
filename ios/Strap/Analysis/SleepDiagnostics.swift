@@ -15,7 +15,11 @@ enum SleepDiagnostics {
     }
 
     static func csv(samples: [V18Sample], session: SleepSession, preSleepSeconds: Int = 0) throws -> String {
-        let lowerBound = session.startUnix - min(max(0, preSleepSeconds), 3600)
+        // Clamp before subtraction so an imported/corrupt extreme timestamp
+        // cannot trap the diagnostic exporter on integer underflow.
+        let lookback = min(max(0, preSleepSeconds), 3600)
+        let (candidateLowerBound, overflow) = session.startUnix.subtractingReportingOverflow(lookback)
+        let lowerBound = overflow ? Int.min : candidateLowerBound
         let rows = samples.filter { lowerBound <= $0.unix && $0.unix < session.endUnix }
             .sorted {
                 if $0.unix != $1.unix { return $0.unix < $1.unix }
