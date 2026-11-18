@@ -93,16 +93,19 @@ struct SleepSession: Codable, Equatable {
         var assigned: [Int: (distance: Int, times: [Int])] = [:]
         for key in overrides.keys.sorted() {
             guard let source = Int(key), let times = SleepCorrectionStore.validated(overrides[key]) else { continue }
-            let candidate = ordered.enumerated().filter { _, period in
-                if period.startUnix == source { return true }
+            // Reuse the same overflow-safe alias distance as saved correction
+            // lookup. A corrupt extreme source key must not crash makeAll.
+            let candidates = ordered.enumerated().compactMap { index, period -> (index: Int, distance: Int)? in
+                guard let distance = SleepCorrectionStore.sourceDistance(source, period.startUnix) else { return nil }
+                if period.startUnix == source { return (index, distance) }
                 let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
-                return abs(source - period.startUnix) <= 6 * 3600 && overlap > 0
-                    && overlap * 2 >= min(period.durationS, times[1] - times[0])
-            }.min { abs(source - $0.element.startUnix) < abs(source - $1.element.startUnix) }
-            guard let candidate else { continue }
-            let distance = abs(source - candidate.element.startUnix)
-            if let previous = assigned[candidate.offset], previous.distance <= distance { continue }
-            assigned[candidate.offset] = (distance, times)
+                guard overlap > 0, overlap * 2 >= min(period.durationS, times[1] - times[0]) else { return nil }
+                return (index, distance)
+            }
+            guard let candidate = candidates.min(by: { $0.distance < $1.distance }) else { continue }
+            let distance = candidate.distance
+            if let previous = assigned[candidate.index], previous.distance <= distance { continue }
+            assigned[candidate.index] = (distance, times)
         }
         // Old caches can contain multiple edits recovered onto different fragments.
         // Prefer the closest source (then latest source), and never count overlapping edits twice.
@@ -293,7 +296,7 @@ enum SleepCorrectionStore {
         return times
     }
     /// Corrupt or legacy override keys must never overflow Int distance arithmetic.
-    private static func nearbySource(_ source: Int, _ start: Int) -> Int? {
+    static func sourceDistance(_ source: Int, _ start: Int) -> Int? {
         let (distance, overflow) = source.subtractingReportingOverflow(start)
         guard !overflow, distance != Int.min else { return nil }
         let magnitude = abs(distance)
@@ -308,7 +311,7 @@ enum SleepCorrectionStore {
             ?? [period.startUnix, period.endUnix + 1]
         var result = overrides
         for (key, value) in overrides {
-            guard let source = Int(key), nearbySource(source, period.startUnix) != nil,
+            guard let source = Int(key), sourceDistance(source, period.startUnix) != nil,
                   let existing = validated(value) else { continue }
             let overlap = min(reference[1], existing[1]) - max(reference[0], existing[0])
             if source == period.startUnix
