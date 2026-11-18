@@ -6,7 +6,7 @@
 - [x] **DONE (verified CI)** Native iOS workflow for `454e0d5` succeeded ([run 44272815069](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44272815069)); matching tests workflow succeeded ([run 44272815052](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44272815052)). Later native iOS workflow for `9e73dfa` also succeeded ([run 44278555357](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44278555357)); tests on `9e73dfa` were cancelled, while the subsequent checklist-only `1182edb` tests workflow succeeded ([run 44278575375](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44278575375)). Physical-device verification remains **VERIFY**.
 - [ ] If native build fails, fix the exact compiler/signing/package failure before starting feature batches.
 
-## Batch 1 — Reconcile Codex PR #46 safely
+- [x] **DONE (verified 2026-11-18):** Native iOS build, simulator tests and IPA packaging succeeded for `7a354408`: [iOS run 44289784088](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44289784088), [tests run 44289784107](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44289784107). The `Strap-unsigned-ipa` artifact (ID `14421547125`) and signing-entitlement artifact (ID `14422245658`) are present. This is an ad-hoc signed IPA requiring authorized SideStore/device re-signing; successful CI does not establish physical-device correctness.\n\n## Batch 1 — Reconcile Codex PR #46 safely
 - [ ] Re-audit each changed file against current `main`; classify already-present, safe-to-port, conflicting, and obsolete.
 - [ ] Integrate activity history/revisions and delete persistence without duplicate actions.
 - [ ] Integrate GPX/FIT export and validate generated files.
