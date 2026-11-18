@@ -50,4 +50,21 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         XCTAssertEqual(night.endUnix, tailStart - 1)
     }
 
+    func testShortTerminalUnknownStateDoesNotHideConfirmedWake() throws {
+        let (baseRows, tailStart, end) = capture(upSeconds: 300)
+        let unknown = (1...60).map { row(end + $0, hr: 55, accel: 0.01, state: 0) }
+        let night = try XCTUnwrap(SleepDetect.detect(baseRows + unknown).first)
+        XCTAssertEqual(night.endUnix, tailStart - 1,
+                       "A short state=0 suffix must not undo sustained state=3 wake")
+    }
+
+    func testBriefBathroomAwakeningFollowedBySleepDoesNotTrimNight() throws {
+        let (baseRows, tailStart, end) = capture(upSeconds: 180)
+        let resumed = (1...900).map { row(end + $0, hr: 55, accel: 0.01, state: 2) }
+        let night = try XCTUnwrap(SleepDetect.detect(baseRows + resumed).first)
+        XCTAssertEqual(night.endUnix, end + 900,
+                       "A short mid-night up interval is not the final wake-up")
+        XCTAssertLessThan(tailStart, night.endUnix)
+    }
+
 }
