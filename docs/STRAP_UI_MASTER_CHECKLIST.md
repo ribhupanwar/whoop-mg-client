@@ -85,6 +85,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 1 / activity swipe wired)** Today timed and manual activity rows now use non-destructive swipe-to-reveal Delete alongside existing long-press context menu (`HomeView.swift`, commit `97fb197`). Gesture tests are in `ActivitySwipeIntentTests.swift`. iOS CI and device verification pending; verify both gesture and persisted deletion before DONE.
 
+- [ ] **VERIFY (Batch 2 / sleep edit persistence)** Saved sleep correction alias lookup now uses overflow-safe source timestamp distance, avoiding crashes for extreme corrupt/legacy keys while retaining unrelated saved overrides (`SleepSession.swift`, commit `e321c35`); focused `SleepSessionTests.swift` regression (`2783fbe`). Native CI and device tests pending. This does not resolve sleep onset/staging or Recovery parity.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
