@@ -109,13 +109,40 @@ enum SleepStager {
             )
         }
 
-        let labels = labelsForValidRuns(epochs)
+        var labels = labelsForValidRuns(epochs)
         guard labels.count == epochs.count else {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
                 wakeMinutes: 0, epochs: validEpochCount, hrCoverage: coverage,
                 reason: "staging produced no labels"
             )
+        }
+
+        // V18 band state 3 is a coarse "up" hint, not a sleep-stage label.
+        // A sustained, well-covered 5-minute up run is strong evidence of wake
+        // and should not be smoothed into deep/light by the physiological model.
+        // Short bathroom/movement intervals remain part of the same night and
+        // are left to the normal stage classifier.
+        let upEpochs = epochs.map { epoch -> Bool in
+            let duration = epoch.end - epoch.start
+            guard duration > 0 else { return false }
+            let upSeconds = records.values.reduce(into: 0) { count, sample in
+                if epoch.start <= sample.unix, sample.unix < epoch.end,
+                   sample.sleepState == 3 { count += 1 }
+            }
+            return Double(upSeconds) / Double(duration) >= 0.8
+        }
+        var runStart: Int?
+        for index in 0...upEpochs.count {
+            let isUp = index < upEpochs.count && upEpochs[index]
+            if isUp {
+                if runStart == nil { runStart = index }
+            } else if let first = runStart {
+                if index - first >= 10 {
+                    for stageIndex in first..<index { labels[stageIndex] = .wake }
+                }
+                runStart = nil
+            }
         }
 
         var segments: [SleepStageSegment] = []
