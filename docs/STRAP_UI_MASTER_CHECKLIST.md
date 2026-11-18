@@ -44,6 +44,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **TODO** Alarm weekly schedule layout and actual band behavior.
 - [ ] **TODO** Recovery baseline/insight presentation with real measurements.
 
+- [ ] **VERIFY** Sleep diagnostic CSV stage-gap boundary: `SleepDiagnostics.csv` now requires `sample.unix < segment.endUnix` before assigning a stage, preventing a preceding segment from being carried across unclassified gaps (fix `db27c5b`, regression `dac26ec`). Native iOS CI runs [44241664595](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44241664595) and [44241664510](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44241664510) were pending at review. This is export labeling only, not a validated sleep detector fix.
+
 ## Train, Plan, More
 - [ ] **TODO** Workout cards, HR zones, pace typography and activity actions.
 - [ ] **TODO** Sleep Coach/strain target layouts.
