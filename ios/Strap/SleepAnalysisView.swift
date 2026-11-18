@@ -712,13 +712,11 @@ struct SleepAnalysisView: View {
                 )
                 Hint("Dashed lines mark the grid; a night counts when both bed and wake sit within ±60 min of your medians.")
             } else if liveBedWake.count >= 2 {
-                BedWakeChart(
-                    spans: liveBedWake,
-                    labels: liveNights.map { weekdayLabel(forUnix: $0.startUnix) },
-                    axisMax: 960,
-                    height: 185
+                ConsistencyBedWakeChart(
+                    nights: liveNights,
+                    calendar: .current
                 )
-                Hint("Bars run from 18:00; a night counts when both bed and wake sit within ±60 min of your circular medians.")
+                Hint("Each bar shows a recorded bedtime and wake time. Missing nights remain blank. STRAP's local ±60-minute median score is not WHOOP's proprietary consistency score.")
             } else {
                 EmptyState(title: "Needs 2+ recorded nights",
                            detail: "Your median bedtime and wake time appear once two nights are stored.")
@@ -1145,5 +1143,89 @@ private struct SleepStageDistributionBar: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
         }
         .accessibilityHidden(true)
+    }
+}
+
+
+/// Sleep consistency chart: fixed calendar positions preserve gaps between nights.
+/// This is an independent visualization of recorded bounds, not WHOOP artwork.
+private struct ConsistencyBedWakeChart: View {
+    let nights: [NightSpan]
+    let calendar: Calendar
+
+    private var days: [Date] {
+        guard let latest = nights.map({ Date(timeIntervalSince1970: Double($0.endUnix)) }).max() else { return [] }
+        let last = calendar.startOfDay(for: latest)
+        return (-4...0).compactMap { calendar.date(byAdding: .day, value: $0, to: last) }
+    }
+
+    private func matching(_ day: Date) -> NightSpan? {
+        nights.filter { calendar.isDate(Date(timeIntervalSince1970: Double($0.endUnix)), inSameDayAs: day) }
+            .max { ($0.endUnix - $0.startUnix) < ($1.endUnix - $1.startUnix) }
+    }
+
+    private func minutesFromEightPM(_ unix: Int) -> Double {
+        let components = calendar.dateComponents([.hour, .minute], from: Date(timeIntervalSince1970: Double(unix)))
+        let minute = (components.hour ?? 0) * 60 + (components.minute ?? 0)
+        return Double((minute - 1200 + 1440) % 1440)
+    }
+
+    private func timeLabel(_ unix: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.dateFormat = "h:mm a"
+        return formatter.string(from: Date(timeIntervalSince1970: Double(unix)))
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let labelWidth: CGFloat = 43
+            let plotWidth = max(1, geo.size.width - labelWidth)
+            let plotHeight = max(1, geo.size.height - 30)
+            let slot = plotWidth / 5
+            let axisMinutes = 960.0 // 8 PM through noon
+            ZStack(alignment: .topLeading) {
+                ForEach(0..<5, id: \.self) { tick in
+                    let y = plotHeight * CGFloat(tick) / 4
+                    Path { path in
+                        path.move(to: CGPoint(x: labelWidth, y: y))
+                        path.addLine(to: CGPoint(x: geo.size.width, y: y))
+                    }
+                    .stroke(Color.appLine.opacity(0.8), lineWidth: 0.7)
+                    Text(["8PM", "12AM", "4AM", "8AM", "12PM"][tick])
+                        .font(StrapTypography.body(9))
+                        .foregroundStyle(Color.appMuted)
+                        .position(x: 20, y: y)
+                }
+                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                    let x = labelWidth + slot * (CGFloat(index) + 0.5)
+                    if let night = matching(day) {
+                        let start = minutesFromEightPM(night.startUnix)
+                        let duration = Double(night.endUnix - night.startUnix) / 60
+                        let top = plotHeight * CGFloat(min(max(start / axisMinutes, 0), 1))
+                        let bottom = plotHeight * CGFloat(min(max((start + duration) / axisMinutes, 0), 1))
+                        let selected = index == 4
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(selected ? Color.appSleep : Color(hex: 0x777D81).opacity(0.8))
+                            .frame(width: min(slot * 0.38, 26), height: max(2, bottom - top))
+                            .position(x: x, y: (top + bottom) / 2)
+                        if selected {
+                            Text(timeLabel(night.startUnix))
+                                .position(x: min(geo.size.width - 42, max(labelWidth + 42, x)), y: max(9, top - 12))
+                            Text(timeLabel(night.endUnix))
+                                .position(x: min(geo.size.width - 42, max(labelWidth + 42, x)), y: min(plotHeight - 8, bottom + 12))
+                        }
+                    }
+                    Text(day.formatted(.dateTime.weekday(.abbreviated)))
+                        .font(StrapTypography.body(10, weight: index == 4 ? .bold : .regular))
+                        .foregroundStyle(index == 4 ? Color.appFG : Color.appMuted)
+                        .position(x: x, y: geo.size.height - 10)
+                }
+            }
+            .font(StrapTypography.body(10, weight: .bold))
+            .foregroundStyle(Color.appSleep)
+        }
+        .frame(height: 260)
+        .accessibilityLabel("Bedtime and wake time for five calendar days; blank days have no recorded sleep")
     }
 }
