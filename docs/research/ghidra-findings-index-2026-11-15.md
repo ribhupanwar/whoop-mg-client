@@ -30,3 +30,11 @@ The above observations are consolidated on `main` as reproducible research point
 ## Source integrity
 
 Addresses and constants originate from the user's Ghidra excerpts and existing research notes; these are static interpretations and may be affected by decompiler type/signature uncertainty. Do not represent them as a verified WHOOP specification.
+
+## 2026-11-18 Combine callback trace (user-supplied Ghidra excerpts)
+
+- `0x10721612c` reads byte `x0+0x10`, branches away unless it equals 1, and loads a weak reference. This is an event/closure guard; the byte is **not** established to be a sleep state.
+- Indirect call at `0x1072161b8` resolves through a table entry to `FUN_1071e51dc` (`0x1071e51dc`). The target captures values and calls `FUN_10077e108` (`0x10077e108`).
+- `FUN_10077e108` is a generic Combine `Future` construction helper (24+ cross-references), registering closure entry `0x10077e1cc` and retaining its captured context. Its presence does **not** prove sleep onset, wake classification, or physiological thresholds.
+- **Next read-only inspection:** decompile `0x10077e1cc`, determine how the captured callback at `DAT_1094ba8b8` is invoked, and only then trace the relevant concrete implementation. Verify class/symbol ownership before labeling this path as sleep-related.
+- **Integration decision:** no production algorithm change from these excerpts. No proprietary pseudocode or assets copied. Status **RESEARCH / BLOCKED** pending classifier attribution and paired timestamped device evidence.
