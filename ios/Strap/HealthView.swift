@@ -141,7 +141,6 @@ struct HealthView: View {
             GeometryReader { geometry in
                 let width = geometry.size.width
                 let height = geometry.size.height
-                let graphY = height * 0.535
                 let markerX = width - 30
                 ZStack(alignment: .topLeading) {
                     Canvas { context, size in
@@ -184,25 +183,6 @@ struct HealthView: View {
                             }
                         }
                     }
-                    // The reference has a soft cyan wash *below* the line,
-                    // separate from the narrow glow around the stroke.
-                    if lastHR != nil {
-                        LinearGradient(
-                            colors: [
-                                Color(hex: 0x159EF0).opacity(0.20),
-                                Color(hex: 0x159EF0).opacity(0.075),
-                                Color(hex: 0x159EF0).opacity(0)
-                            ],
-                            startPoint: .top,
-                            endPoint: .bottom
-                        )
-                        .frame(width: max(0, markerX - width * 0.30), height: height * 0.35)
-                        .position(
-                            x: (width * 0.30 + markerX) / 2,
-                            y: graphY + height * 0.175
-                        )
-                        .allowsHitTesting(false)
-                    }
                     VStack(alignment: .leading, spacing: 0) {
                         Text("HEART RATE")
                             .font(StrapTypography.body(16, weight: .bold))
@@ -241,11 +221,20 @@ struct HealthView: View {
                     .padding(.top, 18)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     if lastHR != nil {
-                        Circle()
-                            .fill(.white)
-                            .frame(width: 12, height: 12)
-                            .shadow(color: .black.opacity(0.7), radius: 7)
-                            .position(x: markerX, y: graphY)
+                        // A marker is meaningful only when the plotted series
+                        // contains at least two actual, valid observations.
+                        let plotted = Array(series.suffix(90)).filter { $0.isFinite && (35...220).contains($0) }
+                        if plotted.count >= 2, let latest = plotted.last {
+                            let low = max(35.0, (plotted.min() ?? 60) - 8)
+                            let high = min(220.0, (plotted.max() ?? 100) + 8)
+                            let markerY = height * 0.35 + height * 0.36
+                                * CGFloat((high - latest) / max(1, high - low))
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 12, height: 12)
+                                .shadow(color: .black.opacity(0.7), radius: 7)
+                                .position(x: markerX, y: markerY)
+                        }
                     }
                 }
             }
