@@ -176,17 +176,24 @@ jobs:
           echo "IMPORTANT: Apply this entitlement while signing, not after installation."
           echo "Verify signed app: codesign -d --entitlements :- Payload/Strap.app"
 
+      # GitHub's CreateArtifact API occasionally times out even after five
+      # internal retries. The entitlement is also included in the IPA delivery
+      # artifact below, so this convenience upload must not fail a valid build.
       - name: Upload signing entitlement plist
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Strap-HealthKit-signing-entitlements
           path: ${{ runner.temp }}/ipa/Strap-signing-entitlements.plist
 
-      - name: Upload unsigned IPA
+      - name: Upload unsigned IPA and signing entitlement
         uses: actions/upload-artifact@v4
         with:
           name: Strap-unsigned-ipa
-          path: ${{ runner.temp }}/ipa/Strap-unsigned.ipa
+          path: |
+            ${{ runner.temp }}/ipa/Strap-unsigned.ipa
+            ${{ runner.temp }}/ipa/Strap-signing-entitlements.plist
+          if-no-files-found: error
 
       # Native screenshots are intentionally excluded from the IPA delivery job.
       # Simulator boot, repeated app launches, and screenshots previously consumed
