@@ -340,12 +340,19 @@ struct HomeView: View {
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
         VStack(spacing: 8) {
             RingView(progress: progress, color: color, lineWidth: 7, size: 84, centerText: text, centerFont: 25)
+                .accessibilityHidden(true)
             Text(label)
                 .font(StrapTypography.body(11, weight: .bold))
                 .tracking(0.9)
                 .foregroundStyle(Color.appFG)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label.replacingOccurrences(of: \" ›\", with: \"\")), \(text == \"—\" ? \"unavailable\" : text)")
+        .accessibilityAddTraits(.isButton)
     }
 
     // MARK: Insight
