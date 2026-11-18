@@ -699,3 +699,24 @@ extension SleepSessionTests {
         XCTAssertEqual(stages, ["wake", "", "", "light", "light"])
     }
 }
+
+
+extension SleepSessionTests {
+    func testDiagnosticLookbackClampsWithoutIntegerUnderflow() throws {
+        let night = knownNight()
+        // Reconstruct a session near the integer boundary; no sensor values
+        // or recorded nights are modified by this export-only test.
+        let nearMinimum = SleepSession(
+            version: night.version, sourceStartUnix: Int.min + 10,
+            startUnix: Int.min + 10, endUnix: Int.min + 100,
+            staging: night.staging, heartRate: [], movementBouts: 0,
+            isEdited: false, sourceEndUnix: Int.min + 100)
+        let csv = try SleepDiagnostics.csv(
+            samples: [sample(Int.min + 5), sample(Int.min + 20)],
+            session: nearMinimum, preSleepSeconds: 1800)
+        let lines = csv.split(separator: "\n")
+        XCTAssertEqual(lines.count, 3, "Retained pre-onset samples must survive clamped lookback")
+        XCTAssertEqual(lines.dropFirst().map { Int($0.split(separator: ",")[3])! },
+                       [Int.min + 5, Int.min + 20])
+    }
+}
