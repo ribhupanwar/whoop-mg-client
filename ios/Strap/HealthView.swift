@@ -266,6 +266,8 @@ struct HealthView: View {
     private var rrDiagnosticPanel: some View {
         Panel {
             SectionTitle("R–R signal diagnostics")
+            Text("Durable live R–R notifications: " + (store.band.persistedLiveRRCount.map(String.init) ?? "loading") + ". Recent analysis window is separate from retained history.")
+                .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
             if let capture = summary {
                 Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
                     .font(StrapTypography.body(12))
