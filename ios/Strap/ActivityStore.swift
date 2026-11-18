@@ -443,12 +443,12 @@ final class ActivityStore {
         // Replayed history can contain several overlapping variants of the
         // same workout. Deduplicate across both existing and incoming rows,
         // not just the first match; repeat until transitive overlaps collapse.
-        let cutoff = Int(now.timeIntervalSince1970) - 60 * 86_400
+        // Historical workouts are user records, not a rolling cache.
+        // Never prune older sessions during an unrelated band sync.
         let deletions = deletedDetectedSessions()
         var seen = Set<String>()
         var items = (detectedActivities() + sessions).filter { session in
-            guard session.endUnix >= cutoff,
-                  !deletions.contains(where: { Self.matches(session, deletion: $0) }) else { return false }
+            guard !deletions.contains(where: { Self.matches(session, deletion: $0) }) else { return false }
             return seen.insert("\(session.startUnix):\(session.endUnix)").inserted
         }
         var changed = true
@@ -470,7 +470,7 @@ final class ActivityStore {
                 }
             }
         }
-        items = items.filter { $0.endUnix >= cutoff }.sorted { $0.startUnix < $1.startUnix }
+        items = items.sorted { $0.startUnix < $1.startUnix }
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: detectedKey)
         }
