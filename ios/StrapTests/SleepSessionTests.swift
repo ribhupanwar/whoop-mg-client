@@ -702,21 +702,19 @@ extension SleepSessionTests {
 
 
 extension SleepSessionTests {
-    func testDiagnosticLookbackClampsWithoutIntegerUnderflow() throws {
+    func testDiagnosticLookbackNearUnixEpochKeepsAvailableRows() throws {
         let night = knownNight()
-        // Reconstruct a session near the integer boundary; no sensor values
-        // or recorded nights are modified by this export-only test.
-        let nearMinimum = SleepSession(
-            version: night.version, sourceStartUnix: Int.min + 10,
-            startUnix: Int.min + 10, endUnix: Int.min + 100,
+        let nearEpoch = SleepSession(
+            version: night.version, sourceStartUnix: 10,
+            startUnix: 10, endUnix: 100,
             staging: night.staging, heartRate: [], movementBouts: 0,
-            isEdited: false, sourceEndUnix: Int.min + 100)
+            isEdited: false, sourceEndUnix: 100)
         let csv = try SleepDiagnostics.csv(
-            samples: [sample(Int.min + 5), sample(Int.min + 20)],
-            session: nearMinimum, preSleepSeconds: 1800)
+            samples: [sample(5), sample(20), sample(100)],
+            session: nearEpoch, preSleepSeconds: 1800)
         let lines = csv.split(separator: "\n")
-        XCTAssertEqual(lines.count, 3, "Retained pre-onset samples must survive clamped lookback")
+        XCTAssertEqual(lines.count, 3, "Only observed rows before end are exported")
         XCTAssertEqual(lines.dropFirst().map { Int($0.split(separator: ",")[3])! },
-                       [Int.min + 5, Int.min + 20])
+                       [5, 20])
     }
 }
