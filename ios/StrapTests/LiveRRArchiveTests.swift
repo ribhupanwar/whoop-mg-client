@@ -120,4 +120,17 @@ final class LiveRRArchiveTests: XCTestCase {
         XCTAssertEqual(try reopened.migrateLegacyLiveRR([old, later]), 2)
         XCTAssertEqual(try reopened.liveRRCount(), 2)
     }
+    func testLegacyPreferenceMergeKeepsAdditionalLocalRowsAfterBackupRestore() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let db = try HistoryDatabase(url: root.appendingPathComponent("history.sqlite"))
+        let fromBackup = record(100)
+        let matchingLegacy = fromBackup.sample
+        let localOnly = LiveSample(unix: 200, heartRate: 64, rrIntervalsMS: [940, 960])
+        try db.commitLiveRR([fromBackup])
+        XCTAssertEqual(try db.migrateLegacyLiveRR([matchingLegacy, localOnly]), 2)
+        XCTAssertEqual(try db.liveRRCount(), 2)
+        XCTAssertEqual(try db.liveRR(from: 100, through: 200).map(\.sample), [matchingLegacy, localOnly])
+    }
+
 }
