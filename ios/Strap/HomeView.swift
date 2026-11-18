@@ -30,7 +30,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("STRAP")
                     .font(StrapTypography.body(18, weight: .light)).tracking(3)
-                    .frame(maxWidth: .infinity).padding(.top, 24).padding(.bottom, 10)
+                    .frame(maxWidth: .infinity).padding(.top, 12).padding(.bottom, 8)
                 ringTrio
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: HomeHeroPosition.self,
@@ -39,8 +39,8 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
-                activitiesCard
                 tonightCard
+                activitiesCard
                 journalCard
                 planCard
                 dashboardSection
@@ -244,7 +244,7 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 3) {
                 NavigationLink(value: Route.sleepAnalysis) {
                     trioItem(
                         label: "SLEEP ›",
@@ -276,7 +276,7 @@ struct HomeView: View {
             }
             if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
-        .padding(.bottom, 20)
+        .padding(.bottom, 16)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -338,12 +338,12 @@ struct HomeView: View {
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
-        VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 7, size: 84, centerText: text, centerFont: 18)
+        VStack(spacing: 7) {
+            RingView(progress: progress, color: color, lineWidth: 7.5, size: 92, centerText: text, centerFont: 22)
                 .accessibilityHidden(true)
             Text(label)
-                .font(StrapTypography.body(11, weight: .bold))
-                .tracking(0.9)
+                .font(StrapTypography.body(11.5, weight: .bold))
+                .tracking(0.75)
                 .foregroundStyle(Color.appFG)
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
