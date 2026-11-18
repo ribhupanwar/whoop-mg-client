@@ -36,7 +36,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 ## Sleep, alarm and recovery
 - [x] **DONE (code)** Alarm wake-time DIN Pro formatting (commit `9ee0ec0`).
 - [x] **DONE (code)** Sleep HR chart valid time-window filtering (commit `f081f76`); regression test added (`606a6a0`).
-- [ ] **VERIFY** Terminal band-up wake boundary regression tests (299s remains, 300s trims) added in `SleepWakeTailBoundaryTests.swift` (commit `72b0490`); native CI and real-device sleep-end validation pending.
+- [x] **DONE (verified CI)** Terminal band-up wake boundary regression tests (299s remains, 300s trims) in `SleepWakeTailBoundaryTests.swift` at `72b0490`; native iOS build/test/IPA workflow [44218990787](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44218990787) succeeded on this code revision. Real-device sleep-end accuracy remains **VERIFY**.
+- [ ] **VERIFY** Compare sustained wake-tail trimming and short bathroom awakenings with timestamped band captures; synthetic boundary tests do not establish physical-device accuracy.
 - [ ] **TODO** Sleep stage hypnogram screenshot alignment and validated detection/staging.
 - [ ] **TODO** Verify edited sleep start/end persistence and recomputation of sleep performance/recovery.
 - [ ] **TODO** Alarm weekly schedule layout and actual band behavior.
