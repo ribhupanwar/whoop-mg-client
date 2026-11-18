@@ -339,7 +339,7 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color) -> some View {
         VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 7, size: 84, centerText: text, centerFont: 25)
+            RingView(progress: progress, color: color, lineWidth: 7, size: 84, centerText: text, centerFont: 18)
                 .accessibilityHidden(true)
             Text(label)
                 .font(StrapTypography.body(11, weight: .bold))
