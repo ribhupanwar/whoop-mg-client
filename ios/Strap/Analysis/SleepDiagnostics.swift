@@ -17,7 +17,13 @@ enum SleepDiagnostics {
     static func csv(samples: [V18Sample], session: SleepSession, preSleepSeconds: Int = 0) throws -> String {
         let lowerBound = session.startUnix - min(max(0, preSleepSeconds), 3600)
         let rows = samples.filter { lowerBound <= $0.unix && $0.unix < session.endUnix }
-            .sorted { $0.unix < $1.unix }
+            .sorted {
+                if $0.unix != $1.unix { return $0.unix < $1.unix }
+                if $0.header.subsecQ15 != $1.header.subsecQ15 {
+                    return $0.header.subsecQ15 < $1.header.subsecQ15
+                }
+                return $0.header.recordIndex < $1.header.recordIndex
+            }
         guard !rows.isEmpty else { throw ExportError.noSamples }
         let segments = session.staging.segments.sorted { $0.startUnix < $1.startUnix }
         var segmentIndex = 0
