@@ -47,8 +47,13 @@ final class GPSRunHistory {
     }
 
     func all() -> [GPSRunRecord] {
-        if let data = try? Data(contentsOf: fileURL),
-           let runs = try? JSONDecoder().decode([GPSRunRecord].self, from: data) {
+        if FileManager.default.fileExists(atPath: fileURL.path) {
+            // A damaged or temporarily unreadable current archive must never
+            // be replaced by an older UserDefaults snapshot during migration.
+            guard let data = try? Data(contentsOf: fileURL),
+                  let runs = try? JSONDecoder().decode([GPSRunRecord].self, from: data) else {
+                return []
+            }
             return runs.sorted { $0.startedAt > $1.startedAt }
         }
         guard let legacy = defaults.data(forKey: key),
