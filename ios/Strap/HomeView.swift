@@ -618,6 +618,7 @@ struct HomeView: View {
                                 .buttonStyle(.plain)
                             }
                         }
+                        .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
                         .contentShape(Rectangle())
                         .contextMenu {
                             Button(role: .destructive) {
@@ -631,6 +632,7 @@ struct HomeView: View {
                     // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
                         activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
                             .contentShape(Rectangle())
                             .contextMenu {
                                 Button(role: .destructive) {
