@@ -73,6 +73,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (verified CI)** IPA delivery hardening: optional standalone HealthKit entitlement artifact no longer fails an otherwise valid iOS build when GitHub CreateArtifact times out; primary `Strap-unsigned-ipa` artifact now bundles IPA and signing entitlement plist and requires both files (commit `e7e625b`). Native iOS workflow [44245566066](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44245566066) succeeded and published `Strap-unsigned-ipa` (3,181,815 bytes) plus standalone entitlement artifact. Physical-device signing and installation remain VERIFY.
 - [x] **DONE (verified CI)** iOS run [44241664510](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44241664510) succeeded on rerun after GitHub ArtifactService/CreateArtifact timed out on first attempt; no Swift compiler or HealthKit entitlement error caused that failure.
 
+- [ ] **VERIFY** Sleep diagnostic export guards lookback timestamp subtraction against integer underflow (commit `67db5db`); near-epoch observed-row regression added and corrected (commit `33a8d00`). Native iOS CI pending; real-device sleep timing remains separate.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
