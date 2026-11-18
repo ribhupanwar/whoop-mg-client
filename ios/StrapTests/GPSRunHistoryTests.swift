@@ -24,6 +24,29 @@ final class GPSRunHistoryTests: XCTestCase {
         XCTAssertTrue(history.all().isEmpty)
     }
 
+    func testUnreadableCurrentArchiveIsNeverOverwrittenByLegacyOrNewWrites() throws {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? fm.removeItem(at: root) }
+        let suite = "gps-corrupt-" + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let history = GPSRunHistory(defaults: defaults, directory: root)
+        let run = GPSRunRecord(id: UUID(), startedAt: Date(timeIntervalSince1970: 1000),
+            endedAt: Date(timeIntervalSince1970: 1100), movingSeconds: 100,
+            distanceMeters: 200, splitSeconds: [], route: [])
+        defaults.set(try JSONEncoder().encode([run]), forKey: "strap.gps.runs.v1")
+        let archive = root.appendingPathComponent("Strap/gps-runs-v2.json")
+        try fm.createDirectory(at: archive.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let damaged = Data("invalid-current-archive".utf8)
+        try damaged.write(to: archive)
+        XCTAssertTrue(history.all().isEmpty)
+        XCTAssertFalse(history.save(run))
+        XCTAssertFalse(history.delete(id: run.id))
+        XCTAssertEqual(try Data(contentsOf: archive), damaged)
+        XCTAssertNotNil(defaults.data(forKey: "strap.gps.runs.v1"))
+    }
+
     func testShortOrZeroDistanceHasNoPace() {
         let run = GPSRunRecord(id: UUID(), startedAt: Date(), endedAt: Date(),
                                movingSeconds: 100, distanceMeters: 0,
