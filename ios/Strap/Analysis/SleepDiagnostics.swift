@@ -29,7 +29,9 @@ enum SleepDiagnostics {
         for sample in rows {
             while segmentIndex < segments.count && segments[segmentIndex].endUnix <= sample.unix { segmentIndex += 1 }
             let stage: String
-            if segmentIndex < segments.count, segments[segmentIndex].startUnix <= sample.unix {
+            if segmentIndex < segments.count,
+               segments[segmentIndex].startUnix <= sample.unix,
+               sample.unix < segments[segmentIndex].endUnix {
                 stage = segments[segmentIndex].stage.rawValue
             } else { stage = "" }
             var fields: [String] = []
