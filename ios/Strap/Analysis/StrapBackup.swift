@@ -247,7 +247,7 @@ enum StrapBackup {
 
             }, liveRRStream: { accept in
                 if fm.fileExists(atPath: source.path) { try streamLiveRR(source, accept: accept) }
-            }, legacyLiveRRImported: preview.manifest.database?.liveRRRecords != nil) {
+) {
                 for file in files {
                     let target = destination(file.path)
                     try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
