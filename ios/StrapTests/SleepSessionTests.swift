@@ -674,3 +674,28 @@ extension SleepSessionTests {
         XCTAssertEqual(retained, [stored])
     }
 }
+
+
+extension SleepSessionTests {
+    func testDiagnosticExportDoesNotAssignStageAcrossUnclassifiedGap() throws {
+        let staging = SleepStaging(
+            segments: [
+                SleepStageSegment(startUnix: start, endUnix: start + 10, stage: .wake),
+                SleepStageSegment(startUnix: start + 20, endUnix: start + 30, stage: .light)
+            ],
+            deepMinutes: 0, lightMinutes: 0, remMinutes: 0, wakeMinutes: 0,
+            epochs: 0, hrCoverage: 1, reason: nil
+        )
+        let session = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: start + 30,
+            staging: staging, heartRate: [], movementBouts: 0, isEdited: true,
+            sourceEndUnix: start + 30)
+        let csv = try SleepDiagnostics.csv(
+            samples: [sample(start + 9), sample(start + 10), sample(start + 15),
+                      sample(start + 20), sample(start + 29)], session: session)
+        let stages = csv.split(separator: "\n").dropFirst().map {
+            String($0.split(separator: ",", omittingEmptySubsequences: false).last!)
+        }
+        XCTAssertEqual(stages, ["wake", "", "", "light", "light"])
+    }
+}
