@@ -27,7 +27,7 @@ struct ActivityLoggerView: View {
                     Hint("Manual entries stay self-reported. The band measures heart rate and movement; it never sees load, so nothing from this sheet becomes strain or recovery.")
                 }
             }
-            .navigationTitle("Add activity")
+            .navigationTitle(editing == nil ? "Add activity" : "Edit activity")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
