@@ -499,6 +499,12 @@ final class ActivityStore {
     func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
         detectedLock.lock()
         defer { detectedLock.unlock() }
+        // Never overwrite unreadable activity or deletion history. A corrupt
+        // tombstone archive must not be replaced with a partial new list.
+        if let original = defaults.data(forKey: detectedKey),
+           (try? JSONDecoder().decode([ActivitySession].self, from: original)) == nil { return }
+        if let original = defaults.data(forKey: deletedDetectedKey),
+           (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil { return }
         var deletions = deletedDetectedSessions()
         if !deletions.contains(where: { Self.matches(session, deletion: $0) }) {
             deletions.append(DeletedDetectedActivity(
@@ -550,6 +556,8 @@ final class ActivityStore {
         // not just the first match; repeat until transitive overlaps collapse.
         // Historical workouts are user records, not a rolling cache.
         // Never prune older sessions during an unrelated band sync.
+        if let original = defaults.data(forKey: deletedDetectedKey),
+           (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil { return }
         let deletions = deletedDetectedSessions()
         var seen = Set<String>()
         var items = (detectedActivities() + sessions).filter { session in
