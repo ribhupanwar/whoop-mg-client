@@ -70,6 +70,9 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [ ] **TODO** Validate export/backup before reinstall/uninstall; never delete historical records.
 - [ ] **TODO** Audit and resolve remaining sleep/HRV/RHR/activity/persistence bugs separately from visual styling.
 
+- [ ] **VERIFY** IPA delivery hardening: optional standalone HealthKit entitlement artifact no longer fails an otherwise valid iOS build when GitHub CreateArtifact times out; primary `Strap-unsigned-ipa` artifact now bundles both IPA and signing entitlement plist and requires both files (commit `e7e625b`). Confirm the new workflow completes and both files download before marking DONE.
+- [x] **DONE (verified CI)** iOS run [44241664510](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44241664510) succeeded on rerun after GitHub ArtifactService/CreateArtifact timed out on first attempt; no Swift compiler or HealthKit entitlement error caused that failure.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
