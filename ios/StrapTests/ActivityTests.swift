@@ -231,6 +231,26 @@ final class ActivityStoreTests: XCTestCase {
         XCTAssertEqual(defaults.data(forKey: "strap.detected.activities.v1"), damaged)
     }
 
+    func testCorruptDeletionTombstonesSurviveSyncAndDelete() {
+        let damaged = Data("unreadable-deletion-history".utf8)
+        defaults.set(damaged, forKey: "strap.detected.activities.deleted.v1")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let activity = session(start: 1_799_996_400, end: 1_799_997_000)
+        store.mergeDetected([activity], now: now)
+        store.deleteDetected(activity, now: now)
+        XCTAssertEqual(defaults.data(forKey: "strap.detected.activities.deleted.v1"), damaged)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+    }
+
+    func testDeleteDoesNotOverwriteCorruptDetectedHistory() {
+        let damaged = Data("unreadable-detected-history".utf8)
+        defaults.set(damaged, forKey: "strap.detected.activities.v1")
+        let activity = session(start: 1_799_996_400, end: 1_799_997_000)
+        store.deleteDetected(activity, now: Date(timeIntervalSince1970: 1_800_000_000))
+        XCTAssertEqual(defaults.data(forKey: "strap.detected.activities.v1"), damaged)
+        XCTAssertNil(defaults.data(forKey: "strap.detected.activities.deleted.v1"))
+    }
+
     func testHistoricalSessionsSurviveNewSyncAndAppRelaunch() {
         let now = Date(timeIntervalSince1970: 1_800_000_000)
         let old = session(start: 1_700_000_000, end: 1_700_000_600)
