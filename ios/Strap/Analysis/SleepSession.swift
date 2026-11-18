@@ -292,6 +292,13 @@ enum SleepCorrectionStore {
               times[1] > times[0], times[1] - times[0] <= 24 * 3600 else { return nil }
         return times
     }
+    /// Corrupt or legacy override keys must never overflow Int distance arithmetic.
+    private static func nearbySource(_ source: Int, _ start: Int) -> Int? {
+        let (distance, overflow) = source.subtractingReportingOverflow(start)
+        guard !overflow, distance != Int.min else { return nil }
+        let magnitude = abs(distance)
+        return magnitude <= 6 * 3600 ? magnitude : nil
+    }
     /// Saving a recovered edit replaces its aliases instead of creating another night.
     static func saving(
         _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]]
@@ -301,7 +308,7 @@ enum SleepCorrectionStore {
             ?? [period.startUnix, period.endUnix + 1]
         var result = overrides
         for (key, value) in overrides {
-            guard let source = Int(key), abs(source - period.startUnix) <= 6 * 3600,
+            guard let source = Int(key), nearbySource(source, period.startUnix) != nil,
                   let existing = validated(value) else { continue }
             let overlap = min(reference[1], existing[1]) - max(reference[0], existing[0])
             if source == period.startUnix
@@ -316,12 +323,12 @@ enum SleepCorrectionStore {
     static func times(for period: SleepPeriod, overrides: [String: [Int]]) -> [Int]? {
         if let exact = validated(overrides[String(period.startUnix)]) { return exact }
         let candidates = overrides.compactMap { key, value -> (Int, [Int])? in
-            guard let source = Int(key), abs(source - period.startUnix) <= 6 * 3600,
+            guard let source = Int(key), let distance = nearbySource(source, period.startUnix),
                   let times = validated(value) else { return nil }
             let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
             let shorter = min(period.durationS, times[1] - times[0])
             guard overlap > 0, overlap * 2 >= shorter else { return nil }
-            return (abs(source - period.startUnix), times)
+            return (distance, times)
         }
         // Dictionary iteration order is undefined. Equal-distance aliases must
         // resolve identically across app launches and archive refreshes.
