@@ -1,3 +1,55 @@
+# STRAP Remaining Work — Execution Batches (2026-11-18)
+
+> Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
+
+## Batch 0 — Build gate (current)
+- [ ] Confirm native iOS workflow for commit `454e0d5` succeeds; tests workflow has passed.
+- [ ] If native build fails, fix the exact compiler/signing/package failure before starting feature batches.
+
+## Batch 1 — Reconcile Codex PR #46 safely
+- [ ] Re-audit each changed file against current `main`; classify already-present, safe-to-port, conflicting, and obsolete.
+- [ ] Integrate activity history/revisions and delete persistence without duplicate actions.
+- [ ] Integrate GPX/FIT export and validate generated files.
+- [ ] Integrate backup/export and prove restore round-trip before relying on it.
+- [ ] Integrate RR archive without changing raw samples or fabricating beats.
+- [ ] Integrate weekly alarm schedule; verify band vibration behavior separately.
+- [ ] Keep PR #46 open until all remaining deltas are accounted for; never bulk merge.
+
+## Batch 2 — Sleep detection and staging
+- [ ] Use timestamped WHOOP/STRAP same-night captures and diagnostic CSV pre-onset records to investigate onset delay; change detector thresholds only when evidence supports it.
+- [ ] Validate bathroom awakenings, short wake gaps, sustained wake tails, lying-awake false positives, and sleep end-time stability.
+- [ ] Validate stage boundaries and hypnogram against reference nights; preserve unknown/unclassified gaps.
+- [ ] Verify manual start/end edits restage from retained sensor data and persist after relaunch.
+- [ ] Verify Sleep Performance, Sleep Consistency, Efficiency and Recovery-dependent outputs recalculate from corrected bounds, or abstain when coverage is insufficient.
+
+## Batch 3 — Health and sensor accuracy
+- [ ] Validate Type-40 and V18 RR units/offsets against timestamped CRC-checked WHOOP BLE captures and an independent beat reference.
+- [ ] Validate V20/V21/V26 record handling using real fixtures; no automatic persistent R22 writes.
+- [ ] Compare morning HRV/RHR and live HRV against the same WHOOP window; deduplicate replay while preserving raw archive.
+- [ ] Validate Strain/calories and activity HR summaries against reference workouts.
+- [ ] Validate SpO2 and respiratory-rate source mapping against independent overnight references; show unavailable rather than inferred values.
+
+## Batch 4 — WHOOP UI fidelity
+- [ ] Compare supplied same-screen WHOOP/STRAP screenshots on the target iPhone.
+- [ ] Tune Home cards, rings, gradients, typography, spacing, navigation, Health charts, sleep-stage timeline and detail screens.
+- [ ] Preserve licensed Proxima Nova/DIN Pro files and metric-derived zone colors.
+- [ ] Add screenshot/layout/accessibility regression tests; verify VoiceOver and tap targets.
+
+## Batch 5 — Data safety and daily workflows
+- [ ] Verify full export/backup restore round-trip, including sleep, activities, raw RR and manual corrections.
+- [ ] Verify uninstall/reinstall recovery path before user relies on backup.
+- [ ] Verify activity duplicate prevention, swipe/long-press deletion, GPS history and exports.
+- [ ] Verify alarm schedules and band vibration on hardware.
+- [ ] Verify empty/loading/error/offline states and profile/device settings.
+
+## Batch 6 — Release acceptance
+- [ ] Reconcile or close stale/overlapping open PRs after reviewing their unique changes.
+- [ ] Run full tests and native IPA workflow on final main commit.
+- [ ] Install IPA on target iPhone; verify BLE reconnect, sleep edit/relaunch, activity delete, export/restore and screenshots.
+- [ ] Update this checklist with evidence links; only then mark the release complete.
+
+---
+
 # STRAP WHOOP-inspired UI engineering backlog
 
 Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires CI/device screenshot, **TODO** = not implemented, **BLOCKED** = missing evidence or environment.
