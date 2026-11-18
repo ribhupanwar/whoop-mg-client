@@ -316,7 +316,8 @@ final class BandLink: NSObject, ObservableObject {
         let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("sleep-exports", isDirectory: true)
         return try await Task.detached(priority: .utility) {
-            try SleepDiagnostics.write(samples: samples, session: session, directory: directory)
+            try SleepDiagnostics.write(samples: samples, session: session, directory: directory,
+                                       preSleepSeconds: 30 * 60)
         }.value
     }
 
