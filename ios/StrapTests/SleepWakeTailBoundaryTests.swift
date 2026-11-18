@@ -58,6 +58,25 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
                        "A short state=0 suffix must not undo sustained state=3 wake")
     }
 
+    func testFiveMinuteMidNightUpIntervalDoesNotEndTheNight() throws {
+        let day = Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 2, minute: 0
+        ))!
+        let base = Int(day.timeIntervalSince1970)
+        let sleepStart = base + 600
+        let upStart = sleepStart + 1800
+        let sleepEnd = sleepStart + 7200
+        var rows = (0..<600).map { row(base + $0, hr: 90, accel: 0.3, state: 0) }
+        rows += (sleepStart..<sleepEnd).map { unix in
+            row(unix, hr: 55, accel: 0.01,
+                state: (upStart..<(upStart + 300)).contains(unix) ? 3 : 2)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, sleepStart)
+        XCTAssertEqual(night.endUnix, sleepEnd - 1,
+                       "A sustained mid-night up interval is wake time, not the final wake boundary")
+    }
+
     func testBriefBathroomAwakeningFollowedBySleepDoesNotTrimNight() throws {
         let (baseRows, tailStart, end) = capture(upSeconds: 180)
         let resumed = (1...900).map { row(end + $0, hr: 55, accel: 0.01, state: 2) }
