@@ -76,6 +76,9 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (verified CI)** Sleep diagnostic export guards lookback timestamp subtraction against integer underflow (commit `67db5db`); near-epoch observed-row regression (commit `33a8d00`). Native iOS [44252856121](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44252856121) passed; real-device sleep timing remains separate.
 - [ ] **VERIFY** Sleep diagnostic CSV now rejects invalid/reversed edited sleep bounds with `noNight` instead of exporting misleading records (commit `d4bad2b`), with regression test (commit `e68de8c`); native iOS CI pending.
 
+- [x] **DONE (merged)** Codex PR [#47](https://github.com/ribhupanwar/whoop-mg-client/pull/47) merged 2026-11-17: isolated WHOOP calorie research, implementation and deterministic tests (`WhoopRecoveredCalories.swift`, `WhoopRecoveredCaloriesTests.swift`). This does not establish WHOOP-equivalent calorie accuracy on a device.
+- [ ] **BLOCKED (merge conflicts)** Codex draft PR [#46](https://github.com/ribhupanwar/whoop-mg-client/pull/46) is open, 73 changed files, GitHub `mergeable=false` / `mergeable_state=dirty` against updated `main`. Review and port safe changes by feature (activity history, exports/backup, RR archives, alarms), preserving newer main code and historical data. Do not bulk merge or mark its features DONE until conflicts, tests and persistence semantics are verified.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
