@@ -14,7 +14,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var whoopImportedDays: [String: WhoopImportedDay] = [:]
     @Published private(set) var whoopImportReadError: String?
     @Published private(set) var journalEntries: [String: JournalEntry] = [:]
-    @Published private(set) var manualActivities: [ManualActivity] = []
+    @Published private(set) var activityWriteError: String?\n    @Published private(set) var manualActivities: [ManualActivity] = []
     @Published private(set) var liveActivities: [LiveActivityRecord] = []
     /// Band-detected sessions, kept across syncs so a walk logged yesterday
     /// still shows on yesterday's screen.
@@ -197,14 +197,36 @@ final class AppStore: ObservableObject {
         return zones
     }
 
-    func addActivity(_ activity: ManualActivity) {
-        activities.save(activity)
+    @discardableResult
+    func addActivity(_ activity: ManualActivity) -> Bool {
+        let saved = activities.save(activity)
+        activityWriteError = activities.lastManualWriteError
+        if saved { manualActivities = activities.manualActivities() }
+        return saved
+    }
+
+    func restoreMissingManualActivity(_ activity: ManualActivity) throws -> Bool {
+        let restored = try activities.restoreMissingManual(activity)
+        manualActivities = activities.manualActivities()
+        return restored
+    }
+
+    func mergeManualActivities(ids: Set<UUID>, name: String) throws {
+        _ = try activities.mergeManual(ids: ids, name: name)
         manualActivities = activities.manualActivities()
     }
 
-    func deleteActivity(id: UUID) {
-        activities.deleteManual(id: id)
+    func undoManualActivityMerge(id: UUID) throws {
+        try activities.undoManualMerge(id: id)
         manualActivities = activities.manualActivities()
+    }
+
+    @discardableResult
+    func deleteActivity(id: UUID) -> Bool {
+        let saved = activities.deleteManual(id: id)
+        activityWriteError = activities.lastManualWriteError
+        if saved { manualActivities = activities.manualActivities() }
+        return saved
     }
 
     func deleteLiveActivity(id: UUID) {
