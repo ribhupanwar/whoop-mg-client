@@ -565,14 +565,15 @@ struct SleepAnalysisView: View {
     // WHOOP-style stacked stage distribution, rather than four compressed columns.
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
         let total = max(1.0, session.map { $0.timeInBedHours * 60 } ?? minutes.values.reduce(0, +))
+        let displayed = SleepStageDisplay.rounded(stageMinutes: minutes, windowMinutes: total)
         return VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("DURATION")
+                Text("TIME IN BED")
                     .font(StrapTypography.body(10, weight: .bold))
                     .tracking(1)
                     .foregroundStyle(Color.appMuted)
                 Spacer()
-                Text(CoachFormat.duration(total / 60.0))
+                Text(displayed.duration(displayed.window))
                     .font(StrapTypography.body(16, weight: .bold))
             }
             ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
@@ -590,7 +591,7 @@ struct SleepAnalysisView: View {
                             .font(StrapTypography.body(11))
                             .foregroundStyle(stage.color)
                         Spacer()
-                        Text(CoachFormat.duration(value / 60.0))
+                        Text(displayed.duration(displayed.stages[stage] ?? 0))
                             .font(StrapTypography.metric(19, weight: .bold))
                     }
                     SleepStageDistributionBar(fraction: fraction, color: stage.color)
@@ -602,7 +603,7 @@ struct SleepAnalysisView: View {
                     Text("UNCLASSIFIED")
                         .foregroundStyle(Color.appMuted)
                     Spacer()
-                    Text(CoachFormat.duration(session.unclassifiedHours))
+                    Text(displayed.duration(displayed.unclassified))
                 }
                 .font(StrapTypography.body(12, weight: .medium))
             }
@@ -617,7 +618,7 @@ struct SleepAnalysisView: View {
                     .font(StrapTypography.body(12, weight: .bold))
                     .tracking(0.5)
                 Spacer()
-                Text(CoachFormat.duration(restorative / 60.0))
+                Text(displayed.duration(displayed.restorative))
                     .font(StrapTypography.metric(19, weight: .bold))
             }
             .padding(.top, 4)
