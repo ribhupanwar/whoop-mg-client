@@ -108,6 +108,7 @@ enum StrapBackup {
     }
     static func stage(_ preview: Preview, support: URL) throws {
         _ = try validate(preview.folder)
+        let fm = FileManager.default
         let pending = support.appendingPathComponent("restore-pending", isDirectory: true)
         guard !FileManager.default.fileExists(atPath: pending.path) else { throw failure("A restore is already pending. Restart STRAP to finish it.") }
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
