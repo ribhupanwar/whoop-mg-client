@@ -6,7 +6,9 @@ import Foundation
 /// Owned exclusively by the history analysis worker, on a separate connection.
 final class HistoryAnalysisCache {
     // Bump whenever a cached sleep/day calculation changes its meaning.
-    static let recipe = 3
+    // Overnight onset no longer waits for the coarse band state=2 after 22:00.
+    // Invalidate derived day/night checkpoints without deleting saved sessions.
+    static let recipe = 4
     struct Ticket { let key: String; let fingerprint: String }
     private let database: HistoryDatabase
     private let encoder = JSONEncoder()
