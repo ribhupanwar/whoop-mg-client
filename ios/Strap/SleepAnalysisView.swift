@@ -745,7 +745,11 @@ struct SleepAnalysisView: View {
                 Spacer()
                 Text(demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—").font(StrapTypography.metric(16))
             }.padding(.bottom, 8)
-            if let session { SleepEfficiencyTimeline(session: session) }
+            if let session {
+                SleepEfficiencyTimeline(session: session)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Sleep efficiency timeline, blue intervals asleep, light intervals awake, hatched intervals unclassified")
+            }
             else if demo {
                 VStack(spacing: 12) {
                     SleepStageDistributionBar(fraction: 0.84, color: .appSleep)
