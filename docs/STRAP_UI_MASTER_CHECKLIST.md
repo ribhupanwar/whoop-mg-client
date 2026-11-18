@@ -17,7 +17,7 @@
 - [ ] Integrate weekly alarm schedule; verify band vibration behavior separately.
 - [ ] Keep PR #46 open until all remaining deltas are accounted for; never bulk merge.
 
-## Batch 2 — Sleep detection and staging
+- [ ] **VERIFY (GPS export duration guard, 2026-11-18):** `dd4c54c` rejects recorded moving time exceeding workout elapsed time before GPX/FIT generation; `0c3ada9` adds focused invalid/valid export regression. Native iOS CI and third-party FIT decoder/device interoperability remain pending. Existing GPS records are never rewritten.\n\n## Batch 2 — Sleep detection and staging
 - [ ] Use timestamped WHOOP/STRAP same-night captures and diagnostic CSV pre-onset records to investigate onset delay; change detector thresholds only when evidence supports it.
 - [ ] Validate bathroom awakenings, short wake gaps, sustained wake tails, lying-awake false positives, and sleep end-time stability.
 - [ ] Validate stage boundaries and hypnogram against reference nights; preserve unknown/unclassified gaps.
