@@ -61,7 +61,7 @@ final class StrapBackupTests: XCTestCase {
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [110, 190]])
     }
 
-    func testStagingFailureLeavesNoPartialRestoreFolder() throws {
+    func testExistingPendingRestoreIsPreservedWithoutStaging() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? fm.removeItem(at: root) }
@@ -72,8 +72,8 @@ final class StrapBackupTests: XCTestCase {
         defer { try? fm.removeItem(at: preview.folder) }
         let support = root.appendingPathComponent("target")
         try fm.createDirectory(at: support, withIntermediateDirectories: true)
-        // A file at the pending destination makes atomic publish fail after
-        // staging has copied. No temporary restore copy may survive.
+        // An existing pending destination must be rejected before copying.
+        // Its contents must remain untouched, with no staging directory.
         try Data("occupied".utf8).write(to: support.appendingPathComponent("restore-pending"))
         XCTAssertThrowsError(try StrapBackup.stage(preview, support: support))
         let names = try fm.contentsOfDirectory(atPath: support.path)
