@@ -312,12 +312,24 @@ final class BandLink: NSObject, ObservableObject {
     /// night. The file stays local until the user explicitly shares it.
     func exportSleepDiagnostics() async throws -> URL {
         guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
-        let samples = retainedHistoricalSamples
+        // The in-memory analysis window may start exactly at detected sleep
+        // onset. Fetch the preceding 30 minutes from the durable raw archive
+        // instead of exporting only the currently retained analysis samples.
+        let lookback = 30 * 60
+        let (candidateStart, overflow) = session.startUnix.subtractingReportingOverflow(lookback)
+        let archiveStart = overflow ? Int.min : candidateStart
+        let archiveRows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
+            archiveWriter.samples(from: archiveStart, through: session.endUnix - 1) { result in
+                continuation.resume(with: result)
+            }
+        }
+        let samples = HistoricalCaptureRecovery.merged(retainedHistoricalSamples + archiveRows)
+            .values.sorted { $0.unix < $1.unix }
         let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("sleep-exports", isDirectory: true)
         return try await Task.detached(priority: .utility) {
             try SleepDiagnostics.write(samples: samples, session: session, directory: directory,
-                                       preSleepSeconds: 30 * 60)
+                                       preSleepSeconds: lookback)
         }.value
     }
 
