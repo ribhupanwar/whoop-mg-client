@@ -138,6 +138,7 @@ struct ManualActivity: Codable, Equatable, Identifiable {
     var minutes: Int
     var sets: [WorkSet]
     var notes: String
+    let mergedFrom: [ManualActivity]?
 
     init(
         id: UUID = UUID(),
@@ -146,7 +147,8 @@ struct ManualActivity: Codable, Equatable, Identifiable {
         name: String,
         minutes: Int,
         sets: [WorkSet] = [],
-        notes: String = ""
+        notes: String = "",
+        mergedFrom: [ManualActivity]? = nil
     ) {
         self.id = id
         self.dateKey = dateKey
@@ -155,6 +157,7 @@ struct ManualActivity: Codable, Equatable, Identifiable {
         self.minutes = minutes
         self.sets = sets
         self.notes = notes
+        self.mergedFrom = mergedFrom
     }
 
     var totalReps: Int { sets.reduce(0) { $0 + $1.reps } }
@@ -298,14 +301,23 @@ private struct DeletedDetectedActivity: Codable, Equatable {
 final class ActivityStore {
     private let detectedLock = NSRecursiveLock()
     private let defaults: UserDefaults
+    private let manualRevisionDirectory: URL
+    private(set) var lastManualWriteError: String?
+    static var revisionArchiveDirectory: URL {
+        FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("captures/activity-revisions", isDirectory: true)
+    }
     private let manualKey = "strap.activities.v1"
     private let liveKey = "strap.live.sessions.v1"
     private let detectedKey = "strap.detected.activities.v1"
     private let deletedDetectedKey = "strap.detected.activities.deleted.v1"
     private let whoopKey = "strap.whoop.official.workouts.v1"
 
-    init(defaults: UserDefaults = .standard) {
+    init(defaults: UserDefaults = .standard, revisionDirectory: URL? = nil) {
         self.defaults = defaults
+        self.manualRevisionDirectory = revisionDirectory ?? (defaults === UserDefaults.standard
+            ? Self.revisionArchiveDirectory
+            : FileManager.default.temporaryDirectory.appendingPathComponent("STRAP-activity-revisions-" + UUID().uuidString))
     }
 
     func manualActivities() -> [ManualActivity] {
@@ -324,23 +336,110 @@ final class ActivityStore {
         return saved.sorted { $0.startedUnix < $1.startedUnix }
     }
 
-    func save(_ activity: ManualActivity) {
-        var items = manualActivities()
-        if let index = items.firstIndex(where: { $0.id == activity.id }) {
-            items[index] = activity
-        } else {
-            items.append(activity)
+    private func strictManualActivities() throws -> [ManualActivity] {
+        guard let original = defaults.object(forKey: manualKey) else { return [] }
+        guard let bytes = original as? Data else {
+            throw PersistenceDiagnostics.Failure(message: "Original activity history could not be read; it was preserved.")
         }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: manualKey)
-        }
+        return try JSONDecoder().decode([ManualActivity].self, from: bytes)
     }
 
-    func deleteManual(id: UUID) {
-        let items = manualActivities().filter { $0.id != id }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: manualKey)
+    private func archiveManualRevision(_ original: Data, directory: URL? = nil) throws {
+        let destination = directory ?? manualRevisionDirectory
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        let archive = destination.appendingPathComponent(PersistenceDiagnostics.digest(original) + ".json")
+        if FileManager.default.fileExists(atPath: archive.path) {
+            guard try Data(contentsOf: archive) == original else {
+                throw PersistenceDiagnostics.Failure(message: "Activity archive conflict; original history preserved.")
+            }
+        } else { try original.write(to: archive, options: .atomic) }
+    }
+
+    private func persistManual(_ items: [ManualActivity]) throws {
+        let bytes = try JSONEncoder().encode(items)
+        if let original = defaults.data(forKey: manualKey) { try archiveManualRevision(original) }
+        defaults.set(bytes, forKey: manualKey)
+    }
+
+    @discardableResult
+    func save(_ activity: ManualActivity) -> Bool {
+        do {
+            var items = try strictManualActivities()
+            if let index = items.firstIndex(where: { $0.id == activity.id }) { items[index] = activity }
+            else { items.append(activity) }
+            try persistManual(items)
+            lastManualWriteError = nil
+            return true
+        } catch { lastManualWriteError = error.localizedDescription; return false }
+    }
+
+    @discardableResult
+    func restoreMissingManual(_ activity: ManualActivity) throws -> Bool {
+        var items = try strictManualActivities()
+        guard !items.contains(where: { $0.id == activity.id }) else { return false }
+        items.append(activity)
+        try persistManual(items)
+        return true
+    }
+
+    @discardableResult
+    func mergeManual(ids: Set<UUID>, name: String) throws -> ManualActivity {
+        guard ids.count >= 2, let original = defaults.data(forKey: manualKey) else {
+            throw PersistenceDiagnostics.Failure(message: "Select at least two manual entries.")
         }
+        let items = try JSONDecoder().decode([ManualActivity].self, from: original)
+        let selected = items.filter { ids.contains($0.id) }
+        guard selected.count == ids.count, let first = selected.first,
+              selected.allSatisfy({ $0.dateKey == first.dateKey && $0.kind == first.kind && $0.minutes >= 0 }) else {
+            throw PersistenceDiagnostics.Failure(message: "Merge only existing manual entries of the same type and date.")
+        }
+        var minutes = 0
+        for item in selected {
+            let sum = minutes.addingReportingOverflow(item.minutes)
+            guard !sum.overflow else { throw PersistenceDiagnostics.Failure(message: "Combined duration is too large.") }
+            minutes = sum.partialValue
+        }
+        let title = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let merged = ManualActivity(dateKey: first.dateKey, kind: first.kind,
+            name: title.isEmpty ? first.kind.label + " (merged)" : title, minutes: minutes,
+            sets: selected.flatMap(\\.sets), notes: selected.map { $0.name + ": " + $0.notes }.joined(separator: "\\n"),
+            mergedFrom: selected)
+        try archiveManualRevision(original)
+        let updated = items.filter { !ids.contains($0.id) } + [merged]
+        defaults.set(try JSONEncoder().encode(updated), forKey: manualKey)
+        return merged
+    }
+
+    func undoManualMerge(id: UUID) throws {
+        guard let original = defaults.data(forKey: manualKey) else {
+            throw PersistenceDiagnostics.Failure(message: "Manual history is unavailable.")
+        }
+        let items = try JSONDecoder().decode([ManualActivity].self, from: original)
+        guard let merged = items.first(where: { $0.id == id }),
+              let retained = merged.mergedFrom, !retained.isEmpty else {
+            throw PersistenceDiagnostics.Failure(message: "No retained merge originals found.")
+        }
+        var updated = items.filter { $0.id != id }
+        for row in retained {
+            if let existing = updated.first(where: { $0.id == row.id }) {
+                guard existing == row else {
+                    throw PersistenceDiagnostics.Failure(message: "An original entry was changed separately; undo cancelled to preserve it.")
+                }
+            } else { updated.append(row) }
+        }
+        try archiveManualRevision(original)
+        defaults.set(try JSONEncoder().encode(updated), forKey: manualKey)
+    }
+
+    @discardableResult
+    func deleteManual(id: UUID) -> Bool {
+        do {
+            let items = try strictManualActivities()
+            guard items.contains(where: { $0.id == id }) else { lastManualWriteError = nil; return true }
+            try persistManual(items.filter { $0.id != id })
+            lastManualWriteError = nil
+            return true
+        } catch { lastManualWriteError = error.localizedDescription; return false }
     }
 
     func saveLive(_ record: LiveActivityRecord) {
