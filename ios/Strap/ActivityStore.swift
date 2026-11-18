@@ -442,8 +442,15 @@ final class ActivityStore {
         } catch { lastManualWriteError = error.localizedDescription; return false }
     }
 
+    // Never overwrite an unreadable live-session archive with an empty decoded list.
+    private func readableLiveActivities() -> [LiveActivityRecord]? {
+        guard let original = defaults.object(forKey: liveKey) else { return [] }
+        guard let bytes = original as? Data else { return nil }
+        return try? JSONDecoder().decode([LiveActivityRecord].self, from: bytes)
+    }
+
     func saveLive(_ record: LiveActivityRecord) {
-        var items = liveActivities()
+        guard var items = readableLiveActivities() else { return }
         if let index = items.firstIndex(where: { $0.id == record.id }) {
             items[index] = record
         } else {
@@ -455,7 +462,8 @@ final class ActivityStore {
     }
 
     func deleteLive(id: UUID) {
-        let items = liveActivities().filter { $0.id != id }
+        guard let existing = readableLiveActivities() else { return }
+        let items = existing.filter { $0.id != id }
         if let data = try? JSONEncoder().encode(items) {
             defaults.set(data, forKey: liveKey)
         }
