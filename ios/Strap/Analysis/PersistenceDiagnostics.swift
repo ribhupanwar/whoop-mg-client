@@ -16,6 +16,9 @@ enum PersistenceDiagnostics {
         let rows: Int64
         let oldestUnix: Int64?
         let latestUnix: Int64?
+        let liveRRRecords: Int64?
+        let liveRROldestUnix: Int64?
+        let liveRRLatestUnix: Int64?
     }
     struct RecordInventory: Codable {
         let key: String
@@ -84,7 +87,7 @@ enum PersistenceDiagnostics {
             "strap.live.rr.samples.v1", "strap.history.retained.count.v1", "strap.history.lastComplete.v1",
             SleepCorrectionStore.defaultsKey, "strap.settings.v1", "strap.activities.v1", "strap.journal.entries.v1", "strap.live.sessions.v1", "strap.detected.activities.v1",
             "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1",
-            WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
+            AppOpenDayTracker.key, WeeklyWakeSchedule.entriesKey, WeeklyWakeSchedule.activeKey, WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
             "strap.wake.alarm.minutes.v1", "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"]
         return exact.contains(key) || ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains { key == "strap.whoop.import." + $0 + ".v1" }
     }
@@ -218,7 +221,11 @@ enum PersistenceDiagnostics {
         }
         let schema = try query("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").compactMap { $0[0] }
         let bounds = try query("SELECT COUNT(*), MIN(unix), MAX(unix) FROM history_sample")[0]
+        let hasRR = !(try query("SELECT name FROM sqlite_master WHERE type='table' AND name='live_rr_record'")).isEmpty
+        let rr = hasRR ? try query("SELECT COUNT(*), MIN(unix), MAX(unix) FROM live_rr_record")[0] : [nil, nil, nil]
         return DatabaseRecord(schema: schema, rows: Int64(bounds[0] ?? "0") ?? 0,
-                              oldestUnix: bounds[1].flatMap(Int64.init), latestUnix: bounds[2].flatMap(Int64.init))
+            oldestUnix: bounds[1].flatMap(Int64.init), latestUnix: bounds[2].flatMap(Int64.init),
+            liveRRRecords: rr[0].flatMap(Int64.init), liveRROldestUnix: rr[1].flatMap(Int64.init),
+            liveRRLatestUnix: rr[2].flatMap(Int64.init))
     }
 }
