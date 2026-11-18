@@ -113,8 +113,15 @@ enum StrapBackup {
         try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
         // Copy to a unique sibling, then atomically publish the pending request.
         let staging = support.appendingPathComponent("restore-staging-" + UUID().uuidString)
-        try FileManager.default.copyItem(at: preview.folder, to: staging)
-        try FileManager.default.moveItem(at: staging, to: pending)
+        do {
+            try fm.copyItem(at: preview.folder, to: staging)
+            try fm.moveItem(at: staging, to: pending)
+        } catch {
+            // A failed copy can leave a partial restore-staging directory.
+            // Never leave that unvalidated copy behind for a later startup.
+            try? fm.removeItem(at: staging)
+            throw error
+        }
     }
     static func streamSamples(_ url: URL, accept: ([V18Sample]) throws -> Void) throws {
         var db: OpaquePointer?
