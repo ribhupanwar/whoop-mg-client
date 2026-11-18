@@ -79,6 +79,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (merged)** Codex PR [#47](https://github.com/ribhupanwar/whoop-mg-client/pull/47) merged 2026-11-17: isolated WHOOP calorie research, implementation and deterministic tests (`WhoopRecoveredCalories.swift`, `WhoopRecoveredCaloriesTests.swift`). This does not establish WHOOP-equivalent calorie accuracy on a device.
 - [ ] **BLOCKED (merge conflicts)** Codex draft PR [#46](https://github.com/ribhupanwar/whoop-mg-client/pull/46) is open, 73 changed files, GitHub `mergeable=false` / `mergeable_state=dirty` against updated `main`. Review and port safe changes by feature (activity history, exports/backup, RR archives, alarms), preserving newer main code and historical data. Do not bulk merge or mark its features DONE until conflicts, tests and persistence semantics are verified.
 
+- [ ] **VERIFY (Batch 1 / PR #46 selective port)** `WhoopSourceDates.swift` source-calendar policy was copied from draft PR #46 to `main` (commit `3adcb52`) with isolated direct regression tests (commit `17087b6`). No import/export call sites are wired yet; native iOS CI [44256303192](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44256303192) and tests [44256303088](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44256303088) pending. Do not mark WHOOP import/export complete or merge PR #46 wholesale.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
