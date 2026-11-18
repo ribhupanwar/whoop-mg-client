@@ -13,6 +13,17 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(saved[String(Int.max)], edit)
     }
 
+    func testMakeAllIgnoresExtremeLegacyKeysWithoutCrashing() {
+        let night = period(3600)
+        let edit = [start + 120, start + 3300]
+        let overrides = [String(Int.min): edit, String(Int.max): edit]
+        let result = SleepSession.makeAll(samples: [], periods: [night], overrides: overrides)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result[0].startUnix, night.startUnix)
+        XCTAssertEqual(result[0].endUnix, night.endUnix + 1)
+        XCTAssertFalse(result[0].isEdited)
+    }
+
     func testSavedBoundsSurviveColdReloadWithoutStaleStagesOrScores() throws {
         let rows = (0..<3600).map { sample(start + $0) }
         let old = SleepSession.make(samples: rows, period: period(3600))
