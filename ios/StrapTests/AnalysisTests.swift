@@ -90,6 +90,34 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
 
 // MARK: - HRV
 
+final class LiveRRReplayDedupTests: XCTestCase {
+    func testReplayedSecondDoesNotInflateLiveBeatCountOrHRV() {
+        let original = (0..<40).map { index in
+            LiveSample(unix: 1_800_000_000 + index, heartRate: 65,
+                       rrIntervalsMS: [index.isMultiple(of: 2) ? 900 : 930])
+        }
+        let baseline = Hrv.fromLiveSamples(original)
+        let replayed = Hrv.fromLiveSamples(original + original)
+        XCTAssertEqual(replayed.beats, baseline.beats)
+        XCTAssertEqual(replayed.nnBeats, baseline.nnBeats)
+        XCTAssertEqual(replayed.rmssdMS, baseline.rmssdMS)
+    }
+
+    func testDuplicateSecondPrefersMoreRRBeats() {
+        let original = (0..<40).map { index in
+            LiveSample(unix: 1_800_000_000 + index, heartRate: 65,
+                       rrIntervalsMS: [900, 930])
+        }
+        let weaker = original.map {
+            LiveSample(unix: $0.unix, heartRate: 65, rrIntervalsMS: [900])
+        }
+        let baseline = Hrv.fromLiveSamples(original)
+        let replayed = Hrv.fromLiveSamples(weaker + original)
+        XCTAssertEqual(replayed.beats, baseline.beats)
+        XCTAssertEqual(replayed.rmssdMS, baseline.rmssdMS)
+    }
+}
+
 final class HrvTests: XCTestCase {
     func testOvernightRMSSD28MillisecondsKeepsRRUnits() throws {
         let rows = (0..<600).map { makeSample(5000 + $0, hr: 76, accel: 0.01, rr: [800, 828]) }
