@@ -367,3 +367,33 @@ extension ActivityStoreTests {
         XCTAssertTrue(store.detectedActivities().isEmpty)
     }
 }
+
+extension ActivityStoreTests {
+    func testCorruptLiveArchiveSurvivesSaveAndDelete() {
+        let key = "strap.live.sessions.v1"
+        let damaged = Data("{not valid JSON".utf8)
+        defaults.set(damaged, forKey: key)
+        let record = LiveActivityRecord(
+            dateKey: "2026-11-10", startedUnix: 1_700_000_000,
+            endedUnix: 1_700_001_800, meanHR: 132.0, maxHR: 168, beats: 220,
+            hrv: .empty, zoneSeconds: [0, 300, 900, 300, 0]
+        )
+        store.saveLive(record)
+        XCTAssertEqual(defaults.data(forKey: key), damaged)
+        store.deleteLive(id: record.id)
+        XCTAssertEqual(defaults.data(forKey: key), damaged)
+    }
+
+    func testWrongTypeLiveArchiveSurvivesSaveAndDelete() {
+        let key = "strap.live.sessions.v1"
+        defaults.set("legacy unreadable data", forKey: key)
+        let record = LiveActivityRecord(
+            dateKey: "2026-11-10", startedUnix: 1_700_000_000,
+            endedUnix: 1_700_001_800, meanHR: nil, maxHR: nil, beats: 0,
+            hrv: .empty, zoneSeconds: []
+        )
+        store.saveLive(record)
+        store.deleteLive(id: record.id)
+        XCTAssertEqual(defaults.string(forKey: key), "legacy unreadable data")
+    }
+}
