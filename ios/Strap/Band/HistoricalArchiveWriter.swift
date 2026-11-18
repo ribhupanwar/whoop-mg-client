@@ -8,6 +8,9 @@ final class HistoricalArchiveWriter {
     private let queue = DispatchQueue(label: "strap.history.archive", qos: .userInitiated)
     private var database: HistoryDatabase?
     private var pending: [Int: V18Sample] = [:]
+    private var pendingLiveRR: [String: LiveRRRecord] = [:]
+    private var liveRRCount: Int?
+    private var pendingLegacyLiveRR: [LiveSample]?
 
     init(url: URL) {
         legacyURL = url
@@ -38,6 +41,47 @@ final class HistoricalArchiveWriter {
         queue.async {
             let result = Result { try self.open().samples(from: start, through: end) }
             DispatchQueue.main.async { completion(result) }
+        }
+    }
+
+    func persistLiveRR(_ records: [LiveRRRecord], completion: @escaping (Result<Int, Error>) -> Void) {
+        queue.async {
+            let result = Result { try self.commitLiveRR(records) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+    func importLegacyLiveRR(_ samples: [LiveSample], completion: @escaping (Result<Int, Error>) -> Void) {
+        queue.async {
+            self.pendingLegacyLiveRR = samples
+            let result = Result { try self.commitLiveRR([]) }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+    func flush(completion: @escaping (Result<Int, Error>) -> Void) {
+        queue.async {
+            let result = Result {
+                _ = try self.commit([], token: nil)
+                return try self.commitLiveRR([])
+            }
+            DispatchQueue.main.async { completion(result) }
+        }
+    }
+    private func commitLiveRR(_ records: [LiveRRRecord]) throws -> Int {
+        for record in records { pendingLiveRR[record.id] = record }
+        do {
+            let opened = try open()
+            if let legacy = pendingLegacyLiveRR {
+                liveRRCount = try opened.migrateLegacyLiveRR(legacy)
+                pendingLegacyLiveRR = nil
+            }
+            let inserted = try opened.commitLiveRR(Array(pendingLiveRR.values))
+            pendingLiveRR.removeAll(keepingCapacity: true)
+            let count = try liveRRCount.map { $0 + inserted } ?? opened.liveRRCount()
+            liveRRCount = count
+            return count
+        } catch {
+            database = nil; liveRRCount = nil
+            throw error
         }
     }
 

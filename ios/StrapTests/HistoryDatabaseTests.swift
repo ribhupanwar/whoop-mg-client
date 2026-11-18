@@ -283,3 +283,21 @@ extension HistoryDatabaseTests {
         XCTAssertEqual(try reopened.metadata("legacy_json_imported"), "1")
     }
 }
+
+
+extension HistoryDatabaseTests {
+    func testRawSensorAndLiveRRRestoreShareOneRollbackBoundary() throws {
+        let database = try HistoryDatabase(url: url)
+        let original = historySample(1000)
+        try database.commit([original])
+        let rr = LiveRRRecord(id: "rollback-fixture", source: "synthetic", receivedAtUnix: 1001.25,
+            sample: LiveSample(unix: 1001, heartRate: 60, rrIntervalsMS: [1000]))
+        enum Injected: Error { case unavailableDisk }
+        XCTAssertThrowsError(try database.restoreMissing(token: "combined-failure",
+            stream: { accept in try accept([historySample(1001)]) },
+            liveRRStream: { accept in try accept([rr]) }, accompanyingWrites: { throw Injected.unavailableDisk }))
+        XCTAssertEqual(try database.samples(from: 0, through: 2000), [original])
+        XCTAssertEqual(try database.liveRRCount(), 0)
+        XCTAssertNil(try database.metadata("restore:combined-failure"))
+    }
+}

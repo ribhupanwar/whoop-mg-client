@@ -16,6 +16,9 @@ enum PersistenceDiagnostics {
         let rows: Int64
         let oldestUnix: Int64?
         let latestUnix: Int64?
+        let liveRRRecords: Int64?
+        let liveRROldestUnix: Int64?
+        let liveRRLatestUnix: Int64?
     }
     struct RecordInventory: Codable {
         let key: String
@@ -218,7 +221,11 @@ enum PersistenceDiagnostics {
         }
         let schema = try query("SELECT sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY name").compactMap { $0[0] }
         let bounds = try query("SELECT COUNT(*), MIN(unix), MAX(unix) FROM history_sample")[0]
+        let hasRR = !(try query("SELECT name FROM sqlite_master WHERE type='table' AND name='live_rr_record'")).isEmpty
+        let rr = hasRR ? try query("SELECT COUNT(*), MIN(unix), MAX(unix) FROM live_rr_record")[0] : [nil, nil, nil]
         return DatabaseRecord(schema: schema, rows: Int64(bounds[0] ?? "0") ?? 0,
-                              oldestUnix: bounds[1].flatMap(Int64.init), latestUnix: bounds[2].flatMap(Int64.init))
+            oldestUnix: bounds[1].flatMap(Int64.init), latestUnix: bounds[2].flatMap(Int64.init),
+            liveRRRecords: rr[0].flatMap(Int64.init), liveRROldestUnix: rr[1].flatMap(Int64.init),
+            liveRRLatestUnix: rr[2].flatMap(Int64.init))
     }
 }
