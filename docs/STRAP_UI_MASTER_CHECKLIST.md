@@ -20,7 +20,7 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (verified CI)** Earlier run `44093504026` failed `TabResponsivenessTests` because `app.buttons["tab.home"]` was not found; the custom tab accessibility change (`bfed00f`) was subsequently covered by successful consolidated UI tests in run `44120344273`. Physical-device VoiceOver and tap-target checks remain **VERIFY**.
 - [x] **DONE (code)** Missing-tab UI test now attaches the full accessibility hierarchy and launch screenshot on failure for actionable CI diagnosis (commit `f505c64`).
 - [x] **DONE (verified CI)** Tab responsiveness regression passed as part of the three UI tests in consolidated run `44120344273` at revision `20b7ad5`; physical-device tap targets/VoiceOver remain **VERIFY**.
-- [ ] **TODO** Recovery/Strain/Sleep hero gauges and detail views screenshot alignment.
+- [ ] **VERIFY** Home Sleep/Recovery/Strain ring labels now avoid clipping with minimum scaling and expose a single accessible button label with actual or unavailable score (commits `f1c8904`, `69e894f`); native CI and device VoiceOver/tap tests pending. Full hero gauges and detail-view screenshot alignment still **TODO**.
 - [ ] **TODO** Today activity card ordering, duplication, swipe actions and visual match.
 - [ ] **TODO** Trends: 7-day, 30-day and longer baseline views, only with real available data.
 
@@ -30,7 +30,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Removed redundant Connected banner above live HR chart to match reference (commit `31070f7`); BLE connection logic unchanged.
 - [ ] **VERIFY** Health Monitor chart grid/background colors against supplied screenshot on actual iPhone.
 - [ ] **VERIFY** Health Monitor HR chart now draws observed HR variation instead of a synthetic flat trace, with endpoint marker aligned to the last plotted observation (commits `90eb17a`, `abcc8f9`); native iOS CI [44225569658](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44225569658) passed for `abcc8f9`; screenshot comparison pending. Chart height, typography and metric tile colors still **TODO**.
-- [ ] **VERIFY** Live HR trace now excludes historical/offline readings and rejects implausible/nonfinite BPM, with focused `HealthChartReadingsTests.swift` tests (commits `8674802`, `3536f74`); native CI and device screenshot comparison pending.\n- [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
+- [ ] **VERIFY** Live HR trace now excludes historical/offline readings and rejects implausible/nonfinite BPM, with focused `HealthChartReadingsTests.swift` tests (commits `8674802`, `3536f74`); native iOS CI [44228173313](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44228173313) passed; device screenshot comparison pending.
+- [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
 - [ ] **TODO** Accurate range/status visualizations; never invent SpO2, respiratory rate or skin temperature.
 
 ## Sleep, alarm and recovery
