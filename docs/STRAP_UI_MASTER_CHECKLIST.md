@@ -29,8 +29,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 - [x] **DONE (code)** Health Monitor HR chart grid changed to more visible blue-grey `#667D88` at 17% opacity (commit `58671c6`).
 - [x] **DONE (code)** Removed redundant Connected banner above live HR chart to match reference (commit `31070f7`); BLE connection logic unchanged.
 - [ ] **VERIFY** Health Monitor chart grid/background colors against supplied screenshot on actual iPhone.
-- [ ] **VERIFY** Health Monitor HR chart now draws observed HR variation instead of a synthetic flat trace, with endpoint marker aligned to the last plotted observation (commits `90eb17a`, `abcc8f9`); native CI and screenshot comparison pending. Chart height, typography and metric tile colors still **TODO**.
-- [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
+- [ ] **VERIFY** Health Monitor HR chart now draws observed HR variation instead of a synthetic flat trace, with endpoint marker aligned to the last plotted observation (commits `90eb17a`, `abcc8f9`); native iOS CI [44225569658](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44225569658) passed for `abcc8f9`; screenshot comparison pending. Chart height, typography and metric tile colors still **TODO**.
+- [ ] **VERIFY** Live HR trace now excludes historical/offline readings and rejects implausible/nonfinite BPM, with focused `HealthChartReadingsTests.swift` tests (commits `8674802`, `3536f74`); native CI and device screenshot comparison pending.\n- [ ] **VERIFY** HR chart geometry, metric cards and status contrast on device.
 - [ ] **TODO** Accurate range/status visualizations; never invent SpO2, respiratory rate or skin temperature.
 
 ## Sleep, alarm and recovery
