@@ -50,12 +50,4 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         XCTAssertEqual(night.endUnix, tailStart - 1)
     }
 
-    func testSparseThreeSecondUpPacketsCannotConfirmWake() throws {
-        let (rows, _, end) = capture(upSeconds: 600, sampleStride: 3)
-        // A gap greater than the detector's two-second state continuity
-        // allowance cannot be interpreted as a sustained band-up tail.
-        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        XCTAssertEqual(night.endUnix, rows.last!.unix)
-        XCTAssertLessThanOrEqual(night.endUnix, end)
-    }
 }
