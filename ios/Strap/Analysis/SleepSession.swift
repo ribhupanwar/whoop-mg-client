@@ -326,7 +326,7 @@ enum SleepCorrectionStore {
     static func times(for period: SleepPeriod, overrides: [String: [Int]]) -> [Int]? {
         if let exact = validated(overrides[String(period.startUnix)]) { return exact }
         let candidates = overrides.compactMap { key, value -> (Int, [Int])? in
-            guard let source = Int(key), let distance = nearbySource(source, period.startUnix),
+            guard let source = Int(key), let distance = sourceDistance(source, period.startUnix),
                   let times = validated(value) else { return nil }
             let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
             let shorter = min(period.durationS, times[1] - times[0])
