@@ -3,7 +3,7 @@
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
 ## Batch 0 — Build gate (current)
-- [ ] Confirm native iOS workflow for commit `454e0d5` succeeds; tests workflow has passed.
+- [x] **DONE (verified CI)** Native iOS workflow for `454e0d5` succeeded ([run 44272815069](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44272815069)); matching tests workflow succeeded ([run 44272815052](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44272815052)). Later native iOS workflow for `9e73dfa` also succeeded ([run 44278555357](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44278555357)); tests on `9e73dfa` were cancelled, while the subsequent checklist-only `1182edb` tests workflow succeeded ([run 44278575375](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44278575375)). Physical-device verification remains **VERIFY**.
 - [ ] If native build fails, fix the exact compiler/signing/package failure before starting feature batches.
 
 ## Batch 1 — Reconcile Codex PR #46 safely
