@@ -83,7 +83,18 @@ enum Respiration {
         // Keep every record in clock order. Filtering to only still records
         // before segmentation hides motion/missing-RR gaps and can stitch
         // unrelated beats into a false respiration peak train.
-        let ordered = samples.sorted { $0.unix < $1.unix }
+        // Offload/reconnect may replay a timestamp. Keep the most complete
+        // second rather than letting duplicates break an otherwise valid
+        // continuous breathing window or double-count R-R beats.
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         var segments: [[(unix: Int, rr: Int)]] = []
         var current: [(unix: Int, rr: Int)] = []
         var lastUnix: Int?
