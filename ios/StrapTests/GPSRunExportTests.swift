@@ -47,6 +47,15 @@ final class GPSRunExportTests: XCTestCase {
             movingSeconds: run.movingSeconds, distanceMeters: run.distanceMeters, splitSeconds: [], route: Array(run.route.reversed()))
         XCTAssertThrowsError(try GPSRunExport.render(reversed, format: .fit))
     }
+    func testExportRejectsMovingDurationLongerThanWorkoutWithoutChangingRecord() {
+        let impossible = GPSRunRecord(id: run.id, startedAt: run.startedAt, endedAt: run.endedAt,
+            movingSeconds: 31, distanceMeters: run.distanceMeters, splitSeconds: [],
+            route: run.route)
+        XCTAssertThrowsError(try GPSRunExport.render(impossible, format: .gpx))
+        XCTAssertThrowsError(try GPSRunExport.render(impossible, format: .fit))
+        XCTAssertNoThrow(try GPSRunExport.render(run, format: .gpx))
+        XCTAssertNoThrow(try GPSRunExport.render(run, format: .fit))
+    }
     func testFITRejectsEpochAndIntegerOverflowWhileGPXKeepsValidRawCoordinates() {
         let old = GPSRunRecord(id: run.id, startedAt: Date(timeIntervalSince1970: 100), endedAt: Date(timeIntervalSince1970: 200),
             movingSeconds: 80, distanceMeters: 100, splitSeconds: [], route: [
