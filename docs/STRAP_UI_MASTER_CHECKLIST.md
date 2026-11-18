@@ -81,6 +81,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 1 / PR #46 selective port)** `WhoopSourceDates.swift` source-calendar policy was copied from draft PR #46 to `main` (commit `3adcb52`) with isolated direct regression tests (commit `17087b6`). No import/export call sites are wired yet; native iOS CI [44256303192](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44256303192) and tests [44256303088](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44256303088) pending. Do not mark WHOOP import/export complete or merge PR #46 wholesale.
 
+- [ ] **VERIFY (Batch 1 / activity swipe)** Copied PR #46's non-destructive `ActivityDeleteReveal.swift` (commit `f6c5a22`) and `ActivitySwipeIntentTests.swift` (commit `8e7afc1`) to `main`. Gesture reveals a Delete button only; no delete on drag. Not yet wired into Today activity cards, so user-visible swipe/delete remains TODO. Native CI pending; do not claim feature complete.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
