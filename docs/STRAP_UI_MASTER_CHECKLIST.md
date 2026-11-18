@@ -83,6 +83,8 @@ Status legend: **DONE (code)** = committed implementation, **VERIFY** = requires
 
 - [ ] **VERIFY (Batch 1 / activity swipe)** Copied PR #46's non-destructive `ActivityDeleteReveal.swift` (commit `f6c5a22`) and `ActivitySwipeIntentTests.swift` (commit `8e7afc1`) to `main`. Gesture reveals a Delete button only; no delete on drag. Not yet wired into Today activity cards, so user-visible swipe/delete remains TODO. Native CI pending; do not claim feature complete.
 
+- [ ] **VERIFY (Batch 1 / activity swipe wired)** Today timed and manual activity rows now use non-destructive swipe-to-reveal Delete alongside existing long-press context menu (`HomeView.swift`, commit `97fb197`). Gesture tests are in `ActivitySwipeIntentTests.swift`. iOS CI and device verification pending; verify both gesture and persisted deletion before DONE.
+
 ## Working rules
 1. Inspect source and reference material; prioritize highest-impact unverified items.
 2. Implement small, reviewable changes; add focused tests; commit verified code to `main`.
