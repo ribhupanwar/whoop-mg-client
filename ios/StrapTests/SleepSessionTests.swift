@@ -156,6 +156,19 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertThrowsError(try SleepDiagnostics.csv(samples: [], session: edited))
     }
 
+    func testDiagnosticPreSleepExportIncludesOnlyAvailableEarlierSamples() throws {
+        let rows = [-1900, -1800, -900, -1, 0, 1, 60].map { sample(start + $0) }
+        let session = SleepSession.make(samples: rows, period: period(60))
+        let csv = try SleepDiagnostics.csv(samples: rows, session: session, preSleepSeconds: 1800)
+        let lines = csv.split(separator: "\n").dropFirst()
+        let timestamps = lines.compactMap { Int($0.split(separator: ",", omittingEmptySubsequences: false)[3]) }
+        XCTAssertEqual(timestamps, [start - 1800, start - 900, start - 1, start, start + 1])
+        XCTAssertFalse(timestamps.contains(start - 1900))
+        XCTAssertFalse(timestamps.contains(start + 60))
+        XCTAssertEqual(try SleepDiagnostics.csv(samples: rows, session: session),
+                       try SleepDiagnostics.csv(samples: rows, session: session, preSleepSeconds: 0))
+    }
+
     func testDiagnosticExportWritesAReadableLocalCSV() throws {
         let rows = (0..<60).map { sample(start + $0) }
         let session = SleepSession.make(samples: rows, period: period(60))
