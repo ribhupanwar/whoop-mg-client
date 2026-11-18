@@ -30,7 +30,7 @@ struct HomeView: View {
             VStack(alignment: .leading, spacing: 0) {
                 Text("STRAP")
                     .font(StrapTypography.body(18, weight: .light)).tracking(3)
-                    .frame(maxWidth: .infinity).padding(.top, 12).padding(.bottom, 8)
+                    .frame(maxWidth: .infinity).padding(.top, 5).padding(.bottom, 8)
                 ringTrio
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: HomeHeroPosition.self,
@@ -360,7 +360,7 @@ struct HomeView: View {
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: ringSize)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label.replacingOccurrences(of: " ›", with: "") + ", " + (text == "—" ? "unavailable" : text))
