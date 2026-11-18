@@ -20,6 +20,8 @@ enum SleepDiagnostics {
         let lookback = min(max(0, preSleepSeconds), 3600)
         let (candidateLowerBound, overflow) = session.startUnix.subtractingReportingOverflow(lookback)
         let lowerBound = overflow ? Int.min : candidateLowerBound
+        // Do not label an invalid/empty edited night as a valid export window.
+        guard session.startUnix < session.endUnix else { throw ExportError.noNight }
         let rows = samples.filter { lowerBound <= $0.unix && $0.unix < session.endUnix }
             .sorted {
                 if $0.unix != $1.unix { return $0.unix < $1.unix }
