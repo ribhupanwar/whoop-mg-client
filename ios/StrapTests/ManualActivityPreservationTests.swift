@@ -75,6 +75,6 @@ final class ManualActivityPreservationTests: XCTestCase {
         XCTAssertEqual(merged.mergedFrom, [a, b])
         XCTAssertEqual(store.manualActivities(), [merged])
         try store.undoManualMerge(id: merged.id)
-        XCTAssertEqual(Set(store.manualActivities().map(\\.id)), [a.id, b.id])
+        XCTAssertEqual(Set(store.manualActivities().map(\.id)), [a.id, b.id])
     }
 }
