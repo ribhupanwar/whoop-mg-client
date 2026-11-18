@@ -14,8 +14,9 @@ enum SleepDiagnostics {
         }
     }
 
-    static func csv(samples: [V18Sample], session: SleepSession) throws -> String {
-        let rows = samples.filter { session.startUnix <= $0.unix && $0.unix < session.endUnix }
+    static func csv(samples: [V18Sample], session: SleepSession, preSleepSeconds: Int = 0) throws -> String {
+        let lowerBound = session.startUnix - min(max(0, preSleepSeconds), 3600)
+        let rows = samples.filter { lowerBound <= $0.unix && $0.unix < session.endUnix }
             .sorted { $0.unix < $1.unix }
         guard !rows.isEmpty else { throw ExportError.noSamples }
         let segments = session.staging.segments.sorted { $0.startUnix < $1.startUnix }
@@ -53,8 +54,9 @@ enum SleepDiagnostics {
         return result
     }
 
-    static func write(samples: [V18Sample], session: SleepSession, directory: URL) throws -> URL {
-        let contents = try csv(samples: samples, session: session)
+    static func write(samples: [V18Sample], session: SleepSession, directory: URL,
+                      preSleepSeconds: Int = 0) throws -> URL {
+        let contents = try csv(samples: samples, session: session, preSleepSeconds: preSleepSeconds)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("sleep-\(session.startUnix)-\(session.endUnix)-\(UUID().uuidString).csv")
         try Data(contents.utf8).write(to: url, options: .atomic)
