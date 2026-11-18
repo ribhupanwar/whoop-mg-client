@@ -46,10 +46,11 @@
 - [ ] **SECURITY (pending audit)** Audit backup ZIP entry path normalization, decompression limits and restore staging cleanup; do not modify historical data while investigating.
 
 ## Batch 6 — Release acceptance
-- [ ] Reconcile or close stale/overlapping open PRs after reviewing their unique changes.
-- [ ] Run full tests and native IPA workflow on final main commit.
+- [ ] **PR reconciliation (audited 2026-11-18):** 22 open PRs remain. Draft #46 is 30 commits ahead / 83 behind main, 73 changed files; #37 is 2 ahead / 264 behind, 7 files; #35 is 79 ahead / 281 behind, 59 files. Their overlapping work requires file-by-file review, not bulk merge or blind closure.
+- [x] **Automated tests (current audit commit's parent):** tests run [44285013778](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44285013778) passed on `51dbb647`. Earlier native iOS run [44278555357](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44278555357) passed on `9e73dfa` only; not proof that the latest main packages successfully.
+- [ ] Run full tests and native IPA workflow on final main commit; verify artifact availability, signing and fonts/entitlements.
 - [ ] Install IPA on target iPhone; verify BLE reconnect, sleep edit/relaunch, activity delete, export/restore and screenshots.
-- [ ] Update this checklist with evidence links; only then mark the release complete.
+- [ ] Do not mark release complete while Sleep/Health accuracy and device acceptance are unresolved.
 
 ---
 
