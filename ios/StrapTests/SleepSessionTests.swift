@@ -31,6 +31,35 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(recovery.sleepComponent), Stats.rounded(report.hoursVsNeededPct, 1))
     }
 
+
+    func testOfflineWakeEditPersistsButCannotReuseOldRecoveryOrSleepScore() throws {
+        let rows = (0..<3600).map { sample(start + $0) }
+        let old = SleepSession.make(samples: rows, period: period(3600))
+        XCTAssertTrue(old.isComplete)
+        let editedBounds = [start + 300, start + 3300]
+        let overrides = [String(start): editedBounds]
+        let offline = SleepSession.retainingUncovered(
+            previous: [old], fresh: [], coverageStart: nil, coverageEnd: nil,
+            samples: [], overrides: overrides
+        )
+        let corrected = try XCTUnwrap(offline.first)
+        XCTAssertEqual(offline.count, 1)
+        XCTAssertEqual(corrected.startUnix, editedBounds[0])
+        XCTAssertEqual(corrected.endUnix, editedBounds[1])
+        XCTAssertTrue(corrected.isEdited)
+        XCTAssertNil(corrected.asleepHours,
+                     "No recovered sensor coverage means no defensible sleep duration")
+        XCTAssertNil(SleepReport.analyze(samples: [], session: corrected,
+                                         needHours: 8, nights: [], sleepBaseline: nil))
+        let reopened = try JSONDecoder().decode([SleepSession].self,
+                                                 from: JSONEncoder().encode(offline))
+        XCTAssertEqual(reopened, offline)
+        XCTAssertEqual(SleepSession.retainingUncovered(
+            previous: reopened, fresh: [], coverageStart: nil, coverageEnd: nil,
+            samples: [], overrides: overrides
+        ), reopened, "Repeated offline replay must not move saved wake time")
+    }
+
     func testAuthoritativeNightMergeClearsObsoleteBiometricsButKeepsRecordedSteps() {
         let old = DayMetrics(dateKey: "2026-11-17", state: "sleep", restingHR: 63, lnRMSSD: log(28),
             hrvWindowSeconds: 600, sleepHours: 7, sleepStartUnix: start, sleepEndUnix: start + 8 * 3600,
