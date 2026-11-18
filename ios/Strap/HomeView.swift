@@ -252,7 +252,7 @@ struct HomeView: View {
                 HStack(spacing: 18) {
                     NavigationLink(value: Route.sleepAnalysis) {
                         trioItem(
-                            label: "SLEEP ›",
+                            label: "SLEEP",
                             text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
                             progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
                             color: .appSleep,
@@ -263,7 +263,7 @@ struct HomeView: View {
 
                     NavigationLink(value: Route.recovery) {
                         trioItem(
-                            label: "RECOVERY ›",
+                            label: "RECOVERY",
                             text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                             progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
                             color: DetailMetric.recovery.color(demo ? Double(SampleData.recoveryRingPercent) : recoveryScore),
@@ -274,7 +274,7 @@ struct HomeView: View {
 
                     NavigationLink(value: Route.strain) {
                         trioItem(
-                            label: "STRAIN ›",
+                            label: "STRAIN",
                             text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
                             progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
                             color: .appAccent,
@@ -353,17 +353,22 @@ struct HomeView: View {
         VStack(spacing: 8) {
             RingView(progress: progress, color: color, lineWidth: 8, size: ringSize, centerText: text, centerFont: 24)
                 .accessibilityHidden(true)
-            Text(label)
-                .font(StrapTypography.body(11.5, weight: .bold))
-                .tracking(0.75)
-                .foregroundStyle(Color.appFG)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            HStack(alignment: .firstTextBaseline, spacing: 5) {
+                Text(label)
+                    .font(StrapTypography.body(12.5, weight: .bold))
+                    .tracking(0.9)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10.5, weight: .bold))
+                    .accessibilityHidden(true)
+            }
+            .foregroundStyle(Color.appFG)
+            .lineLimit(1)
+            .minimumScaleFactor(0.9)
         }
         .frame(width: ringSize)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(label.replacingOccurrences(of: " ›", with: "") + ", " + (text == "—" ? "unavailable" : text))
+        .accessibilityLabel(label + ", " + (text == "—" ? "unavailable" : text))
         .accessibilityAddTraits(.isButton)
     }
 
