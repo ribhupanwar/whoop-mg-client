@@ -1223,6 +1223,34 @@ final class RecoveryTests: XCTestCase {
 
 // MARK: - Respiration
 
+final class RespirationReplayTests: XCTestCase {
+    func testReplayedSecondsDoNotBreakRespirationBeatSegments() {
+        let original = (0..<120).map { index in
+            makeSample(1_800_000_000 + index, hr: 65, accel: 0.01,
+                       rr: [index.isMultiple(of: 2) ? 900 : 920])
+        }
+        let baseline = Respiration.beatSegments(original)
+        let replayed = Respiration.beatSegments(original + original)
+        XCTAssertEqual(baseline.count, 1)
+        XCTAssertEqual(replayed.count, baseline.count)
+        XCTAssertEqual(replayed.first?.count, baseline.first?.count)
+    }
+
+    func testReplayedSecondsPreferMoreCompleteRRRecord() {
+        let original = (0..<120).map { index in
+            makeSample(1_800_000_000 + index, hr: 65, accel: 0.01,
+                       rr: [900, 920])
+        }
+        let weaker = (0..<120).map { index in
+            makeSample(1_800_000_000 + index, hr: 65, accel: 0.01,
+                       rr: [900])
+        }
+        let segments = Respiration.beatSegments(weaker + original)
+        XCTAssertEqual(segments.count, 1)
+        XCTAssertEqual(segments.first?.count, 240)
+    }
+}
+
 final class RespirationTests: XCTestCase {
     /// A continuous beat train whose R-R swings with a 4 s breathing period.
     private func breathingSamples(beats: Int) -> [V18Sample] {
