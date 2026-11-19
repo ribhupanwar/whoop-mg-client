@@ -45,7 +45,7 @@ struct SleepCoachView: View {
                 alarmPanel
             }
         }
-        .strapTabTypography("Sleep coach")
+        .strapTabTypography("Sleep Coach")
         .sheet(isPresented: $showWakePicker) {
             NavigationStack {
                 DatePicker("Wake time", selection: wakeDateBinding, displayedComponents: .hourAndMinute)

@@ -127,35 +127,35 @@ struct SleepAnalysisView: View {
 
     private var performancePanel: some View {
         GeometryReader { geometry in
-            let diameter = min(geometry.size.width - 110, 250.0)
+            let diameter = min(geometry.size.width - 110, 180.0)
             ZStack {
-                Circle().stroke(Color.appRaised, lineWidth: 15)
+                Circle().stroke(Color.appRaised, lineWidth: 12)
                 Circle().trim(from: 0, to: CGFloat(min(1, max(0, (performancePct ?? 0) / 100))))
-                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 15, lineCap: .round))
+                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
-                VStack(spacing: 6) {
-                    Text("STRAP").font(StrapTypography.body(18, weight: .light)).tracking(2)
+                VStack(spacing: 4) {
+                    Text("STRAP").font(StrapTypography.body(14, weight: .light)).tracking(3)
                         .foregroundStyle(Color.appMuted)
                     HStack(alignment: .firstTextBaseline, spacing: 0) {
                         Text(performancePct.map { "\(Int($0.rounded()))" } ?? "—")
-                            .font(StrapTypography.metric(64))
-                        if performancePct != nil { Text("%").font(StrapTypography.metric(40)) }
+                            .font(StrapTypography.metric(48, weight: .bold))
+                        if performancePct != nil { Text("%").font(StrapTypography.metric(28, weight: .bold)) }
                     }
                     Text("SLEEP\nPERFORMANCE")
-                        .font(StrapTypography.body(12, weight: .bold)).tracking(1)
+                        .font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                         .multilineTextAlignment(.center)
                     HStack(spacing: 2) {
                         ForEach(0..<3, id: \.self) { index in
                             Rectangle().fill(index == 1 ? Color.appMuted : Color.appRaised)
-                                .frame(width: 18, height: 3)
+                                .frame(width: 14, height: 3)
                         }
-                    }.padding(.top, 8)
+                    }.padding(.top, 4)
                 }.foregroundStyle(Color.appFG)
             }
             .frame(width: diameter, height: diameter)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(height: 280)
+        .frame(height: 210)
         .padding(.bottom, 20)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Sleep performance, \(percentText(performancePct)). \(performanceCaption)")

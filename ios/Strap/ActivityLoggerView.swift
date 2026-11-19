@@ -39,7 +39,7 @@ struct ActivityLoggerView: View {
                     Hint("Manual entries stay self-reported. The band measures heart rate and movement; it never sees load, so nothing from this sheet becomes strain or recovery.")
                 }
             }
-            .navigationTitle(editing == nil ? "Add activity" : "Edit activity")
+            .navigationTitle(editing == nil ? "ADD ACTIVITY" : "EDIT ACTIVITY")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -71,13 +71,13 @@ struct ActivityLoggerView: View {
                     .foregroundStyle(Color.appMuted)
             }
             .padding(12)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
             TextField("Search 60+ activities", text: $activitySearch)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(StrapTypography.body(13))
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
             ScrollView {
                 LazyVStack(spacing: 2) {
                     ForEach(ActivityKind.allCases.filter {
@@ -137,8 +137,8 @@ struct ActivityLoggerView: View {
                 .font(StrapTypography.body(13))
                 .foregroundStyle(Color.appFG)
                 .padding(10)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
                 .padding(.top, 6)
         }
     }
