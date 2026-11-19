@@ -151,4 +151,23 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
                        "HR rise without measured movement must not imply wake onset")
     }
 
+    func testConfirmedEveningSleepBacktracksThroughPositionAdjustmentRustle() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 21, minute: 45))!.timeIntervalSince1970)
+        var rows = (0..<600).map { row(base + $0, hr: 85, accel: 0.3, state: 0) }
+        let bedtime = base + 600
+        // Prelude has settling HR (62-64) but includes a 4-second position shift rustle (accel 0.25, HR 70)
+        rows += (bedtime..<(bedtime + 960)).map { offset in
+            let isRustle = (bedtime + 300..<(bedtime + 305)).contains(offset)
+            return row(offset, hr: isRustle ? 70 : 62, accel: isRustle ? 0.25 : 0.008, state: 1)
+        }
+        let confirmedStart = bedtime + 960
+        rows += (confirmedStart..<(confirmedStart + 7200)).map {
+            row($0, hr: 61, accel: 0.008, state: 2)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        // Backtracking should successfully traverse the momentary rustle back to bedtime settling
+        XCTAssertEqual(night.startUnix, bedtime)
+    }
+
 }

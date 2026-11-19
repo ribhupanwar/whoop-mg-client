@@ -34,12 +34,12 @@ enum SleepStager {
         .light: log(0.50), .deep: log(0.15), .rem: log(0.22), .wake: log(0.10)
     ]
 
-    private static let deepGateThreshold = 0.25
+    private static let deepGateThreshold = 0.32
     private static let deepGateSlope = 5.0
     private static let jerkFloorMoveMult = 38.0
     private static let jerkFloorGateMult = 55.0
     private static let motionGateBoost = 2.0
-    private static let respWeight = 0.6
+    private static let respWeight = 0.8
 
     private static let remLatencyPenalty = 3.0
     private static let remLatencyMinutes = 60.0
@@ -512,7 +512,7 @@ enum SleepStager {
     ) -> [SleepStage: Double] {
         [
             .deep: 1.2 * max(0, 1 - clock / 0.55),
-            .rem: clock - remGuard(minutesSinceOnset),
+            .rem: 0.85 * clock - remGuard(minutesSinceOnset),
             .light: 0,
             .wake: 0
         ]
@@ -662,7 +662,13 @@ enum SleepStager {
                 emissions[index][.deep] = (emissions[index][.deep] ?? 0) - deepGuard(sinceOnset)
             }
         }
-        return viterbi(emissions)
+        var labels = viterbi(emissions)
+        if let onsetMinutes, onsetMinutes > epochs[0].minutes {
+            for index in epochs.indices where epochs[index].minutes < onsetMinutes {
+                labels[index] = .wake
+            }
+        }
+        return labels
     }
 
     private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {

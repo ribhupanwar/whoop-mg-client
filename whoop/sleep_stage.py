@@ -54,8 +54,8 @@ BASE_LOG_PRIOR = {
     "awake": math.log(0.10),
 }
 
-# Deep is eligible only in the night's lowest ~25 % HR-flatness epochs.
-DEEP_GATE_THRESHOLD = 0.25
+# Deep is eligible only in the night's lowest ~32 % HR-flatness epochs.
+DEEP_GATE_THRESHOLD = 0.32
 DEEP_GATE_SLOPE = 5.0
 
 # Motion thresholds are relative to the night's own quiescent jerk floor, so
@@ -63,7 +63,7 @@ DEEP_GATE_SLOPE = 5.0
 JERK_FLOOR_MOVE_MULT = 38.0
 JERK_FLOOR_GATE_MULT = 55.0
 MOTION_GATE_BOOST = 2.0
-RESP_WEIGHT = 0.6
+RESP_WEIGHT = 0.8
 
 TRANSITION = {
     "deep": {"deep": 0.86, "rem": 0.007, "light": 0.126, "awake": 0.007},
@@ -330,7 +330,7 @@ def _deep_latency_guard(minutes_since_onset: float) -> float:
 def _cycle_prior(clock: float, minutes_since_onset: float) -> dict[str, float]:
     return {
         "deep": 1.2 * max(0.0, 1.0 - clock / 0.55),
-        "rem": 1.0 * clock - _rem_latency_guard(minutes_since_onset),
+        "rem": 0.85 * clock - _rem_latency_guard(minutes_since_onset),
         "light": 0.0,
         "awake": 0.0,
     }
@@ -427,7 +427,11 @@ def _stage_epochs(feats: list[_Epoch]) -> list[str]:
         since_onset = f.minutes - origin
         emissions[index]["rem"] -= _rem_latency_guard(since_onset)
         emissions[index]["deep"] -= _deep_latency_guard(since_onset)
-    return _viterbi(emissions)
+    labels = _viterbi(emissions)
+    if onset_index is not None and onset_index > 0:
+        for idx in range(onset_index):
+            labels[idx] = "awake"
+    return labels
 
 
 def stage_sleep(samples: list[V18Sample], period: SleepPeriod) -> SleepStaging:

@@ -219,8 +219,12 @@ final class HistoryDatabaseTests: XCTestCase {
             do {
                 try FileManager.default.removeItem(at: writer.databaseURL)
                 writer.merge([]) { result in
-                    do { XCTAssertEqual(try result.get(), [historySample(1000)]) }
-                    catch { XCTFail("Retry lost pending rows: \(error)") }
+                    switch result {
+                    case .success(let rows):
+                        XCTAssertEqual(rows, [historySample(1000)])
+                    case .failure(let error):
+                        XCTFail("Retry lost pending rows: \(error)")
+                    }
                     done.fulfill()
                 }
             } catch { XCTFail("Could not repair test path: \(error)"); done.fulfill() }
