@@ -144,7 +144,17 @@ enum SleepStager {
                 if runStart == nil { runStart = index }
             } else if let first = runStart {
                 if index - first >= 10 {
-                    for stageIndex in first..<index { labels[stageIndex] = .wake }
+                    // State=3 can remain latched after a brief bathroom trip.
+                    // Preserve a physiologically quiet return-to-bed tail for
+                    // normal staging instead of forcing the entire up run awake.
+                    // A genuinely active up epoch remains wake evidence.
+                    for stageIndex in first..<index {
+                        let epoch = epochs[stageIndex]
+                        let active = epoch.dynamicMotionFraction >= 0.25
+                            || epoch.moveFrac >= 0.20
+                            || epoch.jerkMax > epoch.jerkScale * jerkFloorGateMult
+                        if active { labels[stageIndex] = .wake }
+                    }
                 }
                 runStart = nil
             }
