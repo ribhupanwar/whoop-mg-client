@@ -34,6 +34,11 @@ enum StrapBackup {
         guard !parts.isEmpty,
               parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
         let name = parts.joined(separator: "/")
+        // Do not allow a directory to impersonate a supported capture file.
+        if name.hasPrefix("captures/"), let leaf = parts.last,
+           ["bin", "json", "raw", "jsonl"].contains((String(leaf) as NSString).pathExtension.lowercased()) {
+            return false
+        }
         return name == "captures" || name.hasPrefix("captures/")
             || name == "sleep-recovery" || name.hasPrefix("sleep-recovery/")
             || name == "Strap"
