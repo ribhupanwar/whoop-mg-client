@@ -691,7 +691,7 @@ enum SleepStager {
             // Only substantial, sustained measured acceleration adds wake
             // evidence; ordinary wrist micro-motion must not erase REM/Deep.
             if epoch.dynamicMotionFraction >= 0.25 {
-                emission[.wake]! += motionGateBoost
+                emission[.wake]! += motionGateBoost * 3
             }
             if let resp = epoch.respReg {
                 let value = zResp(resp)
