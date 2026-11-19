@@ -31,3 +31,8 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 
 ## 2026-11-19 Phase 18 Humans compile gate
 - **VERIFIED / CODE DONE; CI pending:** iOS run [44519508836](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44519508836) failed on nonexistent `DayMetrics.recovery`; `08687ce` derives leaderboard recovery from recorded inputs and prior-day baseline using existing `Recovery.score`. Follow-up [44520900712](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44520900712) failed because `BandLink.needHours` is private; `3a2f253` uses existing public `store.settings.sleepNeedHours`. Native CI for the latter revision was queued at review. Humans display, navigation, and pixel parity remain **DEVICE VERIFY**. No synthetic recovery values or persisted-schema changes.
+
+## 2026-11-19 activity duration comparator regression
+- **VERIFIED (code inspection):** Existing default is five minutes for measured running; optional ten-minute comparator is explicitly opt-in. Walking has its independent ten-minute plus elevated-HR gate. WHOOP's public ten-minute guidance does not establish identical detection thresholds.
+- **CODE DONE / CI VERIFY:** `4dac623e` adds a focused 6-minute measured-run regression (default retained, comparator excluded) and an 11-minute comparator acceptance test. No production behavior, saved records or schemas changed. Native test workflow pending on the exact revision.
+- **DEVICE VERIFY:** compare same-device real 6-minute and 11-minute runs with WHOOP and STRAP; test pauses and late HR cooldown before changing defaults.
