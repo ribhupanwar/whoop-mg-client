@@ -1290,85 +1290,203 @@ private struct WhoopBandBatteryIcon: View {
 }
 
 
-// Battery entry point: a clean-room, non-destructive device information sheet.
-// Unsupported firmware, pairing and erase operations are deliberately not exposed.
+// Clean-room Device Settings layout based on the supplied STATUS and ADVANCED screenshots.
+// Device maintenance actions are intentionally informational until independently verified.
 private struct HomeBandDeviceSettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var advanced = false
+    private let muted = Color(hex: 0x92979F)
+    private let panel = Color(hex: 0x30353A)
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 23, weight: .medium))
+                }
+                Spacer()
+                Text("DEVICE SETTINGS")
+                    .font(StrapTypography.body(17, weight: .bold))
+                    .tracking(1.4)
+                Spacer()
+                Image(systemName: "info.circle")
+                    .font(.system(size: 25))
+                    .accessibilityHidden(true)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 43)
+
+            HStack(alignment: .bottom) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(store.band.isConnected ? "CONNECTED TO" : "DISCONNECTED")
+                        .foregroundStyle(Color.green)
+                        .font(StrapTypography.body(11, weight: .bold))
+                        .tracking(1)
+                    Text("WHOOP MG")
+                        .font(StrapTypography.body(17, weight: .bold))
+                        .tracking(0.8)
+                }
+                Spacer()
+                VStack(alignment: .trailing, spacing: 5) {
+                    Text("LAST SYNC").foregroundStyle(muted)
+                        .font(StrapTypography.body(11, weight: .bold))
+                    Text("—").font(StrapTypography.body(13, weight: .bold))
+                }
+                Image(systemName: "icloud")
+                    .font(.system(size: 24))
+                    .foregroundStyle(muted)
+            }
+            .padding(.horizontal, 24)
+            .padding(.bottom, 23)
+
+            HStack(spacing: 43) {
+                tab("STATUS", selected: !advanced) { advanced = false }
+                tab("ADVANCED", selected: advanced) { advanced = true }
+                Spacer()
+            }
+            .padding(.horizontal, 26)
+            .padding(.bottom, 6)
+
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(store.band.isConnected ? "CONNECTED TO" : "NOT CONNECTED")
-                                .font(.caption.bold())
-                                .foregroundStyle(store.band.isConnected ? Color.green : Color.secondary)
-                            Text("WHOOP BAND").font(.title3.bold())
-                        }
-                        Spacer()
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text("BATTERY").font(.caption2).foregroundStyle(.secondary)
-                            Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
-                                .font(.title3.bold())
-                        }
-                    }
-                    HStack(spacing: 26) {
-                        Button("STATUS") { advanced = false }
-                        Button("ADVANCED") { advanced = true }
-                    }
-                    .font(.subheadline.bold())
-                    .buttonStyle(.plain)
-                    Divider()
-                    if advanced {
-                        infoRow("DEVICE ID", "Not available from this screen")
-                        infoRow("FIRMWARE", "Not verified")
-                        Text("Pairing, firmware updates, reboot and erase are not available here. Use the official device application for supported device maintenance.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    } else {
-                        Image(systemName: "applewatch")
-                            .font(.system(size: 90, weight: .ultraLight))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 30)
-                            .accessibilityHidden(true)
-                        infoRow("CONNECTION", store.band.isConnected ? "Connected" : "Disconnected")
-                        infoRow("BATTERY LEVEL", store.band.batteryPercent.map { "\($0)%" } ?? "Unavailable")
-                        Button {
-                            if store.band.isConnected { store.band.readHistory() }
-                            else { store.connectBand() }
-                        } label: {
-                            Label(store.band.isConnected ? "SYNC BAND HISTORY" : "CONNECT BAND",
-                                  systemImage: "arrow.clockwise")
-                                .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-                .padding(24)
-            }
-            .background(Color.appCanvasTop)
-            .foregroundStyle(Color.appFG)
-            .navigationTitle("DEVICE SETTINGS")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
+                if advanced {
+                    advancedContent
+                } else {
+                    statusContent
                 }
             }
+            .scrollIndicators(.hidden)
+        }
+        .foregroundStyle(Color.white)
+        .background {
+            LinearGradient(colors: [Color(hex: 0x34434D), Color(hex: 0x192127), Color(hex: 0x080D10)],
+                           startPoint: .top, endPoint: .bottom)
+                .ignoresSafeArea()
         }
     }
 
-    private func infoRow(_ title: String, _ value: String) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
-            Text(value).font(.body)
+    private func tab(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            VStack(spacing: 9) {
+                Text(name)
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .tracking(1)
+                    .foregroundStyle(selected ? Color.white : muted)
+                Rectangle().fill(selected ? Color.white : Color.clear)
+                    .frame(height: 2)
+            }
+            .fixedSize(horizontal: true, vertical: false)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 12))
+        .buttonStyle(.plain)
+    }
+
+    private var statusContent: some View {
+        VStack(spacing: 24) {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "applewatch")
+                    .font(.system(size: 150, weight: .ultraLight))
+                    .foregroundStyle(Color.white.opacity(0.72))
+                    .frame(maxWidth: .infinity)
+                    .accessibilityLabel("Band illustration placeholder")
+                VStack(alignment: .trailing, spacing: 8) {
+                    Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
+                        .font(StrapTypography.metric(33, weight: .bold))
+                    Text("WHOOP MG")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(1.6)
+                        .foregroundStyle(muted)
+                }
+                Capsule().fill(Color(hex: 0x444C51))
+                    .frame(width: 5, height: 142)
+                    .overlay(alignment: .bottom) {
+                        GeometryReader { geo in
+                            VStack {
+                                Spacer(minLength: 0)
+                                Capsule().fill(Color.yellow)
+                                    .frame(height: geo.size.height * CGFloat(min(100, max(0, store.band.batteryPercent ?? 0))) / 100)
+                            }
+                        }
+                    }
+            }
+            .frame(height: 440)
+            .padding(.horizontal, 24)
+
+            deviceRow("BROADCAST HEART RATE", icon: "heart.fill",
+                      subtitle: "TO COMPATIBLE APPS & DEVICES", enabled: false)
+            Text("Broadcast control is unavailable until the band protocol is verified.")
+                .font(.caption)
+                .foregroundStyle(muted)
+                .padding(.horizontal, 24)
+        }
+        .padding(.top, 38)
+        .padding(.bottom, 45)
+    }
+
+    private var advancedContent: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 65) {
+                metadata("DEVICE ID", value: "UNAVAILABLE", icon: "applewatch")
+                metadata("FIRMWARE", value: "UNVERIFIED", icon: "cpu")
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 52)
+            .padding(.bottom, 55)
+
+            deviceRow("PAIR A DEVICE", icon: "plus.rectangle.on.rectangle",
+                      subtitle: "Pairing is managed by the official WHOOP app.", enabled: false)
+            deviceRow("UNPAIR DEVICE", icon: "minus.rectangle",
+                      subtitle: "Removes a Bluetooth pairing. Unavailable in STRAP.", enabled: false)
+            deviceRow("REGULATORY LABELS", icon: "tag",
+                      subtitle: "Refer to the official device application for regulatory labels.", enabled: false)
+            deviceRow("SAFETY & REGULATORY", icon: "tag",
+                      subtitle: "Safety and compliance information is provided by the manufacturer.", enabled: false)
+            deviceRow("FIRMWARE CHECK", icon: "cpu",
+                      subtitle: "Firmware updates are not supported by STRAP.", enabled: false)
+            deviceRow("REBOOT DEVICE", icon: "power",
+                      subtitle: "Reboot requires a verified device command.", enabled: false)
+            deviceRow("ERASE DEVICE DATA", icon: "trash",
+                      subtitle: "Unavailable: protects stored heart-rate history.", enabled: false)
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 45)
+    }
+
+    private func metadata(_ title: String, value: String, icon: String) -> some View {
+        VStack(spacing: 8) {
+            Image(systemName: icon).font(.system(size: 23)).foregroundStyle(muted)
+            Text(title).font(StrapTypography.body(11, weight: .bold)).foregroundStyle(muted)
+            Text(value).font(StrapTypography.body(11, weight: .bold))
+        }
+    }
+
+    private func deviceRow(_ title: String, icon: String, subtitle: String, enabled: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 20) {
+                Image(systemName: icon)
+                    .font(.system(size: 23))
+                    .frame(width: 30)
+                    .foregroundStyle(muted)
+                Text(title)
+                    .font(StrapTypography.body(14, weight: .bold))
+                    .tracking(0.8)
+                Spacer()
+                if title == "BROADCAST HEART RATE" {
+                    Toggle(title, isOn: .constant(false))
+                        .labelsHidden()
+                        .disabled(true)
+                }
+            }
+            .padding(.horizontal, 22)
+            .frame(height: 65)
+            .background(panel, in: RoundedRectangle(cornerRadius: 4))
+            Text(subtitle)
+                .font(StrapTypography.body(12))
+                .foregroundStyle(muted)
+                .padding(.horizontal, 14)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .accessibilityElement(children: .combine)
+        .padding(.bottom, 35)
     }
 }
