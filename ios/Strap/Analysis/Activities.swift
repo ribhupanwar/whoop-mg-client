@@ -18,6 +18,9 @@ enum ActivityDetect {
     // WHOOP's public 2026 ten-minute minimum is an optional comparison mode,
     // not evidence that every sport uses the same physiological gate.
     static let comparisonMinSessionS = 600
+    // Walking needs sustained cardiovascular evidence; steps alone remain daily movement.
+    // These conservative gates are STRAP heuristics, not reverse-engineered WHOOP thresholds.
+    static let walkWorkoutMinSessionS = 600
     static let gapToleranceS = 180
     static let stepWindowS = 60
     static let walkSPM = 60.0
@@ -131,11 +134,27 @@ enum ActivityDetect {
             let steps = StepCounter.total(run) ?? 0
             let hasSteps = run.contains { $0.stepCounter != nil }
 
+            let detectedKind = kind(spm: spm, hasSteps: hasSteps)
+            if detectedKind == "walk" {
+                // Casual steps must not be promoted to an automatic workout.
+                // Keep step counting independent; only gate auto-saved walking sessions.
+                let duration = run[run.count - 1].unix - run[0].unix + 1
+                guard duration >= max(minimumDurationS, walkWorkoutMinSessionS) else { continue }
+                let elevatedSeconds = (start..<motionEnd).filter { sampleIndex in
+                    guard measuredMotion[sampleIndex], let baseline = baselines[sampleIndex] else {
+                        return false
+                    }
+                    return Double(ordered[sampleIndex].heartRate) >=
+                        max(hrStartAbsolute, baseline + hrStartDelta)
+                }.count
+                guard elevatedSeconds >= startSustainS else { continue }
+            }
+
             sessions.append(
                 ActivitySession(
                     startUnix: run[0].unix,
                     endUnix: run[run.count - 1].unix,
-                    kind: kind(spm: spm, hasSteps: hasSteps),
+                    kind: detectedKind,
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
