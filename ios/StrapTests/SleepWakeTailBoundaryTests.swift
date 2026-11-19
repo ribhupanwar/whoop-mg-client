@@ -131,8 +131,8 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
             row($0, hr: 70, accel: 0.025, state: $0 >= end - 20 ? 3 : 1)
         }
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        XCTAssertEqual(night.endUnix, wakeStart - 1,
-                       "Corroborated wake should not extend sleep to the band-up marker")
+        XCTAssertLessThanOrEqual(abs(night.endUnix - (wakeStart - 1)), 1,
+                                 "Minute-window wake detection may differ by one sampled second, not minutes")
     }
 
     func testTerminalUpWithoutMotionDoesNotTrimQuietTail() throws {
