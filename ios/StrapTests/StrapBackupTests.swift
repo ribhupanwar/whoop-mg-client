@@ -61,6 +61,21 @@ final class StrapBackupTests: XCTestCase {
         XCTAssertEqual(defaults.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]], ["100": [110, 190]])
     }
 
+    func testBackupDirectoryMetadataRejectsTraversalAndUnsupportedRoots() {
+        XCTAssertTrue(StrapBackup.allowedDirectoryPath("captures/"))
+        XCTAssertTrue(StrapBackup.allowedDirectoryPath("captures/2026/11/"))
+        XCTAssertTrue(StrapBackup.allowedDirectoryPath("sleep-recovery/"))
+        XCTAssertTrue(StrapBackup.allowedDirectoryPath("Strap/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("other/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures/../"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures//nested/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures/./"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures/record.json/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures\\\\nested/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("captures/record\\u{0000}/"))
+        XCTAssertFalse(StrapBackup.allowedDirectoryPath("/captures/"))
+    }
+
     func testExistingPendingRestoreIsPreservedWithoutStaging() throws {
         let fm = FileManager.default
         let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
