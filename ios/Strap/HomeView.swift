@@ -1153,36 +1153,45 @@ enum AppOpenDayTracker {
     }
 }
 
-// Clean-room WHOOP-style band glyph: narrow curved housing and inner seam.
+// Clean-room rendering of the supplied band-battery reference.
 private struct WhoopBandBatteryIcon: View {
     let charge: Int?
     let connected: Bool
+
     var body: some View {
         ZStack(alignment: .topTrailing) {
+            // Curved housing, narrower than the previous glyph.
             Path { p in
-                p.move(to: CGPoint(x: 9, y: 2))
-                p.addCurve(to: CGPoint(x: 5, y: 25), control1: CGPoint(x: 3, y: 3), control2: CGPoint(x: 2, y: 19))
-                p.addLine(to: CGPoint(x: 14, y: 25))
-                p.addCurve(to: CGPoint(x: 18, y: 2), control1: CGPoint(x: 20, y: 22), control2: CGPoint(x: 21, y: 7))
-                p.closeSubpath()
+                p.move(to: CGPoint(x: 8, y: 1.5))
+                p.addLine(to: CGPoint(x: 16.5, y: 1.5))
+                p.addCurve(to: CGPoint(x: 16, y: 24), control1: CGPoint(x: 20, y: 7), control2: CGPoint(x: 19, y: 19))
+                p.addQuadCurve(to: CGPoint(x: 12.5, y: 26), control: CGPoint(x: 15, y: 26))
+                p.addLine(to: CGPoint(x: 5.5, y: 26))
+                p.addQuadCurve(to: CGPoint(x: 3, y: 22), control: CGPoint(x: 3, y: 26))
+                p.addCurve(to: CGPoint(x: 8, y: 1.5), control1: CGPoint(x: 1.5, y: 12), control2: CGPoint(x: 3.5, y: 2))
             }
-            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineJoin: .round))
-            .frame(width: 20, height: 27)
+            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.35, lineCap: .round, lineJoin: .round))
+            .frame(width: 20, height: 28)
+
+            // Inner vertical contour and the distinctive lower crossbar.
             Path { p in
-                p.move(to: CGPoint(x: 10.5, y: 3))
-                p.addCurve(to: CGPoint(x: 8, y: 23), control1: CGPoint(x: 7, y: 10), control2: CGPoint(x: 7, y: 18))
-                p.addLine(to: CGPoint(x: 12, y: 23))
+                p.move(to: CGPoint(x: 12, y: 2.5))
+                p.addCurve(to: CGPoint(x: 9.5, y: 21.5), control1: CGPoint(x: 8.5, y: 9), control2: CGPoint(x: 9, y: 16))
+                p.move(to: CGPoint(x: 4.8, y: 21))
+                p.addLine(to: CGPoint(x: 10.8, y: 21))
             }
-            .stroke(Color.appFG.opacity(0.75), style: StrokeStyle(lineWidth: 0.9, lineCap: .round))
-            .frame(width: 20, height: 27)
+            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
+            .frame(width: 20, height: 28)
+
             if connected {
-                Circle().fill(Color(hex: 0x24E7A5))
-                    .frame(width: 5, height: 5)
-                    .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 1))
+                Circle()
+                    .fill(Color(hex: 0x24E7A5))
+                    .frame(width: 5.5, height: 5.5)
+                    .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 0.8))
                     .offset(x: 1, y: 3)
             }
         }
-        .frame(width: 22, height: 29)
+        .frame(width: 21, height: 28)
         .accessibilityHidden(true)
     }
 }
