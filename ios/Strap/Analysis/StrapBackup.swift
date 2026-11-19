@@ -19,7 +19,8 @@ enum StrapBackup {
     }
     static func failure(_ message: String) -> PersistenceDiagnostics.Failure { .init(message: message) }
     static func allowedPath(_ path: String) -> Bool {
-        guard !path.hasPrefix("/"), !path.contains("\\"), !path.split(separator: "/").contains("..") else { return false }
+        guard !path.isEmpty, !path.contains("\\"), !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }),
+              path.split(separator: "/", omittingEmptySubsequences: false).allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
         return ["persisted-records.plist", "history.sqlite", "strap-history-v18.json", "Strap/gps-runs-v2.json"].contains(path)
             || (path.hasPrefix("captures/") && ["bin", "json", "raw", "jsonl"].contains((path as NSString).pathExtension.lowercased()))
             || (path.hasPrefix("sleep-recovery/") && path.hasSuffix(".json"))
@@ -46,8 +47,13 @@ enum StrapBackup {
             }
             // Preflight every path (including directories) before extraction.
             for entry in archive {
-                guard !entry.path.hasPrefix("/"), !entry.path.contains("\\"),
-                      !entry.path.split(separator: "/").contains("..") else { throw failure("Unsafe backup path.") }
+                guard entry.path == "manifest.json" || allowedPath(entry.path) ||
+                      (entry.type == .directory && !entry.path.contains("\\") &&
+                       entry.path.split(separator: "/", omittingEmptySubsequences: false)
+                           .dropLast(entry.path.hasSuffix("/") ? 1 : 0)
+                           .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })) else {
+                    throw failure("Unsafe backup path.")
+                }
             }
             var extracted: UInt64 = 0
             for entry in archive where entry.type == .file {
