@@ -18,3 +18,8 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 - `e3982ec`: activity motion uses `StepCounter.delta` to handle real 16-bit wrap and reset semantics rather than raw signed subtraction. No persisted schemas, historical data, sensor units or fonts changed.
 - `47734a4`: regression covers a 660-second measured walk spanning a 16-bit counter wrap.
 - **CODE DONE; CI verification pending** on the latest main revision. Do not mark device accuracy complete.
+
+## 2026-11-19 activity false-positive gate verification
+- **CODE DONE / CI VERIFIED (protocol tests):** `0bb016a8` requires detected walking to last at least 600 seconds and include at least 240 measured-motion samples with HR above the established personal baseline threshold; `a8671a3` adds brisk-walk and casual-walk regressions. [Tests run 44502230437](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44502230437) passed for `a8671a3`.
+- **DEVICE VERIFY / native CI pending:** [iOS run 44502230521](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44502230521) was in progress at review. Walking HR thresholds are conservative STRAP heuristics, not verified WHOOP thresholds. Verify false positives, low-HR genuine walks, sparse offload and long pauses on paired real-device captures. Running and HR-only cardio keep their previous gates.
+- **UNKNOWN / follow-up:** A measured-step session classified as generic `workout` when step-rate median is below `walkSPM` can bypass the walk-specific HR gate; classification should be audited with fixtures before changing generic workout behavior. No persistence schema or historical records changed.
