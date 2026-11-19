@@ -10,7 +10,7 @@ Reference research repository: `ribhupanwar/dsta`.
 - Phase 13: reconstructed source-linked engineering handoff saved at `docs/research/phase13/PHASE13_ACTIVITY_DETECTION_HANDOFF.md`. Original full Phase 13 source report was not available; this is not a verbatim copy.
 - Phase 14: all five original user-uploaded reports saved verbatim in `docs/research/phase14/`.
 - Phase 14B: executive report/task log saved; four original detailed markdown reports remain unavailable in GitHub.
-- Phase 15: no completed research deliverables verified.
+- Phase 15: user-supplied Antigravity final synthesis/task log archived verbatim at `docs/research/phase15/PHASE15_ANTIGRAVITY_FINAL_SYNTHESIS_AND_TASK_LOG.txt`. It reports nine local markdown reports and commits `ebc9290` / `75d810e`, but those commits were not found remotely at audit time, and the nine original reports were not in remote `main`. Obtain the nine originals or push the dedicated local branch; do not mark their online archival complete. Primary-sleep HRV fix already landed independently in main as `897cfb3`; avoid duplicate cherry-pick.
 - The original standalone strain handoff remains unconfirmed as an archived document. Existing strain implementation and tests are preserved.
 - A chat handoff/index is a recovery map, **not proof** that every original research artifact has been archived or every algorithm implemented.
 
