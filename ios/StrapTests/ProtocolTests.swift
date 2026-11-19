@@ -238,6 +238,28 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [])
     }
 
+    func testRRCountUpToFourIsAccepted() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 4
+        for i in 0..<4 {
+            let val = 700 + i * 10
+            inner[16 + 2 * i] = UInt8(val & 0xFF)
+            inner[17 + 2 * i] = UInt8((val >> 8) & 0xFF)
+        }
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [700, 710, 720, 730])
+    }
+
+    func testRRNonZeroPaddingRejectsIntervals() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 2
+        inner[16] = 0x20
+        inner[17] = 0x03  // 800
+        inner[18] = 0x34
+        inner[19] = 0x03  // 820
+        inner[22] = 0xAA  // Non-zero padding byte in tail (bytes 20..<24)
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [], "Non-zero padding byte must invalidate RR buffer")
+    }
+
     func testWrongVersionRejected() {
         var inner = bytes(realV18Hex)
         inner[1] = 20

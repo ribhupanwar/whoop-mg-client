@@ -78,6 +78,7 @@ enum V18Decoder {
     static let minReadable = 109
     static let minRRMS = 200
     static let maxRRMS = 3000
+    static let maxRRCount = 4  // V18 RR block capacity: 8 bytes (offsets 16..<24)
     static let minHR = 25
     static let maxHR = 230
     static let fullScaleG = 16.0
@@ -110,11 +111,20 @@ enum V18Decoder {
 
         var rr: [Int] = []
         let declared = Int(inner[15])
-        if declared <= 4 {
-            for index in 0..<declared {
-                if let value = i16(inner, 16 + 2 * index),
-                   (minRRMS...maxRRMS).contains(value) {
-                    rr.append(value)
+        if declared <= maxRRCount {
+            var paddingValid = true
+            for paddingOffset in (16 + 2 * declared)..<24 {
+                if inner[paddingOffset] != 0 {
+                    paddingValid = false
+                    break
+                }
+            }
+            if paddingValid {
+                for index in 0..<declared {
+                    if let value = i16(inner, 16 + 2 * index),
+                       (minRRMS...maxRRMS).contains(value) {
+                        rr.append(value)
+                    }
                 }
             }
         }

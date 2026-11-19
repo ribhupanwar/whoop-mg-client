@@ -53,6 +53,7 @@ ANCHOR_BITS = 20
 # Physiological plausibility window for R-R intervals in milliseconds.
 MIN_RR_MS = 200
 MAX_RR_MS = 3000
+MAX_RR_COUNT = 4  # v18 RR block capacity: 8 bytes (offsets 16..<24)
 
 # HR outside this window is treated as absent, not as a reading.
 MIN_HR = 25
@@ -201,11 +202,13 @@ def decode_v18(inner: bytes) -> V18Sample | None:
 
     rr: list[int] = []
     declared = inner[15]
-    if declared <= 4:
-        for i in range(declared):
-            value = _i16(inner, 16 + 2 * i)
-            if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
-                rr.append(value)
+    if declared <= MAX_RR_COUNT:
+        padding_valid = all(inner[offset] == 0 for offset in range(16 + 2 * declared, 24))
+        if padding_valid:
+            for i in range(declared):
+                value = _i16(inner, 16 + 2 * i)
+                if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
+                    rr.append(value)
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
