@@ -50,7 +50,7 @@
 - [ ] Verify activity duplicate prevention, swipe/long-press deletion, GPS history and GPX/FIT exports on device; preserve already-implemented actions.
 - [ ] Verify weekly alarm schedules and physical band vibration on hardware.
 - [ ] Verify empty/loading/error/offline states and profile/device settings.
-- [ ] **VERIFY (CI/device, 2026-11-19):** Backup ZIP path normalization tightened in `2272381`: reject empty components, `.`/`..`, backslashes and control characters before extraction; regression assertions added in `93c33cc`. Existing 2 GB extraction cap, manifest checksum validation and staging cleanup remain intact. Native iOS CI and real-device restore are pending. No persisted schema or existing data changed.
+- [ ] **VERIFY (device, 2026-11-19; CI passed):** Backup ZIP path normalization tightened in `2272381`: reject empty components, `.`/`..`, backslashes and control characters before extraction; regression assertions added in `93c33cc`. Native iOS workflow [44470763516](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44470763516) succeeded on `93c33cc`; protocol tests workflow [44470778171](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44470778171) succeeded on checklist-only `29d1492`. Existing 2 GB extraction cap, manifest checksum validation and staging cleanup remain intact. Physical-device restore and adversarial archive coverage remain VERIFY. No persisted schema or existing data changed.
 - [ ] **SECURITY (remaining audit)** Verify compressed ZIP entry metadata edge cases, decompression limits and restore staging cleanup with adversarial archives; do not modify historical data while investigating.
 
 ## Batch 6 — Release acceptance
