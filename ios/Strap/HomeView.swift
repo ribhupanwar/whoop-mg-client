@@ -339,7 +339,7 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
         VStack(spacing: 12) {
-            RingView(progress: progress, color: color, lineWidth: 5.0, size: ringSize, centerText: text, centerFont: 27)
+            RingView(progress: progress, color: color, lineWidth: 6.0, size: ringSize, centerText: text, centerFont: 27)
                 .accessibilityHidden(true)
             HStack(spacing: 3) {
                 Text(label)
