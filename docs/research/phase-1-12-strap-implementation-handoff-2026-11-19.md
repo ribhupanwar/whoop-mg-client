@@ -12,7 +12,7 @@ Status: **research triaged, implementation NOT complete**. This handoff does not
 ## Evidence from WHOOP iOS binary analysis (Phases 1–12)
 1. A sleep-processing event and historical-data processing window are separate from the final sleep result. The `processNowSleepOffsetFix` flag conditionally selects a Date offset of **-11 seconds** for a processing interval, **not** a sleep onset/end adjustment. Do not copy it into local sleep boundaries without measured evidence.
 2. Sleep DTOs expose `during.lower/upper`, awake/light/REM/SWS durations, provisional state and auto-detection/source metadata. The binary report did not demonstrate a complete concrete merge-lock branch, so manual-edit precedence is a **STRAP design requirement**, not proven exact WHOOP code.
-3. Activity settings bundle includes user-facing **15-minute sustained exertion** wording and an experimental **10-minute** variant. This does **not** prove a universal Zone 2 gate, per-sport start/end algorithm or gap tolerance.
+3. WHOOP official 2026 release notes state the minimum workout auto-detection duration was **lowered from 15 to 10 minutes in January 2026** (https://www.whoop.com/us/en/thelocker/2026-whats-new/). WHOOP's activity guide describes HR + motion patterns and delayed processing after HR returns to baseline (https://support.whoop.com/s/article/Automatic-and-Manual-Activity-Detection). Historical 15-minute/strain-8 rules are outdated and must NOT be hard-coded as current universal requirements. These public statements still do **not** reveal executable per-sport thresholds, exact pause tolerances or a universal Zone 2 gate.
 4. Activity catalog includes running (0), cycling (1), walking (52), weightlifting (47), etc., with icon URL metadata. External icon availability/licensing and exact WHOOP pixel sizes are not established.
 5. Workout result models include start/end, sport, average/max HR, strain, energy, zones and GPS. Unknown values must remain unavailable.
 6. Reported proprietary recovery/strain formulas, SWS-only HRV/RHR, universal cloud classification, 3–5 minute pause tolerance, and exact cadence ranges are **unverified hypotheses**. Do not implement them as WHOOP facts.
@@ -25,6 +25,8 @@ Status: **research triaged, implementation NOT complete**. This handoff does not
 - Invalidate/recompute dependent sleep score, stage chart, recovery only where data supports calculation; otherwise show unavailable.
 
 ### B. Automatic activity detection
+- **New official evidence (2026):** minimum WHOOP workout auto-detection duration changed to 10 minutes. Compare STRAP's existing 5-minute minimum against a 10-minute **candidate mode** using captured reference workouts; avoid global switch until sensitivity, false positives and short valid sessions are tested.
+- Investigate actual WHOOP start/end state transitions and activity classification using read-only Ghidra; no claim that a binary or backend classifier has been recovered. Evaluate post-HR-baseline processing delay separately from physiological end timestamp.
 - Keep existing 5-minute detector behavior until controlled comparisons support a change. Add opt-in/configurable duration experiments (10/15 min) separately from classification.
 - Validate running/walking from measured step-counter motion and HR, never unverified gait byte alone. Test false sedentary walks, HR-only exertion, gaps, clock jumps, off-wrist and sparse/duplicated historical samples.
 - Add new sports only with reliable evidence; label uncertain workouts as generic rather than inventing cycling/swimming/weights.
