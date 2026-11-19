@@ -248,12 +248,11 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            // Three 104pt rings with WHOOP-like 18pt spacing fit the larger
-            // screens. Scale the diameter only on narrow screens so the row
-            // never clips or pushes Recovery/Strain outside the viewport.
+            // WHOOP distributes the three score centers across the entire row.
+            // Keep each ring compact while allocating an equal-width column.
             GeometryReader { geometry in
-                let diameter = min(CGFloat(84), max(CGFloat(74), (geometry.size.width - 36) / 3))
-                HStack(spacing: 18) {
+                let diameter = min(CGFloat(82), max(CGFloat(74), geometry.size.width / 3 - 16))
+                HStack(spacing: 0) {
                     NavigationLink(value: Route.sleepAnalysis) {
                         trioItem(
                             label: "SLEEP",
@@ -264,6 +263,7 @@ struct HomeView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
 
                     NavigationLink(value: Route.recovery) {
                         trioItem(
@@ -275,6 +275,7 @@ struct HomeView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
 
                     NavigationLink(value: Route.strain) {
                         trioItem(
@@ -286,6 +287,7 @@ struct HomeView: View {
                         )
                     }
                     .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
