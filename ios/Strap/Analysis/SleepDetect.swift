@@ -135,7 +135,16 @@ enum SleepDetect {
                     guard Set(valid.map(\.unix)).count >= 48 else { break }
                     cursor -= 60
                 }
-                if verifiedStart - cursor >= 5 * 60 {
+                // Low movement alone can be awake resting. Only accept the
+                // backtrack when the prelude contains a measured HR settling
+                // transition, rather than hours of flat quiet lying.
+                let earlier = run.filter {
+                    cursor - 5 * 60 <= $0.unix && $0.unix < cursor
+                        && $0.wearing && (35...220).contains($0.heartRate)
+                }
+                let transitionObserved = earlier.count >= 240
+                    && Stats.median(earlier.map { Double($0.heartRate) }) >= confirmedHR + 7
+                if verifiedStart - cursor >= 5 * 60 && transitionObserved {
                     verifiedStart = cursor
                 }
             }
