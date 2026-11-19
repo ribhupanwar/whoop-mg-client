@@ -208,7 +208,7 @@ struct SettingsView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
 
             HStack(spacing: 12) {
-                Button(store.band.isFindingBands ? "Searching…" : "Find another band") {
+                Button(store.band.isFindingBands ? "Searching…" : "PAIR A DEVICE") {
                     store.band.findBands()
                 }
                 .font(StrapTypography.body(12, weight: .medium))
@@ -263,6 +263,22 @@ struct SettingsView: View {
                 Hint("Strongest signal first — the strap on your wrist is usually the top row. Names match because both bands are the same model.")
             }
 
+            // Read-only hardware identity: never substitute a fabricated serial number.
+            if let identifier = store.band.preferredBandID {
+                Text("DEVICE ID  \\(identifier)")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+                    .textSelection(.enabled)
+                    .padding(.top, 8)
+            } else {
+                Hint("Device ID unavailable until a band is selected.")
+            }
+            if let lastSync = store.band.lastHistorySyncAt {
+                Text("LAST SYNC  \\(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 4)
+            }
             if let firmware = store.band.firmwareRevision {
                 Text("Firmware \(firmware)")
                     .font(StrapTypography.body(11))
