@@ -5,6 +5,15 @@ Durable engineering backlog: `docs/STRAP_UI_MASTER_CHECKLIST.md`.
 Previous phases: `docs/research/phase-1-12-implementation-matrix.md`, `docs/research/phase-1-12-strap-implementation-handoff-2026-11-19.md`.
 Reference research repository: `ribhupanwar/dsta`.
 
+## Archive audit update (2026-11-19)
+- Phase 1–12: consolidated implementation matrix and handoff saved; not necessarily each original standalone investigation.
+- Phase 13: reconstructed source-linked engineering handoff saved at `docs/research/phase13/PHASE13_ACTIVITY_DETECTION_HANDOFF.md`. Original full Phase 13 source report was not available; this is not a verbatim copy.
+- Phase 14: all five original user-uploaded reports saved verbatim in `docs/research/phase14/`.
+- Phase 14B: executive report/task log saved; four original detailed markdown reports remain unavailable in GitHub.
+- Phase 15: no completed research deliverables verified.
+- The original standalone strain handoff remains unconfirmed as an archived document. Existing strain implementation and tests are preserved.
+- A chat handoff/index is a recovery map, **not proof** that every original research artifact has been archived or every algorithm implemented.
+
 ## Preserved source research
 Five original user-uploaded Phase 14 reports, archived verbatim in `docs/research/phase14/`:
 - `PHASE14_HRV_BINARY_FINDINGS.md`
