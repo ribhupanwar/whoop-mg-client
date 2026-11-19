@@ -14,6 +14,11 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 | 11 UI rings, battery, typography | VERIFIED (existing components and CI), UNKNOWN (pixel parity) | DEVICE VERIFY | Same-device WHOOP/STRAP screenshot measurements; preserve fonts. |
 | 12 Backup/export/restore and release | VERIFIED (code/tests), UNKNOWN (device restore) | DEVICE VERIFY | Backup and GPX/FIT paths exist; physical restore, decoder interoperability and latest IPA verification pending. |
 
+## 2026-11-19 ring correction CI gate
+- **VERIFIED (code and CI):** `284c16a` Home ring geometry/typography change passed [native iOS/IPA 44527555893](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44527555893) and [tests 44527555948](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44527555948).
+- **DEVICE VERIFY:** screenshot geometry, accessible touch targets, battery icon, font rendering and true physiological parity on target iPhone. Prior forensic report's pixel-match assertions are not physical-device acceptance evidence.
+- **UNKNOWN:** Strain/Health/Stress differences from WHOOP screenshots require matching source history and baseline evidence; never replace unavailable values with mock data.
+
 ## Current bounded change
 - `e3982ec`: activity motion uses `StepCounter.delta` to handle real 16-bit wrap and reset semantics rather than raw signed subtraction. No persisted schemas, historical data, sensor units or fonts changed.
 - `47734a4`: regression covers a 660-second measured walk spanning a 16-bit counter wrap.
