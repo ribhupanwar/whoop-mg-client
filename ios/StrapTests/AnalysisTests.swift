@@ -119,6 +119,21 @@ final class LiveRRReplayDedupTests: XCTestCase {
 }
 
 final class HrvTests: XCTestCase {
+    func testDaytimeNapDoesNotAlterOvernightHRVOrRHR() throws {
+        // Phase 15 regression: an afternoon nap must not contaminate the
+        // primary night's HRV or RHR. This uses only synthetic samples.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let overnight = stretch(0, 25_200, hr: 60, accel: 0.01, rr: [790, 810])
+        let nap = stretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [760, 840])
+        let days = DailyAnalysis.metrics(
+            from: overnight + nap, sex: .male, maxHR: 180, calendar: calendar
+        )
+        let night = try XCTUnwrap(days.first(where: { $0.lnRMSSD != nil }))
+        XCTAssertEqual(try XCTUnwrap(night.restingHR), 60, accuracy: 1e-9)
+        XCTAssertEqual(exp(try XCTUnwrap(night.lnRMSSD)), 20, accuracy: 1e-9)
+    }
+
     func testOvernightRMSSD28MillisecondsKeepsRRUnits() throws {
         let rows = (0..<600).map { makeSample(5000 + $0, hr: 76, accel: 0.01, rr: [800, 828]) }
         let result = Hrv.restingHRV(rows, minWindowS: 300)
