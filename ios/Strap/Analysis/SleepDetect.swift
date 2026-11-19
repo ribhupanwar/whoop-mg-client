@@ -196,6 +196,46 @@ enum SleepDetect {
             }
             if let upStart, upSeconds >= 300 {
                 verifiedEnd = upStart - 1
+            } else if let terminalUp = run.last(where: { $0.sleepState == 3 }),
+                      run.last!.unix - terminalUp.unix <= 60 {
+                // A fresh terminal band-up transition corroborates wake, but
+                // cannot alone establish when waking began. Require sustained
+                // elevated HR AND motion relative to the preceding resting
+                // baseline. A short bathroom break followed by sleep has no
+                // terminal up marker and must not truncate the night.
+                let baseline = run.filter {
+                    terminalUp.unix - 30 * 60 <= $0.unix
+                        && $0.unix < terminalUp.unix - 10 * 60
+                        && $0.wearing && (35...220).contains($0.heartRate)
+                }
+                if baseline.count >= 600 {
+                    let restingHR = Stats.median(baseline.map { Double($0.heartRate) })
+                    let lowerBound = max(verifiedStart + minSleepS, terminalUp.unix - 12 * 60)
+                    var wakeCandidate: Int?
+                    var minute = lowerBound
+                    while minute + 180 <= terminalUp.unix {
+                        let window = run.filter {
+                            minute <= $0.unix && $0.unix < minute + 180
+                                && $0.wearing && (35...220).contains($0.heartRate)
+                                && $0.dynamicAccelG.map { $0.isFinite && $0 >= 0 } == true
+                        }
+                        let elevated = window.filter {
+                            Double($0.heartRate) >= restingHR + 10
+                        }.count
+                        let moving = window.filter {
+                            ($0.dynamicAccelG ?? 0) >= 0.015
+                        }.count
+                        if Set(window.map(\.unix)).count >= 150,
+                           elevated >= 90, moving >= 30 {
+                            wakeCandidate = minute
+                            break
+                        }
+                        minute += 60
+                    }
+                    if let wakeCandidate {
+                        verifiedEnd = min(verifiedEnd, wakeCandidate - 1)
+                    }
+                }
             }
             guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
 
