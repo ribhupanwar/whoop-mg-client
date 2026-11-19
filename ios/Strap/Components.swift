@@ -304,11 +304,11 @@ struct ScoreValueText: View {
 
     var body: some View {
         if value.hasSuffix("%"), value.count > 1 {
-            HStack(alignment: .firstTextBaseline, spacing: 1) {
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
                 Text(String(value.dropLast()))
-                    .font(StrapTypography.metric(size, weight: weight))
+                    .font(StrapTypography.metric(size, weight: .bold))
                 Text("%")
-                    .font(StrapTypography.metric(size * 0.58, weight: weight))
+                    .font(StrapTypography.metric(size * 0.72, weight: .bold))
             }
             .monospacedDigit()
         } else {
