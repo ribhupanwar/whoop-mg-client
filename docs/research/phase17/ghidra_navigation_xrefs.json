@@ -1,0 +1,22 @@
+{"program":"Whoop","targets":[
+  {"target":"MainViewTabBarController","matches":[
+  ]}
+,
+  {"target":"MainViewTabNavigationRouter","matches":[
+  ]}
+,
+  {"target":"StrapSettingsBatteryStatusView","matches":[
+  ]}
+,
+  {"target":"CTABatteryStatus","matches":[
+  ]}
+,
+  {"target":"ColorSystem","matches":[
+  ]}
+,
+  {"target":"MultiRingGauge","matches":[
+  ]}
+,
+  {"target":"OverviewGauge","matches":[
+  ]}
+]}
