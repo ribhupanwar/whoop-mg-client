@@ -10,6 +10,14 @@ HOME = Path(__file__).resolve().parents[1] / "ios" / "Strap" / "HomeView.swift"
 
 
 class HomeRingGeometryGuardTests(unittest.TestCase):
+    def test_percent_sign_uses_bold_din_weight(self):
+        components = (HOME.parent / "Components.swift").read_text(encoding="utf-8")
+        self.assertRegex(
+            components,
+            r'Text\("%"\)\s*\.font\(StrapTypography\.metric\(size \* 0\.72, weight: \.bold\)\)',
+            "Percent sign should retain approved bold DIN typography.",
+        )
+
     def test_primary_score_ring_stroke_and_center_font(self):
         source = HOME.read_text(encoding="utf-8")
         calls = re.findall(
