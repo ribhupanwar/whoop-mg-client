@@ -294,11 +294,11 @@ final class StepDrivenDetectTests: XCTestCase {
         )
     }
 
-    /// A six-minute walk at 120 steps/min with resting HR and no gait readout
-    /// — the walk must come from the step counter alone. The trailing-minute
-    /// rate is undefined on the first tick, so the session starts one second in.
-    private func walk(seconds: Int = 360) -> [V18Sample] {
-        (0..<seconds).map { sample($0, hr: 75, steps: $0 * 2, gait: nil) }
+    /// A sustained brisk walk at 120 steps/min with elevated HR (135 bpm)
+    /// satisfying the 10-minute automatic walking safeguard (600s floor)
+    /// and sustained cardiovascular exertion requirements.
+    private func walk(seconds: Int = 660, hr: Int = 135) -> [V18Sample] {
+        (0..<seconds).map { sample($0, hr: hr, steps: $0 * 2, gait: nil) }
     }
 
     func testGaitWithoutMeasuredStepsCannotCreateActivity() {
@@ -308,26 +308,26 @@ final class StepDrivenDetectTests: XCTestCase {
 
     func testMissingHourDoesNotJoinTwoShortWalksIntoOneWorkout() {
         var samples = walk(seconds: 120)
-        samples += (0..<120).map { sample(3600 + $0, hr: 75, steps: 240 + $0 * 2, gait: nil) }
+        samples += (0..<120).map { sample(3600 + $0, hr: 135, steps: 240 + $0 * 2, gait: nil) }
         XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
     }
 
-    func testFiveMinuteWalkIsDetectedWithoutAGaitByte() {
+    func testSustainedWalkIsDetectedWithoutAGaitByte() {
         let sessions = ActivityDetect.detect(walk())
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.kind, "walk")
         XCTAssertEqual(sessions.first?.startUnix, 1)
-        XCTAssertEqual(sessions.first?.steps, 716)
+        XCTAssertEqual(sessions.first?.steps, 1316)
     }
 
     func testFastSteppingIsLabelledARun() {
-        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3, gait: nil) }
+        let samples = (0..<360).map { sample($0, hr: 145, steps: $0 * 3, gait: nil) }
         XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
     }
 
     func testStaleStillGaitDoesNotHideMeasuredRunning() {
         // Some firmware reports gait=0 even while the step counter rises.
-        let samples = (0..<360).map { sample($0, hr: 75, steps: $0 * 3, gait: 0) }
+        let samples = (0..<360).map { sample($0, hr: 145, steps: $0 * 3, gait: 0) }
         let sessions = ActivityDetect.detect(samples)
         XCTAssertEqual(sessions.count, 1)
         XCTAssertEqual(sessions.first?.kind, "run")
@@ -352,12 +352,21 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertTrue(ActivityDetect.detect(walk(seconds: 240)).isEmpty)
     }
 
-    func testTenMinuteComparisonModeRejectsSixMinuteWalkWithoutChangingDefault() {
+    func testShortBriskWalkBelowTenMinutesDoesNotAutoSave() {
+        // Walks under 10 minutes (600s) are not auto-saved as official workouts.
         let samples = walk(seconds: 360)
-        XCTAssertEqual(ActivityDetect.detect(samples).count, 1)
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
         XCTAssertTrue(ActivityDetect.detect(
             samples, minimumDurationS: ActivityDetect.comparisonMinSessionS
         ).isEmpty)
+    }
+
+    func testCasualWalkWithRestingHRDoesNotBecomeWorkout() {
+        // 11 minutes of walking with resting HR (75 bpm) must remain daily movement, not a workout.
+        let samples = walk(seconds: 660, hr: 75)
+        XCTAssertTrue(ActivityDetect.detect(samples).isEmpty)
+        // Daily steps must still count completely
+        XCTAssertGreaterThanOrEqual(StepCounter.total(samples) ?? 0, 1300)
     }
 
     func testTenMinuteComparisonModeAcceptsSustainedWalk() {
@@ -382,19 +391,19 @@ final class StepDrivenDetectTests: XCTestCase {
     }
 
     func testShortPauseIsBridgedButTrailingCooldownIsNot() {
-        let first = walk(seconds: 360)
-        let pause = (360..<420).map {
-            sample($0, hr: 75, steps: 718, gait: ActivityDetect.gaitStill)
+        let first = walk(seconds: 600)
+        let pause = (600..<660).map {
+            sample($0, hr: 110, steps: 1_198, gait: ActivityDetect.gaitStill)
         }
-        let resumed = (420..<780).map {
-            sample($0, hr: 75, steps: 718 + ($0 - 420) * 2, gait: ActivityDetect.gaitStill)
+        let resumed = (660..<1020).map {
+            sample($0, hr: 135, steps: 1_198 + ($0 - 660) * 2, gait: ActivityDetect.gaitStill)
         }
-        let cooldown = (780..<960).map {
-            sample($0, hr: 75, steps: 1_436, gait: ActivityDetect.gaitStill)
+        let cooldown = (1020..<1200).map {
+            sample($0, hr: 75, steps: 1_918, gait: ActivityDetect.gaitStill)
         }
         let sessions = ActivityDetect.detect(first + pause + resumed + cooldown)
         XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions.first?.endUnix, 779)
+        XCTAssertEqual(sessions.first?.endUnix, 1019)
     }
 
     func testElevatedHeartRateCooldownDoesNotExtendMeasuredWalk() {
@@ -415,7 +424,7 @@ final class StepDrivenDetectTests: XCTestCase {
     func testStepCounterWrapDoesNotSplitMeasuredWalk() {
         // A valid 16-bit wrap must not look like stopped movement.
         let samples = (0..<660).map { second in
-            sample(second, hr: 75, steps: (65_000 + second * 2) % 65_536, gait: nil)
+            sample(second, hr: 135, steps: (65_000 + second * 2) % 65_536, gait: nil)
         }
         let sessions = ActivityDetect.detect(samples)
         XCTAssertEqual(sessions.count, 1)
@@ -427,6 +436,64 @@ final class StepDrivenDetectTests: XCTestCase {
     func testInvalidComparisonDurationDoesNotCreateSessions() {
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: 0).isEmpty)
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: -10).isEmpty)
+    }
+
+    func testCasualWalkingAroundHouseDoesNotCreateWorkout() {
+        // 15 minutes of casual strolling around house at 65 SPM, resting HR 72
+        let samples = (0..<900).map { sample($0, hr: 72, steps: Int(Double($0) * 65.0 / 60.0), gait: 1) }
+        let sessions = ActivityDetect.detect(samples)
+        XCTAssertTrue(sessions.isEmpty, "Casual walking at 65 SPM must not create a workout")
+        XCTAssertGreaterThan(StepCounter.total(samples) ?? 0, 900)
+    }
+
+    func testShoppingAndErrandsWithPausesDoesNotCreateWorkout() {
+        // 30 minutes of stop-and-start shopping: 1 min walk at 70 SPM, 2 min pause, repeated 10 times
+        var samples: [V18Sample] = []
+        var t = 0
+        var currentSteps = 100
+        for _ in 0..<10 {
+            for s in 0..<60 {
+                samples.append(sample(t + s, hr: 76, steps: currentSteps + Int(Double(s) * 70.0 / 60.0), gait: 1))
+            }
+            t += 60
+            currentSteps += 70
+            for s in 0..<120 {
+                samples.append(sample(t + s, hr: 74, steps: currentSteps, gait: 0))
+            }
+            t += 120
+        }
+        let sessions = ActivityDetect.detect(samples)
+        XCTAssertTrue(sessions.isEmpty, "Shopping with pauses must not create a workout")
+        XCTAssertGreaterThanOrEqual(StepCounter.total(samples) ?? 0, 700)
+    }
+
+    func testOfficeWalkingThroughoutDayDoesNotCreateWorkout() {
+        // Intermittent 2-minute walks between desks at 75 SPM
+        var samples: [V18Sample] = []
+        var t = 0
+        var currentSteps = 100
+        for _ in 0..<6 {
+            for s in 0..<1680 {
+                samples.append(sample(t + s, hr: 70, steps: currentSteps, gait: 0))
+            }
+            t += 1680
+            for s in 0..<120 {
+                samples.append(sample(t + s, hr: 75, steps: currentSteps + Int(Double(s) * 75.0 / 60.0), gait: 1))
+            }
+            t += 120
+            currentSteps += 150
+        }
+        let sessions = ActivityDetect.detect(samples)
+        XCTAssertTrue(sessions.isEmpty, "Intermittent office walking must not become workouts")
+        XCTAssertGreaterThanOrEqual(StepCounter.total(samples) ?? 0, 900)
+    }
+
+    func testCandidateClassificationDiagnosesDailyMovement() {
+        let casualSamples = (0..<900).map { sample($0, hr: 72, steps: Int(Double($0) * 65.0 / 60.0), gait: 1) }
+        let candidates = ActivityDetect.evaluateCandidates(casualSamples)
+        for candidate in candidates {
+            XCTAssertNotEqual(candidate.confidence, .confirmed)
+        }
     }
 }
 

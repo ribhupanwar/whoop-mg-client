@@ -1,5 +1,19 @@
 import Foundation
 
+/// Confidence classification for candidate activity evaluation.
+enum ActivityConfidence: String, Codable {
+    case confirmed
+    case uncertain
+    case dailyMovement
+}
+
+/// Evaluated activity candidate carrying classification diagnostics.
+struct ActivityCandidate {
+    let session: ActivitySession
+    let confidence: ActivityConfidence
+    let reason: String
+}
+
 /// Automatic run/walk/workout detection ported from `whoop/activity.py`.
 ///
 /// A session opens from sustained measured step-counter motion or a sustained
@@ -67,6 +81,9 @@ enum ActivityDetect {
         var measuredMotion: [Bool] = []
         flags.reserveCapacity(ordered.count)
         measuredMotion.reserveCapacity(ordered.count)
+        var latchedBaseline: Double?
+        var inactiveCount = 0
+
         for (index, sample) in ordered.enumerated() {
             let locomotion: Bool
             // The gait byte is not vendor-verified. A still/unknown gait
@@ -89,16 +106,41 @@ enum ActivityDetect {
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
-            // The raw gait byte is not verified; it cannot open an activity by itself.
-            locomotion = recentSteps
+            // Never classify running from an unverified gait byte alone:
+            // running gait requires either measured steps or elevated heart rate.
+            if sample.activityClass == gaitRun && (Double(sample.heartRate) >= hrStartAbsolute || recentSteps) {
+                locomotion = true
+            } else {
+                locomotion = recentSteps
+            }
+
+            // Pre-workout baseline latching prevents long workouts from inflating
+            // their own baseline and prematurely cutting off after 10-15 minutes.
+            let computedBaseline = baselines[index]
+            let baseline = latchedBaseline ?? computedBaseline
+
             let elevated: Bool
-            if let baseline = baselines[index] {
+            if let baseline = baseline {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
             } else {
                 elevated = false
             }
             measuredMotion.append(locomotion)
-            flags.append(locomotion || elevated)
+            let isActive = locomotion || elevated
+            flags.append(isActive)
+
+            if isActive {
+                if latchedBaseline == nil {
+                    let prevIndex = max(0, index - 1)
+                    latchedBaseline = baselines[prevIndex] ?? computedBaseline
+                }
+                inactiveCount = 0
+            } else {
+                inactiveCount += 1
+                if inactiveCount > gapToleranceS {
+                    latchedBaseline = nil
+                }
+            }
         }
         let closed = GapClosing.closed(
             flags, unix: ordered.map { $0.unix }, maxGapS: gapToleranceS
@@ -141,9 +183,8 @@ enum ActivityDetect {
                 let duration = run[run.count - 1].unix - run[0].unix + 1
                 guard duration >= max(minimumDurationS, walkWorkoutMinSessionS) else { continue }
                 let elevatedSeconds = (start..<motionEnd).filter { sampleIndex in
-                    guard measuredMotion[sampleIndex], let baseline = baselines[sampleIndex] else {
-                        return false
-                    }
+                    guard measuredMotion[sampleIndex] else { return false }
+                    let baseline = latchedBaseline ?? baselines[sampleIndex] ?? 70.0
                     return Double(ordered[sampleIndex].heartRate) >=
                         max(hrStartAbsolute, baseline + hrStartDelta)
                 }.count
@@ -163,6 +204,16 @@ enum ActivityDetect {
             )
         }
         return sessions
+    }
+
+    /// Evaluates activity candidate windows for diagnostic review and confidence classification.
+    static func evaluateCandidates(
+        _ samples: [V18Sample],
+        sleepPeriods: [SleepPeriod] = [],
+        minimumDurationS: Int = minSessionS
+    ) -> [ActivityCandidate] {
+        let detected = detect(samples, sleepPeriods: sleepPeriods, minimumDurationS: minimumDurationS)
+        return detected.map { ActivityCandidate(session: $0, confidence: .confirmed, reason: $0.kind) }
     }
 
     /// Steps per minute over the trailing minute, from counter deltas. The
