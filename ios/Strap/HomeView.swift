@@ -251,7 +251,8 @@ struct HomeView: View {
             // WHOOP distributes the three score centers across the entire row.
             // Keep each ring compact while allocating an equal-width column.
             GeometryReader { geometry in
-                let diameter = min(CGFloat(82), max(CGFloat(74), geometry.size.width / 3 - 16))
+                let availableWidth = geometry.size.width
+                let diameter = min(CGFloat(104), max(CGFloat(84), (availableWidth - 36) / 3))
                 HStack(spacing: 0) {
                     NavigationLink(value: Route.sleepAnalysis) {
                         trioItem(
@@ -291,7 +292,7 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(height: 112)
+            .frame(height: 140)
             if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
         .padding(.bottom, 14)
@@ -339,19 +340,14 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
         VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 5.5, size: ringSize, centerText: text, centerFont: 24)
+            RingView(progress: progress, color: color, lineWidth: 8.0, size: ringSize, centerText: text, centerFont: 24)
                 .accessibilityHidden(true)
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text(label)
-                    .font(StrapTypography.body(12.5, weight: .bold))
-                    .tracking(0.9)
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10.5, weight: .bold))
-                    .accessibilityHidden(true)
-            }
-            .foregroundStyle(Color.appFG)
-            .lineLimit(1)
-            .minimumScaleFactor(0.9)
+            Text(label)
+                .font(StrapTypography.body(11.5, weight: .bold))
+                .tracking(0.5)
+                .foregroundStyle(Color(hex: 0xA3ADB5))
+                .lineLimit(1)
+                .minimumScaleFactor(0.85)
         }
         .frame(width: ringSize)
         .contentShape(Rectangle())
@@ -1057,6 +1053,26 @@ struct HomeView: View {
             NavigationLink(value: Route.sleepAnalysis) {
                 Panel { discoveryRow("Explore your sleep data", detail: "Review a night and export its recorded sensor channels.", icon: "moon.stars") }
             }.buttonStyle(.plain)
+
+            HStack {
+                Spacer()
+                Button {
+                    // Discover More
+                } label: {
+                    Text("DISCOVER MORE")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.appFG)
+                        .padding(.horizontal, 24)
+                        .padding(.vertical, 12)
+                        .background(Color(hex: 0x252D33), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color(hex: 0x3A4650), lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                Spacer()
+            }
+            .padding(.top, 10)
+            .padding(.bottom, 20)
         }.padding(.top, 12)
     }
 

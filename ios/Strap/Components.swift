@@ -269,16 +269,16 @@ struct RingView: View {
     let progress: Double?
     let color: Color
     var lineWidth: CGFloat = 8
-    var size: CGFloat = 96
+    var size: CGFloat = 104
     let centerText: String
     // Home's compact WHOOP-style rings use a smaller DIN score face relative
     // to the ring diameter; the previous 22 pt value dominated the arc.
-    var centerFont: CGFloat = 18
+    var centerFont: CGFloat = 24
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.appLine, lineWidth: lineWidth)
+                .stroke(color.opacity(0.20), lineWidth: lineWidth)
             if let progress, progress > 0 {
                 Circle()
                     .trim(from: 0, to: min(max(progress, 0), 1))
@@ -308,7 +308,7 @@ struct ScoreValueText: View {
                 Text(String(value.dropLast()))
                     .font(StrapTypography.metric(size, weight: .bold))
                 Text("%")
-                    .font(StrapTypography.metric(size * 0.72, weight: .bold))
+                    .font(StrapTypography.metric(size * 0.58, weight: .regular))
             }
             .monospacedDigit()
         } else {

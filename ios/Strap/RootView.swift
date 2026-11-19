@@ -15,21 +15,21 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .home: return "house.fill"
         case .health: return "heart.fill"
-        case .humans: return "person.3.fill"
+        case .humans: return "person.2.fill"
         case .train: return "dumbbell.fill"
         case .plan: return "calendar"
-        case .more: return "ellipsis.circle.fill"
+        case .more: return "line.3.horizontal"
         }
     }
 
     var icon: String {
         switch self {
         case .home: return "house"
-        case .health: return "heart.text.square"
-        case .humans: return "person.3"
+        case .health: return "heart"
+        case .humans: return "person.2"
         case .train: return "dumbbell"
         case .plan: return "calendar"
-        case .more: return "ellipsis.circle"
+        case .more: return "line.3.horizontal"
         }
     }
 }
@@ -147,11 +147,11 @@ struct RootView: View {
                                 .font(.system(size: 20, weight: selected ? .semibold : .regular))
                                 .frame(height: 24)
                             Text(item.label)
-                                .font(StrapTypography.body(11, weight: selected ? .bold : .medium))
+                                .font(StrapTypography.body(10, weight: selected ? .bold : .semibold))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .foregroundStyle(selected ? Color.appFG : Color.appMuted)
+                        .foregroundStyle(selected ? Color.white : Color(hex: 0x6B7882))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 52)
 
@@ -168,16 +168,16 @@ struct RootView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color.appBG.opacity(0.86), in: RoundedRectangle(cornerRadius: 23))
-            .overlay(RoundedRectangle(cornerRadius: 23)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.7))
+            .background(Color(hex: 0x171E22).opacity(0.95), in: RoundedRectangle(cornerRadius: 28))
+            .overlay(RoundedRectangle(cornerRadius: 28)
+                .strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
             Button { showInsights = true } label: {
                 Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 23, weight: .medium))
-                    .foregroundStyle(Color.appFG)
+                    .font(.system(size: 22, weight: .medium))
+                    .foregroundStyle(Color.white)
                     .frame(width: 54, height: 54)
-                    .background(Color.appBG.opacity(0.97), in: Circle())
-                    .overlay(Circle().strokeBorder(Color.white.opacity(0.14), lineWidth: 0.7))
+                    .background(Color(hex: 0x171E22).opacity(0.95), in: Circle())
+                    .overlay(Circle().strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Daily insights")
