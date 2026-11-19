@@ -15,6 +15,9 @@ enum ActivityDetect {
     static let hrStartDelta = 20.0
     static let startSustainS = 240
     static let minSessionS = 300
+    // WHOOP's public 2026 ten-minute minimum is an optional comparison mode,
+    // not evidence that every sport uses the same physiological gate.
+    static let comparisonMinSessionS = 600
     static let gapToleranceS = 180
     static let stepWindowS = 60
     static let walkSPM = 60.0
@@ -26,8 +29,12 @@ enum ActivityDetect {
 
     static func detect(
         _ samples: [V18Sample],
-        sleepPeriods: [SleepPeriod] = []
+        sleepPeriods: [SleepPeriod] = [],
+        minimumDurationS: Int = minSessionS
     ) -> [ActivitySession] {
+        // Preserve the established five-minute behavior unless a caller
+        // explicitly opts into a longer, independently evaluated duration.
+        guard minimumDurationS > 0 else { return [] }
         // Historical offload can replay the same second after reconnect.
         // Choose one record per timestamp before calculating cadence, HR
         // baselines and sustained-activity duration; duplicates are not time.
@@ -103,7 +110,7 @@ enum ActivityDetect {
             let end = index
             let run = Array(ordered[start..<end])
 
-            guard run[run.count - 1].unix - run[0].unix + 1 >= minSessionS else { continue }
+            guard run[run.count - 1].unix - run[0].unix + 1 >= minimumDurationS else { continue }
             guard flags[start..<end].filter({ $0 }).count >= startSustainS else { continue }
 
             let walkTicks = run.filter { $0.activityClass == gaitWalk }.count
