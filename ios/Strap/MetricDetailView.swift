@@ -164,30 +164,30 @@ struct MetricDetailView: View {
         let scale = recoveryMode ? 100.0 : 21.0
         let mean = MetricTimeline.comparison(mainMetric, before: selectedKey, in: history)
         return ZStack {
-            Circle().stroke(mainMetric.color(value).opacity(0.20), lineWidth: 15)
+            Circle().stroke(mainMetric.color(value).opacity(0.20), lineWidth: 12)
             if let value {
                 Circle().trim(from: 0, to: min(1, max(0, value / scale)))
-                    .stroke(mainMetric.color(value), style: StrokeStyle(lineWidth: 15, lineCap: .round))
+                    .stroke(mainMetric.color(value), style: StrokeStyle(lineWidth: 12, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             if !recoveryMode, let mean {
-                Rectangle().fill(Color.appFG).frame(width: 4, height: 15)
-                    .offset(y: -118).rotationEffect(.degrees(mean / 21 * 360))
+                Rectangle().fill(Color.appFG).frame(width: 3.5, height: 12)
+                    .offset(y: -90).rotationEffect(.degrees(mean / 21 * 360))
             }
-            VStack(spacing: 6) {
-                Text("STRAP").font(StrapTypography.body(17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
-                ScoreValueText(value: mainMetric.text(value), size: 64)
+            VStack(spacing: 4) {
+                Text("STRAP").font(StrapTypography.body(14, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
+                ScoreValueText(value: mainMetric.text(value), size: 48)
                     .minimumScaleFactor(0.7).lineLimit(1)
-                Text(mainMetric.title.uppercased()).font(StrapTypography.body(12, weight: .bold)).tracking(1)
+                Text(mainMetric.title.uppercased()).font(StrapTypography.body(11, weight: .bold)).tracking(1)
                 if recoveryMode, let value {
                     Text(value >= 67 ? "RECOVERED" : value >= 34 ? "ADEQUATE" : "REST & RECOVER")
-                        .font(StrapTypography.body(11, weight: .bold))
+                        .font(StrapTypography.body(10.5, weight: .bold))
                         .tracking(0.8)
-                        .foregroundStyle(mainMetric.color(value))
+                        .foregroundStyle(value >= 67 ? Color(hex: 0x00E676) : value >= 34 ? Color(hex: 0xFFDE00) : Color(hex: 0xFF3B30))
                 }
-            }.padding(24)
+            }.padding(16)
         }
-        .frame(width: 236, height: 236)
+        .frame(width: 180, height: 180)
         .frame(maxWidth: .infinity)
         .padding(.top, 24)
         .padding(.bottom, 34)

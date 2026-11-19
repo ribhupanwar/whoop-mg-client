@@ -16,7 +16,7 @@ struct StressView: View {
                 outsideWorkoutsPanel
             }
         }
-        .navigationTitle("Stress monitor")
+        .navigationTitle("STRESS MONITOR")
         .navigationBarTitleDisplayMode(.inline)
     }
 
@@ -26,7 +26,7 @@ struct StressView: View {
                 StressGauge(value: demo ? SampleData.stressGauge : stressIndex)
                 VStack(spacing: 5) {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
-                        .font(StrapTypography.body(33, weight: .medium))
+                        .font(StrapTypography.metric(36, weight: .bold))
                         .foregroundStyle(Color.appFG)
                     Text(demo ? "HIGH · SAMPLE" : "\(store.band.stress.band.uppercased())")
                         .font(StrapTypography.body(11, weight: .medium))

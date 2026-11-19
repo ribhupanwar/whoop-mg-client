@@ -810,11 +810,11 @@ struct StressGauge: View {
     var body: some View {
         ZStack {
             arc(180, 240)
-                .stroke(Color.appAccent, style: StrokeStyle(lineWidth: 11, lineCap: .round))
+                .stroke(Color(hex: 0x00E676), style: StrokeStyle(lineWidth: 11, lineCap: .round))
             arc(240, 300)
-                .stroke(Color.appGood, lineWidth: 11)
+                .stroke(Color(hex: 0xFFDE00), lineWidth: 11)
             arc(300, 360)
-                .stroke(Color.appWarn, style: StrokeStyle(lineWidth: 11, lineCap: .round))
+                .stroke(Color(hex: 0xFF3B30), style: StrokeStyle(lineWidth: 11, lineCap: .round))
             if let value {
                 let angle = (180.0 + min(max(value, 0), 3) / 3.0 * 180.0) * .pi / 180.0
                 Path { p in

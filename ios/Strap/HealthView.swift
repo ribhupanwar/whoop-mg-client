@@ -72,7 +72,7 @@ struct HealthView: View {
             }
             Spacer(minLength: 0)
             Text("—")
-                .font(StrapTypography.metric(31, weight: .bold))
+                .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
             Text("BUILDING BASELINE")
@@ -82,9 +82,9 @@ struct HealthView: View {
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
-        .padding(15)
-        .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
+        .padding(13)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
@@ -105,7 +105,7 @@ struct HealthView: View {
             Spacer(minLength: 0)
             HStack(alignment: .firstTextBaseline, spacing: unit == "%" ? 1 : 4) {
                 Text(value)
-                    .font(StrapTypography.metric(31, weight: .bold))
+                    .font(StrapTypography.metric(28, weight: .bold))
                     .foregroundStyle(Color.appFG)
                     .monospacedDigit()
                     .minimumScaleFactor(0.75)
@@ -117,12 +117,15 @@ struct HealthView: View {
                         .baselineOffset(unit == "%" ? 0 : 1)
                 }
             }
-            HStack(spacing: 4) {
-                Image(systemName: reading.verifiedWithinRange ? "checkmark.circle.fill" : "circle")
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(reading.verifiedWithinRange ? Color(hex: 0x00E676) :
+                        (reading.status == .outsideRange || reading.status == .candidate ? Color.appWarn : Color.appMuted.opacity(0.5)))
+                    .frame(width: 7, height: 7)
                 Text(demo ? "SAMPLE" : reading.statusText)
             }
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(reading.verifiedWithinRange ? Color.appGood :
+                .foregroundStyle(reading.verifiedWithinRange ? Color(hex: 0x00E676) :
                     (reading.status == .outsideRange || reading.status == .candidate ? Color.appWarn : Color.appMuted))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -130,9 +133,9 @@ struct HealthView: View {
                 .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(15)
-        .frame(maxWidth: .infinity, minHeight: 144, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 15).fill(LinearGradient.appCard))
+        .padding(13)
+        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
     }
 
     // Full-bleed WHOOP-style monitor. Sensor readings are never synthesized.

@@ -95,7 +95,7 @@ struct HealthHubView: View {
                 .buttonStyle(.plain)
             }
             .padding(17)
-            .background(RoundedRectangle(cornerRadius: 17).fill(LinearGradient.appCard))
+            .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
         }
         .frame(maxWidth: .infinity)
         .padding(.bottom, 22)
@@ -123,7 +123,7 @@ struct HealthHubView: View {
         }
         .padding(19)
         .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 17).fill(
+        .background(RoundedRectangle(cornerRadius: 12).fill(
             LinearGradient(colors: [Color(hex: 0x292D30), Color(hex: 0x155B50)],
                            startPoint: .leading, endPoint: .trailing)))
         .padding(.bottom, 20)
@@ -159,7 +159,7 @@ struct HealthHubView: View {
         }
         .padding(17)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
         .padding(.bottom, 18)
     }
 
@@ -249,8 +249,8 @@ struct HealthHubView: View {
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
@@ -326,7 +326,7 @@ struct HealthHubView: View {
                         .font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
+                    Image(systemName: "chevron.right").font(.system(size: 8.5, weight: .semibold)).foregroundStyle(Color.appMuted)
                 }
                 HStack(alignment: .bottom, spacing: 10) {
                     VStack(alignment: .leading, spacing: 3) {
@@ -355,8 +355,8 @@ struct HealthHubView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+            .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .padding(.bottom, 11)
