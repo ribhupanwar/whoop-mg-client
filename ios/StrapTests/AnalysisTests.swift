@@ -671,13 +671,12 @@ final class ActivityDetectTests: XCTestCase {
         XCTAssertEqual(sessions[0].meanHR!, 150.0, accuracy: 1e-6)
     }
 
-    func testWalkBelowThresholdDetectedFromGaitAndSteps() {
+    func testCasualWalkWithStepsDoesNotBecomeWorkout() {
         var rows = rest()
         rows += stream(900, 1200, hr: 95, accel: 0.12, spm: 110, gait: 1, step0: 100)
         rows += coolDown(2100)
         let sessions = ActivityDetect.detect(rows)
-        XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions[0].kind, "walk")
+        XCTAssertTrue(sessions.isEmpty)
     }
 
     func testElevatedHeartRateWithoutGaitIsAWorkout() {
@@ -736,13 +735,28 @@ final class ActivityDetectTests: XCTestCase {
         XCTAssertTrue(ActivityDetect.detect(stream(0, 1800, hr: 70, accel: 0.5)).isEmpty)
     }
 
-    func testSteppingWithoutGaitClassifiesByRate() {
+    func testCasualSteppingWithoutGaitDoesNotBecomeWorkout() {
         var rows = rest()
         rows += stream(900, 1200, hr: 80, accel: 0.12, spm: 110, gait: nil, step0: 100)
         rows += coolDown(2100)
         let sessions = ActivityDetect.detect(rows)
+        XCTAssertTrue(sessions.isEmpty)
+    }
+
+    func testSustainedBriskWalkingWithElevatedHeartRateIsWorkout() {
+        var rows = rest()
+        rows += stream(900, 1200, hr: 135, accel: 0.15, spm: 110, gait: 1, step0: 100)
+        rows += coolDown(2100)
+        let sessions = ActivityDetect.detect(rows)
         XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions[0].kind, "walk")
+        XCTAssertEqual(sessions.first?.kind, "walk")
+    }
+
+    func testShortBriskWalkDoesNotAutoSaveWorkout() {
+        var rows = rest()
+        rows += stream(900, 480, hr: 135, accel: 0.15, spm: 110, gait: 1, step0: 100)
+        rows += coolDown(1380)
+        XCTAssertTrue(ActivityDetect.detect(rows).isEmpty)
     }
 
     func testOffWristSecondsAreIgnored() {
