@@ -397,6 +397,21 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(sessions.first?.endUnix, 779)
     }
 
+    func testElevatedHeartRateCooldownDoesNotExtendMeasuredWalk() {
+        // Resting baseline, sustained walk, then 3 minutes of high HR at rest.
+        let baseline = (0..<360).map { sample($0, hr: 75, steps: 0, gait: nil) }
+        let walking = (360..<1020).map {
+            sample($0, hr: 145, steps: ($0 - 359) * 2, gait: nil)
+        }
+        let stoppedSteps = 660 * 2
+        let cooldown = (1020..<1200).map {
+            sample($0, hr: 130, steps: stoppedSteps, gait: nil)
+        }
+        let sessions = ActivityDetect.detect(baseline + walking + cooldown)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.endUnix, 1019)
+    }
+
     func testInvalidComparisonDurationDoesNotCreateSessions() {
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: 0).isEmpty)
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: -10).isEmpty)
