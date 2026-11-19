@@ -369,6 +369,34 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(sessions.first?.kind, "walk")
     }
 
+    func testCooldownDoesNotExtendDetectedWalkEnd() {
+        // The report's alleged session.end mutation does not exist in STRAP.
+        // Trailing inactive records must not become part of a workout.
+        let active = walk(seconds: 660)
+        let cooldown = (660..<900).map {
+            sample($0, hr: 75, steps: 1_318, gait: ActivityDetect.gaitStill)
+        }
+        let sessions = ActivityDetect.detect(active + cooldown)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.endUnix, 659)
+    }
+
+    func testShortPauseIsBridgedButTrailingCooldownIsNot() {
+        let first = walk(seconds: 360)
+        let pause = (360..<420).map {
+            sample($0, hr: 75, steps: 718, gait: ActivityDetect.gaitStill)
+        }
+        let resumed = (420..<780).map {
+            sample($0, hr: 75, steps: 718 + ($0 - 420) * 2, gait: ActivityDetect.gaitStill)
+        }
+        let cooldown = (780..<960).map {
+            sample($0, hr: 75, steps: 1_436, gait: ActivityDetect.gaitStill)
+        }
+        let sessions = ActivityDetect.detect(first + pause + resumed + cooldown)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.endUnix, 779)
+    }
+
     func testInvalidComparisonDurationDoesNotCreateSessions() {
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: 0).isEmpty)
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: -10).isEmpty)
