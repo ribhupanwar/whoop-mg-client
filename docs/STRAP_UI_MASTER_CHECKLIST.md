@@ -3,6 +3,9 @@
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
 ## Phase 1–12 current implementation matrix (2026-11-19)
+- [ ] **VERIFY (CI/device):** Activity duration comparator regression `4dac623e` covers 6-minute measured running retained by the 5-minute default, excluded by opt-in 10-minute comparator, and 11-minute running accepted by comparator. Test workflow pending; no production duration change or device accuracy claim.
+- [ ] **VERIFY (CI/device):** Battery-triggered Device Settings STATUS/ADVANCED layout `342b446e` is code-complete but still requires native iOS build and device screenshots. Advanced maintenance commands remain unavailable; no band firmware or stored data modified.
+
 - [x] **DONE (code):** Evidence/status matrix created at [docs/research/phase-1-12-implementation-matrix.md](research/phase-1-12-implementation-matrix.md); distinguishes VERIFIED / INFERRED / UNKNOWN and CODE DONE / CI VERIFIED / DEVICE VERIFY / BLOCKED.
 - [ ] **VERIFY (CI/device):** `e3982ec` uses wrap-aware `StepCounter.delta` for activity motion evidence; `47734a4` adds a 660-second counter-wrap walk regression. No activity duration policy or persisted data changed. Await native iOS and test CI for this revision, then physical-device comparison. Previous cooldown regression tests passed in [tests run 44492229003](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44492229003); iOS [run 44492229014](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44492229014) was still in progress at review.
 
