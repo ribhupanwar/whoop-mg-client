@@ -33,6 +33,7 @@
 - [ ] Validate SpO2 and respiratory-rate source mapping against independent overnight references; show unavailable rather than inferred values.
 
 ## Batch 4 — WHOOP UI fidelity
+- [ ] **VERIFY (device screenshot, 2026-11-19):** Latest ring diameter correction `ebf13f7` removes the extra half-stroke padding from `RingView`, so its `size` frame is not inadvertently expanded by padding. Native iOS [run 44461395186](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44461395186) and protocol [run 44461395108](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44461395108) succeeded for the exact `ebf13f7` main revision. Code/CI are verified, but 104pt outer-circle geometry, digit sizes, labels and color parity still require same-device WHOOP/STRAP screenshot measurement. Preserve licensed fonts and actual score colors; no physiological metrics changed.\n\n
 - [ ] Compare supplied same-screen WHOOP/STRAP screenshots on the target iPhone.
 - [ ] Tune Home cards, rings, gradients, typography, spacing, navigation, Health charts, sleep-stage timeline and detail screens.
 - [ ] Preserve licensed Proxima Nova/DIN Pro files and metric-derived zone colors.
