@@ -114,6 +114,30 @@ enum SleepDetect {
                 guard let confirmed = Hrv.contiguousRuns(sleepRows).first(where: { $0.count >= 300 }),
                       let first = confirmed.first else { continue }
                 verifiedStart = first.unix
+                // The coarse band sleep flag can lag physiological settling.
+                // Backtrack only through sustained, worn, quiet, low-HR
+                // evidence immediately preceding a confirmed sleep run.
+                // Never subtract a fixed number of minutes.
+                let confirmedHR = Stats.median(Array(confirmed.prefix(300)).map { Double($0.heartRate) })
+                let floorUnix = max(run[0].unix, verifiedStart - 20 * 60)
+                let prelude = run.filter { floorUnix <= $0.unix && $0.unix < verifiedStart }
+                var cursor = verifiedStart
+                while cursor - 60 >= floorUnix {
+                    let minute = prelude.filter { cursor - 60 <= $0.unix && $0.unix < cursor }
+                    let valid = minute.filter {
+                        $0.wearing && (35...220).contains($0.heartRate)
+                            && $0.sleepState != 3
+                            && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= 0.04 } ?? false)
+                            && Double($0.heartRate) <= confirmedHR + 5
+                    }
+                    // At least 48 distinct observed seconds per minute;
+                    // a sparse replay cannot be interpreted as sleep.
+                    guard Set(valid.map(\.unix)).count >= 48 else { break }
+                    cursor -= 60
+                }
+                if verifiedStart - cursor >= 5 * 60 {
+                    verifiedStart = cursor
+                }
             }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes
