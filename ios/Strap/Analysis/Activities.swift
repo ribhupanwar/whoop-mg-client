@@ -65,11 +65,10 @@ enum ActivityDetect {
         flags.reserveCapacity(ordered.count)
         measuredMotion.reserveCapacity(ordered.count)
         for (index, sample) in ordered.enumerated() {
-            let gait = sample.activityClass
             let locomotion: Bool
             // The gait byte is not vendor-verified. A still/unknown gait
             // must not suppress a sustained, measured step rate.
-            // With a reported still gait, require *recent* counter movement:
+            // Prefer recent measured counter movement for every gait state:
             // the trailing 60-second rate otherwise extends runs into cooldown.
             let recentSteps: Bool
             if index > 0,
