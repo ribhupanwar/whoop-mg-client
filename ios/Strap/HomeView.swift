@@ -215,14 +215,18 @@ struct HomeView: View {
 
             Spacer()
 
-            HStack(spacing: 5) {
+            HStack(spacing: 6) {
                 Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted)
-                Image(systemName: batterySymbol)
-                    .font(StrapTypography.body(14))
-                    .foregroundStyle(batteryColor)
+                    .font(StrapTypography.metric(15, weight: .bold))
+                    .foregroundStyle(Color.appFG)
+                    .monospacedDigit()
+                WhoopBandBatteryIcon(
+                    charge: displayedBattery,
+                    connected: store.band.isConnected
+                )
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), \(store.band.isConnected ? "connected" : "disconnected")")
 
         }
         .padding(.bottom, 10)
@@ -324,24 +328,6 @@ struct HomeView: View {
 
     private var displayedBattery: Int? {
         demo ? SampleData.batteryPercent : store.band.batteryPercent
-    }
-
-    private var batterySymbol: String {
-        guard let percent = displayedBattery else { return "battery.0" }
-        switch percent {
-        case 88...: return "battery.100"
-        case 63...: return "battery.75"
-        case 38...: return "battery.50"
-        case 13...: return "battery.25"
-        default: return "battery.0"
-        }
-    }
-
-    private var batteryColor: Color {
-        guard let percent = displayedBattery else { return .appMuted }
-        if percent <= 10 { return .appHigh }
-        if percent <= 20 { return .appWarn }
-        return .appMuted
     }
 
     private var batteryText: String {
@@ -1162,5 +1148,32 @@ enum AppOpenDayTracker {
         days.insert(dayKey(date, calendar: calendar))
         defaults.set(days.sorted(), forKey: key)
         return days.count
+    }
+}
+
+// WHOOP-style band outline. Connection dot reflects real BLE state.
+private struct WhoopBandBatteryIcon: View {
+    let charge: Int?
+    let connected: Bool
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            Path { p in
+                p.move(to: CGPoint(x: 12, y: 2))
+                p.addCurve(to: CGPoint(x: 6, y: 35), control1: CGPoint(x: 4, y: 3), control2: CGPoint(x: 3, y: 27))
+                p.addLine(to: CGPoint(x: 18, y: 35))
+                p.addCurve(to: CGPoint(x: 24, y: 2), control1: CGPoint(x: 26, y: 30), control2: CGPoint(x: 27, y: 8))
+                p.closeSubpath()
+            }
+            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineJoin: .round))
+            .frame(width: 29, height: 38)
+            if connected {
+                Circle().fill(Color(hex: 0x24E7A5))
+                    .frame(width: 7, height: 7)
+                    .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 1))
+                    .offset(x: 1, y: 3)
+            }
+        }
+        .frame(width: 31, height: 39)
+        .accessibilityHidden(true)
     }
 }
