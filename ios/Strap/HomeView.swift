@@ -252,7 +252,7 @@ struct HomeView: View {
             // screens. Scale the diameter only on narrow screens so the row
             // never clips or pushes Recovery/Strain outside the viewport.
             GeometryReader { geometry in
-                let diameter = min(CGFloat(104), max(CGFloat(74), (geometry.size.width - 36) / 3))
+                let diameter = min(CGFloat(84), max(CGFloat(74), (geometry.size.width - 36) / 3))
                 HStack(spacing: 18) {
                     NavigationLink(value: Route.sleepAnalysis) {
                         trioItem(
@@ -289,7 +289,7 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(height: 132)
+            .frame(height: 112)
             if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
         .padding(.bottom, 14)
@@ -337,7 +337,7 @@ struct HomeView: View {
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
         VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 8, size: ringSize, centerText: text, centerFont: 24)
+            RingView(progress: progress, color: color, lineWidth: 5.5, size: ringSize, centerText: text, centerFont: 24)
                 .accessibilityHidden(true)
             HStack(alignment: .firstTextBaseline, spacing: 5) {
                 Text(label)
@@ -1158,22 +1158,22 @@ private struct WhoopBandBatteryIcon: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             Path { p in
-                p.move(to: CGPoint(x: 12, y: 2))
-                p.addCurve(to: CGPoint(x: 6, y: 35), control1: CGPoint(x: 4, y: 3), control2: CGPoint(x: 3, y: 27))
-                p.addLine(to: CGPoint(x: 18, y: 35))
-                p.addCurve(to: CGPoint(x: 24, y: 2), control1: CGPoint(x: 26, y: 30), control2: CGPoint(x: 27, y: 8))
+                p.move(to: CGPoint(x: 9, y: 2))
+                p.addCurve(to: CGPoint(x: 5, y: 25), control1: CGPoint(x: 3, y: 3), control2: CGPoint(x: 2, y: 19))
+                p.addLine(to: CGPoint(x: 14, y: 25))
+                p.addCurve(to: CGPoint(x: 18, y: 2), control1: CGPoint(x: 20, y: 22), control2: CGPoint(x: 21, y: 7))
                 p.closeSubpath()
             }
             .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineJoin: .round))
-            .frame(width: 29, height: 38)
+            .frame(width: 20, height: 27)
             if connected {
                 Circle().fill(Color(hex: 0x24E7A5))
-                    .frame(width: 7, height: 7)
+                    .frame(width: 5, height: 5)
                     .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 1))
                     .offset(x: 1, y: 3)
             }
         }
-        .frame(width: 31, height: 39)
+        .frame(width: 22, height: 29)
         .accessibilityHidden(true)
     }
 }
