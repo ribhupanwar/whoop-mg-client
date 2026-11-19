@@ -1,8 +1,10 @@
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Hashable {
+    static var allCases: [AppTab] { [.home, .health, .humans, .more] }
     case home
     case health
+    case humans
     case train
     case plan
     case more
@@ -13,6 +15,7 @@ enum AppTab: String, CaseIterable, Hashable {
         switch self {
         case .home: return "house.fill"
         case .health: return "heart.fill"
+        case .humans: return "person.3.fill"
         case .train: return "dumbbell.fill"
         case .plan: return "calendar"
         case .more: return "ellipsis.circle.fill"
@@ -22,7 +25,8 @@ enum AppTab: String, CaseIterable, Hashable {
     var icon: String {
         switch self {
         case .home: return "house"
-        case .health: return "heart"
+        case .health: return "heart.text.square"
+        case .humans: return "person.3"
         case .train: return "dumbbell"
         case .plan: return "calendar"
         case .more: return "ellipsis.circle"
@@ -59,12 +63,13 @@ struct RootView: View {
     private var store: AppStore { owner.store }
     @State private var tab: AppTab = .home
     @State private var showInsights = false
+    @State private var showPlan = false
     @State private var homePath: [Route] = []
 
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $homePath) {
-                HomeView(openPlan: { tab = .plan })
+                HomeView(openPlan: { showPlan = true })
                     .strapDestinations()
             }
             .font(StrapTypography.body(15))
@@ -80,20 +85,12 @@ struct RootView: View {
             .tag(AppTab.health)
 
             NavigationStack {
-                TrainView()
+                HumansView()
                     .strapDestinations()
             }
             .font(StrapTypography.body(15))
-            .tabItem { Label(AppTab.train.label, systemImage: AppTab.train.icon) }
-            .tag(AppTab.train)
-
-            NavigationStack {
-                PlanView()
-                    .strapDestinations()
-            }
-            .font(StrapTypography.body(15))
-            .tabItem { Label(AppTab.plan.label, systemImage: AppTab.plan.icon) }
-            .tag(AppTab.plan)
+            .tabItem { Label(AppTab.humans.label, systemImage: AppTab.humans.icon) }
+            .tag(AppTab.humans)
 
             NavigationStack {
                 MoreView()
@@ -106,6 +103,7 @@ struct RootView: View {
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) { floatingNavigation }
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
+        .sheet(isPresented: $showPlan) { NavigationStack { PlanView().strapDestinations() }.environmentObject(store) }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 // Count app launches even when returning to Health, Train, Plan or More.
@@ -124,8 +122,9 @@ struct RootView: View {
             else if args.contains("--preview-sleep") { homePath = [.sleepAnalysis] }
             else if args.contains("--preview-healthspan") { homePath = [.healthspan] }
             else if args.contains("--preview-health") { tab = .health }
-            else if args.contains("--preview-train") { tab = .train }
-            else if args.contains("--preview-plan") { tab = .plan }
+            else if args.contains("--preview-humans") { tab = .humans }
+            else if args.contains("--preview-train") { showPlan = true }
+            else if args.contains("--preview-plan") { showPlan = true }
             else if args.contains("--preview-more") { tab = .more }
             #endif
         }
@@ -136,7 +135,7 @@ struct RootView: View {
     }
 
     private var floatingNavigation: some View {
-        // Keep all five destinations on a single stable bottom bar.
+        // WHOOP-reference navigation: four tabs with a separate circular accessory.
         // The selected tab is legible without relying on glass blur alone.
         HStack(spacing: 8) {
             HStack(spacing: 0) {
@@ -155,12 +154,7 @@ struct RootView: View {
                         .foregroundStyle(selected ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 52)
-                        .background {
-                            if selected {
-                                RoundedRectangle(cornerRadius: 15)
-                                    .fill(Color.white.opacity(0.09))
-                            }
-                        }
+
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -174,7 +168,7 @@ struct RootView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color.appBG.opacity(0.97), in: RoundedRectangle(cornerRadius: 23))
+            .background(Color.appBG.opacity(0.86), in: RoundedRectangle(cornerRadius: 23))
             .overlay(RoundedRectangle(cornerRadius: 23)
                 .strokeBorder(Color.white.opacity(0.12), lineWidth: 0.7))
             Button { showInsights = true } label: {
@@ -271,5 +265,37 @@ private struct DailyInsightsView: View {
             }.strapDestinations().navigationTitle("Daily insights").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
+    }
+}
+
+
+// The reference navigation includes Humans, not Train/Plan. Community requires
+// a real service integration; never display invented people or activity.
+private struct HumansView: View {
+    var body: some View {
+        Screen {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Humans")
+                    .font(StrapTypography.body(26, weight: .bold))
+                    .foregroundStyle(Color.appFG)
+                Panel {
+                    Label("Community", systemImage: "person.3")
+                        .font(StrapTypography.body(18, weight: .bold))
+                    Text("Community features are not connected yet.")
+                        .font(StrapTypography.body(14))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Panel {
+                    SectionTitle("Your tools")
+                    NavigationLink { TrainView() } label: {
+                        Label("Training", systemImage: "dumbbell")
+                    }
+                    NavigationLink { PlanView() } label: {
+                        Label("Plan", systemImage: "calendar")
+                    }
+                }
+            }
+        }
+        .strapTabTypography("Humans")
     }
 }
