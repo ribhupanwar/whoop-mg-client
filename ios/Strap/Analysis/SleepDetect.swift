@@ -226,7 +226,7 @@ enum SleepDetect {
                             ($0.dynamicAccelG ?? 0) >= 0.015
                         }.count
                         if Set(window.map(\.unix)).count >= 150,
-                           elevated >= 90, moving >= 30 {
+                           elevated >= 150, moving >= 30 {
                             wakeCandidate = minute
                             break
                         }
