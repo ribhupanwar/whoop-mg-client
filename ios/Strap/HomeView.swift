@@ -1288,3 +1288,87 @@ private struct WhoopBandBatteryIcon: View {
         .accessibilityHidden(true)
     }
 }
+
+
+// Battery entry point: a clean-room, non-destructive device information sheet.
+// Unsupported firmware, pairing and erase operations are deliberately not exposed.
+private struct HomeBandDeviceSettingsView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var advanced = false
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(store.band.isConnected ? "CONNECTED TO" : "NOT CONNECTED")
+                                .font(.caption.bold())
+                                .foregroundStyle(store.band.isConnected ? Color.green : Color.secondary)
+                            Text("WHOOP BAND").font(.title3.bold())
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text("BATTERY").font(.caption2).foregroundStyle(.secondary)
+                            Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
+                                .font(.title3.bold())
+                        }
+                    }
+                    HStack(spacing: 26) {
+                        Button("STATUS") { advanced = false }
+                        Button("ADVANCED") { advanced = true }
+                    }
+                    .font(.subheadline.bold())
+                    .buttonStyle(.plain)
+                    Divider()
+                    if advanced {
+                        infoRow("DEVICE ID", "Not available from this screen")
+                        infoRow("FIRMWARE", "Not verified")
+                        Text("Pairing, firmware updates, reboot and erase are not available here. Use the official device application for supported device maintenance.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Image(systemName: "applewatch")
+                            .font(.system(size: 90, weight: .ultraLight))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 30)
+                            .accessibilityHidden(true)
+                        infoRow("CONNECTION", store.band.isConnected ? "Connected" : "Disconnected")
+                        infoRow("BATTERY LEVEL", store.band.batteryPercent.map { "\($0)%" } ?? "Unavailable")
+                        Button {
+                            if store.band.isConnected { store.band.readHistory() }
+                            else { store.connectBand() }
+                        } label: {
+                            Label(store.band.isConnected ? "SYNC BAND HISTORY" : "CONNECT BAND",
+                                  systemImage: "arrow.clockwise")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                }
+                .padding(24)
+            }
+            .background(Color.appCanvasTop)
+            .foregroundStyle(Color.appFG)
+            .navigationTitle("DEVICE SETTINGS")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Close", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                }
+            }
+        }
+    }
+
+    private func infoRow(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.caption.bold()).foregroundStyle(.secondary)
+            Text(value).font(.body)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 12))
+    }
+}
