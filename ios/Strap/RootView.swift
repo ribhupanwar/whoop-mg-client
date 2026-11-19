@@ -272,27 +272,120 @@ private struct DailyInsightsView: View {
 // The reference navigation includes Humans, not Train/Plan. Community requires
 // a real service integration; never display invented people or activity.
 private struct HumansView: View {
+    @EnvironmentObject private var store: AppStore
+    @State private var selectedSegment = 0
+
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Humans")
                     .font(StrapTypography.body(26, weight: .bold))
                     .foregroundStyle(Color.appFG)
-                Panel {
-                    Label("Community", systemImage: "person.3")
-                        .font(StrapTypography.body(18, weight: .bold))
-                    Text("Community features are not connected yet.")
-                        .font(StrapTypography.body(14))
-                        .foregroundStyle(Color.appMuted)
+
+                Picker("Community Section", selection: $selectedSegment) {
+                    Text("MY TEAMS").tag(0)
+                    Text("LEADERBOARDS").tag(1)
                 }
+                .pickerStyle(.segmented)
+                .padding(.bottom, 4)
+
+                if selectedSegment == 0 {
+                    Panel {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.2.fill")
+                                .font(.system(size: 24))
+                                .foregroundStyle(Color.appAccent)
+                                .frame(width: 44, height: 44)
+                                .background(Color.appAccent.opacity(0.12), in: Circle())
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text("PERSONAL BASELINE CLUB")
+                                    .font(StrapTypography.body(13, weight: .bold))
+                                    .foregroundStyle(Color.appFG)
+                                Text("On-device streak: \(AppOpenDayTracker.count()) days recorded")
+                                    .font(StrapTypography.body(11))
+                                    .foregroundStyle(Color.appMuted)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                        Divider().background(Color.appLine)
+                        Text("Cloud team synchronization requires WHOOP server credentials. Your personal records and streaks remain stored privately on-device.")
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(Color.appMuted)
+                            .lineSpacing(2)
+                    }
+                } else {
+                    Panel {
+                        SectionTitle("LOCAL RECORDS")
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("PEAK STRAIN")
+                                    .font(StrapTypography.body(10, weight: .bold))
+                                    .foregroundStyle(Color.appMuted)
+                                Text(store.band.days.map(\.strain).compactMap { $0 }.max().map { String(format: "%.1f", $0) } ?? "—")
+                                    .font(StrapTypography.metric(22, weight: .bold))
+                                    .foregroundStyle(Color.appAccent)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 2) {
+                                Text("PEAK RECOVERY")
+                                    .font(StrapTypography.body(10, weight: .bold))
+                                    .foregroundStyle(Color.appMuted)
+                                Text(store.band.days.map(\.recovery).compactMap { $0 }.max().map { "\(Int($0.rounded()))%" } ?? "—")
+                                    .font(StrapTypography.metric(22, weight: .bold))
+                                    .foregroundStyle(Color.appGood)
+                            }
+                        }
+                        .padding(.vertical, 6)
+                    }
+                }
+
                 Panel {
-                    SectionTitle("Your tools")
+                    SectionTitle("TRAINING & PLANNING")
                     NavigationLink { TrainView() } label: {
-                        Label("Training", systemImage: "dumbbell")
+                        HStack(spacing: 12) {
+                            Image(systemName: "dumbbell.fill")
+                                .frame(width: 24)
+                                .foregroundStyle(Color.appAccent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("TRAINING & GPS RUN")
+                                    .font(StrapTypography.body(13, weight: .bold))
+                                    .foregroundStyle(Color.appFG)
+                                Text("Live pace, route capture, and manual workout logger")
+                                    .font(StrapTypography.body(11))
+                                    .foregroundStyle(Color.appMuted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        .padding(.vertical, 8)
                     }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
                     NavigationLink { PlanView() } label: {
-                        Label("Plan", systemImage: "calendar")
+                        HStack(spacing: 12) {
+                            Image(systemName: "calendar")
+                                .frame(width: 24)
+                                .foregroundStyle(Color.appAccent)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("DAILY PLAN & SCHEDULES")
+                                    .font(StrapTypography.body(13, weight: .bold))
+                                    .foregroundStyle(Color.appFG)
+                                Text("Sleep targets, bedtime schedules, and strain goals")
+                                    .font(StrapTypography.body(11))
+                                    .foregroundStyle(Color.appMuted)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        .padding(.vertical, 8)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }

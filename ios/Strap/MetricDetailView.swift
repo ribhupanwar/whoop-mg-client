@@ -164,7 +164,7 @@ struct MetricDetailView: View {
         let scale = recoveryMode ? 100.0 : 21.0
         let mean = MetricTimeline.comparison(mainMetric, before: selectedKey, in: history)
         return ZStack {
-            Circle().stroke(Color.appRaised, lineWidth: 15)
+            Circle().stroke(mainMetric.color(value).opacity(0.20), lineWidth: 15)
             if let value {
                 Circle().trim(from: 0, to: min(1, max(0, value / scale)))
                     .stroke(mainMetric.color(value), style: StrokeStyle(lineWidth: 15, lineCap: .round))
@@ -174,11 +174,17 @@ struct MetricDetailView: View {
                 Rectangle().fill(Color.appFG).frame(width: 4, height: 15)
                     .offset(y: -118).rotationEffect(.degrees(mean / 21 * 360))
             }
-            VStack(spacing: 8) {
+            VStack(spacing: 6) {
                 Text("STRAP").font(StrapTypography.body(17, weight: .light)).tracking(3).foregroundStyle(Color.appMuted)
                 ScoreValueText(value: mainMetric.text(value), size: 64)
                     .minimumScaleFactor(0.7).lineLimit(1)
                 Text(mainMetric.title.uppercased()).font(StrapTypography.body(12, weight: .bold)).tracking(1)
+                if recoveryMode, let value {
+                    Text(value >= 67 ? "RECOVERED" : value >= 34 ? "ADEQUATE" : "REST & RECOVER")
+                        .font(StrapTypography.body(11, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(mainMetric.color(value))
+                }
             }.padding(24)
         }
         .frame(width: 236, height: 236)
