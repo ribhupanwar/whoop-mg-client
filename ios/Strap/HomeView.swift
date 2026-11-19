@@ -1191,7 +1191,13 @@ private struct WhoopBandBatteryIcon: View {
                     .offset(x: 1, y: 3)
             }
         }
+        // The source path is defined in a 21×28 coordinate space. Scale its
+        // entire silhouette (including the green connection dot) together,
+        // rather than changing individual control points and distorting it.
+        // Keep the compact icon independent of the genuine BLE percentage.
         .frame(width: 21, height: 28)
+        .scaleEffect(0.86)
+        .frame(width: 18, height: 24)
         .accessibilityHidden(true)
     }
 }
