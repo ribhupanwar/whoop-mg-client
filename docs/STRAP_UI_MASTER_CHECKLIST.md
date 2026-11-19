@@ -3,6 +3,7 @@
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
 ## Phase 1–12 current implementation matrix (2026-11-19)
+- [ ] **VERIFY (CI/device, 2026-11-19):** Activity baseline latch now resets across >180-second historical/off-wrist gaps (`48dd1777`), with two 660-second runs separated by an hour regression (`c3af8d87`). **CODE DONE; CI pending on test commit**. No change to minimum duration, persisted activities, sensor decoding or historical data. Validate split runs and reconnect replay on device.
 - [ ] **VERIFY (CI/device):** Activity duration comparator regression `4dac623e` covers 6-minute measured running retained by the 5-minute default, excluded by opt-in 10-minute comparator, and 11-minute running accepted by comparator. Test workflow pending; no production duration change or device accuracy claim.
 - [ ] **VERIFY (CI/device):** Battery-triggered Device Settings STATUS/ADVANCED layout `342b446e` is code-complete but still requires native iOS build and device screenshots. Advanced maintenance commands remain unavailable; no band firmware or stored data modified.
 
