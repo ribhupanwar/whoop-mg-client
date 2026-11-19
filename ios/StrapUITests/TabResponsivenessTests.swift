@@ -28,7 +28,7 @@ final class TabResponsivenessTests: XCTestCase {
         }
         var durations: [Double] = []
         for _ in 0..<3 {
-            for tab in ["health", "train", "plan", "more", "home"] {
+            for tab in ["health", "humans", "more", "home"] {
                 let button = app.buttons["tab." + tab]
                 let start = Date()
                 button.tap()
