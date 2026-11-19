@@ -1234,45 +1234,47 @@ private struct WhoopBandBatteryIcon: View {
     let connected: Bool
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            // Curved housing, narrower than the previous glyph.
+        // Traced from the user's WHOOP battery reference. The right shoulder
+        // is intentionally interrupted by the connection dot; the central
+        // descending contour is separate from the exterior band silhouette.
+        ZStack(alignment: .topLeading) {
             Path { p in
-                p.move(to: CGPoint(x: 8, y: 1.5))
-                p.addLine(to: CGPoint(x: 16.5, y: 1.5))
-                p.addCurve(to: CGPoint(x: 16, y: 24), control1: CGPoint(x: 20, y: 7), control2: CGPoint(x: 19, y: 19))
-                p.addQuadCurve(to: CGPoint(x: 12.5, y: 26), control: CGPoint(x: 15, y: 26))
-                p.addLine(to: CGPoint(x: 5.5, y: 26))
-                p.addQuadCurve(to: CGPoint(x: 3, y: 22), control: CGPoint(x: 3, y: 26))
-                p.addCurve(to: CGPoint(x: 8, y: 1.5), control1: CGPoint(x: 1.5, y: 12), control2: CGPoint(x: 3.5, y: 2))
+                p.move(to: CGPoint(x: 8.1, y: 1.3))
+                p.addCurve(to: CGPoint(x: 17.0, y: 1.3),
+                           control1: CGPoint(x: 10.1, y: 0.8), control2: CGPoint(x: 14.6, y: 1.3))
+                p.move(to: CGPoint(x: 8.1, y: 1.3))
+                p.addCurve(to: CGPoint(x: 2.5, y: 20.8),
+                           control1: CGPoint(x: 3.5, y: 4.1), control2: CGPoint(x: 1.5, y: 15.2))
+                p.addCurve(to: CGPoint(x: 6.4, y: 26.6),
+                           control1: CGPoint(x: 3.0, y: 25.3), control2: CGPoint(x: 4.3, y: 26.6))
+                p.addLine(to: CGPoint(x: 15.0, y: 26.6))
+                p.addCurve(to: CGPoint(x: 19.4, y: 14.0),
+                           control1: CGPoint(x: 18.3, y: 26.6), control2: CGPoint(x: 19.4, y: 20.2))
             }
-            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.35, lineCap: .round, lineJoin: .round))
-            .frame(width: 20, height: 28)
+            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
 
-            // Inner vertical contour and the distinctive lower crossbar.
             Path { p in
-                p.move(to: CGPoint(x: 12, y: 2.5))
-                p.addCurve(to: CGPoint(x: 9.5, y: 21.5), control1: CGPoint(x: 8.5, y: 9), control2: CGPoint(x: 9, y: 16))
-                p.move(to: CGPoint(x: 4.8, y: 21))
-                p.addLine(to: CGPoint(x: 10.8, y: 21))
+                p.move(to: CGPoint(x: 16.9, y: 1.4))
+                p.addCurve(to: CGPoint(x: 13.1, y: 20.8),
+                           control1: CGPoint(x: 13.7, y: 6.8), control2: CGPoint(x: 12.2, y: 15.8))
+                p.addCurve(to: CGPoint(x: 14.5, y: 23.5),
+                           control1: CGPoint(x: 13.1, y: 22.3), control2: CGPoint(x: 13.7, y: 23.0))
+                p.move(to: CGPoint(x: 3.8, y: 20.6))
+                p.addLine(to: CGPoint(x: 9.6, y: 20.6))
             }
-            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.1, lineCap: .round))
-            .frame(width: 20, height: 28)
+            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.15, lineCap: .round, lineJoin: .round))
 
             if connected {
                 Circle()
                     .fill(Color(hex: 0x24E7A5))
-                    .frame(width: 5.5, height: 5.5)
-                    .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 0.8))
-                    .offset(x: 1, y: 3)
+                    .frame(width: 6.2, height: 6.2)
+                    .overlay(Circle().stroke(Color.appCanvasTop, lineWidth: 0.7))
+                    .offset(x: 16.8, y: 4.4)
             }
         }
-        // The source path is defined in a 21×28 coordinate space. Scale its
-        // entire silhouette (including the green connection dot) together,
-        // rather than changing individual control points and distorting it.
-        // Keep the compact icon independent of the genuine BLE percentage.
-        .frame(width: 21, height: 28)
+        .frame(width: 23, height: 28)
         .scaleEffect(0.86)
-        .frame(width: 18, height: 24)
+        .frame(width: 20, height: 24)
         .accessibilityHidden(true)
     }
 }
