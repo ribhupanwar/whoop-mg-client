@@ -403,7 +403,9 @@ final class StepDrivenDetectTests: XCTestCase {
         }
         let sessions = ActivityDetect.detect(first + pause + resumed + cooldown)
         XCTAssertEqual(sessions.count, 1)
-        XCTAssertEqual(sessions.first?.endUnix, 1019)
+        // At second 1020 the step counter reaches 1,918 (+2 delta); trailing
+        // stationary cooldown (1021..<1200) at 75 bpm must not extend the session.
+        XCTAssertEqual(sessions.first?.endUnix, 1020)
     }
 
     func testElevatedHeartRateCooldownDoesNotExtendMeasuredWalk() {
