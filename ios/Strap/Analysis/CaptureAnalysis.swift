@@ -247,20 +247,20 @@ enum DailyAnalysis {
             // Use the primary (longest) sleep session, so a low-HR nap cannot
             // change the overnight reference. RHR does not require R-R beats.
             let resting = sessions.max { $0.period.durationS < $1.period.durationS }?.rhr
-            let weightedHRV: Double? = {
-                let values = sessions.compactMap { session -> (Double, Double)? in
-                    guard let rmssd = session.hrv.rmssdMS,
-                          rmssd.isFinite, rmssd > 0 else { return nil }
-                    guard session.window >= 300, session.hrv.nnBeats >= 20 else { return nil }
-                    // Weight by the verified quiet R-R window, not time in bed.
-                    return (rmssd, Double(session.window))
-                }
-                let weight = values.reduce(0.0) { $0 + $1.1 }
-                guard weight > 0 else { return nil }
-                return values.reduce(0.0) { $0 + $1.0 * $1.1 } / weight
+            // Nightly recovery must use the same primary sleep session as RHR.
+            // Combining a daytime nap's RMSSD with overnight RMSSD changes the
+            // recovery reference even when the primary night is unchanged.
+            // Missing/invalid primary-session RR must remain missing: do not
+            // silently substitute a nap's otherwise valid HRV.
+            let primary = sessions.max { $0.period.durationS < $1.period.durationS }
+            let primaryRMSSD: Double? = {
+                guard let primary, let rmssd = primary.hrv.rmssdMS,
+                      rmssd.isFinite, rmssd > 0,
+                      primary.window >= 300, primary.hrv.nnBeats >= 20 else { return nil }
+                return rmssd
             }()
-            let nightlyLnRMSSD = weightedHRV.map { log($0) }
-            let nightlyWindowSeconds = sessions.reduce(0) { $0 + $1.window }
+            let nightlyLnRMSSD = primaryRMSSD.map { log($0) }
+            let nightlyWindowSeconds = primary?.window ?? 0
             let daySleep = sleepSessions.filter {
                 JournalStore.dayKey(
                     for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)),
