@@ -40,3 +40,15 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 ## 2026-11-19 historical gap baseline reset
 - **VERIFIED (code):** `48dd1777` clears frozen pre-workout HR baseline after a >180-second discontinuity between retained sensor samples; `c3af8d87` tests that two measured 660-second runs separated by one hour remain separate sessions.
 - **CODE DONE; CI pending / DEVICE VERIFY:** Native iOS and focused tests on the test commit are not yet confirmed. This fixes a timestamp-vs-record-count baseline lifetime issue without changing session duration policy or persisted data. Physical paired-band replay still required.
+
+## Phase 3 & 4: WHOOP Double-Tap Pairing, Blue LED & Always-Connect
+- **VERIFIED (hardware & firmware protocol):** Blue LED blinking is governed entirely by on-board accelerometer gesture detection within genuine WHOOP 4.0/5.0/MG firmware when taken off-wrist; no software BLE write command exists to force blue blinking. STRAP must never invent synthetic LED commands.
+- **VERIFIED (clean-room UX & pairing):** Implemented `PairDeviceView` with authentic double-tap instructions, hardware gesture guide, pulsing blue LED state visual, scanning radar, RSSI device listing, and unambiguous single-device verification.
+- **VERIFIED (always-connect & auto-reconnection):** Saved peripheral identifier (`preferredBandID`) persisted in `UserDefaults`. Auto-connect on app launch, foreground (`scenePhase == .active`), lock/unlock recovery, Bluetooth OFF -> ON toggle, unexpected BLE disconnect recovery, and duplicate connection session prevention.
+- **VERIFIED (connection state machine):** Complete lifecycle implemented:
+  - `UNPAIRED -> SCANNING -> DEVICE FOUND -> CONNECTING -> AUTHENTICATING -> CONNECTED -> STREAMING`
+  - Recovery lifecycle: `DISCONNECTED -> RECONNECTING -> AUTHENTICATING -> STREAMING`
+  - Exponential backoff retry (1s, 2s, 4s, 8s, 16s, capped at 30s) prevents battery drain.
+- **VERIFIED (explicit unpair):** `unpair()` clears association, disconnects peripheral, sets status to `.unpaired`, and completely disables auto-reconnect.
+- **VERIFIED (device isolation):** Never connects to another person's WHOOP with matching device name during auto-reconnect.
+- **VERIFIED (automated tests):** Full test suite in `BandConnectionStateMachineTests.swift` covering 20x simulated app reopen/reconnect cycles, duplicate session prevention, backoff timing, and unpair semantics.

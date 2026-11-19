@@ -237,9 +237,9 @@ struct HomeView: View {
                 }
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), device settings")
             .accessibilityHint("Opens band status and advanced information")
-            .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), \(store.band.isConnected ? "connected" : "disconnected")")
 
         }
         .padding(.bottom, 10)

@@ -3,35 +3,54 @@ import CoreBluetooth
 import Foundation
 
 enum BandStatus: Equatable {
+    case unpaired
     case idle
     case poweredOff
     case unauthorized
     case unsupported
     case scanning
+    case deviceFound(String)
     case connecting(String)
     case authenticating
+    case connected(String)
+    case streaming(bpm: Int)
     case draining
     case ready
+    case disconnected(String)
+    case reconnecting(attempt: Int)
     case failed(String)
 
     var title: String {
         switch self {
+        case .unpaired: return "No band paired — tap Pair a Device"
         case .idle: return "Not connected"
         case .poweredOff: return "Bluetooth is off"
         case .unauthorized: return "Bluetooth permission denied"
         case .unsupported: return "Bluetooth LE unsupported"
-        case .scanning: return "Searching for your strap…"
-        case .connecting: return "Connecting…"
+        case .scanning: return "Searching for your WHOOP band…"
+        case .deviceFound(let name): return "Found \(name)"
+        case .connecting(let name): return "Connecting to \(name)…"
         case .authenticating: return "Pairing — accept the Bluetooth prompt"
+        case .connected(let name): return "Connected to \(name)"
+        case .streaming(let bpm): return "Streaming live (\(bpm) BPM)"
         case .draining: return "Reading stored history…"
         case .ready: return "Connected"
+        case .disconnected(let message): return "Disconnected (\(message))"
+        case .reconnecting(let attempt): return "Reconnecting (attempt \(attempt))…"
         case .failed(let message): return message
         }
     }
 
     var isConnected: Bool {
         switch self {
-        case .authenticating, .draining, .ready: return true
+        case .authenticating, .connected, .streaming, .draining, .ready: return true
+        default: return false
+        }
+    }
+
+    var isReady: Bool {
+        switch self {
+        case .ready, .connected, .streaming: return true
         default: return false
         }
     }
@@ -431,6 +450,9 @@ final class BandLink: NSObject, ObservableObject {
         lastHistorySyncAt = UserDefaults.standard.object(forKey: "strap.history.lastComplete.v1") as? Date
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
+        if preferredBandID == nil {
+            status = .unpaired
+        }
         applySavedSleepBounds()
         central = CBCentralManager(delegate: self, queue: nil,
             options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
@@ -743,7 +765,7 @@ final class BandLink: NSObject, ObservableObject {
             mergeHistoricalArchive([]) { [weak self] in
                 self?.recalculateRetainedMetrics()
             }
-        } else if status == .ready, isConnected,
+        } else if status.isReady, isConnected,
                   HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: lastSyncAttempt, foreground: true) {
             readHistory()
         }
@@ -912,6 +934,7 @@ final class BandLink: NSObject, ObservableObject {
             bandName = band.name
             discoveredBands = []
             discoveredPeripherals = [:]
+            status = liveHeartRate != nil ? .streaming(bpm: liveHeartRate!) : .connected(band.name)
             return
         }
 
@@ -939,6 +962,102 @@ final class BandLink: NSObject, ObservableObject {
         preferredBandName = nil
         UserDefaults.standard.removeObject(forKey: Keys.preferredBandID)
         UserDefaults.standard.removeObject(forKey: Keys.preferredBandName)
+    }
+
+    /// Explicit unpair clears the saved association, terminates any active connection,
+    /// and completely disables automatic reconnection until a new device is paired.
+    func unpair() {
+        wantsConnection = false
+        forgetPreferredBand()
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        reconnectAttempt = 0
+        if let peripheral {
+            central.cancelPeripheralConnection(peripheral)
+        }
+        resetLink()
+        stopPicker()
+        status = .unpaired
+        lastMessage = "Band unpaired. Double-tap your WHOOP to enter pairing mode when ready to pair."
+    }
+
+    /// Automatically restore and maintain connection to the saved WHOOP band without manual taps.
+    func autoConnectIfNeeded() {
+        guard let id = preferredBandID, !id.isEmpty else {
+            if peripheral == nil && status != .scanning {
+                status = .unpaired
+            }
+            return
+        }
+        wantsConnection = true
+
+        // 1. If already connected, refresh telemetry, ensure streams, and prevent duplicate sessions
+        if let peripheral, peripheral.state == .connected {
+            refreshBattery()
+            ensureHeartRateStream()
+            if status != .draining && status != .authenticating {
+                if let bpm = liveHeartRate {
+                    status = .streaming(bpm: bpm)
+                } else {
+                    status = .connected(bandName ?? preferredBandName ?? "WHOOP MG")
+                }
+            }
+            return
+        }
+
+        // 2. If already in flight, reuse existing connection attempt
+        if let peripheral, peripheral.state == .connecting {
+            return
+        }
+
+        // 3. Central check
+        guard central.state == .poweredOn else {
+            if central.state == .poweredOff { status = .poweredOff }
+            return
+        }
+
+        // 4. Reset retry counter and attempt immediate reconnect
+        reconnectWork?.cancel()
+        reconnectWork = nil
+        reconnectAttempt = 0
+        reconnectSavedPeripheralOrScan()
+    }
+
+    /// Dedicated WHOOP pairing scan triggered by "Pair a Device" flow.
+    func startPairingScan() {
+        guard central.state == .poweredOn else {
+            lastMessage = status.title
+            return
+        }
+        stopPicker()
+        pickerMode = true
+        isFindingBands = true
+        wantsConnection = true
+        discoveredBands = []
+        discoveredPeripherals = [:]
+        status = .scanning
+        central.scanForPeripherals(
+            withServices: nil,
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
+        )
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.isFindingBands else { return }
+            self.isFindingBands = false
+            self.pickerMode = false
+            self.central.stopScan()
+            if self.discoveredBands.isEmpty {
+                self.lastMessage = "No WHOOP bands found. Double-tap your band until the side LED blinks blue to enter pairing mode."
+            }
+        }
+        pickerTimeout = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+    }
+
+    func stopPairingScan() {
+        stopPicker()
+        if !isConnected && preferredBandID == nil {
+            status = .unpaired
+        }
     }
 
     private func stopPicker() {
@@ -1076,7 +1195,7 @@ final class BandLink: NSObject, ObservableObject {
     private func beginScan() {
         guard central.state == .poweredOn else { return }
         switch status {
-        case .ready, .draining, .authenticating: return
+        case .ready, .connected, .streaming, .draining, .authenticating: return
         default: break
         }
         if let peripheral, peripheral.state == .connected || peripheral.state == .connecting {
@@ -1099,15 +1218,16 @@ final class BandLink: NSObject, ObservableObject {
                let saved = self.central.retrievePeripherals(withIdentifiers: [uuid]).first {
                 saved.delegate = self
                 self.peripheral = saved
-                self.status = .connecting(self.preferredBandName ?? saved.name ?? "Saved strap")
+                self.status = .connecting(self.preferredBandName ?? saved.name ?? "Saved WHOOP")
                 self.central.connect(saved, options: nil)
-            } else {
-                self.status = .failed("No strap found. Keep Bluetooth enabled and use Find another band if needed.")
+            } else if self.wantsConnection && self.preferredBandID != nil {
                 self.scheduleReconnect()
+            } else {
+                self.status = .failed("No WHOOP band found. Keep Bluetooth enabled and use Pair a Device if needed.")
             }
         }
         scanTimeout = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 20, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: work)
     }
 
     /// A pending CoreBluetooth connect survives iOS suspension, unlike a
@@ -1121,7 +1241,7 @@ final class BandLink: NSObject, ObservableObject {
            let saved = central.retrievePeripherals(withIdentifiers: [uuid]).first {
             saved.delegate = self
             peripheral = saved
-            status = .connecting(preferredBandName ?? saved.name ?? "Saved strap")
+            status = .connecting(preferredBandName ?? saved.name ?? "Saved WHOOP")
             central.connect(saved, options: nil)
             return
         }
@@ -1132,14 +1252,18 @@ final class BandLink: NSObject, ObservableObject {
         guard wantsConnection, central.state == .poweredOn else { return }
         reconnectWork?.cancel()
         reconnectAttempt = min(reconnectAttempt + 1, 6)
-        if reconnectAttempt >= 3, let peripheral, peripheral.state == .disconnected {
-            // Leave an outstanding connection for iOS to complete on re-advertisement.
-            peripheral.delegate = self
-            status = .connecting(preferredBandName ?? peripheral.name ?? "Saved strap")
-            central.connect(peripheral, options: nil)
-            return
+        status = .reconnecting(attempt: reconnectAttempt)
+        if reconnectAttempt >= 3 {
+            let target = peripheral ?? (preferredBandID.flatMap { UUID(uuidString: $0) }.flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first })
+            if let target, target.state == .disconnected {
+                self.peripheral = target
+                target.delegate = self
+                status = .connecting(preferredBandName ?? target.name ?? "Saved WHOOP")
+                central.connect(target, options: nil)
+                return
+            }
         }
-        let delay = min(30.0, Double(1 << reconnectAttempt))
+        let delay = min(30.0, Double(1 << min(reconnectAttempt, 5)))
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.wantsConnection, self.central.state == .poweredOn else { return }
             self.reconnectSavedPeripheralOrScan()
@@ -1243,7 +1367,7 @@ final class BandLink: NSObject, ObservableObject {
     private func armAutomaticSync() {
         guard automaticSyncTimer == nil else { return }
         let timer = Timer(timeInterval: HistorySyncPolicy.periodicSeconds, repeats: true) { [weak self] _ in
-            guard let self, self.status == .ready, self.isConnected,
+            guard let self, self.status.isReady, self.isConnected,
                   !self.isSavingHistory, !self.isAnalyzingHistory,
                   HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: self.lastSyncAttempt,
                                                emptyStreak: self.emptySyncStreak) else { return }
@@ -1553,7 +1677,11 @@ final class BandLink: NSObject, ObservableObject {
         if !completed && !continueBacklog {
             historySyncError = "History sync stopped (\(reason)). Saved data is safe; retry to fetch the remaining records."
         }
-        status = .ready
+        if let bpm = liveHeartRate {
+            status = .streaming(bpm: bpm)
+        } else {
+            status = .ready
+        }
         ensureHeartRateStream()
         armAutomaticSync()
 
@@ -1585,7 +1713,7 @@ final class BandLink: NSObject, ObservableObject {
             if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
             self.recalculateRetainedMetrics()
             if continueBacklog, self.historySyncGeneration == generation,
-               self.status == .ready, self.isConnected, self.drainStartedAt == nil {
+               self.status.isReady, self.isConnected, self.drainStartedAt == nil {
                 self.continuationAttempts += 1
                 self.continuationFrontier = newest
                 self.startDraining(continuing: true)
@@ -1738,6 +1866,13 @@ final class BandLink: NSObject, ObservableObject {
             type40HRPackets += 1
             staleHRReconnects = 0
             liveHeartRate = bpm
+            if case .connected = status {
+                status = .streaming(bpm: bpm)
+            } else if case .ready = status {
+                status = .streaming(bpm: bpm)
+            } else if case .streaming = status {
+                status = .streaming(bpm: bpm)
+            }
             recordLiveHR(bpm)
             lastLiveHRAt = Date()
             liveHRNotificationCount += 1
@@ -1809,6 +1944,13 @@ final class BandLink: NSObject, ObservableObject {
                                        connected: isConnected, now: Date()) == nil else { return }
         staleHRReconnects = 0
         liveHeartRate = reading.heartRate
+        if case .connected = status {
+            status = .streaming(bpm: reading.heartRate)
+        } else if case .ready = status {
+            status = .streaming(bpm: reading.heartRate)
+        } else if case .streaming = status {
+            status = .streaming(bpm: reading.heartRate)
+        }
         recordLiveHR(reading.heartRate)
         lastLiveHRAt = Date()
         liveHRNotificationCount += 1
@@ -1862,7 +2004,7 @@ extension BandLink: CBCentralManagerDelegate {
                 wantsConnection = true
                 reconnectSavedPeripheralOrScan()
             } else {
-                status = .idle
+                status = preferredBandID == nil ? .unpaired : .idle
             }
         case .poweredOff:
             if pickerMode {
@@ -1896,10 +2038,12 @@ extension BandLink: CBCentralManagerDelegate {
         let hasGen5Service = services.contains(BandUUID.service)
             || overflowServices.contains(BandUUID.service)
             || serviceData.keys.contains(BandUUID.service)
+        let hasStandardHR = services.contains(BandUUID.heartRateService)
+            || overflowServices.contains(BandUUID.heartRateService)
         let advertisedName = (advertisementData[CBAdvertisementDataLocalNameKey] as? String) ?? ""
         let named = (peripheral.name ?? "").lowercased().contains("whoop")
             || advertisedName.lowercased().contains("whoop")
-        guard hasGen5Service || named else { return }
+        guard hasGen5Service || hasStandardHR || named else { return }
 
         let identifier = peripheral.identifier.uuidString
         let name = !advertisedName.isEmpty ? advertisedName
@@ -1916,8 +2060,11 @@ extension BandLink: CBCentralManagerDelegate {
             )
         )
 
-        // The picker only lists sightings; the user taps the band to connect.
-        if pickerMode { return }
+        // The picker/pairing flow only lists sightings; the user taps the band to connect.
+        if pickerMode {
+            status = .deviceFound(name)
+            return
+        }
         // With a saved band, ignore the other strap even if it advertises first.
         if let preferredBandID, identifier != preferredBandID { return }
         // A duplicate advertisement can arrive after connect was requested.
@@ -2001,10 +2148,12 @@ extension BandLink: CBCentralManagerDelegate {
         isLiveSession = false
         sessionStartedUnix = nil
         liveSamples = []
-        status = .failed(
-            error.map { "Disconnected: \($0.localizedDescription)" } ?? "Strap disconnected"
+        status = .disconnected(
+            error.map { $0.localizedDescription } ?? "Strap disconnected"
         )
-        scheduleReconnect()
+        if wantsConnection || preferredBandID != nil {
+            scheduleReconnect()
+        }
     }
 }
 
@@ -2203,13 +2352,14 @@ extension BandLink: CBPeripheralDelegate {
                 peripheral.setNotifyValue(false, for: hr)
             }
             hrSubscribedBeforeBond = false
-            status = .authenticating
+            status = .connected(bandName ?? "WHOOP MG")
             let generation = linkGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }
                 self.beginDrainRequests()
                 self.ensureHeartRateStream()
                 self.syncWakeAlarm(force: true)
+                self.refreshBattery()
             }
         }
     }

@@ -117,6 +117,7 @@ final class AppStore: ObservableObject {
                 await self?.activateHealthKit(exportBacklog: true)
             }
         }
+        band.autoConnectIfNeeded()
     }
 
     /// A drain can report the same session twice; the store merges overlaps,
@@ -183,6 +184,10 @@ final class AppStore: ObservableObject {
         band.connect(
             sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours
         )
+    }
+
+    func unpairBand() {
+        band.unpair()
     }
 
     // MARK: - Activities

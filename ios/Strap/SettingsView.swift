@@ -18,6 +18,7 @@ struct SettingsView: View {
     @State private var whoopFrom = Calendar.current.date(byAdding: .day, value: -30, to: Date())!
     @State private var whoopThrough = Date()
     @State private var whoopImportStatus = "No WHOOP file imported"
+    @State private var showPairingSheet = false
 
     var body: some View {
         Screen {
@@ -35,6 +36,10 @@ struct SettingsView: View {
         }
         .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(isPresented: $showPairingSheet) {
+            PairDeviceView()
+                .environmentObject(store)
+        }
         .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.zip, .commaSeparatedText, .plainText], onCompletion: importWhoopFile)
         .onAppear {
             weightText = store.settings.weightKG.map { String(format: "%g", $0) } ?? ""
@@ -181,7 +186,18 @@ struct SettingsView: View {
 
     private var strapPanel: some View {
         Panel {
-            SectionTitle("Strap")
+            HStack {
+                SectionTitle("Strap")
+                Spacer()
+                NavigationLink { DeviceSettingsView() } label: {
+                    HStack(spacing: 4) {
+                        Text("Device Settings")
+                        Image(systemName: "chevron.right")
+                    }
+                    .font(StrapTypography.body(11, weight: .semibold))
+                    .foregroundStyle(Color.appAccent)
+                }
+            }
             HStack(spacing: 10) {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.band.bandName ?? store.band.preferredBandName ?? "WHOOP MG")
@@ -208,19 +224,18 @@ struct SettingsView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
 
             HStack(spacing: 12) {
-                Button(store.band.isFindingBands ? "Searching…" : "PAIR A DEVICE") {
-                    store.band.findBands()
+                Button("Pair a Device") {
+                    showPairingSheet = true
                 }
-                .font(StrapTypography.body(12, weight: .medium))
+                .font(StrapTypography.body(12, weight: .bold))
                 .foregroundStyle(Color.appAccent)
-                .disabled(store.band.isFindingBands)
 
                 Spacer()
 
                 if store.band.preferredBandID != nil {
-                    Button("Forget saved band") { store.band.forgetPreferredBand() }
+                    Button("Unpair Device") { store.unpairBand() }
                         .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
+                        .foregroundStyle(Color.appHigh)
                 }
             }
             .padding(.top, 8)

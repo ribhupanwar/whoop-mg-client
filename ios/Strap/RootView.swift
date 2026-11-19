@@ -109,11 +109,13 @@ struct RootView: View {
                 // Count app launches even when returning to Health, Train, Plan or More.
                 AppOpenDayTracker.recordOpen()
                 store.band.resumeHistoryProcessing()
+                store.band.autoConnectIfNeeded()
             }
             else { store.band.persistLiveRRArchive(force: true) }
         }
         .onAppear {
             AppOpenDayTracker.recordOpen()
+            store.band.autoConnectIfNeeded()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
             if args.contains("--preview-health-monitor") { homePath = [.health] }

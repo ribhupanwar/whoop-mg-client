@@ -73,8 +73,8 @@ struct MoreView: View {
 
                     Divider().background(Color.appLine)
 
-                    NavigationLink { SettingsView() } label: {
-                        moreRow("DEVICE SETTINGS", subtitle: "\(store.band.bandName ?? "STRAP Band") · \(store.band.isConnected ? "Connected" : "Disconnected")", icon: "radiowaves.right")
+                    NavigationLink { DeviceSettingsView() } label: {
+                        moreRow("DEVICE SETTINGS", subtitle: "\(store.band.bandName ?? store.band.preferredBandName ?? "STRAP Band") · \(store.band.isConnected ? "Connected" : (store.band.preferredBandID == nil ? "Not Paired" : "Disconnected"))", icon: "radiowaves.right")
                     }
                     .buttonStyle(.plain)
 
