@@ -341,13 +341,13 @@ private struct HumansView: View {
                                 Text("PEAK STRAIN")
                                     .font(StrapTypography.body(10, weight: .bold))
                                     .foregroundStyle(Color.appMuted)
-                                Text(store.band.days.map(\.strain).compactMap { $0 }.max().map { String(format: "%.1f", $0) } ?? "—")
+                                Text(store.band.days.compactMap(\.strain).max().map { String(format: "%.1f", $0) } ?? (store.isPreview ? String(format: "%.1f", SampleData.strain) : "—"))
                                     .font(StrapTypography.metric(22, weight: .bold))
                                     .foregroundStyle(Color.appAccent)
                             }
                             Spacer()
                             VStack(alignment: .trailing, spacing: 2) {
-                                Text("PEAK RECOVERY")
+                                Text("RECOVERY SCORE")
                                     .font(StrapTypography.body(10, weight: .bold))
                                     .foregroundStyle(Color.appMuted)
                                 Text(peakRecoveryText)

@@ -608,7 +608,6 @@ struct SleepAnalysisView: View {
                 .font(StrapTypography.body(12, weight: .medium))
             }
             Divider().overlay(Color.appLine).padding(.top, 2)
-            let restorative = (minutes[.deep] ?? 0) + (minutes[.rem] ?? 0)
             HStack {
                 RoundedRectangle(cornerRadius: 2)
                     .fill(LinearGradient(colors: [SleepStage.deep.color, SleepStage.rem.color],
