@@ -24,6 +24,7 @@
 - [ ] Verify manual start/end edits restage from retained sensor data and persist after relaunch.
 - [ ] Verify Sleep Performance, Sleep Consistency, Efficiency and Recovery-dependent outputs recalculate from corrected bounds, or abstain when coverage is insufficient.
 
+- [ ] **VERIFY (CI/device, 2026-11-19):** `ff208072` preserves physiologically quiet post-bathroom band-up tails instead of forcing wake stages. Native iOS run [44452935076](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44452935076) failed one stale assertion in `SleepBandStateIndependenceTests` (530 unit tests, 1 failure; three UI tests passed), while protocol run [44452935075](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44452935075) passed. `2c0ad63` updates the regression to distinguish a quiet latched five-minute up hint from five minutes of corroborated dynamic wrist motion. Native CI for this test correction and real-device wake/stage accuracy remain VERIFY; do not claim sleep accuracy is fixed.\n
 ## Batch 3 — Health and sensor accuracy
 - [ ] Validate Type-40 and V18 RR units/offsets against timestamped CRC-checked WHOOP BLE captures and an independent beat reference.
 - [ ] Validate V20/V21/V26 record handling using real fixtures; no automatic persistent R22 writes.
