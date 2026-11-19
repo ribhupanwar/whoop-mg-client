@@ -264,7 +264,7 @@ struct DashboardView: View {
             let earlier = store.band.days
                 .filter { $0.dateKey < key && $0.lnRMSSD != nil && $0.restingHR != nil }
                 .sorted { $0.dateKey < $1.dateKey }
-            let baseline = DailyAnalysis.baseline(from: Array(earlier.suffix(30)))
+            let baseline = DailyAnalysis.baseline(from: Array(earlier.suffix(DailyAnalysis.rollingBaselineDays)))
             let local = store.band.days.first { $0.dateKey == key }
             let result = Recovery.score(
                 lnRMSSD: local?.lnRMSSD,

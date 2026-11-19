@@ -608,7 +608,7 @@ final class BandLink: NSObject, ObservableObject {
                 byDay[day.dateKey] = day
             }
             let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
-            let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(30)))
+            let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(DailyAnalysis.rollingBaselineDays)))
             let sleepWindows = (fresh.sleepSessions ?? []).map { (start: $0.startUnix, end: $0.endUnix - 1) }
             let excluded = sleepWindows + fresh.activities.map { (start: $0.startUnix, end: $0.endUnix) }
             fresh.awakeStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
@@ -621,7 +621,7 @@ final class BandLink: NSObject, ObservableObject {
                 freshDays.first(where: { $0.dateKey == day.dateKey }) ?? day
             }.suffix(14)).compactMap(\.night)
             let sleepBaseline = DailyAnalysis.baseline(
-                from: Array(allDays.filter { $0.state == "sleep" }.suffix(30))
+                from: Array(allDays.filter { $0.state == "sleep" }.suffix(DailyAnalysis.rollingBaselineDays))
             )
             let report = fresh.latestSleepSession.flatMap {
                 SleepReport.analyze(
@@ -693,16 +693,16 @@ final class BandLink: NSObject, ObservableObject {
     var isConnected: Bool { peripheral?.state == .connected }
 
     var baseline: Baseline? {
-        DailyAnalysis.baseline(from: Array(days.suffix(30)))
+        DailyAnalysis.baseline(from: Array(days.suffix(DailyAnalysis.rollingBaselineDays)))
     }
 
     /// Stress uses verified awake-quiet windows; overnight HRV is a separate baseline.
     var awakeBaseline: Baseline? {
-        DailyAnalysis.awakeBaseline(from: Array(days.suffix(30)))
+        DailyAnalysis.awakeBaseline(from: Array(days.suffix(DailyAnalysis.rollingBaselineDays)))
     }
 
     var sleepBaseline: Baseline? {
-        DailyAnalysis.baseline(from: Array(days.filter { $0.state == "sleep" }.suffix(30)))
+        DailyAnalysis.baseline(from: Array(days.filter { $0.state == "sleep" }.suffix(DailyAnalysis.rollingBaselineDays)))
     }
 
     var recentNights: [NightSpan] {
@@ -790,7 +790,7 @@ final class BandLink: NSObject, ObservableObject {
             rhr: night?.restingHR,
             sleepHours: night?.reliableSleepHours,
             sleepNeedHours: needHours,
-            baseline: DailyAnalysis.baseline(from: Array(days.filter { $0.dateKey < (nightKey ?? "") }.suffix(30)))
+            baseline: DailyAnalysis.baseline(from: Array(days.filter { $0.dateKey < (nightKey ?? "") }.suffix(DailyAnalysis.rollingBaselineDays)))
         )
     }
 

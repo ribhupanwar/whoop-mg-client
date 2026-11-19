@@ -156,6 +156,9 @@ struct CaptureSummary: Codable, Equatable {
 
 /// Per-local-day metrics, the input a personal baseline is built from.
 enum DailyAnalysis {
+    /// Canonical rolling baseline window discovered from WHOOP `GetRestingHeartRateBaselineRequest` (`0x1099623a0`).
+    /// WHOOP evaluates baseline statistics over a rolling buffer of 28 eligible days.
+    static let rollingBaselineDays = 28
     static func metrics(
         from samples: [V18Sample],
         sex: Sex,

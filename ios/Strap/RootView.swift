@@ -283,7 +283,7 @@ private struct HumansView: View {
         let days = store.band.days.sorted { $0.dateKey < $1.dateKey }
         let values = days.enumerated().compactMap { index, day -> Double? in
             let baseline = DailyAnalysis.baseline(
-                from: Array(days.prefix(index).suffix(30))
+                from: Array(days.prefix(index).suffix(DailyAnalysis.rollingBaselineDays))
             )
             return Recovery.score(
                 lnRMSSD: day.lnRMSSD,

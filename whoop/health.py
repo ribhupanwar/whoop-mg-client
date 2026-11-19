@@ -74,6 +74,7 @@ STRAIN_SCALE_TRIMP = 150.0
 STRAIN_MAX = 21.0
 
 MIN_BASELINE_DAYS = 7
+ROLLING_BASELINE_DAYS = 28  # Canonical WHOOP rolling baseline window (0x1099623a0)
 RECOVERY_WEIGHTS = {"hrv": 0.5, "rhr": 0.2, "sleep": 0.3}
 
 STRESS_MAX = 3.0
