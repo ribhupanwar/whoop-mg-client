@@ -287,7 +287,7 @@ private struct HumansView: View {
                 lnRMSSD: day.lnRMSSD,
                 rhr: day.restingHR,
                 sleepHours: day.reliableSleepHours,
-                sleepNeedHours: store.band.needHours,
+                sleepNeedHours: store.settings.sleepNeedHours,
                 baseline: baseline
             ).score
         }
