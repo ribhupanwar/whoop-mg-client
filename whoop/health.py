@@ -39,6 +39,7 @@ from the strap alone. What is here instead:
 import math
 import statistics
 from dataclasses import dataclass
+from enum import IntEnum
 
 from .records import (
     MAX_RR_MS,
@@ -249,6 +250,14 @@ class Baseline:
         )
 
 
+class RecoveryLevel(IntEnum):
+    HIGH_RECOVERY = 0    # Green (raw score > 66.0, displaying >= 67%)
+    MEDIUM_RECOVERY = 1  # Yellow (33.0 < score <= 66.0, displaying 34% - 66%)
+    LOW_RECOVERY = 2     # Red (raw score <= 33.0, displaying <= 33%)
+    CALIBRATING = 3      # Insufficient baseline (< 7 days)
+    DEAD_END = 4         # Missing / invalid data
+
+
 @dataclass
 class RecoveryResult:
     score: float | None
@@ -258,14 +267,26 @@ class RecoveryResult:
     sleep_component: float | None = None
 
     @property
-    def band(self) -> str:
+    def level(self) -> RecoveryLevel:
         if self.score is None:
-            return "unavailable"
-        if self.score >= 67:
+            if self.reason and "baseline" in self.reason.lower():
+                return RecoveryLevel.CALIBRATING
+            return RecoveryLevel.DEAD_END
+        if self.score > 66.0:
+            return RecoveryLevel.HIGH_RECOVERY
+        if self.score > 33.0:
+            return RecoveryLevel.MEDIUM_RECOVERY
+        return RecoveryLevel.LOW_RECOVERY
+
+    @property
+    def band(self) -> str:
+        if self.level == RecoveryLevel.HIGH_RECOVERY:
             return "green"
-        if self.score >= 34:
+        if self.level == RecoveryLevel.MEDIUM_RECOVERY:
             return "yellow"
-        return "red"
+        if self.level == RecoveryLevel.LOW_RECOVERY:
+            return "red"
+        return "unavailable"
 
 
 def _logistic(z: float) -> float:

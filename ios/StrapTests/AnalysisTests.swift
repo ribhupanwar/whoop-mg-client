@@ -1196,6 +1196,39 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(result.score!, 65.0, accuracy: 1e-6)
     }
 
+    func testRecoveryLevelCanonicalBoundaries() {
+        // 5-case enum matching 0x10a0f2874 and raw float boundaries 0x100041d3c
+        let cal = RecoveryResult(score: nil, reason: "needs at least 7 days of baseline",
+                                 hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
+        XCTAssertEqual(cal.level, .calibrating)
+        XCTAssertEqual(cal.band, "unavailable")
+
+        let dead = RecoveryResult(score: nil, reason: "needs HRV and resting HR",
+                                  hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
+        XCTAssertEqual(dead.level, .deadEnd)
+        XCTAssertEqual(dead.band, "unavailable")
+
+        let red = RecoveryResult(score: 33.0, reason: nil,
+                                 hrvComponent: 33.0, rhrComponent: 33.0, sleepComponent: 33.0)
+        XCTAssertEqual(red.level, .lowRecovery)
+        XCTAssertEqual(red.band, "red")
+
+        let yellowLower = RecoveryResult(score: 33.001, reason: nil,
+                                         hrvComponent: 34.0, rhrComponent: 34.0, sleepComponent: 34.0)
+        XCTAssertEqual(yellowLower.level, .mediumRecovery)
+        XCTAssertEqual(yellowLower.band, "yellow")
+
+        let yellowUpper = RecoveryResult(score: 66.0, reason: nil,
+                                         hrvComponent: 66.0, rhrComponent: 66.0, sleepComponent: 66.0)
+        XCTAssertEqual(yellowUpper.level, .mediumRecovery)
+        XCTAssertEqual(yellowUpper.band, "yellow")
+
+        let green = RecoveryResult(score: 66.001, reason: nil,
+                                   hrvComponent: 67.0, rhrComponent: 67.0, sleepComponent: 67.0)
+        XCTAssertEqual(green.level, .highRecovery)
+        XCTAssertEqual(green.band, "green")
+    }
+
     func testStressIndexCountsDeviationsBelowTheNorm() {
         let baseline = steadyBaseline()
         XCTAssertEqual(Recovery.stressIndex(lnRMSSD: 4.0, baseline: baseline).index, 0.0)

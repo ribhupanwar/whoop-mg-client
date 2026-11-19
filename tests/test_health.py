@@ -5,6 +5,7 @@ import unittest
 
 from whoop.health import (
     Baseline,
+    RecoveryLevel,
     RecoveryResult,
     SLEEP_DEBT_CAP_H,
     SLEEP_DEBT_WINDOW_NIGHTS,
@@ -199,6 +200,16 @@ class TestRecovery(unittest.TestCase):
             for rhr in (40.0, 55.0, 75.0):
                 result = recovery_score(ln, rhr, 8.0, 8.0, baseline())
                 self.assertTrue(0.0 <= result.score <= 100.0)
+
+    def test_recovery_level_canonical_boundaries(self):
+        # 5-case enum matching 0x10a0f2874 and raw float boundaries 0x100041d3c
+        self.assertEqual(RecoveryResult(None, "needs baseline").level, RecoveryLevel.CALIBRATING)
+        self.assertEqual(RecoveryResult(None, "needs HRV").level, RecoveryLevel.DEAD_END)
+        self.assertEqual(RecoveryResult(33.0, None).level, RecoveryLevel.LOW_RECOVERY)
+        self.assertEqual(RecoveryResult(33.0001, None).level, RecoveryLevel.MEDIUM_RECOVERY)
+        self.assertEqual(RecoveryResult(66.0, None).level, RecoveryLevel.MEDIUM_RECOVERY)
+        self.assertEqual(RecoveryResult(66.0001, None).level, RecoveryLevel.HIGH_RECOVERY)
+        self.assertEqual(RecoveryResult(100.0, None).level, RecoveryLevel.HIGH_RECOVERY)
 
 
 class TestStress(unittest.TestCase):

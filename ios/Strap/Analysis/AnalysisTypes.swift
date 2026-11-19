@@ -227,6 +227,16 @@ struct Baseline: Codable, Equatable {
     }
 }
 
+/// Canonical WHOOP Recovery tiers identified from binary type descriptor `0x10a0f2874`
+/// and presentation boundaries `-[WHPTheme recoveryColorForRecoveryScore:]` at `0x100041d3c`.
+public enum RecoveryLevel: Int, Codable {
+    case highRecovery   = 0  // Green (raw score > 66.0, displaying >= 67%)
+    case mediumRecovery = 1  // Yellow (33.0 < score <= 66.0, displaying 34% - 66%)
+    case lowRecovery    = 2  // Red (raw score <= 33.0, displaying <= 33%)
+    case calibrating    = 3  // Insufficient baseline (< 7 days)
+    case deadEnd        = 4  // Missing / invalid data
+}
+
 struct RecoveryResult: Codable, Equatable {
     let score: Double?
     let reason: String?
@@ -234,11 +244,25 @@ struct RecoveryResult: Codable, Equatable {
     let rhrComponent: Double?
     let sleepComponent: Double?
 
+    var level: RecoveryLevel {
+        guard let score else {
+            if let reason, reason.lowercased().contains("baseline") {
+                return .calibrating
+            }
+            return .deadEnd
+        }
+        if score > 66.0 { return .highRecovery }
+        if score > 33.0 { return .mediumRecovery }
+        return .lowRecovery
+    }
+
     var band: String {
-        guard let score else { return "unavailable" }
-        if score >= 67 { return "green" }
-        if score >= 34 { return "yellow" }
-        return "red"
+        switch level {
+        case .highRecovery: return "green"
+        case .mediumRecovery: return "yellow"
+        case .lowRecovery: return "red"
+        case .calibrating, .deadEnd: return "unavailable"
+        }
     }
 }
 
