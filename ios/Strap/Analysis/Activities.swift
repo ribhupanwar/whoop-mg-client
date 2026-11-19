@@ -61,7 +61,9 @@ enum ActivityDetect {
         let baselines = baselineHRs(ordered)
 
         var flags: [Bool] = []
+        var measuredMotion: [Bool] = []
         flags.reserveCapacity(ordered.count)
+        measuredMotion.reserveCapacity(ordered.count)
         for (index, sample) in ordered.enumerated() {
             let gait = sample.activityClass
             let locomotion: Bool
@@ -70,7 +72,7 @@ enum ActivityDetect {
             // With a reported still gait, require *recent* counter movement:
             // the trailing 60-second rate otherwise extends runs into cooldown.
             let recentSteps: Bool
-            if gait == gaitStill, index > 0,
+            if index > 0,
                let current = sample.stepCounter,
                let previous = ordered[index - 1].stepCounter {
                 let elapsed = sample.unix - ordered[index - 1].unix
@@ -89,6 +91,7 @@ enum ActivityDetect {
             } else {
                 elevated = false
             }
+            measuredMotion.append(locomotion)
             flags.append(locomotion || elevated)
         }
         let closed = GapClosing.closed(
@@ -108,14 +111,20 @@ enum ActivityDetect {
                 index += 1
             }
             let end = index
-            let run = Array(ordered[start..<end])
+            // HR remains elevated after a measured walk/run stops. Keep short
+            // pauses inside the workout but exclude trailing HR-only cooldown.
+            // Preserve existing behavior for HR-only cardio workouts.
+            let motionIndices = (start..<end).filter { measuredMotion[$0] }
+            let motionEnd = motionIndices.count >= startSustainS
+                ? (motionIndices.last! + 1) : end
+            let run = Array(ordered[start..<motionEnd])
 
             guard run[run.count - 1].unix - run[0].unix + 1 >= minimumDurationS else { continue }
-            guard flags[start..<end].filter({ $0 }).count >= startSustainS else { continue }
+            guard flags[start..<motionEnd].filter({ $0 }).count >= startSustainS else { continue }
 
             let walkTicks = run.filter { $0.activityClass == gaitWalk }.count
             let runTicks = run.filter { $0.activityClass == gaitRun }.count
-            let spm = rates[start..<end].compactMap { $0 }.filter { $0 > 0 }
+            let spm = rates[start..<motionEnd].compactMap { $0 }.filter { $0 > 0 }
             let steps = StepCounter.total(run) ?? 0
             let hasSteps = run.contains { $0.stepCounter != nil }
 
