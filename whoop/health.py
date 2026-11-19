@@ -299,6 +299,8 @@ def recovery_score(
     sleep_hours: float | None,
     sleep_need_hours: float | None,
     baseline: Baseline | None,
+    respiratory_rate: float | None = None,
+    respiratory_rate_baseline: float | None = None,
 ) -> RecoveryResult:
     """Baseline-relative 0-100 recovery estimate. Not WHOOP's recovery.
 
@@ -327,6 +329,17 @@ def recovery_score(
 
     total_weight = sum(RECOVERY_WEIGHTS[k] for k in components)
     score = sum(components[k] * RECOVERY_WEIGHTS[k] for k in components) / total_weight
+    if (
+        respiratory_rate is not None
+        and respiratory_rate_baseline is not None
+        and respiratory_rate_baseline > 0
+    ):
+        delta = respiratory_rate - respiratory_rate_baseline
+        if delta >= 1.2:
+            # WHOOP illness indicator: elevation of >= 1.2 rpm above baseline dampens recovery
+            excess = delta - 1.0
+            damping = max(0.0, min(0.25, 0.10 * excess))
+            score *= (1.0 - damping)
     return RecoveryResult(
         score=round(score, 1),
         reason=None,

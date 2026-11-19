@@ -211,6 +211,20 @@ class TestRecovery(unittest.TestCase):
         self.assertEqual(RecoveryResult(66.0001, None).level, RecoveryLevel.HIGH_RECOVERY)
         self.assertEqual(RecoveryResult(100.0, None).level, RecoveryLevel.HIGH_RECOVERY)
 
+    def test_respiratory_rate_illness_penalty(self):
+        # Normal respiration (+0.3 rpm above baseline) applies no penalty
+        normal = recovery_score(4.0, 55.0, 8.0, 8.0, baseline(),
+                                respiratory_rate=14.3, respiratory_rate_baseline=14.0)
+        unpenalized = recovery_score(4.0, 55.0, 8.0, 8.0, baseline())
+        self.assertEqual(normal.score, unpenalized.score)
+
+        # Elevated respiration (+2.0 rpm above baseline, illness indicator >= 1.2 rpm)
+        sick = recovery_score(4.0, 55.0, 8.0, 8.0, baseline(),
+                              respiratory_rate=16.0, respiratory_rate_baseline=14.0)
+        self.assertLess(sick.score, unpenalized.score)
+        # Expected: 65.0 * (1 - 0.10) = 58.5
+        self.assertEqual(sick.score, 58.5)
+
 
 class TestStress(unittest.TestCase):
     def test_no_baseline_gives_no_index(self):

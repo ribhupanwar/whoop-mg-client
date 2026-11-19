@@ -1229,6 +1229,28 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(green.band, "green")
     }
 
+    func testRespiratoryRateIllnessPenalty() {
+        let baseline = steadyBaseline()
+        // Normal respiration (+0.3 rpm above baseline) applies no deduction
+        let normal = Recovery.score(
+            lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8, baseline: baseline,
+            respiratoryRate: 14.3, respiratoryRateBaseline: 14.0
+        )
+        let unpenalized = Recovery.score(
+            lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8, baseline: baseline
+        )
+        XCTAssertEqual(normal.score, unpenalized.score)
+
+        // Elevated respiration (+2.0 rpm above baseline, illness indicator >= 1.2 rpm)
+        let sick = Recovery.score(
+            lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8, baseline: baseline,
+            respiratoryRate: 16.0, respiratoryRateBaseline: 14.0
+        )
+        XCTAssertLessThan(sick.score!, unpenalized.score!)
+        // Expected: 65.0 * (1 - 0.10) = 58.5
+        XCTAssertEqual(sick.score!, 58.5, accuracy: 1e-6)
+    }
+
     func testStressIndexCountsDeviationsBelowTheNorm() {
         let baseline = steadyBaseline()
         XCTAssertEqual(Recovery.stressIndex(lnRMSSD: 4.0, baseline: baseline).index, 0.0)

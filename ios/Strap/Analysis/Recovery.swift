@@ -24,7 +24,9 @@ enum Recovery {
         rhr: Double?,
         sleepHours: Double?,
         sleepNeedHours: Double?,
-        baseline: Baseline?
+        baseline: Baseline?,
+        respiratoryRate: Double? = nil,
+        respiratoryRateBaseline: Double? = nil
     ) -> RecoveryResult {
         guard let baseline, baseline.days >= minBaselineDays else {
             return RecoveryResult(
@@ -63,7 +65,17 @@ enum Recovery {
             weighted += sleep * sleepWeight
             weight += sleepWeight
         }
-        let score = weighted / weight
+        var score = weighted / weight
+        if let respiratoryRate, let respiratoryRateBaseline,
+           respiratoryRate.isFinite, respiratoryRateBaseline.isFinite, respiratoryRateBaseline > 0 {
+            let delta = respiratoryRate - respiratoryRateBaseline
+            if delta >= 1.2 {
+                // WHOOP illness indicator: elevation of >= 1.2 rpm above baseline dampens recovery
+                let excess = delta - 1.0
+                let damping = max(0.0, min(0.25, 0.10 * excess))
+                score *= (1.0 - damping)
+            }
+        }
         return RecoveryResult(
             score: Stats.rounded(score, 1),
             reason: nil,
