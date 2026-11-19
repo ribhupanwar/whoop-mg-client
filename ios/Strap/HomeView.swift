@@ -217,8 +217,8 @@ struct HomeView: View {
 
             HStack(spacing: 6) {
                 Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
-                    .font(StrapTypography.metric(15, weight: .bold))
-                    .foregroundStyle(Color.appFG)
+                    .font(StrapTypography.metric(12, weight: .bold))
+                    .foregroundStyle(Color.appMuted)
                     .monospacedDigit()
                 WhoopBandBatteryIcon(
                     charge: displayedBattery,
@@ -1153,7 +1153,7 @@ enum AppOpenDayTracker {
     }
 }
 
-// WHOOP-style band outline. Connection dot reflects real BLE state.
+// Clean-room WHOOP-style band glyph: narrow curved housing and inner seam.
 private struct WhoopBandBatteryIcon: View {
     let charge: Int?
     let connected: Bool
@@ -1167,6 +1167,13 @@ private struct WhoopBandBatteryIcon: View {
                 p.closeSubpath()
             }
             .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineJoin: .round))
+            .frame(width: 20, height: 27)
+            Path { p in
+                p.move(to: CGPoint(x: 10.5, y: 3))
+                p.addCurve(to: CGPoint(x: 8, y: 23), control1: CGPoint(x: 7, y: 10), control2: CGPoint(x: 7, y: 18))
+                p.addLine(to: CGPoint(x: 12, y: 23))
+            }
+            .stroke(Color.appFG.opacity(0.75), style: StrokeStyle(lineWidth: 0.9, lineCap: .round))
             .frame(width: 20, height: 27)
             if connected {
                 Circle().fill(Color(hex: 0x24E7A5))
