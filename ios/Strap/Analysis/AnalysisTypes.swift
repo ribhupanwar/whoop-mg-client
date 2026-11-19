@@ -278,6 +278,23 @@ struct StressResult: Codable, Equatable {
     }
 }
 
+/// Canonical WHOOP VO2 Max source enumeration from binary strings (`0x109748af0`–`0x109748b50`).
+public enum VO2MaxSource: String, Codable, CaseIterable {
+    case internalEstimate = "INTERNAL_ESTIMATE"
+    case manualLabTest    = "MANUAL_LAB_TEST"
+    case manualWearable   = "MANUAL_WEARABLE"
+    case manualOther      = "MANUAL_OTHER"
+
+    public var title: String {
+        switch self {
+        case .internalEstimate: return "Internal Estimate"
+        case .manualLabTest:    return "Lab Test"
+        case .manualWearable:   return "Wearable"
+        case .manualOther:      return "Manual Entry"
+        }
+    }
+}
+
 // MARK: - Respiration and SpO2
 
 struct RespRate: Codable, Equatable {

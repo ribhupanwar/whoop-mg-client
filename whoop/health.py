@@ -39,7 +39,13 @@ from the strap alone. What is here instead:
 import math
 import statistics
 from dataclasses import dataclass
-from enum import IntEnum
+from enum import Enum, IntEnum
+
+class VO2MaxSource(str, Enum):
+    INTERNAL_ESTIMATE = "INTERNAL_ESTIMATE"
+    MANUAL_LAB_TEST = "MANUAL_LAB_TEST"
+    MANUAL_WEARABLE = "MANUAL_WEARABLE"
+    MANUAL_OTHER = "MANUAL_OTHER"
 
 from .records import (
     MAX_RR_MS,

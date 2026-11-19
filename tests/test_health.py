@@ -8,6 +8,7 @@ from whoop.health import (
     RecoveryLevel,
     RecoveryResult,
     SLEEP_DEBT_CAP_H,
+    VO2MaxSource,
     SLEEP_DEBT_WINDOW_NIGHTS,
     STRESS_MAX,
     clock_label,
@@ -224,6 +225,13 @@ class TestRecovery(unittest.TestCase):
         self.assertLess(sick.score, unpenalized.score)
         # Expected: 65.0 * (1 - 0.10) = 58.5
         self.assertEqual(sick.score, 58.5)
+
+    def test_vo2max_source_enumeration(self):
+        # 4 source strings matching 0x109748af0-0x109748b50
+        self.assertEqual(VO2MaxSource.INTERNAL_ESTIMATE.value, "INTERNAL_ESTIMATE")
+        self.assertEqual(VO2MaxSource.MANUAL_LAB_TEST.value, "MANUAL_LAB_TEST")
+        self.assertEqual(VO2MaxSource.MANUAL_WEARABLE.value, "MANUAL_WEARABLE")
+        self.assertEqual(VO2MaxSource.MANUAL_OTHER.value, "MANUAL_OTHER")
 
 
 class TestStress(unittest.TestCase):

@@ -1269,6 +1269,15 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(sick.score!, 58.5, accuracy: 1e-6)
     }
 
+    func testVO2MaxSourceEnumeration() {
+        // 4 source strings matching 0x109748af0-0x109748b50
+        XCTAssertEqual(VO2MaxSource.internalEstimate.rawValue, "INTERNAL_ESTIMATE")
+        XCTAssertEqual(VO2MaxSource.manualLabTest.rawValue, "MANUAL_LAB_TEST")
+        XCTAssertEqual(VO2MaxSource.manualWearable.rawValue, "MANUAL_WEARABLE")
+        XCTAssertEqual(VO2MaxSource.manualOther.rawValue, "MANUAL_OTHER")
+        XCTAssertEqual(VO2MaxSource.allCases.count, 4)
+    }
+
     func testStressIndexCountsDeviationsBelowTheNorm() {
         let baseline = steadyBaseline()
         XCTAssertEqual(Recovery.stressIndex(lnRMSSD: 4.0, baseline: baseline).index, 0.0)
