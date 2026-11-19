@@ -172,6 +172,34 @@ final class SleepStageTests: XCTestCase {
         }
     }
 
+    func testDynamicAccelerationAddsWakeEvidenceWithoutChangingMeasuredCoverage() {
+        let (quiet, period) = makeNight()
+        let moving = quiet.map { sample -> V18Sample in
+            let offset = sample.unix - period.startUnix
+            guard (20 * 60..<(24 * 60)).contains(offset) else { return sample }
+            return V18Sample(
+                header: sample.header, heartRate: 88,
+                rrIntervalsMS: sample.rrIntervalsMS, dynamicAccelG: 0.25,
+                gravityXG: sample.gravityXG, gravityYG: sample.gravityYG,
+                gravityZG: sample.gravityZG, stepCounter: sample.stepCounter,
+                stepCadence: sample.stepCadence, activityClass: sample.activityClass,
+                skinTempC: sample.skinTempC, tempAux1C: sample.tempAux1C,
+                tempAux2C: sample.tempAux2C, sleepStateByte: sample.sleepStateByte,
+                sleepState: sample.sleepState, cardiacFlags: sample.cardiacFlags,
+                hrQualityFlags: sample.hrQualityFlags,
+                spo2CandidateRaw: sample.spo2CandidateRaw,
+                spo2CandidatePct: sample.spo2CandidatePct,
+                spo2CandidateKind: sample.spo2CandidateKind,
+                signalQualityLogVariance: sample.signalQualityLogVariance,
+                psnrB: sample.psnrB, psnrA: sample.psnrA
+            )
+        }
+        let baseline = SleepStager.stage(samples: quiet, period: period)
+        let observed = SleepStager.stage(samples: moving, period: period)
+        XCTAssertGreaterThan(observed.wakeMinutes, baseline.wakeMinutes)
+        XCTAssertEqual(observed.totalMinutes, baseline.totalMinutes, accuracy: 0.001)
+    }
+
     func testMotionBurstsAreStagedAsWake() {
         let (samples, period) = makeNight(bursts: [(20, 24)])
         let staging = SleepStager.stage(samples: samples, period: period)
