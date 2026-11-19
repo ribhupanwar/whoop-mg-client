@@ -125,9 +125,10 @@ final class HrvTests: XCTestCase {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let overnight = stretch(0, 25_200, hr: 60, accel: 0.01, rr: [790, 810])
+        let awake = stretch(26_000, 3_600, hr: 80, accel: 0.15, rr: [750, 750])
         let nap = stretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [760, 840])
         let days = DailyAnalysis.metrics(
-            from: overnight + nap, sex: .male, maxHR: 180, calendar: calendar
+            from: overnight + awake + nap, sex: .male, maxHR: 180, calendar: calendar
         )
         let night = try XCTUnwrap(days.first(where: { $0.lnRMSSD != nil }))
         XCTAssertEqual(try XCTUnwrap(night.restingHR), 60, accuracy: 1e-9)

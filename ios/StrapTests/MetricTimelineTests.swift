@@ -189,8 +189,13 @@ extension MetricTimelineTests {
             let record = days.first { $0.dateKey == point.key }
             let expected = Recovery.score(lnRMSSD: record?.lnRMSSD, rhr: record?.restingHR,
                 sleepHours: record?.reliableSleepHours, sleepNeedHours: 8,
-                baseline: DailyAnalysis.baseline(from: Array(prior.suffix(30)))).score
+                baseline: DailyAnalysis.baseline(from: Array(prior.suffix(DailyAnalysis.rollingBaselineDays)))).score
             XCTAssertEqual(point.recovery, expected)
         }
+    }
+
+    func testRollingBaselineDaysIsCanonical28Days() {
+        // Verified from WHOOP GetRestingHeartRateBaselineRequest (0x1099623a0)
+        XCTAssertEqual(DailyAnalysis.rollingBaselineDays, 28)
     }
 }
