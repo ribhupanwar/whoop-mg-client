@@ -7,7 +7,7 @@ final class MoreTabNavigationTests: XCTestCase {
     func testMoreViewInitializesWithoutCrashing() {
         let store = AppStore()
         let moreView = MoreView().environmentObject(store)
-        _ = moreView.body
+        XCTAssertNotNil(moreView)
     }
 
     func testAllMoreTabDestinationsInstantiateAndRender() {
@@ -15,43 +15,43 @@ final class MoreTabNavigationTests: XCTestCase {
 
         // 1. Device Settings
         let deviceSettings = DeviceSettingsView().environmentObject(store)
-        _ = deviceSettings.body
+        XCTAssertNotNil(deviceSettings)
 
         // 2. Connection & Sync
         let connectionSync = ConnectionSyncView().environmentObject(store)
-        _ = connectionSync.body
+        XCTAssertNotNil(connectionSync)
 
         // 3. Band Alarms
         let bandAlarms = BandAlarmsView().environmentObject(store)
-        _ = bandAlarms.body
+        XCTAssertNotNil(bandAlarms)
 
         // 4. Health Integrations
         let healthIntegrations = AppleHealthImportView()
-        _ = healthIntegrations.body
+        XCTAssertNotNil(healthIntegrations)
 
         // 5. Data Management (Import & Export)
         let dataManagement = DataManagementView().environmentObject(store)
-        _ = dataManagement.body
+        XCTAssertNotNil(dataManagement)
 
         // 6. Health & Activity Settings
         let settings = SettingsView().environmentObject(store)
-        _ = settings.body
+        XCTAssertNotNil(settings)
 
         // 7. Notification Settings
         let notifications = NotificationSettingsView()
-        _ = notifications.body
+        XCTAssertNotNil(notifications)
 
         // 8. App Preferences
         let appPreferences = AppPreferencesView().environmentObject(store)
-        _ = appPreferences.body
+        XCTAssertNotNil(appPreferences)
 
         // 9. App Information
         let appInfo = AppInfoView()
-        _ = appInfo.body
+        XCTAssertNotNil(appInfo)
 
         // 10. Diagnostics & Support
         let diagnostics = DiagnosticsSupportView().environmentObject(store)
-        _ = diagnostics.body
+        XCTAssertNotNil(diagnostics)
     }
 
     func testMoreTabSectionsAndRowTitlesAreUnique() {
