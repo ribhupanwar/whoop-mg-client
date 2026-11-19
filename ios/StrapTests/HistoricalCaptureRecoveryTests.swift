@@ -7,8 +7,12 @@ final class HistoricalCaptureRecoveryTests: XCTestCase {
         bytes[0] = 0x2F; bytes[1] = 18
         bytes[7] = 100
         bytes[14] = hr; bytes[15] = count
-        bytes[16] = UInt8(rr & 255); bytes[17] = UInt8(rr >> 8)
-        bytes[18] = bytes[16]; bytes[19] = bytes[17]
+        if count >= 1 {
+            bytes[16] = UInt8(rr & 255); bytes[17] = UInt8(rr >> 8)
+        }
+        if count >= 2 {
+            bytes[18] = bytes[16]; bytes[19] = bytes[17]
+        }
         return try JSONSerialization.data(withJSONObject: ["frame": ["inner": bytes.map { String(format: "%02x", $0) }.joined()]])
     }
 

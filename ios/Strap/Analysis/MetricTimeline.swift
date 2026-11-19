@@ -75,7 +75,7 @@ enum MetricTimeline {
             let key = JournalStore.dayKey(for: date, calendar: calendar)
             let day = byKey[key]
             while priorEnd < ordered.count && ordered[priorEnd].dateKey < key { priorEnd += 1 }
-            let baseline = DailyAnalysis.baseline(from: Array(ordered[max(0, priorEnd - 30)..<priorEnd]))
+            let baseline = DailyAnalysis.baseline(from: Array(ordered[max(0, priorEnd - DailyAnalysis.rollingBaselineDays)..<priorEnd]))
             let recovery = Recovery.score(lnRMSSD: day?.lnRMSSD, rhr: day?.restingHR,
                 sleepHours: day?.reliableSleepHours, sleepNeedHours: sleepNeedHours, baseline: baseline).score
             let sessions = liveByDay[key] ?? []
@@ -115,7 +115,7 @@ enum MetricTimeline {
 
     static func comparison(_ metric: DetailMetric, before key: String, in points: [MetricDay]) -> Double? {
         let values = points.filter { $0.key < key }.sorted { $0.key < $1.key }
-            .compactMap { $0.value(metric) }.suffix(30)
+            .compactMap { $0.value(metric) }.suffix(DailyAnalysis.rollingBaselineDays)
         return values.isEmpty ? nil : Stats.mean(Array(values))
     }
 

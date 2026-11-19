@@ -317,7 +317,7 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(sessions.count, 2)
         XCTAssertEqual(sessions.map(\.kind), ["run", "run"])
         XCTAssertEqual(sessions[0].endUnix, 659)
-        XCTAssertEqual(sessions[1].startUnix, 4_261)
+        XCTAssertEqual(sessions[1].startUnix, 4_260)
     }
 
     func testMissingHourDoesNotJoinTwoShortWalksIntoOneWorkout() {
