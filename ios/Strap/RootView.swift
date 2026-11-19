@@ -275,6 +275,26 @@ private struct HumansView: View {
     @EnvironmentObject private var store: AppStore
     @State private var selectedSegment = 0
 
+    // Use the same dated recovery calculation as Metric History. DayMetrics
+    // retains measured inputs, not a stored `recovery` field.
+    private var peakRecoveryText: String {
+        let days = store.band.days.sorted { $0.dateKey < $1.dateKey }
+        let values = days.enumerated().compactMap { index, day -> Double? in
+            let baseline = DailyAnalysis.baseline(
+                from: Array(days.prefix(index).suffix(30))
+            )
+            return Recovery.score(
+                lnRMSSD: day.lnRMSSD,
+                rhr: day.restingHR,
+                sleepHours: day.reliableSleepHours,
+                sleepNeedHours: store.band.needHours,
+                baseline: baseline
+            ).score
+        }
+        guard let peak = values.max() else { return "—" }
+        return "\(Int(peak.rounded()))%"
+    }
+
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
@@ -330,7 +350,7 @@ private struct HumansView: View {
                                 Text("PEAK RECOVERY")
                                     .font(StrapTypography.body(10, weight: .bold))
                                     .foregroundStyle(Color.appMuted)
-                                Text(store.band.days.map(\.recovery).compactMap { $0 }.max().map { "\(Int($0.rounded()))%" } ?? "—")
+                                Text(peakRecoveryText)
                                     .font(StrapTypography.metric(22, weight: .bold))
                                     .foregroundStyle(Color.appGood)
                             }
