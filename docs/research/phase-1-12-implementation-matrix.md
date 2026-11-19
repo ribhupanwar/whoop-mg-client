@@ -36,3 +36,7 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 - **VERIFIED (code inspection):** Existing default is five minutes for measured running; optional ten-minute comparator is explicitly opt-in. Walking has its independent ten-minute plus elevated-HR gate. WHOOP's public ten-minute guidance does not establish identical detection thresholds.
 - **CODE DONE / CI VERIFY:** `4dac623e` adds a focused 6-minute measured-run regression (default retained, comparator excluded) and an 11-minute comparator acceptance test. No production behavior, saved records or schemas changed. Native test workflow pending on the exact revision.
 - **DEVICE VERIFY:** compare same-device real 6-minute and 11-minute runs with WHOOP and STRAP; test pauses and late HR cooldown before changing defaults.
+
+## 2026-11-19 historical gap baseline reset
+- **VERIFIED (code):** `48dd1777` clears frozen pre-workout HR baseline after a >180-second discontinuity between retained sensor samples; `c3af8d87` tests that two measured 660-second runs separated by one hour remain separate sessions.
+- **CODE DONE; CI pending / DEVICE VERIFY:** Native iOS and focused tests on the test commit are not yet confirmed. This fixes a timestamp-vs-record-count baseline lifetime issue without changing session duration policy or persisted data. Physical paired-band replay still required.
