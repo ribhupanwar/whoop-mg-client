@@ -88,6 +88,14 @@ enum ActivityDetect {
         var inactiveCount = 0
 
         for (index, sample) in ordered.enumerated() {
+            // A long archive/off-wrist gap is not continuous exercise.
+            // Clear the latched pre-workout baseline before evaluating the
+            // next sample, rather than waiting for 181 inactive *records*.
+            if index > 0 && sample.unix - ordered[index - 1].unix > gapToleranceS {
+                latchedBaseline = nil
+                baselineFrozen = false
+                inactiveCount = 0
+            }
             let locomotion: Bool
             // The gait byte is not vendor-verified. A still/unknown gait
             // must not suppress a sustained, measured step rate.
