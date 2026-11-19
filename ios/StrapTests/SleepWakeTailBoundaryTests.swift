@@ -118,4 +118,37 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         XCTAssertLessThan(tailStart, night.endUnix)
     }
 
+
+    func testTerminalUpWithSustainedHRAndMotionTrimsWakePrelude() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 19, hour: 2, minute: 0))!.timeIntervalSince1970)
+        let sleepStart = base + 600
+        let wakeStart = sleepStart + 7200
+        let end = wakeStart + 360
+        var rows = (0..<600).map { row(base + $0, hr: 90, accel: 0.3, state: 0) }
+        rows += (sleepStart..<wakeStart).map { row($0, hr: 55, accel: 0.008, state: 2) }
+        rows += (wakeStart..<end).map {
+            row($0, hr: 70, accel: 0.025, state: $0 >= end - 20 ? 3 : 1)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.endUnix, wakeStart - 1,
+                       "Corroborated wake should not extend sleep to the band-up marker")
+    }
+
+    func testTerminalUpWithoutMotionDoesNotTrimQuietTail() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 19, hour: 2, minute: 0))!.timeIntervalSince1970)
+        let sleepStart = base + 600
+        let wakeStart = sleepStart + 7200
+        let end = wakeStart + 360
+        var rows = (0..<600).map { row(base + $0, hr: 90, accel: 0.3, state: 0) }
+        rows += (sleepStart..<wakeStart).map { row($0, hr: 55, accel: 0.008, state: 2) }
+        rows += (wakeStart..<end).map {
+            row($0, hr: 70, accel: 0.008, state: $0 >= end - 20 ? 3 : 1)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.endUnix, end - 1,
+                       "HR rise without measured movement must not imply wake onset")
+    }
+
 }
