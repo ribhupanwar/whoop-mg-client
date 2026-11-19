@@ -1,8 +1,8 @@
 import SwiftUI
 
-let strainBlue = Color(hex: 0x0099DC)
-let recoveryLineBlue = Color(hex: 0x65ADE0)
-let zonePalette: [Color] = [Color(hex: 0xABC5D0), Color(hex: 0x4C9DBB), Color(hex: 0x5CB99C), Color(hex: 0xFFB35B), Color(hex: 0xFF702A)]
+let strainBlue = Color(hex: 0x0091FF)
+let recoveryLineBlue = Color(hex: 0x00E676)
+let zonePalette: [Color] = [Color(hex: 0x337099), Color(hex: 0x2D9CDB), Color(hex: 0x00B2FE), Color(hex: 0xF2994A), Color(hex: 0xEB5757)]
 
 extension DetailMetric {
     var title: String {
@@ -47,7 +47,7 @@ extension DetailMetric {
     }
     func color(_ value: Double?) -> Color {
         if self == .recovery, let value {
-            return value >= 67 ? Color(hex: 0x00DF00) : value >= 34 ? Color(hex: 0xFFE500) : Color(hex: 0xFF0037)
+            return value >= 67 ? Color.appGood : value >= 34 ? Color.appWarn : Color.appHigh
         }
         return self == .sleepPerformance ? .appSleep : isLine ? recoveryLineBlue : strainBlue
     }

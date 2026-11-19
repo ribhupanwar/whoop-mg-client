@@ -1069,10 +1069,10 @@ struct SleepAnalysisView: View {
 private extension SleepStage {
     var color: Color {
         switch self {
-        case .wake: return Color(red: 0.78, green: 0.79, blue: 0.80)
-        case .light: return Color(hex: 0xABA4EE)
-        case .deep: return Color(hex: 0xF58DF7)
-        case .rem: return Color(hex: 0xA954E8)
+        case .wake: return Color(hex: 0xFF6666)
+        case .light: return Color(hex: 0x3075A6)
+        case .deep: return Color(hex: 0x1A4366)
+        case .rem: return Color(hex: 0xA663CC)
         }
     }
 }
