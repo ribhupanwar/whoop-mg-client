@@ -325,6 +325,27 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(ActivityDetect.detect(samples).first?.kind, "run")
     }
 
+    func testTenMinuteComparatorDoesNotSilentlyChangeFiveMinuteRunningDefault() {
+        // Public WHOOP duration guidance is a comparison target, not a
+        // reason to silently discard STRAP's existing short measured runs.
+        let sixMinuteRun = (0..<360).map {
+            sample($0, hr: 145, steps: $0 * 3, gait: nil)
+        }
+        XCTAssertEqual(ActivityDetect.detect(sixMinuteRun).first?.kind, "run")
+        XCTAssertTrue(ActivityDetect.detect(
+            sixMinuteRun, minimumDurationS: ActivityDetect.comparisonMinSessionS
+        ).isEmpty)
+
+        let elevenMinuteRun = (0..<660).map {
+            sample($0, hr: 145, steps: $0 * 3, gait: nil)
+        }
+        let compared = ActivityDetect.detect(
+            elevenMinuteRun, minimumDurationS: ActivityDetect.comparisonMinSessionS
+        )
+        XCTAssertEqual(compared.count, 1)
+        XCTAssertEqual(compared.first?.kind, "run")
+    }
+
     func testStaleStillGaitDoesNotHideMeasuredRunning() {
         // Some firmware reports gait=0 even while the step counter rises.
         let samples = (0..<360).map { sample($0, hr: 145, steps: $0 * 3, gait: 0) }
