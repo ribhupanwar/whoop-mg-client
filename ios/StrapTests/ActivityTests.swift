@@ -412,6 +412,18 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertEqual(sessions.first?.endUnix, 1019)
     }
 
+    func testStepCounterWrapDoesNotSplitMeasuredWalk() {
+        // A valid 16-bit wrap must not look like stopped movement.
+        let samples = (0..<660).map { second in
+            sample(second, hr: 75, steps: (65_000 + second * 2) % 65_536, gait: nil)
+        }
+        let sessions = ActivityDetect.detect(samples)
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.startUnix, 1)
+        XCTAssertEqual(sessions.first?.endUnix, 659)
+        XCTAssertEqual(sessions.first?.kind, "walk")
+    }
+
     func testInvalidComparisonDurationDoesNotCreateSessions() {
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: 0).isEmpty)
         XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: -10).isEmpty)
