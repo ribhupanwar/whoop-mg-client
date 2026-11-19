@@ -10,7 +10,7 @@ Reference research repository: `ribhupanwar/dsta`.
 - Phase 13: reconstructed source-linked engineering handoff saved at `docs/research/phase13/PHASE13_ACTIVITY_DETECTION_HANDOFF.md`. Original full Phase 13 source report was not available; this is not a verbatim copy.
 - Phase 14: all five original user-uploaded reports saved verbatim in `docs/research/phase14/`.
 - Phase 14B: executive report/task log saved; four original detailed markdown reports remain unavailable in GitHub.
-- Phase 15: user-supplied Antigravity final synthesis/task log archived verbatim at `docs/research/phase15/PHASE15_ANTIGRAVITY_FINAL_SYNTHESIS_AND_TASK_LOG.txt`. It reports nine local markdown reports and commits `ebc9290` / `75d810e`, but those commits were not found remotely at audit time, and the nine original reports were not in remote `main`. Obtain the nine originals or push the dedicated local branch; do not mark their online archival complete. Primary-sleep HRV fix already landed independently in main as `897cfb3`; avoid duplicate cherry-pick.
+- Phase 15: all nine original forensic research reports from the pushed `fix/phase15-primary-sleep-hrv-isolation` branch copied verbatim to `docs/research/phase15/` on `main`, plus the original synthesis/task log. The branch was 236 commits behind main; only documentation was copied, not its duplicate HRV code patch. The existing independent primary-sleep HRV fix is `897cfb3`. Treat claims in research reports as claims requiring evidence assessment, not automatic authorization to change production formulas.
 - The original standalone strain handoff remains unconfirmed as an archived document. Existing strain implementation and tests are preserved.
 - A chat handoff/index is a recovery map, **not proof** that every original research artifact has been archived or every algorithm implemented.
 
@@ -30,7 +30,7 @@ User also supplied the Antigravity Phase 14B executive report/task log, preserve
 
 Original Antigravity location reported:
 `C:\Users\ribhu\.gemini\antigravity\brain\7f9969b1-682d-4744-8dd7-565b721c43e6\`.
-Phase 15 is a requested forensic verification task; do not claim its nine deliverables exist until verified.
+Phase 15 nine original reports were verified on the pushed branch and copied to main on 2026-11-19; evaluate binary claims and suggested thresholds independently before implementation.
 
 ## Existing earlier research and implementation
 - `docs/WHOOP_CALORIE_BINARY_FINDINGS.md`, `docs/WHOOP_CALORIE_ENGINE_HANDOFF.md`, `docs/WHOOP_CALORIE_IMPLEMENTATION_VALIDATION.md`
