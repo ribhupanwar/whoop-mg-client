@@ -27,7 +27,6 @@ struct DashboardRows: View {
                 }
                 .padding(.bottom, 8)
             }
-            Hint("The small number under a metric is your comparison value and stays absent until history exists. VO₂ max and calories are published estimates, never strap measurements.")
         }
     }
 

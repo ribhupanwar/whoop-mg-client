@@ -193,14 +193,24 @@ struct CardHead: View {
     var body: some View {
         HStack {
             Text(title.uppercased())
-                .font(StrapTypography.body(12, weight: .bold))
-                .tracking(0.8)
+                .font(StrapTypography.body(11.5, weight: .bold))
+                .tracking(0.6)
                 .foregroundStyle(Color.appFG)
             Spacer()
             if let trailing {
-                Text(trailing)
-                    .font(StrapTypography.body(15))
-                    .foregroundStyle(Color.appMuted)
+                if trailing == "\u{203A}" || trailing == "›" {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(Color.appMuted)
+                } else if trailing == "\u{2922}" || trailing == "⤢" {
+                    Image(systemName: "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.appMuted)
+                } else {
+                    Text(trailing)
+                        .font(StrapTypography.body(14))
+                        .foregroundStyle(Color.appMuted)
+                }
             }
         }
         .padding(.bottom, 11)

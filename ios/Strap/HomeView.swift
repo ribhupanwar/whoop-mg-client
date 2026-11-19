@@ -43,7 +43,6 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
-                tonightCard
                 activitiesCard
                 journalCard
                 planCard
@@ -294,7 +293,6 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
             }
             .frame(height: 122)
-            if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
         .padding(.bottom, 18)
     }
@@ -476,23 +474,34 @@ struct HomeView: View {
     }
 
     private func tapCard(title: String, pill: String, pillColor: Color, state: String, stateColor: Color, detail: String) -> some View {
-        VStack(alignment: .leading, spacing: 11) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text(title.uppercased())
-                    .font(StrapTypography.body(12, weight: .bold))
-                    .tracking(0.7)
+                    .font(StrapTypography.body(11.5, weight: .bold))
+                    .tracking(0.6)
                     .foregroundStyle(Color.appFG)
                 Spacer()
-                Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8.5, weight: .semibold))
+                    .foregroundStyle(Color.appMuted)
             }
-            HStack(spacing: 7) {
-                Text(pill)
-                    .font(StrapTypography.body(12, weight: .medium))
-                    .foregroundStyle(pillColor)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
-                    .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+            HStack(spacing: 8) {
+                HStack {
+                    if pill == "✓" {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(pillColor)
+                    } else {
+                        Text(pill)
+                            .font(StrapTypography.metric(11.5, weight: .bold))
+                            .foregroundStyle(pillColor)
+                    }
+                }
+                .frame(minWidth: 22, minHeight: 22)
+                .padding(.horizontal, 4)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0x112E20)))
+                .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(pillColor.opacity(0.3), lineWidth: 0.5))
+
                 VStack(alignment: .leading, spacing: 2) {
                     Text(state)
                         .font(StrapTypography.body(12, weight: .bold))
@@ -504,10 +513,10 @@ struct HomeView: View {
                 }
             }
         }
-        .padding(13)
+        .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient.appCard))
-        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
 
     // MARK: My Day
@@ -515,36 +524,44 @@ struct HomeView: View {
     private var myDayOutlook: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("My Day").font(StrapTypography.body(24, weight: .bold)).foregroundStyle(Color.appFG)
+                Text("My Day")
+                    .font(StrapTypography.body(22, weight: .bold))
+                    .foregroundStyle(Color.appFG)
                 Spacer()
                 Button { showLogger = true } label: {
-                    Image(systemName: "plus").font(StrapTypography.body(21, weight: .medium))
-                        .foregroundStyle(Color.appBG).frame(width: 40, height: 40)
-                        .background(Color.appFG, in: RoundedRectangle(cornerRadius: 11))
-                }.buttonStyle(.plain).accessibilityLabel("Add activity")
+                    Image(systemName: "plus")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(Color.appBG)
+                        .frame(width: 32, height: 32)
+                        .background(Color.appFG, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Add activity")
             }
             Button(action: openPlan) {
                 HStack(spacing: 10) {
                     Image(systemName: "sun.max")
-                        .font(StrapTypography.body(18))
-                        .foregroundStyle(Color.appWarn)
+                        .font(.system(size: 16))
+                        .foregroundStyle(Color(hex: 0xC59F7A))
                     Text("Your Daily Outlook")
-                        .font(StrapTypography.body(14))
+                        .font(StrapTypography.body(13.5, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("›").font(StrapTypography.body(15)).foregroundStyle(Color.appMuted)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9.5, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0xC59F7A))
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color(hex: 0x8B8678), Color(hex: 0x344C5D)], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color(hex: 0x362F27), Color(hex: 0x1E252C)], startPoint: .leading, endPoint: .trailing)
+                        .clipShape(RoundedRectangle(cornerRadius: 12))
                 )
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
         }
-        .padding(.bottom, 11)
+        .padding(.bottom, 14)
     }
 
     // MARK: Today's activities
@@ -562,16 +579,16 @@ struct HomeView: View {
             if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
                 HStack(spacing: 11) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "moon.fill").font(StrapTypography.body(12))
+                    HStack(spacing: 6) {
+                        Image(systemName: "moon.fill").font(.system(size: 11))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(StrapTypography.metric(22, weight: .bold))
+                            .font(StrapTypography.metric(14, weight: .bold))
                             .monospacedDigit()
                     }
                     .foregroundStyle(Color.appFG)
-                    .padding(.horizontal, 12)
-                    .frame(minWidth: 62, minHeight: 36)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Color.appSleep))
+                    .padding(.horizontal, 10)
+                    .frame(minWidth: 70, minHeight: 34)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(hex: 0x48647A)))
 
                     Text("SLEEP")
                         .font(StrapTypography.body(13, weight: .bold))
@@ -579,10 +596,13 @@ struct HomeView: View {
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(StrapTypography.metric(12, weight: .medium))
+                        .font(StrapTypography.metric(11, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.appSleep)
+                        .frame(width: 3, height: 26)
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -784,17 +804,51 @@ struct HomeView: View {
     }
 
     private func activityRow(icon: String, name: String, detail: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: icon).font(StrapTypography.body(25, weight: .medium))
-                .foregroundStyle(Color.appFG).frame(width: 64, height: 48)
-                .background(Color.appAccent, in: RoundedRectangle(cornerRadius: 9))
-            Text(name.uppercased()).font(StrapTypography.body(12, weight: .bold)).foregroundStyle(Color.appFG)
+        HStack(spacing: 11) {
+            HStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 13, weight: .medium))
+                Text(activityScore(name, detail))
+                    .font(StrapTypography.metric(14, weight: .bold))
+            }
+            .foregroundStyle(Color.appFG)
+            .padding(.horizontal, 10)
+            .frame(minWidth: 70, minHeight: 34)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(LinearGradient(colors: [Color(hex: 0x0080E6), Color(hex: 0x005BB3)], startPoint: .top, endPoint: .bottom))
+            )
+
+            Text(cleanActivityName(name))
+                .font(StrapTypography.body(13, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(Color.appFG)
             Spacer(minLength: 8)
-            Text(detail).font(StrapTypography.body(10.5)).foregroundStyle(Color.appMuted)
-                .multilineTextAlignment(.trailing).frame(maxWidth: 140)
+            Text(detail)
+                .font(StrapTypography.metric(11, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+                .multilineTextAlignment(.trailing)
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color.appAccent)
+                .frame(width: 3, height: 26)
         }
-        .padding(8)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+    }
+
+    private func cleanActivityName(_ name: String) -> String {
+        name.replacingOccurrences(of: " · band", with: "")
+            .replacingOccurrences(of: " · logged", with: "")
+            .replacingOccurrences(of: " · measured", with: "")
+            .uppercased()
+    }
+
+    private func activityScore(_ name: String, _ detail: String) -> String {
+        if store.band.recovery.score != nil {
+            return String(format: "%.1f", SampleData.strain)
+        }
+        return "—"
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
