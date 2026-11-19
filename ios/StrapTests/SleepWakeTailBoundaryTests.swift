@@ -38,6 +38,37 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         return (rows, tailStart, end)
     }
 
+    func testConfirmedEveningSleepBacktracksThroughQuietLowHRPrelude() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 21, minute: 45))!.timeIntervalSince1970)
+        var rows = (0..<600).map { row(base + $0, hr: 85, accel: 0.3, state: 0) }
+        let quietStart = base + 600
+        rows += (quietStart..<(quietStart + 900)).map {
+            row($0, hr: 62, accel: 0.008, state: 1)
+        }
+        let confirmedStart = quietStart + 900
+        rows += (confirmedStart..<(confirmedStart + 7200)).map {
+            row($0, hr: 61, accel: 0.008, state: 2)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, quietStart)
+    }
+
+    func testMovingPreludeDoesNotBacktrackConfirmedEveningSleep() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 21, minute: 45))!.timeIntervalSince1970)
+        var rows = (0..<600).map { row(base + $0, hr: 85, accel: 0.3, state: 0) }
+        rows += ((base + 600)..<(base + 1500)).map {
+            row($0, hr: 62, accel: 0.07, state: 1)
+        }
+        let confirmedStart = base + 1500
+        rows += (confirmedStart..<(confirmedStart + 7200)).map {
+            row($0, hr: 61, accel: 0.008, state: 2)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, confirmedStart)
+    }
+
     func testFourMinuteTerminalUpDoesNotEndSleepEarly() throws {
         let (rows, _, end) = capture(upSeconds: 299)
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
