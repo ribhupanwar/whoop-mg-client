@@ -290,7 +290,6 @@ struct RingView: View {
                 .lineLimit(1)
                 .foregroundStyle(Color.appFG)
         }
-        .padding(lineWidth / 2)
         .frame(width: size, height: size)
     }
 }
