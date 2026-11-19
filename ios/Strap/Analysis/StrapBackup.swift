@@ -25,6 +25,19 @@ enum StrapBackup {
             || (path.hasPrefix("captures/") && ["bin", "json", "raw", "jsonl"].contains((path as NSString).pathExtension.lowercased()))
             || (path.hasPrefix("sleep-recovery/") && path.hasSuffix(".json"))
     }
+    /// Directory entries must be rooted in a supported backup namespace.
+    /// No directory entry is extracted, but malformed metadata is rejected.
+    static func allowedDirectoryPath(_ path: String) -> Bool {
+        guard path.hasSuffix("/"), !path.contains("\\"),
+              !path.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) }) else { return false }
+        let parts = path.dropLast().split(separator: "/", omittingEmptySubsequences: false)
+        guard !parts.isEmpty,
+              parts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else { return false }
+        let name = parts.joined(separator: "/")
+        return name == "captures" || name.hasPrefix("captures/")
+            || name == "sleep-recovery" || name.hasPrefix("sleep-recovery/")
+            || name == "Strap"
+    }
     static func inspect(_ url: URL) throws -> Preview {
         let fm = FileManager.default
         let folder = fm.temporaryDirectory.appendingPathComponent("restore-preview-" + UUID().uuidString)
@@ -48,10 +61,7 @@ enum StrapBackup {
             // Preflight every path (including directories) before extraction.
             for entry in archive {
                 guard entry.path == "manifest.json" || allowedPath(entry.path) ||
-                      (entry.type == .directory && !entry.path.contains("\\") &&
-                       entry.path.split(separator: "/", omittingEmptySubsequences: false)
-                           .dropLast(entry.path.hasSuffix("/") ? 1 : 0)
-                           .allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." })) else {
+                      (entry.type == .directory && allowedDirectoryPath(entry.path)) else {
                     throw failure("Unsafe backup path.")
                 }
             }
