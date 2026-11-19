@@ -84,14 +84,19 @@ enum SleepStager {
         var secHR: [Int: Double] = [:]
         var secGravity: [Int: (Double, Double, Double)] = [:]
         var rrBySecond: [Int: [Double]] = [:]
+        var secDynamicAccel: [Int: Double] = [:]
         for (second, sample) in records {
             secHR[second] = Double(sample.heartRate)
             secGravity[second] = finiteGravity(sample)
             rrBySecond[second] = validRR(sample)
+            if let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 {
+                secDynamicAccel[second] = accel
+            }
         }
 
         let epochs = features(
-            start: start, end: end, secHR: secHR, secGravity: secGravity, rrBySecond: rrBySecond
+            start: start, end: end, secHR: secHR, secGravity: secGravity,
+            secDynamicAccel: secDynamicAccel, rrBySecond: rrBySecond
         )
         let coverage = Double(secHR.count) / Double(end - start)
         let validEpochCount = epochs.filter { $0.hr != nil }.count
@@ -225,6 +230,7 @@ enum SleepStager {
         let jerks: [Double]
         let gapCount: Int
         let jerkMax: Double
+        let dynamicMotionFraction: Double
         let respReg: Double?
         let clock: Double
         let minutes: Double
@@ -241,6 +247,7 @@ enum SleepStager {
         let respReg: Double?
         let clock: Double
         let jerkScale: Double
+        let dynamicMotionFraction: Double
         let minutes: Double
     }
 
@@ -249,6 +256,7 @@ enum SleepStager {
         end: Int,
         secHR: [Int: Double],
         secGravity: [Int: (Double, Double, Double)],
+        secDynamicAccel: [Int: Double],
         rrBySecond: [Int: [Double]]
     ) -> [Epoch] {
         let span = Double(end - start)
@@ -280,6 +288,13 @@ enum SleepStager {
             let valid = Double(hrs.count) / Double(epochEnd - epochStart) >= minHRCoverage
 
             var jerks: [Double] = []
+            let dynamicValues = (epochStart..<epochEnd).compactMap { secDynamicAccel[$0] }
+            // Absolute dynamic acceleration complements orientation changes:
+            // wrist motion can occur without a large gravity-vector delta.
+            // Require dense coverage; never treat missing motion as wake.
+            let dynamicMotionFraction = dynamicValues.count >= (epochEnd - epochStart) * 4 / 5
+                ? Double(dynamicValues.filter { $0 >= 0.12 }.count) / Double(dynamicValues.count)
+                : 0
             if valid {
                 for second in epochStart..<epochEnd {
                     // Missing seconds are not consecutive motion observations.
@@ -317,6 +332,7 @@ enum SleepStager {
                     jerks: jerks,
                     gapCount: max(1, jerks.count),
                     jerkMax: jerks.max() ?? 0,
+                    dynamicMotionFraction: dynamicMotionFraction,
                     respReg: valid ? respRegularity(beats) : nil,
                     clock: midpoint / span,
                     minutes: midpoint / 60.0
@@ -347,6 +363,7 @@ enum SleepStager {
                 respReg: raw.respReg,
                 clock: raw.clock,
                 jerkScale: jerkScale,
+                dynamicMotionFraction: raw.dynamicMotionFraction,
                 minutes: raw.minutes
             )
         }
@@ -669,6 +686,11 @@ enum SleepStager {
                 emission[stage]! += prior[stage]!
             }
             if epoch.jerkMax > epoch.jerkScale * jerkFloorGateMult {
+                emission[.wake]! += motionGateBoost
+            }
+            // Only substantial, sustained measured acceleration adds wake
+            // evidence; ordinary wrist micro-motion must not erase REM/Deep.
+            if epoch.dynamicMotionFraction >= 0.25 {
                 emission[.wake]! += motionGateBoost
             }
             if let resp = epoch.respReg {
