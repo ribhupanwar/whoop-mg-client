@@ -50,7 +50,8 @@
 - [ ] Verify activity duplicate prevention, swipe/long-press deletion, GPS history and GPX/FIT exports on device; preserve already-implemented actions.
 - [ ] Verify weekly alarm schedules and physical band vibration on hardware.
 - [ ] Verify empty/loading/error/offline states and profile/device settings.
-- [ ] **SECURITY (pending audit)** Audit backup ZIP entry path normalization, decompression limits and restore staging cleanup; do not modify historical data while investigating.
+- [ ] **VERIFY (CI/device, 2026-11-19):** Backup ZIP path normalization tightened in `2272381`: reject empty components, `.`/`..`, backslashes and control characters before extraction; regression assertions added in `93c33cc`. Existing 2 GB extraction cap, manifest checksum validation and staging cleanup remain intact. Native iOS CI and real-device restore are pending. No persisted schema or existing data changed.
+- [ ] **SECURITY (remaining audit)** Verify compressed ZIP entry metadata edge cases, decompression limits and restore staging cleanup with adversarial archives; do not modify historical data while investigating.
 
 ## Batch 6 — Release acceptance
 - [ ] **PR reconciliation (audited 2026-11-18):** 22 open PRs remain. Draft #46 is 30 commits ahead / 83 behind main, 73 changed files; #37 is 2 ahead / 264 behind, 7 files; #35 is 79 ahead / 281 behind, 59 files. Their overlapping work requires file-by-file review, not bulk merge or blind closure.
