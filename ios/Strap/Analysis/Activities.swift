@@ -37,7 +37,9 @@ enum ActivityDetect {
     static let walkWorkoutMinSessionS = 600
     static let gapToleranceS = 180
     static let stepWindowS = 60
-    static let walkSPM = 60.0
+    // Sustained brisk cadence, not incidental one-step-per-second movement.
+    // This is a STRAP workout classifier threshold; daily step counting is separate.
+    static let walkSPM = 100.0
     static let runSPM = 140.0
 
     static let gaitStill = 0
@@ -82,6 +84,7 @@ enum ActivityDetect {
         flags.reserveCapacity(ordered.count)
         measuredMotion.reserveCapacity(ordered.count)
         var latchedBaseline: Double?
+        var baselineFrozen = false
         var inactiveCount = 0
 
         for (index, sample) in ordered.enumerated() {
@@ -100,9 +103,13 @@ enum ActivityDetect {
                 // subtraction, which loses real movement at a legitimate wrap.
                 let delta = elapsed > 0
                     ? StepCounter.delta(from: previous, to: current, seconds: elapsed) : 0
+                // A single two-step burst is not evidence of brisk walking.
+                // Require the validated trailing cadence AND immediate motion:
+                // the first prevents shopping/office false positives, the
+                // second prevents the 60-second rate extending cooldown.
                 recentSteps = elapsed > 0 && elapsed <= 5 &&
-                    delta > 0 && Double(delta) * 60.0 / Double(elapsed) >= walkSPM &&
-                    delta <= StepCounter.maxStepsPerSecond * elapsed
+                    delta > 0 && delta <= StepCounter.maxStepsPerSecond * elapsed &&
+                    (rates[index] ?? 0) >= walkSPM
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
@@ -117,7 +124,9 @@ enum ActivityDetect {
             // Pre-workout baseline latching prevents long workouts from inflating
             // their own baseline and prematurely cutting off after 10-15 minutes.
             let computedBaseline = baselines[index]
-            let baseline = latchedBaseline ?? computedBaseline
+            // Do not learn a new 'resting' baseline from the middle of a
+            // workout; a frozen nil means no pre-workout baseline is available.
+            let baseline = baselineFrozen ? latchedBaseline : computedBaseline
 
             let elevated: Bool
             if let baseline = baseline {
@@ -130,15 +139,17 @@ enum ActivityDetect {
             flags.append(isActive)
 
             if isActive {
-                if latchedBaseline == nil {
+                if !baselineFrozen {
                     let prevIndex = max(0, index - 1)
                     latchedBaseline = baselines[prevIndex] ?? computedBaseline
+                    baselineFrozen = true
                 }
                 inactiveCount = 0
             } else {
                 inactiveCount += 1
                 if inactiveCount > gapToleranceS {
                     latchedBaseline = nil
+                    baselineFrozen = false
                 }
             }
         }
@@ -182,13 +193,19 @@ enum ActivityDetect {
                 // Keep step counting independent; only gate auto-saved walking sessions.
                 let duration = run[run.count - 1].unix - run[0].unix + 1
                 guard duration >= max(minimumDurationS, walkWorkoutMinSessionS) else { continue }
-                let elevatedSeconds = (start..<motionEnd).filter { sampleIndex in
-                    guard measuredMotion[sampleIndex] else { return false }
-                    let baseline = latchedBaseline ?? baselines[sampleIndex] ?? 70.0
-                    return Double(ordered[sampleIndex].heartRate) >=
-                        max(hrStartAbsolute, baseline + hrStartDelta)
+                // Only an HR baseline observed BEFORE the candidate is
+                // eligible. A baseline computed from workout samples can make
+                // 135 bpm exercise appear unelevated relative to itself.
+                let preWorkoutBaseline = baselines[start]
+                let hrFloor = max(
+                    hrStartAbsolute,
+                    (preWorkoutBaseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta
+                )
+                let exertionSeconds = (start..<motionEnd).filter { sampleIndex in
+                    measuredMotion[sampleIndex] &&
+                        Double(ordered[sampleIndex].heartRate) >= hrFloor
                 }.count
-                guard elevatedSeconds >= startSustainS else { continue }
+                guard exertionSeconds >= startSustainS else { continue }
             }
 
             sessions.append(
