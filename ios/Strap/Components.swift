@@ -318,7 +318,7 @@ struct ScoreValueText: View {
                 Text(String(value.dropLast()))
                     .font(StrapTypography.metric(size, weight: .bold))
                 Text("%")
-                    .font(StrapTypography.metric(size * 0.72, weight: .regular))
+                    .font(StrapTypography.metric(size * 0.72, weight: .bold))
             }
             .monospacedDigit()
         } else {
