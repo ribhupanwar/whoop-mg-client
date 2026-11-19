@@ -75,10 +75,14 @@ enum ActivityDetect {
                let current = sample.stepCounter,
                let previous = ordered[index - 1].stepCounter {
                 let elapsed = sample.unix - ordered[index - 1].unix
-                let delta = current - previous
+                // The 16-bit counter wraps near 65,535 and may reset on sync.
+                // Reuse the validated counter semantics instead of signed
+                // subtraction, which loses real movement at a legitimate wrap.
+                let delta = elapsed > 0
+                    ? StepCounter.delta(from: previous, to: current, seconds: elapsed) : 0
                 recentSteps = elapsed > 0 && elapsed <= 5 &&
                     delta > 0 && Double(delta) * 60.0 / Double(elapsed) >= walkSPM &&
-                    Double(delta) / Double(elapsed) <= 5
+                    delta <= StepCounter.maxStepsPerSecond * elapsed
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
