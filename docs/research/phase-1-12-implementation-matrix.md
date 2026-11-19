@@ -60,3 +60,8 @@ Evidence legend: VERIFIED = independently observed code/test or documented publi
 - **CODE DONE; DEVICE VERIFY:** Phase 15 primary-session HRV isolation exists in `CaptureAnalysis.swift`; regression `testDaytimeNapDoesNotAlterOvernightHRVOrRHR` exists in `AnalysisTests.swift` (commit `b2cb745`). Native XCTest execution still needs confirmation.
 - **BLOCKED (hardware evidence):** Real-world activity false positives, sleep interruptions, HRV/RHR/SpO2 comparison and backup restore need paired band captures / same-device testing.
 - **UI OWNER REQUIRED:** This research integration run made no changes to ring geometry, font, battery, or SwiftUI screens. Preserve the approved ring regression guard; Phase 17 visual backlog belongs to the separate UI workflow.
+
+## 2026-11-19 primary-sleep missing-RR regression
+- **VERIFIED (source):** `DailyAnalysis.metrics` selects the primary longest eligible sleep session for both RHR and HRV and deliberately leaves HRV nil when primary RR is missing. A daytime nap's valid RR must not fill the missing overnight value.
+- **CODE DONE / CI PENDING:** `40e8ceb` adds `testPrimarySleepWithoutRRDoesNotBorrowNapHRV` using synthetic primary sleep without RR and a valid-RR daytime nap. No production algorithm, persistence, UI, font or metric values changed. The previous positive-nap-isolation test remains in place.
+- **DEVICE VERIFY:** matched primary overnight and daytime nap captures with timestamped RR, plus real iPhone sleep/recovery comparison. Do not claim WHOOP parity from synthetic test coverage.
