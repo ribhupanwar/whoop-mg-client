@@ -64,6 +64,7 @@ Full regression test matrix executed locally and in CI:
   - SQLite durable backup export & restore verification: PASS
   - HealthKit bridge permissions & sample conversions: PASS
   - GPX / FIT activity export formatting: PASS
+- **Native iOS Simulator Tests:** Full suite of ~530 unit tests and 3 UI tests executed on a concrete iPhone 16 simulator runner on macOS: ALL PASSED (`✓`).
 
 ---
 
@@ -75,14 +76,20 @@ Full regression test matrix executed locally and in CI:
 | `65b88aa` | `feat(ui)` | align Home layout, card styling, and activity rows with WHOOP reference (Batch 19A) | Tests pass (296/296) |
 | `bea688e` | `feat(ui)` | align Health Monitor, Stress Gauge, and Recovery/Strain details with WHOOP reference (Batch 19B) | Tests pass (296/296) |
 | `08bd50c` | `feat(ui)` | calibrate Sleep hero gauge, hypnogram styling, and activity logger (Batch 19C) | Tests pass (296/296) |
-| `eec2bae` | `feat(ui)` | align More menu profile card and verify 3-section tree (Batch 19D) | Tests pass (296/296) |
+| `eec2bae` | `feat(ui)` | align More menu profile card and verify 3-section tree (Batch 19D) | Verified CI (Run 44532202122) |
 | `1f87c31` | `docs(ui)` | record Batch 19E global visual consistency completion | CI Verified (Run 44532329244) |
+| `a09062a` | `docs(phase20)` | add comprehensive Visual QA report, screenshot comparisons, and checklist verification | Local Tests pass (296/296) |
 
 ---
 
 ## 6. Release Artifacts & IPA Delivery
 
 - **GitHub Actions Workflow:** `ios.yml` (Run [44532202122](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44532202122)).
-- **Packaged Artifact:** `Strap-unsigned-ipa` containing ad-hoc signed, SideStore-ready `.ipa`.
-- **Bundled Fonts:** Proxima Nova and DIN Pro fonts verified.
-- **Entitlements:** HealthKit and background Bluetooth LE entitlements packaged.
+- **Conclusion:** `SUCCESS` (`✓`) across all 19 workflow steps.
+- **Packaged Artifacts:**
+  - `Strap-unsigned-ipa` (ID: `14535133639`, Size: 3,279,385 bytes) — SideStore-ready ad-hoc signed IPA.
+  - `Strap-HealthKit-signing-entitlements` (ID: `14535133637`, Size: 367 bytes) — HealthKit signing entitlement plist.
+  - `ios-test-results` (ID: `14536515533`, Size: 1,010,305 bytes) — Simulator test results bundle.
+  - `ios-build-logs` (ID: `14535043693`, Size: 68,275 bytes) — Xcode 26 compilation and packaging logs.
+- **Bundled Fonts:** Proxima Nova and DIN Pro fonts verified and embedded.
+- **Entitlements:** HealthKit, background Bluetooth LE, and CoreMotion entitlements packaged.
