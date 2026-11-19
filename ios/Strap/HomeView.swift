@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
     @State private var correctedLabels: [String: String] = UserDefaults.standard.dictionary(forKey: "strap.detected.activity.labels.v1") as? [String: String] ?? [:]
+    @State private var showDeviceSettings = false
     @State private var showDashboardCustomize = false
     @State private var showSleepEditor = false
     @State private var correctedSleepStart = Date()
@@ -164,6 +165,9 @@ struct HomeView: View {
         .sheet(isPresented: $showLiveSession) {
             LiveSessionView()
         }
+        .sheet(isPresented: $showDeviceSettings) {
+            HomeBandDeviceSettingsView()
+        }
         .sheet(isPresented: $showDashboardCustomize) {
             DashboardCustomizeSheet()
         }
@@ -218,17 +222,23 @@ struct HomeView: View {
 
             Spacer()
 
-            HStack(spacing: 6) {
-                Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
-                    .font(StrapTypography.metric(12, weight: .bold))
-                    .foregroundStyle(Color.appMuted)
-                    .monospacedDigit()
-                WhoopBandBatteryIcon(
-                    charge: displayedBattery,
-                    connected: store.band.isConnected
-                )
+            Button {
+                showDeviceSettings = true
+            } label: {
+                HStack(spacing: 6) {
+                    Text(demo ? "\(SampleData.batteryPercent)%" : batteryText)
+                        .font(StrapTypography.metric(12, weight: .bold))
+                        .foregroundStyle(Color.appMuted)
+                        .monospacedDigit()
+                    WhoopBandBatteryIcon(
+                        charge: displayedBattery,
+                        connected: store.band.isConnected
+                    )
+                }
             }
-            .accessibilityElement(children: .combine)
+            .buttonStyle(.plain)
+            .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), device settings")
+            .accessibilityHint("Opens band status and advanced information")
             .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), \(store.band.isConnected ? "connected" : "disconnected")")
 
         }
