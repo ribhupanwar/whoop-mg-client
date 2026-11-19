@@ -29,8 +29,12 @@ struct HomeView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 Text("STRAP")
-                    .font(StrapTypography.body(18, weight: .light)).tracking(3)
-                    .frame(maxWidth: .infinity).padding(.top, 5).padding(.bottom, 8)
+                    .font(StrapTypography.body(14, weight: .bold))
+                    .tracking(3.5)
+                    .foregroundStyle(Color.appFG.opacity(0.85))
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 10)
+                    .padding(.bottom, 12)
                 ringTrio
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: HomeHeroPosition.self,
@@ -248,11 +252,8 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            // WHOOP distributes the three score centers across the entire row.
-            // Keep each ring compact while allocating an equal-width column.
             GeometryReader { geometry in
-                let availableWidth = geometry.size.width
-                let diameter = min(CGFloat(104), max(CGFloat(84), (availableWidth - 36) / 3))
+                let diameter: CGFloat = 84.0
                 HStack(spacing: 0) {
                     NavigationLink(value: Route.sleepAnalysis) {
                         trioItem(
@@ -292,10 +293,10 @@ struct HomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(height: 140)
+            .frame(height: 122)
             if !demo && !trioHint.isEmpty { Hint(trioHint) }
         }
-        .padding(.bottom, 14)
+        .padding(.bottom, 18)
     }
 
     private func percentText(_ value: Int?) -> String {
@@ -339,17 +340,21 @@ struct HomeView: View {
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
-        VStack(spacing: 8) {
-            RingView(progress: progress, color: color, lineWidth: 8.0, size: ringSize, centerText: text, centerFont: 24)
+        VStack(spacing: 12) {
+            RingView(progress: progress, color: color, lineWidth: 5.0, size: ringSize, centerText: text, centerFont: 22)
                 .accessibilityHidden(true)
-            Text(label)
-                .font(StrapTypography.body(11.5, weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(Color(hex: 0xA3ADB5))
-                .lineLimit(1)
-                .minimumScaleFactor(0.85)
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .tracking(0.6)
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 8, weight: .semibold))
+            }
+            .foregroundStyle(Color(hex: 0xA3ADB5))
+            .lineLimit(1)
+            .minimumScaleFactor(0.85)
         }
-        .frame(width: ringSize)
+        .frame(width: ringSize + 28)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label + ", " + (text == "—" ? "unavailable" : text))

@@ -26,7 +26,7 @@ extension Color {
     static let appGood = Color(hex: 0x00E676)
     static let appWarn = Color(hex: 0xFFDE00)
     static let appHigh = Color(hex: 0xFF3B30)
-    static let appSleep = Color(hex: 0x4CA6E6)
+    static let appSleep = Color(hex: 0x7EA3B9)
     static let appGoodChipBG = Color(hex: 0x16261B)
     static let appDemoFlagBG = Color(hex: 0x2A2114)
 }
