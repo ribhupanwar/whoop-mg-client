@@ -231,8 +231,8 @@ struct MoreView: View {
             .accessibilityLabel("Open profile and settings")
         }
         .padding(16)
-        .background(RoundedRectangle(cornerRadius: 16).fill(LinearGradient.appCard))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.appLine, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
     }
 
     private var dataManagementPanel: some View {
