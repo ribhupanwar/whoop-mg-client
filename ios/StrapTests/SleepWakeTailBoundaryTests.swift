@@ -44,14 +44,15 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         var rows = (0..<600).map { row(base + $0, hr: 85, accel: 0.3, state: 0) }
         let quietStart = base + 600
         rows += (quietStart..<(quietStart + 900)).map {
-            row($0, hr: 62, accel: 0.008, state: 1)
+            row($0, hr: $0 < quietStart + 300 ? 74 : 62,
+                accel: 0.008, state: 1)
         }
         let confirmedStart = quietStart + 900
         rows += (confirmedStart..<(confirmedStart + 7200)).map {
             row($0, hr: 61, accel: 0.008, state: 2)
         }
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        XCTAssertEqual(night.startUnix, quietStart)
+        XCTAssertEqual(night.startUnix, quietStart + 300)
     }
 
     func testMovingPreludeDoesNotBacktrackConfirmedEveningSleep() throws {
