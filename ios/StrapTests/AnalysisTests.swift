@@ -119,6 +119,21 @@ final class LiveRRReplayDedupTests: XCTestCase {
 }
 
 final class HrvTests: XCTestCase {
+    func testPrimarySleepWithoutRRDoesNotBorrowNapHRV() throws {
+        // A valid nap must not fabricate overnight recovery when the
+        // longer primary sleep has no measured R-R intervals.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let overnight = stretch(0, 25_200, hr: 60, accel: 0.01)
+        let nap = stretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [760, 840])
+        let days = DailyAnalysis.metrics(
+            from: overnight + nap, sex: .male, maxHR: 180, calendar: calendar
+        )
+        let night = try XCTUnwrap(days.first(where: { $0.restingHR != nil }))
+        XCTAssertEqual(try XCTUnwrap(night.restingHR), 60, accuracy: 1e-9)
+        XCTAssertNil(night.lnRMSSD, "Nap RR must never fill missing primary-sleep HRV")
+    }
+
     func testDaytimeNapDoesNotAlterOvernightHRVOrRHR() throws {
         // Phase 15 regression: an afternoon nap must not contaminate the
         // primary night's HRV or RHR. This uses only synthetic samples.
