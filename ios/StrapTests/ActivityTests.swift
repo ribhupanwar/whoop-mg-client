@@ -351,6 +351,28 @@ final class StepDrivenDetectTests: XCTestCase {
     func testFourMinuteWalkIsBelowTheFloor() {
         XCTAssertTrue(ActivityDetect.detect(walk(seconds: 240)).isEmpty)
     }
+
+    func testTenMinuteComparisonModeRejectsSixMinuteWalkWithoutChangingDefault() {
+        let samples = walk(seconds: 360)
+        XCTAssertEqual(ActivityDetect.detect(samples).count, 1)
+        XCTAssertTrue(ActivityDetect.detect(
+            samples, minimumDurationS: ActivityDetect.comparisonMinSessionS
+        ).isEmpty)
+    }
+
+    func testTenMinuteComparisonModeAcceptsSustainedWalk() {
+        let samples = walk(seconds: 660)
+        let sessions = ActivityDetect.detect(
+            samples, minimumDurationS: ActivityDetect.comparisonMinSessionS
+        )
+        XCTAssertEqual(sessions.count, 1)
+        XCTAssertEqual(sessions.first?.kind, "walk")
+    }
+
+    func testInvalidComparisonDurationDoesNotCreateSessions() {
+        XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: 0).isEmpty)
+        XCTAssertTrue(ActivityDetect.detect(walk(), minimumDurationS: -10).isEmpty)
+    }
 }
 
 extension ActivityStoreTests {
