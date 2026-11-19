@@ -317,6 +317,29 @@ enum Hrv {
         return (.empty, 0)
     }
 
+    /// Evaluates HRV during Slow Wave Sleep (SWS / deep sleep) epochs.
+    /// WHOOP physiological research documents that HRV is calculated during SWS (deep sleep)
+    /// because parasympathetic vagal stability is maximized. When SWS epochs contain >= 20 NN beats
+    /// and >= minWindowS (default 300s), SWS RMSSD is returned. Otherwise, falls back to quiet-window HRV.
+    static func swsRestingHRV(
+        _ samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = restingQuietAccelG,
+        minWindowS: Int = restingMinWindowS
+    ) -> (result: HrvResult, windowSeconds: Int, isSWS: Bool) {
+        if !deepEpochs.isEmpty {
+            let deepSamples = samples.filter { sample in
+                deepEpochs.contains { $0.contains(sample.unix) }
+            }
+            let deepResult = restingHRV(deepSamples, quietAccelG: quietAccelG, minWindowS: minWindowS)
+            if let rmssd = deepResult.result.rmssdMS, rmssd.isFinite, rmssd > 0, deepResult.result.nnBeats >= 20 {
+                return (result: deepResult.result, windowSeconds: deepResult.windowSeconds, isSWS: true)
+            }
+        }
+        let fallback = restingHRV(samples, quietAccelG: quietAccelG, minWindowS: minWindowS)
+        return (result: fallback.result, windowSeconds: fallback.windowSeconds, isSWS: false)
+    }
+
     /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
     /// change either production estimator or its quality thresholds.
     struct RestingWindowDiagnostic {

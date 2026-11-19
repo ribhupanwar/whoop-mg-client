@@ -168,6 +168,34 @@ def resting_hrv(
     return hrv(longest), len(longest)
 
 
+def sws_resting_hrv(
+    samples: list[V18Sample],
+    deep_epochs: list[tuple[int, int]] | None = None,
+    quiet_accel_g: float = 0.10,
+    min_window_s: int = 60,
+) -> tuple[HrvResult, int, bool]:
+    """HRV during Slow Wave Sleep (SWS / deep sleep) epochs.
+
+    When deep sleep epochs contain at least min_window_s and valid RMSSD, returns
+    SWS RMSSD. Otherwise safely falls back to the longest quiet-window resting HRV.
+    """
+    if deep_epochs:
+        deep_samples = [
+            s
+            for s in samples
+            if any(start <= s.unix <= end for start, end in deep_epochs)
+        ]
+        deep_res, deep_len = resting_hrv(
+            deep_samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s
+        )
+        if deep_res.rmssd_ms is not None and deep_res.nn_beats >= 20:
+            return deep_res, deep_len, True
+    fallback_res, fallback_len = resting_hrv(
+        samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s
+    )
+    return fallback_res, fallback_len, False
+
+
 def age_predicted_max_hr(age: int) -> float:
     """Tanaka (2001): 208 - 0.7*age. A population estimate, not a measurement."""
     if age <= 0:

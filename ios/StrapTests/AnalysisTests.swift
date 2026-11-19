@@ -488,6 +488,24 @@ final class RestingHrvTests: XCTestCase {
         XCTAssertGreaterThan(pooled.rmssdMS!, 40.0)
     }
 
+    func testSWSRestingHRVSelectsSWSWhenAvailable() {
+        // Light sleep: RMSSD ~ 10 ms (800, 810)
+        let light = stretch(0, 120, hr: 65, accel: 0.01, rr: [800, 810])
+        // Deep / SWS sleep: RMSSD ~ 30 ms (780, 810)
+        let deep = stretch(120, 120, hr: 58, accel: 0.01, rr: [780, 810])
+        let allSamples = light + deep
+
+        let swsResult = Hrv.swsRestingHRV(allSamples, deepEpochs: [120...239], minWindowS: 60)
+        XCTAssertTrue(swsResult.isSWS)
+        XCTAssertEqual(swsResult.windowSeconds, 120)
+        XCTAssertEqual(swsResult.result.rmssdMS!, 30.0, accuracy: 0.5)
+
+        let fallbackResult = Hrv.swsRestingHRV(light, deepEpochs: [], minWindowS: 60)
+        XCTAssertFalse(fallbackResult.isSWS)
+        XCTAssertEqual(fallbackResult.windowSeconds, 120)
+        XCTAssertEqual(fallbackResult.result.rmssdMS!, 10.0, accuracy: 0.5)
+    }
+
     func testRestingHeartRateIsLowestSustainedWindow() {
         var rows = stretch(0, 120, hr: 70, accel: 0.01)
         rows[60] = makeSample(60, hr: 50, accel: 0.01)

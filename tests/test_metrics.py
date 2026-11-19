@@ -14,6 +14,7 @@ from whoop.metrics import (
     resting_hrv,
     rmssd,
     sdnn,
+    sws_resting_hrv,
     trimp,
 )
 from whoop.records import RecordHeader, V18Sample
@@ -112,6 +113,25 @@ class TestRestingHrv(unittest.TestCase):
         pooled = hrv(quiet + moving)
         self.assertLess(resting.rmssd_ms, 5.0)
         self.assertGreater(pooled.rmssd_ms, 40.0)
+
+    def test_sws_resting_hrv_selects_sws_when_available(self):
+        # Light sleep (0 to 120s): RMSSD ~ 10 ms (800, 810)
+        light = [sample(i, 65, 0.01, (800, 810)) for i in range(120)]
+        # SWS deep sleep (120 to 240s): RMSSD ~ 30 ms (780, 810)
+        deep = [sample(120 + i, 58, 0.01, (780, 810)) for i in range(120)]
+        all_samples = light + deep
+
+        res, win, is_sws = sws_resting_hrv(all_samples, deep_epochs=[(120, 239)], min_window_s=60)
+        self.assertTrue(is_sws)
+        self.assertEqual(win, 120)
+        self.assertAlmostEqual(res.rmssd_ms, 30.0, places=1)
+
+    def test_sws_resting_hrv_falls_back_when_no_sws(self):
+        light = [sample(i, 65, 0.01, (800, 810)) for i in range(120)]
+        res, win, is_sws = sws_resting_hrv(light, deep_epochs=None, min_window_s=60)
+        self.assertFalse(is_sws)
+        self.assertEqual(win, 120)
+        self.assertAlmostEqual(res.rmssd_ms, 10.0, places=1)
 
 
 class TestHrvKnownValues(unittest.TestCase):
