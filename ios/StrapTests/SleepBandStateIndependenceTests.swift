@@ -11,7 +11,7 @@ final class SleepBandStateIndependenceTests: XCTestCase {
             startUnix: start, endUnix: start + 600 - 1,
             quietFraction: 0.95, meanHR: 60, wakeEvents: 0
         )
-        func samples(upSeconds: Int) -> [V18Sample] {
+        func samples(upSeconds: Int, activeUp: Bool = false) -> [V18Sample] {
             (0..<600).map { second in
                 let state = (300..<(300 + upSeconds)).contains(second) ? 3 : 2
                 return V18Sample(
@@ -19,7 +19,7 @@ final class SleepBandStateIndependenceTests: XCTestCase {
                         version: 18, flags: 0x80, recordIndex: UInt32(second),
                         unix: UInt32(start + second), subsecQ15: 0
                     ),
-                    heartRate: 60, rrIntervalsMS: [1000], dynamicAccelG: 0.01,
+                    heartRate: 60, rrIntervalsMS: [1000], dynamicAccelG: activeUp && (300..<(300 + upSeconds)).contains(second) ? 0.20 : 0.01,
                     gravityXG: 0, gravityYG: 0, gravityZG: 1,
                     stepCounter: nil, stepCadence: nil, activityClass: nil,
                     skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
@@ -36,7 +36,10 @@ final class SleepBandStateIndependenceTests: XCTestCase {
         XCTAssertEqual(shortUp, baseline,
                        "A four-minute bathroom/movement interval must not force wake or end the night")
         let sustainedUp = SleepStager.stage(samples: samples(upSeconds: 300), period: period)
-        XCTAssertGreaterThanOrEqual(sustainedUp.wakeMinutes, 5,
-                       "A well-covered five-minute band-up interval should be represented as awake")
+        XCTAssertEqual(sustainedUp, baseline,
+                       "A quiet five-minute latched up hint alone must not manufacture wake")
+        let activeUp = SleepStager.stage(samples: samples(upSeconds: 300, activeUp: true), period: period)
+        XCTAssertGreaterThanOrEqual(activeUp.wakeMinutes, 5,
+                       "Five minutes of measured movement corroborating band-up should be awake")
     }
 }
