@@ -108,6 +108,10 @@ final class StrapBackupTests: XCTestCase {
         XCTAssertThrowsError(try StrapBackup.inspect(diagnostic))
         XCTAssertFalse(StrapBackup.allowedPath("captures/../../history.sqlite"))
         XCTAssertFalse(StrapBackup.allowedPath("/history.sqlite"))
+        XCTAssertFalse(StrapBackup.allowedPath("captures//record.bin"))
+        XCTAssertFalse(StrapBackup.allowedPath("captures/./record.bin"))
+        XCTAssertFalse(StrapBackup.allowedPath("captures/record.bin/"))
+        XCTAssertFalse(StrapBackup.allowedPath("captures/record\u{0000}.bin"))
     }
 }
 
