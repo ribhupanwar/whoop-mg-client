@@ -61,7 +61,7 @@ struct ConnectionSyncView: View {
                     Divider().background(Color.appLine).padding(.vertical, 4)
 
                     HStack {
-                        Text("Pending Historical Data")
+                        Text("History Processing")
                             .font(StrapTypography.body(12, weight: .medium))
                             .foregroundStyle(Color.appMuted)
                         Spacer()
@@ -185,7 +185,7 @@ struct ConnectionSyncView: View {
                         Divider().background(Color.appLine)
                         metricDiagnosticsRow("Live Packets Processed", value: "\(store.band.type40HRPackets + store.band.standardHRPackets)")
                         Divider().background(Color.appLine)
-                        metricDiagnosticsRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
+                        metricDiagnosticsRow("History Records With R-R Data", value: "\(store.band.historyRRRecords)")
                         Divider().background(Color.appLine)
                         metricDiagnosticsRow("Sync Stream Error", value: store.band.historySyncError ?? "No error recorded")
                     }
@@ -200,13 +200,13 @@ struct ConnectionSyncView: View {
     private var pendingDataDescription: String {
         if store.band.isAnalyzingHistory || store.band.isSavingHistory {
             if let p = store.band.historyProgress, p.total > 0 {
-                return "\(max(0, p.total - p.completed)) chunks pending"
+                return p.detail(now: Date())
             }
             return "Analyzing history…"
         } else if store.band.status == .draining {
             return "Draining flash frames…"
         } else {
-            return "Up to date (0 pending)"
+            return "Idle · band backlog unknown"
         }
     }
 
@@ -478,9 +478,6 @@ struct DataManagementView: View {
     @State private var showWhoopImporter = false
     @State private var importingWhoop = false
     @State private var whoopImportStatus = "No WHOOP file imported"
-    @State private var rawExportURL: URL?
-    @State private var rawExportStatus: String?
-    @State private var exportingRaw = false
 
     private var backupUnavailable: Bool {
         preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory
@@ -653,44 +650,6 @@ struct DataManagementView: View {
                         .foregroundStyle(Color.appFG)
                         .padding(.vertical, 6)
                     }
-
-                    Divider().background(Color.appLine).padding(.vertical, 4)
-
-                    Button {
-                        prepareRawTelemetryExport()
-                    } label: {
-                        HStack {
-                            Image(systemName: "waveform.path.ecg")
-                            Text("Export Raw Telemetry (14-Column CSV)")
-                                .font(StrapTypography.body(13.5, weight: .semibold))
-                            Spacer()
-                            if exportingRaw { ProgressView().controlSize(.small) }
-                        }
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.vertical, 6)
-                    }
-                    .disabled(exportingRaw)
-
-                    if let rawExportURL {
-                        Divider().background(Color.appLine).padding(.vertical, 4)
-                        ShareLink(item: rawExportURL) {
-                            HStack {
-                                Image(systemName: "square.and.arrow.up.fill")
-                                Text("Save Raw Telemetry CSV")
-                                    .font(StrapTypography.body(13.5, weight: .bold))
-                                Spacer()
-                            }
-                            .foregroundStyle(Color.appGood)
-                            .padding(.vertical, 6)
-                        }
-                    }
-
-                    if let rawExportStatus {
-                        Text(rawExportStatus)
-                            .font(StrapTypography.body(11))
-                            .foregroundStyle(rawExportURL != nil ? Color.appGood : Color.appMuted)
-                            .padding(.top, 2)
-                    }
                 }
             }
         }
@@ -764,14 +723,6 @@ struct DataManagementView: View {
             } catch { exportError = error.localizedDescription }
             preparingExport = false
         }
-    }
-
-    private func prepareRawTelemetryExport() {
-        // CaptureSummary contains derived metrics, not raw V18 frames.
-        // Do not fabricate a raw export from aggregated data.
-        rawExportURL = nil
-        exportingRaw = false
-        rawExportStatus = "Raw sensor export is unavailable here until the persisted V18 archive reader is wired."
     }
 }
 
@@ -1112,7 +1063,7 @@ struct DiagnosticsSupportView: View {
                     Divider().background(Color.appLine)
                     infoRow("Live RR Packets Processed", value: "\(store.band.type40RRPackets + store.band.standardRRPackets)")
                     Divider().background(Color.appLine)
-                    infoRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
+                    infoRow("History Records With R-R Data", value: "\(store.band.historyRRRecords)")
                 }
 
                 // Section 4: Sensor Feeds
