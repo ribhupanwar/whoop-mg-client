@@ -284,18 +284,32 @@ final class BandConnectionStateMachineTests: XCTestCase {
             if i % 2 == 0 { counter += 1 } // ~30 spm casual shuffle
             samples.append(
                 V18Sample(
-                    header: V18Header(version: 5, recordIndex: i, subsecQ15: 0),
-                    unix: baseUnix + i,
-                    heartRate: 75, // normal resting/standing HR
-                    rawHeartRate: 75,
+                    header: BandRecordHeader(
+                        version: 18, flags: 0x80, recordIndex: UInt32(i),
+                        unix: UInt32(baseUnix + i), subsecQ15: 0
+                    ),
+                    heartRate: 75,
                     rrIntervalsMS: [800],
                     dynamicAccelG: 0.05,
-                    gravityXG: 0, gravityYG: 0, gravityZG: 1,
-                    wearing: true,
-                    sleepState: 0,
-                    activityClass: 0,
+                    gravityXG: nil,
+                    gravityYG: nil,
+                    gravityZG: nil,
                     stepCounter: counter,
-                    hrQualityFlags: 0
+                    stepCadence: nil,
+                    activityClass: nil,
+                    skinTempC: nil,
+                    tempAux1C: nil,
+                    tempAux2C: nil,
+                    sleepStateByte: nil,
+                    sleepState: nil,
+                    cardiacFlags: nil,
+                    hrQualityFlags: nil,
+                    spo2CandidateRaw: nil,
+                    spo2CandidatePct: nil,
+                    spo2CandidateKind: .absent,
+                    signalQualityLogVariance: nil,
+                    psnrB: nil,
+                    psnrA: nil
                 )
             )
         }
