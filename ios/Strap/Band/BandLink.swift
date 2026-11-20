@@ -1523,7 +1523,11 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func beginDrainRequests() {
-        guard status == .authenticating else { return }
+        // The clientHello acknowledgement moves status to .connected before
+        // scheduling this callback. Requiring .authenticating here silently
+        // prevented the initial history request on a successfully bonded link.
+        guard hrBondConfirmed, peripheral?.state == .connected,
+              commandCharacteristic != nil, status != .draining else { return }
         startDraining()
     }
 
