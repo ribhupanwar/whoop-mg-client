@@ -1,13 +1,13 @@
 import CoreBluetooth
 
-/// UUID constants for WHOOP 4.0 and WHOOP 5.0 / MG (Gen5).
+/// Gen5 GATT identifiers and standard Bluetooth SIG services.
 enum BandUUID {
-    static let service              = CBUUID(string: "FD4B")
-    static let commandTo            = CBUUID(string: "00000001-FD4B-4E36-8E30-EC7DE3E5A004")
-    static let commandFrom          = CBUUID(string: "00000002-FD4B-4E36-8E30-EC7DE3E5A004")
-    static let events               = CBUUID(string: "00000004-FD4B-4E36-8E30-EC7DE3E5A004")
-    static let data                 = CBUUID(string: "00000005-FD4B-4E36-8E30-EC7DE3E5A004")
-    static let memfault             = CBUUID(string: "00000006-FD4B-4E36-8E30-EC7DE3E5A004")
+    static let service = CBUUID(string: "fd4b0001-cce1-4033-93ce-002d5875f58a")
+    static let commandTo = CBUUID(string: "fd4b0002-cce1-4033-93ce-002d5875f58a")
+    static let commandFrom = CBUUID(string: "fd4b0003-cce1-4033-93ce-002d5875f58a")
+    static let events = CBUUID(string: "fd4b0004-cce1-4033-93ce-002d5875f58a")
+    static let data = CBUUID(string: "fd4b0005-cce1-4033-93ce-002d5875f58a")
+    static let memfault = CBUUID(string: "fd4b0007-cce1-4033-93ce-002d5875f58a")
 
     // Standard Bluetooth SIG Heart Rate Service (0x180D)
     static let heartRateService     = CBUUID(string: "180D")

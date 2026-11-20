@@ -93,10 +93,10 @@ class WhoopUIParityTests(unittest.TestCase):
     def test_ring_geometry_constants(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")
         expected_geometry = {
-            "heroRingDiameter": "84.0",
+            "heroRingDiameter": "79.0",
             "detailRingDiameter": "104.0",
             "ringStrokeWidth": "5.0",
-            "ringGap": "18.0",
+            "ringGap": "8.0",
             "heroMetricFontSize": "23.0",
             "percentSignScale": "0.72",
         }
@@ -104,13 +104,13 @@ class WhoopUIParityTests(unittest.TestCase):
             pattern = rf"static\s+let\s+{const}:\s*CGFloat\s*=\s*{val}"
             self.assertRegex(theme_src, pattern, f"Ring geometry constant {const} must be {val}")
 
-    def test_home_view_header_wordmark_and_identity(self):
+    def test_home_view_has_no_unwanted_wordmark_above_rings(self):
         home_src = (IOS_DIR / "HomeView.swift").read_text(encoding="utf-8")
-        self.assertIn('Image("WhoopWordmark")', home_src)
-        self.assertIn('.frame(height: 14)', home_src)
-        self.assertIn('"STRAP · WHOOP Client"', home_src)
-        # Ensure hardcoded approximate "STRAP" text heading is replaced
-        self.assertNotIn('Text("STRAP")\n                    .font', home_src.replace("\r\n", "\n"))
+        # Keep the score rings immediately inside the home content; do not
+        # render an asset whose pixels can introduce an unrelated banner.
+        self.assertNotIn('Image("WhoopWordmark")', home_src)
+        self.assertIn('                ringTrio\n', home_src)
+        self.assertIn('                HistorySyncCard()\n', home_src)
 
     def test_device_settings_hardware_and_quarantine(self):
         home_src = (IOS_DIR / "HomeView.swift").read_text(encoding="utf-8")

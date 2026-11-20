@@ -2,6 +2,12 @@
 
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
+## Issue #83 BLE recovery
+
+- [x] Found the Gen5 GATT UUID regression in `fe78b2c`. The iOS UUIDs now agree with the earlier iOS transport and the hardware-backed Python Gen5 profile. Added a native regression test for the service, command write and four notification UUIDs.
+- [ ] Validate protocol-level CLIENT_HELLO, notification recovery, and manual history readiness. Commit `46bbe62b` alone still relies on a flag set by the ATT write callback.
+- [ ] On firmware 50.43.1.0 verify live HR packets, history frames and persisted chunks/ACKs, pull-to-refresh, and foreground/background reconnect with diagnostics.
+
 ## Phase 1–12 current implementation matrix (2026-11-19)
 - [x] **DONE (code/tests/CI, 2026-11-20):** Multi-PR Reconciliation and Integration across PRs #62, #65, #67, #68, #70 into `main` (commit with PR #69 preserved):
   - **PR #67:** Incidental workout prevention, walk/run cadence gates, and clear explanations for missing calorie inputs.
@@ -231,3 +237,48 @@ Sources: user-supplied WHOOP design notes, official WHOOP brand guidance, NOOP d
 - [ ] **VERIFY (interoperability):** Validate GPX/FIT exports with an independent FIT decoder and actual workout records; successful build is not external file compatibility proof.
 
 - [ ] **VERIFY (sleep wake corroboration, 2026-11-19):** Recent sleep detector changes `08994457` (measured dynamic acceleration), `baee7502` (sustained HR elevation), `a8cf6f1b` (sticky transition guard) and focused boundary tolerance regression `77aadf85` are present on `main`. Native iOS workflow [44448858902](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44448858902) and protocol tests [44448858972](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44448858972) both succeeded for `77aadf85`. Earlier intermediate iOS runs [44442879390](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44442879390) and [44446246179](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44446246179) failed; latest passing run supersedes their build gate, but device sleep timing, false-positive awake detection, stages and recovery recalculation remain VERIFY/BLOCKED pending same-night sensor reference. No physiological accuracy claim from synthetic tests.
+
+## Issue #83 follow-up verification
+
+The [Gen5 GATT fix](https://github.com/ribhupanwar/whoop-mg-client/pull/84) merged as `09fd4893c95aee3b11fee18d8f485aae8039e6f5`. The reviewed PR head `38bdc8743db70ee9a9e5c899f33cf996302440d1` passed 625 unit tests, 3 UI tests, and SideStore IPA packaging with licensed-font and HealthKit checks. [iOS workflow and artifacts](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44746663043)
+
+The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use it to select simulator fixtures and capture matching states. The archive contains only the locked Healthspan state and lacks activity details, More, device settings, sync and alarm editing.
+
+| Area | Existing automated coverage | Remaining verification |
+| --- | --- | --- |
+| Sleep onset, short awakenings and bathroom breaks | `SleepOvernightOnsetBoundaryTests`, `SleepWakeTailBoundaryTests`, `SleepBathroomBreakMergingTests` | Replay a labeled overnight recording with both a short bathroom trip and a final wake. Verify each boundary and the displayed wake durations. |
+| Sleep edits, stages and recovery | `SleepSessionTests`, `SleepStageTests`, `SleepStageDisplayTests`, `BandConnectionStateMachineTests` | Edit a night's start and end, relaunch, refresh history, then reopen the day. Verify saved bounds, stage totals and recovery recalculate for the edited night. |
+| HRV and resting heart rate | `AnalysisTests`, `LiveRRArchiveTests`, `HealthMonitorTests` | Replay a trace with missing seconds, repeated packets and outliers. Compare overnight windows, HRV and resting heart rate with a labeled source before making claims about measurement accuracy. |
+| Activity lifecycle and metrics | `ActivityTests`, `ActivityExertionTests`, `CaloriesTests`, `ManualActivityPreservationTests`, `GPSRunHistoryTests` | Record known-distance walks and runs. Reconcile live and detected records, edit and delete a record, then refresh and verify persistence and totals. |
+| HealthKit, backups and historical retention | `HealthKitTests`, `StrapBackupTests`, `HistoryDatabaseTests`, `HistoricalCaptureRecoveryTests`, `WhoopImportBatchTests` | On a test store, export, round-trip and retry an import. Check date ranges and counts, signed HealthKit authorization and that existing records survive. |
+| BLE and background behavior | `BandConnectionStateMachineTests`, `ReconnectBackoffPolicyTests`, `LiveHeartRateStateTests`, `TabResponsivenessTests` | On firmware 50.43.1.0 capture command and data notifications, the hello ATT result and protocol reply, 2A37 or Type-40 packets, history frames, persisted chunks and ACKs. Repeat for pull-to-refresh and foreground/background reconnect. |
+| Visual behavior | `TypographyTests`, `LiveHeartRateChartTests` | Capture STRAP on an iPhone simulator for the inventory's chart states. Check units, axes, gaps, interaction and scroll reachability. |
+
+## Home, Profile and More release follow-up
+
+| Status | Area | Evidence and remaining check |
+| --- | --- | --- |
+| DONE | Source reference inventory | Inspected and mapped 61 images in [the inventory](WHOOP_UI_REFERENCE_INVENTORY.md). |
+| VERIFY | Home geometry and scroll | PR #91 measures both 589 × 1280 reference pairs and adds simulator captures for expanded and sticky scores. Compare with matching state and screen dimensions before marking visual work done. |
+| VERIFY | Profile and More | PR #92 adds local name and avatar editing. PR #93 routes wake-alarm edits through the schedule editor, and denied notification permission through iOS Settings. Exercise pair/unpair, firmware, last successful sync, backup import/export and alarm scheduling on an iPhone. |
+| VERIFY | Health and backup labels | PR #82 distinguishes HealthKit write authorization, excludes device alarm confirmation from backup, and shows minimum night coverage using the existing baseline rules. Physical HealthKit permission states and backup/restore still need testing. |
+| TODO | Home card, header and navigation tuning | Measure Monitor, My Day, Tonight's Sleep and Journal against matched idle/loaded captures. Verify the lowest action remains reachable above the floating navigation at large text sizes. |
+| TODO | App-level units, time formats and extra alerts | Implement real formatting and scheduling before surfacing those switches. Wake alarm uses its established editor. |
+| BLOCKED | Missing reference states | Collect paired captures for Profile, More, unlocked Healthspan, activity details, alarm editing, device settings and sync diagnostics. Use labeled fixtures when comparing charts. |
+| BLOCKED | BLE acknowledgement and lossless acceptance | User reports sync working after the UUID fix. PR #85 remains draft pending a same-band packet capture and issue #88 acceptance. Validate #90 as ACK write diagnostics and confirm that the next chunk follows on the band. |
+| VERIFY | Final IPA | Build from the resulting main commit. Keep the licensed fonts, bundle identifier, signing and HealthKit entitlement. Verify the exact artifact before release. |
+
+### Reference code review
+
+- [NOOP protocol notes](https://github.com/ryanbr/noop/blob/2a1de7609843b095505274ad6fc811757210be80/docs/BLE_REVERSE_ENGINEERING.md) document Gen5 notification channels and the fixed hello command. This is independent reference evidence and still requires a STRAP capture on the user's firmware.
+- [OpenStrap Edge](https://github.com/OpenStrap/edge/tree/0c72868) exposes deferred replies, link-generation checks and history rollback in its session engine. Those are diagnostic design references. Preserve STRAP's working transport until a regression is reproduced.
+- [DSTA PulseForge](https://github.com/ribhupanwar/dsta/tree/bdee9cd/PulseForge) separates standard 2A37/RR parsing from per-channel FD4B reassembly and exposes subscription diagnostics. Distinguish actual sensor packets from a GATT connection.
+- [Woop](https://github.com/ribhupanwar/Woop/tree/14bb3f8) shares the NOOP project structure. Treat overlapping implementations as one reference lineage and retain STRAP's existing data-provenance labels.
+
+### Issue and PR disposition
+
+- #58 and #83 track the measured Home work and full comparison inventory. Issue #88 remains a physical acceptance gate.
+- #59 needs the original sleep trace or a validated fixture. #61 requires paired window-level diagnostics before changing overnight HRV or RHR.
+- #6 concerns originally labeled activities and requires a user-authorized export or official integration. Raw BLE history is sensor evidence for local detection.
+- #5 remains the controlled scientific-metric verification batch. PR #81 combines a stale Home presentation with workout export and analysis tools. Split the independent diagnostics before rebasing those changes.
+- Main run [44751970075](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44751970075) failed on the former 84 pt Python expectation. Main repaired it in `2de7794`. Native run [44751970073](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44751970073) failed on the separate Swift 84 pt assertion. PR #91 updates that test with the geometry change.

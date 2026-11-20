@@ -1523,7 +1523,11 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func beginDrainRequests() {
-        guard status == .authenticating else { return }
+        // The clientHello acknowledgement moves status to .connected before
+        // scheduling this callback. Requiring .authenticating here silently
+        // prevented the initial history request on a successfully bonded link.
+        guard hrBondConfirmed, peripheral?.state == .connected,
+              commandCharacteristic != nil, status != .draining else { return }
         startDraining()
     }
 
@@ -1534,7 +1538,15 @@ final class BandLink: NSObject, ObservableObject {
             connect(sex: sex, maxHR: maxHR, needHours: needHours)
             return
         }
-        guard status != .draining, status != .authenticating else { return }
+        guard status != .draining else {
+            lastMessage = "History transfer already in progress."
+            return
+        }
+        guard status != .authenticating else {
+            historySyncError = "WHOOP handshake is still pending. History sync cannot start until the band acknowledges pairing."
+            lastMessage = historySyncError ?? "WHOOP handshake pending"
+            return
+        }
         startDraining()
     }
 

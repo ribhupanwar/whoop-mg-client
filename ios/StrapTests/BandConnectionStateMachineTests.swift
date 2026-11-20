@@ -6,6 +6,17 @@ final class BandConnectionStateMachineTests: XCTestCase {
     private let testBandName = "WHOOP MG (Test)"
     private let otherUUID = "87654321-DCBA-10FE-5432-10FEDCBA9876"
 
+    func testGen5GATTDiscoveryUsesBandServiceAndCharacteristicUUIDs() {
+        XCTAssertEqual(BandUUID.service.uuidString.lowercased(), "fd4b0001-cce1-4033-93ce-002d5875f58a")
+        XCTAssertEqual(BandUUID.commandTo.uuidString.lowercased(), "fd4b0002-cce1-4033-93ce-002d5875f58a")
+        XCTAssertEqual(BandUUID.notifiable.map { $0.uuidString.lowercased() }, [
+            "fd4b0003-cce1-4033-93ce-002d5875f58a",
+            "fd4b0004-cce1-4033-93ce-002d5875f58a",
+            "fd4b0005-cce1-4033-93ce-002d5875f58a",
+            "fd4b0007-cce1-4033-93ce-002d5875f58a",
+        ])
+    }
+
     // MARK: - State Machine Lifecycle Tests
 
     func testLifecycleStatesForwardAndReverse() {

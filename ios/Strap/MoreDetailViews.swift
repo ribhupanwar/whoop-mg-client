@@ -21,7 +21,9 @@ struct ConnectionSyncView: View {
                             Text(store.band.isConnected ? "Connected" : "Disconnected")
                                 .font(StrapTypography.body(14, weight: .bold))
                                 .foregroundStyle(Color.appFG)
-                            Text(store.band.status.title)
+                            Text(store.band.isConnected && store.band.status == .scanning
+                                 ? "Connected · updating connection status"
+                                 : store.band.status.title)
                                 .font(StrapTypography.body(11))
                                 .foregroundStyle(Color.appMuted)
                         }
@@ -116,6 +118,18 @@ struct ConnectionSyncView: View {
                         }
                         .foregroundStyle(Color.appAccent)
                         .padding(.vertical, 8)
+                    }
+                }
+
+                if store.band.status == .draining || store.band.drainStats.acks > 0 {
+                    Panel {
+                        SectionTitle("BAND HISTORY TRANSFER")
+                        Text("\(store.band.drainStats.acks) chunks acknowledged · \(store.band.drainStats.samples) records received")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appFG)
+                        Text("These are measured transfer counters, not a percentage of total band history.")
+                            .font(StrapTypography.body(10.5))
+                            .foregroundStyle(Color.appMuted)
                     }
                 }
 

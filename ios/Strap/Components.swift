@@ -117,8 +117,7 @@ struct Screen<Content: View>: View {
         .scrollIndicators(.hidden)
         .font(StrapTypography.body(15))
         .background(
-            LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
-                           startPoint: .top, endPoint: .bottom)
+            LinearGradient.appCanvas
                 .ignoresSafeArea()
         )
     }
@@ -281,18 +280,17 @@ struct RingView: View {
     var lineWidth: CGFloat = AppLayout.ringStrokeWidth
     var size: CGFloat = AppLayout.heroRingDiameter
     let centerText: String
-    // WHOOP reference Home rings use DIN Pro 22-24 pt bold with 84 pt outer diameter
-    // and 5.0 pt stroke width.
     var centerFont: CGFloat = AppLayout.heroMetricFontSize
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.appRingTrack, lineWidth: lineWidth)
+                .strokeBorder(Color.appRingTrack, lineWidth: lineWidth)
             if let progress, progress > 0 {
                 Circle()
                     .trim(from: 0, to: min(max(progress, 0), 1))
                     .stroke(color, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .padding(lineWidth / 2)
                     .rotationEffect(.degrees(-90))
             }
             ScoreValueText(value: centerText, size: centerFont)
@@ -318,7 +316,7 @@ struct ScoreValueText: View {
                 Text(String(value.dropLast()))
                     .font(StrapTypography.metric(size, weight: .bold))
                 Text("%")
-                    .font(StrapTypography.metric(size * 0.72, weight: .bold))
+                    .font(StrapTypography.metric(size * AppLayout.percentSignScale, weight: .bold))
             }
             .monospacedDigit()
         } else {
