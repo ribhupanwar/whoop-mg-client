@@ -5,6 +5,7 @@ import SwiftUI
 /// Demo mode: labelled sample values behind the persistent banner.
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
     let openPlan: () -> Void
 
     @State private var appOpenDays = AppOpenDayTracker.count()
@@ -51,6 +52,21 @@ struct HomeView: View {
         .onAppear {
             appOpenDays = AppOpenDayTracker.recordOpen()
             nextWake = WakeAlarm.nextWakeDate()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { nextWake = WakeAlarm.nextWakeDate() }
+        }
+        .task(id: nextWake) {
+            guard let nextWake else { return }
+            let delay = max(0, nextWake.timeIntervalSinceNow)
+            do {
+                try await Task.sleep(for: .seconds(delay))
+                self.nextWake = WakeAlarm.nextWakeDate()
+            } catch is CancellationError {
+                // The schedule or screen changed while waiting.
+            } catch {
+                self.nextWake = WakeAlarm.nextWakeDate()
+            }
         }
         .coordinateSpace(name: "home-scroll")
         .onPreferenceChange(HomeHeroPosition.self) { value in
