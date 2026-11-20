@@ -6,6 +6,7 @@ import Foundation
 enum SleepDetect {
     static let quietAccelG = 0.08
     static let minSleepS = 3600
+    static let maxSleepS = 12 * 3600 // WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.swift)
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
 
@@ -266,7 +267,8 @@ enum SleepDetect {
                     verifiedEnd = min(verifiedEnd, terminalStart - 1)
                 }
             }
-            guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
+            guard verifiedEnd - verifiedStart + 1 >= minSleepS,
+                  verifiedEnd - verifiedStart + 1 <= maxSleepS else { continue }
 
             // Metrics must describe the verified interval, not the discarded
             // awake tail or a trimmed pre-bed onset.
@@ -289,10 +291,22 @@ enum SleepDetect {
                 return row.wearing && (35...220).contains(row.heartRate)
                     ? Double(row.heartRate) : nil
             }
+            // Harmonize wakeEvents with WHOOP 5.80.2 disturbanceCount and SleepSession.movementBouts:
+            // Count sustained movement bouts (movement persisting >= 15 seconds), not 1-second edge noise.
+            var movingSeconds = 0
             var wakeEvents = 0
-            for (offset, index) in verifiedIndices.enumerated() where offset > 0 {
-                let previous = verifiedIndices[offset - 1]
-                if !quiet[index] && quiet[previous] { wakeEvents += 1 }
+            var lastMovingUnix: Int? = nil
+            for index in verifiedIndices {
+                if !quiet[index] {
+                    if ordered[index].unix != lastMovingUnix {
+                        movingSeconds += 1
+                        lastMovingUnix = ordered[index].unix
+                    }
+                    if movingSeconds == 15 { wakeEvents += 1 }
+                } else {
+                    movingSeconds = 0
+                    lastMovingUnix = nil
+                }
             }
             periods.append(
                 SleepPeriod(

@@ -57,6 +57,7 @@ from .records import (
 
 QUIET_ACCEL_G = 0.08
 MIN_SLEEP_S = 1800
+MAX_SLEEP_WINDOW_S = 12 * 3600  # WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.swift)
 SLEEP_GAP_TOLERANCE_S = 300
 HR_DROP_BPM = 5.0
 
@@ -185,7 +186,7 @@ def detect_sleep(
         end = i
         run = ordered[start:end]
         duration = run[-1].unix - run[0].unix + 1
-        if duration < min_sleep_s:
+        if duration < min_sleep_s or duration > MAX_SLEEP_WINDOW_S:
             continue
         run_hrs = [float(s.heart_rate) for s in run if s.wearing]
         if not run_hrs or statistics.median(run_hrs) > active_median - hr_drop_bpm:

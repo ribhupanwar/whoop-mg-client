@@ -228,7 +228,30 @@ enum ActivityDetect {
                 )
             )
         }
-        return sessions
+        return suppressDuplicates(sessions)
+    }
+
+    /// Suppress auto-detected sessions that overlap by >= 50% with an earlier accepted session
+    /// (matching WHOOP 5.80.2 ActivityEntity duplicate suppression, 0xa39cef2).
+    static func suppressDuplicates(
+        _ sessions: [ActivitySession],
+        existing: [ActivitySession] = []
+    ) -> [ActivitySession] {
+        var accepted: [ActivitySession] = []
+        for candidate in sessions.sorted(by: { $0.startUnix < $1.startUnix }) {
+            let candidateDuration = max(1, candidate.durationS)
+            let isDuplicate = (accepted + existing).contains { other in
+                let overlapStart = max(candidate.startUnix, other.startUnix)
+                let overlapEnd = min(candidate.endUnix, other.endUnix)
+                guard overlapEnd >= overlapStart else { return false }
+                let overlap = overlapEnd - overlapStart + 1
+                return Double(overlap) / Double(candidateDuration) >= 0.50
+            }
+            if !isDuplicate {
+                accepted.append(candidate)
+            }
+        }
+        return accepted
     }
 
     /// Evaluates activity candidate windows for diagnostic review and confidence classification.
