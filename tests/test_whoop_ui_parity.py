@@ -93,7 +93,7 @@ class WhoopUIParityTests(unittest.TestCase):
     def test_ring_geometry_constants(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")
         expected_geometry = {
-            "heroRingDiameter": "84.0",
+            "heroRingDiameter": "68.0",
             "detailRingDiameter": "104.0",
             "ringStrokeWidth": "5.0",
             "ringGap": "18.0",
