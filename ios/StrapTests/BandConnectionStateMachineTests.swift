@@ -17,6 +17,32 @@ final class BandConnectionStateMachineTests: XCTestCase {
         ])
     }
 
+    func testHelloATTCompletionRequiresMatchingSuccessfulProtocolResponse() {
+        var hello = BandHelloExchange(sequence: 7)
+        hello.writeCompleted = true
+        XCTAssertFalse(hello.isConfirmed)
+
+        hello.receive([0x24, 0, 0x91, 7])
+        hello.receive([0x24, 0, 0x91, 6, 1])
+        hello.receive([0x24, 0, 0x22, 7, 1])
+        hello.receive([0x28, 0, 0x91, 7, 1])
+        hello.receive([0x24, 0, 0x91, 7, 0])
+        hello.receive([0x24, 0, 0x91, 7, 2])
+        XCTAssertFalse(hello.isConfirmed)
+
+        hello.receive([0x24, 0, 0x91, 7, 1])
+        XCTAssertTrue(hello.isConfirmed)
+    }
+
+    func testHelloNotificationMayPrecedeATTCallback() {
+        var hello = BandHelloExchange(sequence: 1)
+        hello.receive([0x26, 0, 0x91, 1, 1])
+        XCTAssertFalse(hello.isConfirmed)
+
+        hello.writeCompleted = true
+        XCTAssertTrue(hello.isConfirmed)
+    }
+
     // MARK: - State Machine Lifecycle Tests
 
     func testLifecycleStatesForwardAndReverse() {

@@ -56,6 +56,27 @@ enum BandStatus: Equatable {
     }
 }
 
+struct BandHelloExchange {
+    let sequence: UInt8
+    var writeCompleted = false
+    private(set) var responseReceived = false
+
+    init(sequence: UInt8) {
+        self.sequence = sequence
+    }
+
+    var isConfirmed: Bool { writeCompleted && responseReceived }
+
+    mutating func receive(_ frame: [UInt8]) {
+        guard frame.count >= 5,
+              frame[0] == BandPacket.commandResponse || frame[0] == BandPacket.puffinCommandResponse,
+              frame[2] == BandCommand.clientHello.rawValue,
+              frame[3] == sequence,
+              frame[4] == 1 else { return }
+        responseReceived = true
+    }
+}
+
 struct DrainStats: Equatable {
     var frames = 0
     var samples = 0
@@ -288,7 +309,8 @@ final class BandLink: NSObject, ObservableObject {
     private var notifyCharacteristics: [CBCharacteristic] = []
     private var reassemblers: [CBUUID: FrameReassembler] = [:]
     private var subscribed: Set<CBUUID> = []
-    private var subscriptionAttempts = 0
+    private var helloExchange: BandHelloExchange?
+    private var helloResponseDeadline: DispatchWorkItem?
 
     /// Public read-only stage helps distinguish GATT connection from an
     /// authenticated Gen5 stream when the live packet counter stays at zero.
@@ -1493,7 +1515,9 @@ final class BandLink: NSObject, ObservableObject {
         notifyCharacteristics = []
         reassemblers = [:]
         subscribed = []
-        subscriptionAttempts = 0
+        helloExchange = nil
+        helloResponseDeadline?.cancel()
+        helloResponseDeadline = nil
         handshakeStarted = false
         helloAttempts = 0
         commandQueue.forEach { $0.onFailure?("Band disconnected. Reconnect and try again.") }
@@ -1515,7 +1539,8 @@ final class BandLink: NSObject, ObservableObject {
     private func maybeBeginHandshake() {
         guard !handshakeStarted,
               commandCharacteristic != nil,
-              subscriptionAttempts > 0,
+              subscribed.contains(BandUUID.commandFrom),
+              subscribed.contains(BandUUID.data),
               peripheral?.state == .connected else { return }
         handshakeStarted = true
         status = .authenticating
@@ -1542,8 +1567,8 @@ final class BandLink: NSObject, ObservableObject {
             lastMessage = "History transfer already in progress."
             return
         }
-        guard status != .authenticating else {
-            historySyncError = "WHOOP handshake is still pending. History sync cannot start until the band acknowledges pairing."
+        guard hrBondConfirmed else {
+            historySyncError = "WHOOP protocol acknowledgement is pending. History sync cannot start yet."
             lastMessage = historySyncError ?? "WHOOP handshake pending"
             return
         }
@@ -1624,7 +1649,7 @@ final class BandLink: NSObject, ObservableObject {
         if let hrCharacteristic, !hrCharacteristic.isNotifying, !hrResubscribePending {
             peripheral.setNotifyValue(true, for: hrCharacteristic)
         }
-        guard handshakeStarted, commandCharacteristic != nil,
+        guard hrBondConfirmed, commandCharacteristic != nil,
               isBroadcastingHR, !hrProfileEnabled, !hrEnableQueued else { return }
         hrEnableQueued = true
         enqueue(BandCommand.setGenericHRProfile.rawValue, body: [0x01])
@@ -1686,7 +1711,7 @@ final class BandLink: NSObject, ObservableObject {
             self.ensureHeartRateStream()
             // WHOOP Gen5's vendor Type-40 stream is controlled independently
             // of the standard 2A37 CCCD. Re-arm both paths on silence.
-            if self.commandCharacteristic != nil, self.handshakeStarted {
+            if self.commandCharacteristic != nil, self.hrBondConfirmed {
                 self.enqueue(BandCommand.realtimeHROn.rawValue, body: [0x01])
             }
             self.lastMessage = "No fresh HR packets · recovery attempt \(self.hrRecoveryAttempts). Check live packet count."
@@ -1707,6 +1732,9 @@ final class BandLink: NSObject, ObservableObject {
         let writeID = UUID()
         currentWriteID = writeID
         let inner: [UInt8] = [BandPacket.command, commandSeq, next.opcode] + next.body
+        if next.opcode == BandCommand.clientHello.rawValue {
+            helloExchange = BandHelloExchange(sequence: commandSeq)
+        }
         commandSeq &+= 1
         let frame = Gen5Frame.build(inner)
         if next.expectResponse {
@@ -2085,6 +2113,11 @@ final class BandLink: NSObject, ObservableObject {
     private func handleFrame(_ inner: [UInt8], uuid: CBUUID) {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
+
+        if uuid == BandUUID.commandFrom, helloExchange != nil {
+            helloExchange?.receive(inner)
+            confirmHelloIfReady()
+        }
 
         if uuid == BandUUID.events {
             let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
@@ -2476,9 +2509,8 @@ extension BandLink: CBPeripheralDelegate {
                 commandCharacteristic = characteristic
             case BandUUID.heartRateMeasurement:
                 hrCharacteristic = characteristic
-                subscriptionAttempts += 1
-                if characteristic.properties.contains(.notify) {
-                    peripheral.setNotifyValue(true, for: characteristic)
+                if characteristic.properties.contains(.notify) || characteristic.properties.contains(.indicate) {
+                    if !characteristic.isNotifying { peripheral.setNotifyValue(true, for: characteristic) }
                 } else {
                     lastMessage = "The band did not expose HR notifications on 0x2A37."
                 }
@@ -2496,8 +2528,11 @@ extension BandLink: CBPeripheralDelegate {
                 if BandUUID.notifiable.contains(characteristic.uuid),
                    !notifyCharacteristics.contains(where: { $0.uuid == characteristic.uuid }) {
                     notifyCharacteristics.append(characteristic)
-                    subscriptionAttempts += 1
-                    peripheral.setNotifyValue(true, for: characteristic)
+                    if characteristic.isNotifying {
+                        subscribed.insert(characteristic.uuid)
+                    } else {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    }
                 }
             }
         }
@@ -2526,6 +2561,8 @@ extension BandLink: CBPeripheralDelegate {
         }
         if characteristic.isNotifying {
             subscribed.insert(characteristic.uuid)
+        } else {
+            subscribed.remove(characteristic.uuid)
         }
         if characteristic.uuid == BandUUID.heartRateMeasurement {
             if characteristic.isNotifying {
@@ -2602,10 +2639,11 @@ extension BandLink: CBPeripheralDelegate {
         error: Error?
     ) {
         guard peripheral === self.peripheral, characteristic == commandCharacteristic,
-              !commandWriteTimedOut else { return }
+              commandInFlight, !commandWriteTimedOut else { return }
         commandDeadline?.cancel()
         commandDeadline = nil
         if let error {
+            if commandQueue.first?.opcode == BandCommand.clientHello.rawValue { helloExchange = nil }
             commandInFlight = false
             if isAuthenticationError(error), helloAttempts < 2 {
                 helloAttempts += 1
@@ -2631,7 +2669,11 @@ extension BandLink: CBPeripheralDelegate {
                 commandQueue.removeFirst()
             }
             status = .failed("The strap rejected a command: \(error.localizedDescription)")
-            if !isAuthenticationError(error) { scheduleReconnect() }
+            if handshakeStarted && !hrBondConfirmed {
+                central.cancelPeripheralConnection(peripheral)
+            } else if !isAuthenticationError(error) {
+                scheduleReconnect()
+            }
             return
         }
         let finished = commandQueue.first?.opcode
@@ -2644,26 +2686,46 @@ extension BandLink: CBPeripheralDelegate {
         }
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {
-            hrBondConfirmed = true
-            // Field captures show an enabled 0x2A37 subscription BEFORE
-            // Gen5 encryption can remain silent forever. The bonded link
-            // must renew its CCCD regardless of isNotifying=true.
-            if hrSubscribedBeforeBond, let hr = hrCharacteristic, hr.isNotifying {
-                hrResubscribePending = true
-                peripheral.setNotifyValue(false, for: hr)
+            helloExchange?.writeCompleted = true
+            confirmHelloIfReady()
+            if !hrBondConfirmed {
+                let generation = linkGeneration
+                let timeout = DispatchWorkItem { [weak self] in
+                    guard let self, self.linkGeneration == generation, !self.hrBondConfirmed,
+                          let peripheral = self.peripheral else { return }
+                    self.helloExchange = nil
+                    self.historySyncError = "The band did not acknowledge CLIENT_HELLO. Reconnecting."
+                    self.lastMessage = self.historySyncError ?? "WHOOP protocol acknowledgement timed out"
+                    self.central.cancelPeripheralConnection(peripheral)
+                }
+                helloResponseDeadline = timeout
+                DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: timeout)
             }
-            hrSubscribedBeforeBond = false
-            status = .connected(bandName ?? "WHOOP MG")
-            isRebooting = false
-            rebootMessage = nil
-            let generation = linkGeneration
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }
-                self.beginDrainRequests()
-                self.ensureHeartRateStream()
-                self.syncWakeAlarm(force: true)
-                self.refreshBattery()
-            }
+        }
+    }
+
+    private func confirmHelloIfReady() {
+        guard helloExchange?.isConfirmed == true, let peripheral, peripheral.state == .connected else { return }
+        helloExchange = nil
+        helloResponseDeadline?.cancel()
+        helloResponseDeadline = nil
+        hrBondConfirmed = true
+        // Renew the standard HR subscription if it was enabled before hello.
+        if hrSubscribedBeforeBond, let hr = hrCharacteristic, hr.isNotifying {
+            hrResubscribePending = true
+            peripheral.setNotifyValue(false, for: hr)
+        }
+        hrSubscribedBeforeBond = false
+        status = .connected(bandName ?? "WHOOP MG")
+        isRebooting = false
+        rebootMessage = nil
+        let generation = linkGeneration
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }
+            self.beginDrainRequests()
+            self.ensureHeartRateStream()
+            self.syncWakeAlarm(force: true)
+            self.refreshBattery()
         }
     }
 }
