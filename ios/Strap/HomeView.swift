@@ -17,6 +17,10 @@ struct HomeView: View {
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
+    @State private var refreshingHome = false
+    @State private var syncSuccessAt: Date?
+    @State private var syncSuccessDismissal: Task<Void, Never>?
+    @State private var hasObservedInitialSync = false
     @State private var dayOffset = 0
     @State private var showLogger = false
     @State private var nextWake = WakeAlarm.nextWakeDate()
@@ -44,6 +48,10 @@ struct HomeView: View {
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 5)
                 }
+                if let completedAt = syncSuccessAt {
+                    syncSuccessBanner(completedAt: completedAt)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
                 ringTrio
                     .onScrollVisibilityChange(threshold: 0.05) { isVisible in
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
@@ -63,6 +71,8 @@ struct HomeView: View {
             }
         }
         .onAppear {
+            // An existing persisted completion is not a new sync success.
+            hasObservedInitialSync = true
             AppOpenDayTracker.recordOpen()
             appStreak = AppOpenStreak.stored().current
             nextWake = WakeAlarm.nextWakeDate()
@@ -106,11 +116,32 @@ struct HomeView: View {
             }
         }
         .refreshable {
+            refreshingHome = true
             if store.band.isConnected {
                 store.band.readHistory()
             } else {
                 store.connectBand()
             }
+            // SwiftUI owns the native pull gesture; show a short W-mark
+            // progress state without claiming the band finished syncing.
+            try? await Task.sleep(for: .milliseconds(700))
+            refreshingHome = false
+        }
+        .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
+            guard hasObservedInitialSync, let completedAt,
+                  store.band.historySyncError == nil else { return }
+            syncSuccessDismissal?.cancel()
+            withAnimation(.easeInOut(duration: 0.25)) { syncSuccessAt = completedAt }
+            syncSuccessDismissal = Task { @MainActor in
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.25)) { syncSuccessAt = nil }
+            }
+        }
+        .onDisappear {
+            syncSuccessDismissal?.cancel()
+            syncSuccessDismissal = nil
+            syncSuccessAt = nil
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
@@ -189,6 +220,38 @@ struct HomeView: View {
         .sheet(isPresented: $showDashboardCustomize) {
             DashboardCustomizeSheet()
         }
+    }
+
+    // MARK: Pull-to-refresh completion
+
+    private func syncSuccessBanner(completedAt: Date) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "cloud")
+                .font(.system(size: 18))
+                .foregroundStyle(.white)
+            Text("DATA CAUGHT UP")
+                .font(StrapTypography.body(12, weight: .bold))
+                .tracking(1.0)
+                .foregroundStyle(.white)
+            Spacer(minLength: 4)
+            VStack(alignment: .trailing, spacing: 3) {
+                Text("SYNCED TO")
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .tracking(0.9)
+                    .foregroundStyle(.white)
+                Text(completedAt, format: .dateTime.hour().minute())
+                    .font(StrapTypography.metric(11, weight: .bold))
+                    .foregroundStyle(Color.green)
+            }
+            Image(systemName: "checkmark")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Color.green)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 62)
+        .background(Color.black, in: RoundedRectangle(cornerRadius: 12))
+        .padding(.bottom, 12)
+        .accessibilityElement(children: .combine)
     }
 
     // MARK: Top bar
