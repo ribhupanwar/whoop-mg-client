@@ -249,7 +249,7 @@ enum DailyAnalysis {
                     }
                     let deepEpochs = relatedSession?.staging.segments
                         .filter { $0.stage == .deep }
-                        .map { $0.startUnix...$0.endUnix } ?? []
+                        .compactMap { $0.endUnix > $0.startUnix ? ($0.startUnix...($0.endUnix - 1)) : nil } ?? []
                     let result = Hrv.swsRestingHRV(segment, deepEpochs: deepEpochs, minWindowS: 300)
                     let rhr = Hrv.restingHeartRate(segment, windowS: 300)
                     return (period: period, hrv: result.result,
