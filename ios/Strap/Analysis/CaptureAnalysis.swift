@@ -114,7 +114,9 @@ struct CaptureSummary: Codable, Equatable {
 
         let steps = StepCounter.total(ordered)
         let staging = sessions.last?.staging
-        let activities = ActivityDetect.detect(ordered, sleepPeriods: canonicalPeriods)
+        let activities = ActivityDetect.detect(
+            ordered, sleepPeriods: canonicalPeriods, restingHR: resting, maxHR: maxHR
+        )
         let sleepWindows = canonicalPeriods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
         let stressSeries = StressWindows.series(
