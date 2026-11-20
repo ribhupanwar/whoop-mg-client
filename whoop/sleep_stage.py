@@ -54,8 +54,8 @@ BASE_LOG_PRIOR = {
     "awake": math.log(0.10),
 }
 
-# Deep is eligible only in the night's lowest ~32 % HR-flatness epochs.
-DEEP_GATE_THRESHOLD = 0.32
+# Deep is eligible only in the night's lowest ~25 % HR-flatness epochs.
+DEEP_GATE_THRESHOLD = 0.25
 DEEP_GATE_SLOPE = 5.0
 
 # Motion thresholds are relative to the night's own quiescent jerk floor, so
@@ -63,7 +63,7 @@ DEEP_GATE_SLOPE = 5.0
 JERK_FLOOR_MOVE_MULT = 38.0
 JERK_FLOOR_GATE_MULT = 55.0
 MOTION_GATE_BOOST = 2.0
-RESP_WEIGHT = 0.8
+RESP_WEIGHT = 0.6
 
 TRANSITION = {
     "deep": {"deep": 0.86, "rem": 0.007, "light": 0.126, "awake": 0.007},
@@ -330,7 +330,7 @@ def _deep_latency_guard(minutes_since_onset: float) -> float:
 def _cycle_prior(clock: float, minutes_since_onset: float) -> dict[str, float]:
     return {
         "deep": 1.2 * max(0.0, 1.0 - clock / 0.55),
-        "rem": 0.85 * clock - _rem_latency_guard(minutes_since_onset),
+        "rem": 1.0 * clock - _rem_latency_guard(minutes_since_onset),
         "light": 0.0,
         "awake": 0.0,
     }
