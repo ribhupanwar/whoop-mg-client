@@ -19,7 +19,7 @@ final class HomeScoreRingTests: XCTestCase {
         capture("Home compact scores", in: app)
 
         for _ in 0..<4 where compactSleep.exists { scrollingContent.swipeDown() }
-        XCTAssertFalse(compactSleep.exists)
+        XCTAssertTrue(compactSleep.waitForNonExistence(timeout: 5))
     }
 
     private func capture(_ name: String, in app: XCUIApplication) {

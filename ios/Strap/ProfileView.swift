@@ -21,15 +21,27 @@ enum ProfileAvatar: String, CaseIterable, Identifiable {
 
 struct ProfileAvatarView: View {
     @AppStorage(ProfileAvatar.storageKey) private var avatar: ProfileAvatar = .person
+    @AppStorage(ProfileView.nameKey) private var displayName = ""
     let size: CGFloat
 
     var body: some View {
-        Image(systemName: avatar.rawValue)
-            .font(.system(size: size * 0.45, weight: .semibold))
-            .foregroundStyle(Color.appBG)
-            .frame(width: size, height: size)
-            .background(Color(hex: 0x72CED1), in: Circle())
-            .accessibilityHidden(true)
+        let initials = displayName.split(whereSeparator: \.isWhitespace).prefix(2)
+            .compactMap(\.first).map(String.init).joined().uppercased()
+        Group {
+            if avatar == .person, !initials.isEmpty {
+                Text(initials).font(StrapTypography.body(size * 0.40, weight: .bold))
+            } else {
+                Image(systemName: avatar.rawValue)
+                    .font(.system(size: size * 0.45, weight: .semibold))
+            }
+        }
+        .foregroundStyle(Color.appBG)
+        .frame(width: size, height: size)
+        .background(
+            LinearGradient(colors: [Color(hex: 0x83D9CE), Color(hex: 0x54AEC8)], startPoint: .topLeading, endPoint: .bottomTrailing),
+            in: Circle()
+        )
+        .accessibilityHidden(true)
     }
 }
 
@@ -86,6 +98,8 @@ struct ProfileView: View {
     static let nameKey = "strap.profile.displayName.v1"
     @AppStorage(ProfileView.nameKey) private var displayName = ""
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var streak = AppOpenStreak.stored()
     @State private var period: Period = .all
     @State private var showAllActivities = false
 
@@ -107,15 +121,18 @@ struct ProfileView: View {
         period.months.flatMap { Calendar.current.date(byAdding: .month, value: -$0, to: Date()) }
     }
 
-    private var activityGroups: [(name: String, count: Int)] {
+    private var activityGroups: [(name: String, count: Int, averageStrain: Double?)] {
         let start = rangeStart?.timeIntervalSince1970 ?? -.infinity
         let sessions = store.detectedBandActivities.filter { Double($0.startUnix) >= start }
-        return Dictionary(grouping: sessions, by: \.kind).map { ($0.key, $0.value.count) }
+        return Dictionary(grouping: sessions, by: \.kind).map { name, group in
+            let scores = group.compactMap(\.strain).filter { $0.isFinite && (0...21).contains($0) }
+            let average = scores.isEmpty ? nil : scores.reduce(0, +) / Double(scores.count)
+            return (name: name, count: group.count, averageStrain: average)
+        }
             .sorted { $0.count == $1.count ? $0.name < $1.name : $0.count > $1.count }
     }
 
     var body: some View {
-        let streak = AppOpenStreak.stored()
         Screen {
             VStack(alignment: .leading, spacing: 18) {
                 header
@@ -154,6 +171,12 @@ struct ProfileView: View {
                 activitySummary
             }
             .foregroundStyle(Color.appFG)
+        }
+        .onAppear { streak = .stored() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            AppOpenDayTracker.recordOpen()
+            streak = .stored()
         }
         .navigationTitle("Profile")
         .navigationBarTitleDisplayMode(.inline)
@@ -248,6 +271,11 @@ struct ProfileView: View {
             ForEach(groups.indices.prefix(showAllActivities ? groups.count : 3), id: \.self) { index in
                 let group = groups[index]
                 stat(group.name.capitalized, value: group.count.formatted())
+                if let average = group.averageStrain {
+                    Text("Average recorded strain \(average.formatted(.number.precision(.fractionLength(1))))")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
                 ProgressView(value: Double(group.count), total: Double(groups.first?.count ?? 1))
                     .tint(Color.appAccent)
             }

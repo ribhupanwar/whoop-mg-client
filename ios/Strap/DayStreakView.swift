@@ -44,7 +44,8 @@ struct AppOpenStreak {
 
 struct DayStreakView: View {
     private let milestones = [7, 14, 25, 50, 100, 200, 365]
-    private var streak: AppOpenStreak { .stored() }
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var streak = AppOpenStreak.stored()
 
     var body: some View {
         let snapshot = streak
@@ -99,6 +100,12 @@ struct DayStreakView: View {
                 .buttonStyle(.bordered)
             }
             .foregroundStyle(Color.appFG)
+        }
+        .onAppear { streak = .stored() }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            AppOpenDayTracker.recordOpen()
+            streak = .stored()
         }
         .navigationTitle("Day Streak")
         .navigationBarTitleDisplayMode(.inline)

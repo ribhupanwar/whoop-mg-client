@@ -209,6 +209,7 @@ struct HomeView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Day Streak")
+            .accessibilityValue("\(appStreak) days")
 
             Spacer()
 
