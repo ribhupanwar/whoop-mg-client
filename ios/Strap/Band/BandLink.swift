@@ -104,6 +104,9 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var serialNumber: String?
     @Published private(set) var modelNumber: String?
     @Published private(set) var isBroadcastingHR: Bool = false
+    @Published private(set) var isRebooting = false
+    @Published private(set) var rebootMessage: String?
+    private var rebootExpectedDisconnect = false
     @Published private(set) var lastHistoryRecordCount = 0
     @Published private(set) var lastHistorySyncAt: Date?
     @Published private(set) var batteryPercent: Int?
@@ -1007,6 +1010,21 @@ final class BandLink: NSObject, ObservableObject {
         enqueue(BandCommand.setGenericHRProfile.rawValue, body: [enabled ? 0x01 : 0x00])
     }
 
+    /// Safely sends REBOOT_STRAP (Command 29 / 0x1D) to restart the WHOOP strap.
+    /// Non-destructive: circular flash history buffers in SPI NOR flash survive warm MCU reset.
+    func rebootBand() {
+        guard isConnected, commandCharacteristic != nil else {
+            rebootMessage = "WHOOP is not connected"
+            return
+        }
+        isRebooting = true
+        rebootMessage = "Sending reboot command to WHOOP..."
+        enqueue(BandCommand.rebootStrap.rawValue, body: [], response: true, onWrite: { [weak self] in
+            self?.rebootExpectedDisconnect = true
+            self?.rebootMessage = "Reboot command sent. Awaiting band restart..."
+        })
+    }
+
     /// Explicit unpair clears the saved association, terminates any active connection,
     /// and completely disables automatic reconnection until a new device is paired.
     func unpair() {
@@ -1605,8 +1623,8 @@ final class BandLink: NSObject, ObservableObject {
         RunLoop.main.add(timer, forMode: .common)
     }
 
-    private func enqueue(_ opcode: UInt8, body: [UInt8] = [], response: Bool = true) {
-        commandQueue.append(PendingCommand(opcode: opcode, body: body, expectResponse: response))
+    private func enqueue(_ opcode: UInt8, body: [UInt8] = [], response: Bool = true, onWrite: (() -> Void)? = nil) {
+        commandQueue.append(PendingCommand(opcode: opcode, body: body, expectResponse: response, onWrite: onWrite))
         pump()
     }
 
@@ -2050,6 +2068,26 @@ final class BandLink: NSObject, ObservableObject {
                 // HISTORY_COMPLETE: stop only on the explicit completion marker.
                 finishDrain(reason: "explicit completion")
             }
+        } else if (type == BandPacket.commandResponse || type == BandPacket.puffinCommandResponse), inner.count >= 5 {
+            // WHOOP 5/MG Puffin command response inner structure:
+            // inner[0] = 0x24 (commandResponse) or 0x26 (puffinCommandResponse)
+            // inner[1] = response sequence number
+            // inner[2] = command opcode (e.g. 0x1D for rebootStrap)
+            // inner[3] = origin sequence number
+            // inner[4] = result code (0x01 = SUCCESS, 0x00 = FAILURE)
+            // Note: in raw Gen5 BLE frame, inner[4] resides at byte 12 (+4 shift from 4.0 byte 8).
+            let cmdOpcode = inner[2]
+            let resultCode = inner[4]
+            if cmdOpcode == BandCommand.rebootStrap.rawValue {
+                if resultCode == 1 {
+                    rebootExpectedDisconnect = true
+                    isRebooting = true
+                    rebootMessage = "WHOOP acknowledged reboot. Restarting hardware..."
+                } else {
+                    isRebooting = false
+                    rebootMessage = "WHOOP refused reboot command (result code \(resultCode))"
+                }
+            }
         }
     }
 
@@ -2267,6 +2305,13 @@ extension BandLink: CBCentralManagerDelegate {
         isLiveSession = false
         sessionStartedUnix = nil
         liveSamples = []
+        if rebootExpectedDisconnect {
+            rebootExpectedDisconnect = false
+            status = .connecting("Rebooting WHOOP…")
+            lastMessage = "WHOOP is restarting; waiting for re-advertisement…"
+            scheduleReconnect()
+            return
+        }
         status = .disconnected(
             error.map { $0.localizedDescription } ?? "Strap disconnected"
         )
@@ -2498,6 +2543,8 @@ extension BandLink: CBPeripheralDelegate {
             }
             hrSubscribedBeforeBond = false
             status = .connected(bandName ?? "WHOOP MG")
+            isRebooting = false
+            rebootMessage = nil
             let generation = linkGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }

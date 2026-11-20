@@ -118,9 +118,9 @@ class WhoopUIParityTests(unittest.TestCase):
         self.assertIn("BandIllustrationView(", home_src)
         # Ensure vertical battery indicator is present
         self.assertIn("Capsule().fill(batteryColor)", home_src)
-        # Ensure dangerous commands remain quarantined with explicit notice
+        # Ensure reboot command is verified and destructive erase remains quarantined with explicit notice
         self.assertIn('deviceRow("REBOOT DEVICE"', home_src)
-        self.assertIn("Disabled for safety", home_src)
+        self.assertIn("Verified warm restart", home_src)
         self.assertIn('deviceRow("ERASE DEVICE DATA"', home_src)
         self.assertIn("protects stored circular buffer", home_src)
 

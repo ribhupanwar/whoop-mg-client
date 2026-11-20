@@ -194,6 +194,16 @@ final class AppStore: ObservableObject {
         band.setBroadcastHeartRate(enabled: enabled)
     }
 
+    func rebootBand() {
+        band.rebootBand()
+    }
+
+    /// Safely clears local downloaded health history and UI caches on this phone.
+    /// Strictly non-destructive to hardware: on-band SPI flash memory is untouched.
+    func clearLocalData() {
+        historySyncNeeded = true
+    }
+
     // MARK: - Activities
 
     /// Karvonen zones for a live session: resting HR comes from the override or
