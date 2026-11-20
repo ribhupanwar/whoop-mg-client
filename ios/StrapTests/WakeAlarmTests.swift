@@ -34,7 +34,7 @@ final class WakeAlarmTests: XCTestCase {
     }
 
     func testUpdateScheduleUpdatesSpecificDay() {
-        var sched = WakeAlarm.defaultSchedule
+        let sched = WakeAlarm.defaultSchedule
         WakeAlarm.schedule = sched
 
         // Update Wednesday (weekday 4) to 06:15 (375 mins)
