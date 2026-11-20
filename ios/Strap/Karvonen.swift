@@ -56,4 +56,39 @@ enum Karvonen {
     static func agePredictedMaxHR(age: Int) -> Double {
         208.0 - 0.7 * Double(age)
     }
+
+    /// WHOOP 5.80.2 verified method (0x109a85a8c): getReserveWithHeartRate:restingHeartRate:maximumHeartRate:
+    /// Maps instantaneous heart rate to reserve ratio in [0.0, 1.0].
+    static func getReserveWithHeartRate(heartRate: Double, restingHeartRate: Double, maximumHeartRate: Double) -> Double? {
+        guard heartRate.isFinite, restingHeartRate.isFinite, maximumHeartRate.isFinite,
+              restingHeartRate > 0, maximumHeartRate > restingHeartRate else { return nil }
+        let reserve = (heartRate - restingHeartRate) / (maximumHeartRate - restingHeartRate)
+        return max(0.0, min(1.0, reserve))
+    }
+
+    /// WHOOP 5.80.2 verified method (0x109a85158): getHeartRateForReserve:restingHeartRate:maximumHeartRate:
+    /// Inverts reserve ratio back to absolute heart rate in BPM.
+    static func getHeartRateForReserve(reserve: Double, restingHeartRate: Double, maximumHeartRate: Double) -> Double? {
+        guard reserve.isFinite, restingHeartRate.isFinite, maximumHeartRate.isFinite,
+              restingHeartRate > 0, maximumHeartRate > restingHeartRate else { return nil }
+        return restingHeartRate + reserve * (maximumHeartRate - restingHeartRate)
+    }
+
+    /// WHOOP 5.80.2 fallback calibration preventing strain withholding when user profile lacks explicit baselines.
+    static func effectiveMaxHR(configuredMaxHR: Double?, age: Int?) -> Double {
+        if let configured = configuredMaxHR, configured > 60 {
+            return configured
+        }
+        if let age = age, age > 0 {
+            return agePredictedMaxHR(age: age)
+        }
+        return 190.0
+    }
+
+    static func effectiveRestingHR(measuredRestingHR: Double?) -> Double {
+        if let measured = measuredRestingHR, measured > 30 {
+            return measured
+        }
+        return 60.0
+    }
 }

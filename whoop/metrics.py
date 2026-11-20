@@ -263,6 +263,46 @@ def hr_reserve_ratio(hr: float, resting_hr: float, max_hr: float) -> float:
     return max(0.0, min(1.0, (hr - resting_hr) / (max_hr - resting_hr)))
 
 
+def get_reserve_with_heart_rate(
+    heart_rate: float,
+    resting_heart_rate: float,
+    maximum_heart_rate: float,
+) -> float:
+    """WHOOP 5.80.2 parity (0x109a85a8c): getReserveWithHeartRate:restingHeartRate:maximumHeartRate:"""
+    return hr_reserve_ratio(heart_rate, resting_heart_rate, maximum_heart_rate)
+
+
+def get_heart_rate_for_reserve(
+    reserve: float,
+    resting_heart_rate: float,
+    maximum_heart_rate: float,
+) -> float:
+    """WHOOP 5.80.2 parity (0x109a85158): getHeartRateForReserve:restingHeartRate:maximumHeartRate:"""
+    if maximum_heart_rate <= resting_heart_rate:
+        raise ValueError("maximum_heart_rate must exceed resting_heart_rate")
+    clipped_reserve = max(0.0, min(1.0, reserve))
+    return resting_heart_rate + clipped_reserve * (maximum_heart_rate - resting_heart_rate)
+
+
+def effective_baselines(
+    configured_max_hr: float | None = None,
+    measured_resting_hr: float | None = None,
+    age: int | None = None,
+) -> tuple[float, float]:
+    """Safe fallback calibration preventing strain withholding on uncalibrated profile."""
+    max_hr = (
+        configured_max_hr
+        if configured_max_hr is not None and configured_max_hr > 60
+        else (age_predicted_max_hr(age) if age is not None and age > 0 else 190.0)
+    )
+    rhr = (
+        measured_resting_hr
+        if measured_resting_hr is not None and measured_resting_hr > 30
+        else 60.0
+    )
+    return rhr, max_hr
+
+
 def trimp(
     samples: list[V18Sample],
     max_hr: float,
@@ -288,3 +328,22 @@ def trimp(
         ratio = hr_reserve_ratio(float(sample.heart_rate), resting_hr, max_hr)
         total += (1.0 / 60.0) * ratio * k1 * math.exp(k2 * ratio)
     return total
+
+
+def whoop_strain_intensity(hr: float, resting_hr: float, max_hr: float) -> float:
+    """Non-linear strain intensity weighting from WHOOP 5.80.2 (0x1001eee6c)."""
+    if max_hr <= resting_hr or resting_hr <= 0:
+        return 0.0
+    reserve = max(0.0, min(1.0, (hr - resting_hr) / (max_hr + 3.0 - resting_hr)))
+    if reserve <= 0.30:
+        return 0.0
+    return 16.0 / (1.0 + math.exp((1.0 - reserve) / 0.15))
+
+
+def accumulate_live_strain_step(
+    current_raw: float, hr: float, delta_s: float, resting_hr: float, max_hr: float
+) -> float:
+    """Incremental live strain accumulation step with 3-second gap capping (WHOOP 5.80.2)."""
+    weight = whoop_strain_intensity(hr, resting_hr, max_hr)
+    dt = min(3.0, max(0.0, delta_s))
+    return current_raw + weight * dt / 691200.0

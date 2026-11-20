@@ -54,4 +54,41 @@ final class KarvonenTests: XCTestCase {
         XCTAssertNil(Karvonen.zoneIndex(heartRate: .nan, zones: zones))
         XCTAssertNil(Karvonen.zoneIndex(heartRate: 0, zones: zones))
     }
+
+    func testWhoop5802KarvonenReserveMethods() {
+        // RHR 60, MaxHR 190 -> reserve span 130
+        let rhr = 60.0
+        let maxHR = 190.0
+
+        // HR 125 -> (125 - 60)/130 = 65/130 = 0.50
+        let reserve50 = Karvonen.getReserveWithHeartRate(heartRate: 125.0, restingHeartRate: rhr, maximumHeartRate: maxHR)
+        XCTAssertNotNil(reserve50)
+        XCTAssertEqual(reserve50!, 0.50, accuracy: 0.0001)
+
+        // Inverse: reserve 0.50 -> 60 + 0.50 * 130 = 125 BPM
+        let hrCalculated = Karvonen.getHeartRateForReserve(reserve: 0.50, restingHeartRate: rhr, maximumHeartRate: maxHR)
+        XCTAssertNotNil(hrCalculated)
+        XCTAssertEqual(hrCalculated!, 125.0, accuracy: 0.0001)
+
+        // Boundary clipping
+        let belowRest = Karvonen.getReserveWithHeartRate(heartRate: 50.0, restingHeartRate: rhr, maximumHeartRate: maxHR)
+        XCTAssertEqual(belowRest, 0.0)
+
+        let aboveMax = Karvonen.getReserveWithHeartRate(heartRate: 200.0, restingHeartRate: rhr, maximumHeartRate: maxHR)
+        XCTAssertEqual(aboveMax, 1.0)
+
+        // Invalid inputs
+        XCTAssertNil(Karvonen.getReserveWithHeartRate(heartRate: 120, restingHeartRate: 190, maximumHeartRate: 60))
+        XCTAssertNil(Karvonen.getHeartRateForReserve(reserve: 0.5, restingHeartRate: 190, maximumHeartRate: 60))
+    }
+
+    func testWhoop5802EffectiveBaselines() {
+        // Fallback with nil baselines
+        XCTAssertEqual(Karvonen.effectiveMaxHR(configuredMaxHR: nil, age: nil), 190.0)
+        XCTAssertEqual(Karvonen.effectiveMaxHR(configuredMaxHR: nil, age: 30), 187.0)
+        XCTAssertEqual(Karvonen.effectiveMaxHR(configuredMaxHR: 195.0, age: 30), 195.0)
+
+        XCTAssertEqual(Karvonen.effectiveRestingHR(measuredRestingHR: nil), 60.0)
+        XCTAssertEqual(Karvonen.effectiveRestingHR(measuredRestingHR: 48.0), 48.0)
+    }
 }

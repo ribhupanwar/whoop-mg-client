@@ -333,11 +333,17 @@ struct HomeView: View {
     private var recoveryScore: Double? { store.band.recovery.score }
 
     private var strain: Double? {
-        // Keep the Home ring consistent with the daily Strain History bar.
+        // Keep the Home ring consistent with the daily Strain History bar while
+        // updating reactively in real time as live heart rate is streamed.
         let today = JournalStore.dayKey(for: Date())
-        // Never substitute a capture-wide score for today's day score:
-        // it may include a different date or an invalid sleep exclusion.
-        return store.band.days.first(where: { $0.dateKey == today })?.strain
+        let batchStrain = store.band.days.first(where: { $0.dateKey == today })?.strain
+        if let live = store.band.liveDayStrain {
+            if let batch = batchStrain {
+                return max(batch, live)
+            }
+            return live
+        }
+        return batchStrain
     }
 
     private var displayedBattery: Int? {

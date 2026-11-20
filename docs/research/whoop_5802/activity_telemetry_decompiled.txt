@@ -1,0 +1,141 @@
+================================================================================
+ADDRESS: 0x105d21198
+FUNCTION: FUN_105d21198 @ 105d21198
+
+void FUN_105d21198(long param_1)
+
+{
+  undefined *puVar1;
+  undefined *puVar2;
+  undefined *puVar3;
+  long lVar4;
+  undefined *puVar5;
+  undefined1 auVar6 [16];
+  long lStack_198;
+  undefined *puStack_190;
+  undefined *puStack_188;
+  undefined *puStack_180;
+  undefined *puStack_178;
+  undefined *puStack_170;
+  undefined *puStack_168;
+  undefined *puStack_160;
+  undefined *puStack_158;
+  undefined *puStack_150;
+  long lStack_148;
+  undefined *puStack_140;
+  undefined *puStack_138;
+  undefined *puStack_130;
+  undefined *puStack_128;
+  undefined *puStack_120;
+  undefined *puStack_118;
+  undefined *puStack_110;
+  undefined *puStack_108;
+  undefined *puStack_100;
+  undefined *puStack_f8;
+  long lStack_f0;
+  undefined *puStack_e8;
+  undefined *puStack_e0;
+  undefined *puStack_d8;
+  undefined *puStack_d0;
+  undefined *puStack_c8;
+  undefined *puStack_c0;
+  undefined *puStack_b8;
+  long lStack_b0;
+  long lStack_a8;
+  undefined *puStack_a0;
+  undefined *puStack_98;
+  long lStack_90;
+  long lStack_88;
+  long lStack_80;
+  long lStack_78;
+  undefined *puStack_70;
+  undefined *puStack_68;
+  undefined *puStack_60;
+  undefined *puStack_58;
+  
+  auVar6 = func_0x000105d21360(0x13f);
+  if (auVar6._8_8_ < 0x40) {
+    lStack_198 = *(long *)(auVar6._0_8_ + -8) + 0x40;
+    puVar1 = PTR___sBbWV_10b334b48 + 0x40;
+    puStack_188 = &UNK_1095532b8;
+    puStack_180 = &UNK_1095532d0;
+    puVar2 = PTR___sBoWV_10b334b78 + 0x40;
+    puStack_178 = &UNK_1095532b8;
+    puStack_168 = &UNK_1095532b8;
+    puStack_160 = &UNK_1095532b8;
+    puStack_150 = PTR___syycWV_10b3376d0 + 0x40;
+    puStack_158 = &UNK_1095532e8;
+    puStack_190 = puVar1;
+    puStack_170 = puVar2;
+    auVar6 = __sSo17OS_dispatch_queueC8DispatchE17SchedulerTimeTypeV6StrideVMa(0x13f);
+    puVar5 = PTR___sBi64_WV_10b334b68;
+    if (auVar6._8_8_ < 0x40) {
+      lStack_148 = *(long *)(auVar6._0_8_ + -8) + 0x40;
+      puVar3 = PTR___sBi64_WV_10b334b68 + 0x40;
+      puStack_120 = &UNK_109553300;
+      puStack_118 = &UNK_109553300;
+      puStack_108 = &UNK_109553300;
+      puStack_100 = &UNK_109553300;
+      puStack_f8 = &UNK_109553300;
+      puStack_140 = puVar3;
+      puStack_138 = puVar3;
+      puStack_130 = puVar3;
+      puStack_128 = puVar2;
+      puStack_110 = puVar1;
+      auVar6 = func_0x0001005ca978(0x13f,0x10b768c50,PTR___s10Foundation4DateVMa_10b32ad38);
+      if (auVar6._8_8_ < 0x40) {
+        lVar4 = *(long *)(auVar6._0_8_ + -8) + 0x40;
+        puStack_b8 = &UNK_109553318;
+        puStack_a0 = &UNK_109553330;
+        lStack_f0 = lVar4;
+        puStack_e8 = puVar3;
+        puStack_e0 = puVar3;
+        puStack_d8 = puVar3;
+        puStack_d0 = puVar3;
+        puStack_c8 = puVar3;
+        puStack_c0 = puVar3;
+        lStack_b0 = lVar4;
+        lStack_a8 = lVar4;
+        puStack_98 = puVar3;
+        lStack_90 = lVar4;
+        auVar6 = func_0x0001005ca978(0x13f,0x10b769b40,&DAT_105d23b28);
+        if (auVar6._8_8_ < 0x40) {
+          lStack_88 = *(long *)(auVar6._0_8_ + -8) + 0x40;
+          auVar6 = func_0x0001005ca978(0x13f,0x10b769b48,&DAT_105d2cf64);
+          if (auVar6._8_8_ < 0x40) {
+            lStack_80 = *(long *)(auVar6._0_8_ + -8) + 0x40;
+            puStack_70 = puVar5 + 0x40;
+            puStack_68 = &UNK_109553300;
+            puStack_60 = &UNK_109553330;
+            puStack_58 = &UNK_109553330;
+            lStack_78 = lVar4;
+            _swift_updateClassMetadata2(param_1,0x100,0x29,&lStack_198,param_1 + 0x50);
+          }
+        }
+      }
+    }
+  }
+  return;
+}
+
+
+================================================================================
+ADDRESS: 0x109553520
+FUNCTION: FUN_109553520 @ 109553520
+
+/* WARNING: Control flow encountered bad instruction data */
+
+void FUN_109553520(void)
+
+{
+  undefined1 in_z10 [32];
+  undefined1 in_z12 [32];
+  undefined1 in_z20 [32];
+  undefined4 in_p1;
+  
+  SVE_fnmls(in_z20,in_p1,in_z10,in_z12);
+                    /* WARNING: Bad instruction - Truncating control flow here */
+  halt_baddata();
+}
+
+
