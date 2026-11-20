@@ -1534,7 +1534,15 @@ final class BandLink: NSObject, ObservableObject {
             connect(sex: sex, maxHR: maxHR, needHours: needHours)
             return
         }
-        guard status != .draining, status != .authenticating else { return }
+        guard status != .draining else {
+            lastMessage = "History transfer already in progress."
+            return
+        }
+        guard status != .authenticating else {
+            historySyncError = "WHOOP handshake is still pending. History sync cannot start until the band acknowledges pairing."
+            lastMessage = historySyncError ?? "WHOOP handshake pending"
+            return
+        }
         startDraining()
     }
 
