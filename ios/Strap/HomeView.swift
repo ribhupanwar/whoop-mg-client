@@ -281,7 +281,9 @@ struct HomeView: View {
                             label: "RECOVERY",
                             text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                             progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
-                            color: Color(hex: 0x00D66D),
+                            color: (demo ? Double(SampleData.recoveryRingPercent) : recoveryScore).map { score in
+                                score >= 67 ? Color(hex: 0x00E66C) : DetailMetric.recovery.color(score)
+                            } ?? DetailMetric.recovery.color(nil),
                             ringSize: diameter
                         )
                     }
@@ -1323,7 +1325,7 @@ private struct HomeBandDeviceSettingsView: View {
             HStack(alignment: .bottom) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(store.band.isConnected ? "CONNECTED TO" : "DISCONNECTED")
-                        .foregroundStyle(Color.green)
+                        .foregroundStyle(store.band.isConnected ? Color.green : muted)
                         .font(StrapTypography.body(11, weight: .bold))
                         .tracking(1)
                     Text("WHOOP MG")
