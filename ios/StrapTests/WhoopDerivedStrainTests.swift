@@ -55,4 +55,42 @@ final class WhoopDerivedStrainTests: XCTestCase {
         XCTAssertEqual(WhoopDerivedStrain.raw(invalid, restingHR: 60, maxHR: 180), 0)
         XCTAssertEqual(WhoopDerivedStrain.raw(offWrist, restingHR: 60, maxHR: 180), 0)
     }
+
+    func testRawForScoreRoundtrip() {
+        for score in [0.0, 1.0, 5.5, 10.0, 14.2, 18.0, 20.5, 21.0] {
+            guard let raw = WhoopDerivedStrain.raw(forScore: score) else {
+                XCTFail("Missing raw for score \(score)")
+                continue
+            }
+            let recovered = WhoopDerivedStrain.display(raw: raw)
+            XCTAssertEqual(recovered, score, accuracy: 0.05)
+        }
+    }
+
+    func testLiveAccumulateStepBehavior() {
+        let resting = 60.0
+        let maxHR = 180.0
+        
+        // Sedentary HR (65 bpm) produces 0 weight and does not increase raw strain
+        let baseRaw = 0.001
+        let sedentary = WhoopDerivedStrain.accumulateStep(
+            currentRaw: baseRaw, hr: 65, deltaSeconds: 1.0, restingHR: resting, maxHR: maxHR
+        )
+        XCTAssertEqual(sedentary, baseRaw)
+        
+        // Exercise HR (150 bpm) produces positive weight and increases raw strain
+        let exercise = WhoopDerivedStrain.accumulateStep(
+            currentRaw: baseRaw, hr: 150, deltaSeconds: 1.0, restingHR: resting, maxHR: maxHR
+        )
+        XCTAssertGreaterThan(exercise, baseRaw)
+        
+        // Gap capping: a 60-second jump contributes no more than a 3-second jump
+        let capped3s = WhoopDerivedStrain.accumulateStep(
+            currentRaw: baseRaw, hr: 150, deltaSeconds: 3.0, restingHR: resting, maxHR: maxHR
+        )
+        let largeGap = WhoopDerivedStrain.accumulateStep(
+            currentRaw: baseRaw, hr: 150, deltaSeconds: 60.0, restingHR: resting, maxHR: maxHR
+        )
+        XCTAssertEqual(largeGap, capped3s, accuracy: 1e-12)
+    }
 }

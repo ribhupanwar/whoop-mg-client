@@ -127,6 +127,58 @@ class TestWHOOP5802AlgorithmParity(unittest.TestCase):
         self.assertEqual(len(suppress_duplicates([session(1000, 1100), session(1101, 1200)])), 2)
 
 
+class TestWhoop5802KarvonenParity(unittest.TestCase):
+    def test_get_reserve_with_heart_rate(self):
+        from whoop.metrics import get_reserve_with_heart_rate, get_heart_rate_for_reserve, effective_baselines
+
+        rhr = 60.0
+        max_hr = 190.0
+        # HR 125 -> reserve 0.50
+        res = get_reserve_with_heart_rate(125.0, rhr, max_hr)
+        self.assertAlmostEqual(res, 0.50, places=4)
+
+        # Inverse
+        hr = get_heart_rate_for_reserve(0.50, rhr, max_hr)
+        self.assertAlmostEqual(hr, 125.0, places=4)
+
+        # Clipping
+        self.assertEqual(get_reserve_with_heart_rate(50.0, rhr, max_hr), 0.0)
+        self.assertEqual(get_reserve_with_heart_rate(200.0, rhr, max_hr), 1.0)
+
+        # Fallback baselines
+        r, m = effective_baselines()
+        self.assertEqual(r, 60.0)
+        self.assertEqual(m, 190.0)
+
+        r2, m2 = effective_baselines(configured_max_hr=195.0, measured_resting_hr=48.0, age=30)
+        self.assertEqual(r2, 48.0)
+        self.assertEqual(m2, 195.0)
+
+    def test_live_strain_accumulation_parity(self):
+        from whoop.metrics import whoop_strain_intensity, accumulate_live_strain_step
+
+        rhr = 60.0
+        max_hr = 190.0
+
+        # HR below 30% reserve generates 0.0 intensity
+        # 30% reserve of (190 + 3 - 60) = 0.3 * 133 = 39.9 -> HR <= 99.9 bpm
+        self.assertEqual(whoop_strain_intensity(70.0, rhr, max_hr), 0.0)
+        self.assertEqual(whoop_strain_intensity(95.0, rhr, max_hr), 0.0)
+
+        # HR above 30% reserve generates positive intensity
+        vigorous_intensity = whoop_strain_intensity(150.0, rhr, max_hr)
+        self.assertGreater(vigorous_intensity, 0.0)
+
+        # Integration step accumulates
+        base_raw = 0.001
+        step_raw = accumulate_live_strain_step(base_raw, 150.0, 1.0, rhr, max_hr)
+        self.assertGreater(step_raw, base_raw)
+
+        # 3-second gap capping (WHOOP 5.80.2 staleHeartRateInterval)
+        capped_3s = accumulate_live_strain_step(base_raw, 150.0, 3.0, rhr, max_hr)
+        large_gap = accumulate_live_strain_step(base_raw, 150.0, 60.0, rhr, max_hr)
+        self.assertAlmostEqual(capped_3s, large_gap, places=10)
+
 
 if __name__ == "__main__":
     unittest.main()

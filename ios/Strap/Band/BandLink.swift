@@ -109,6 +109,11 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var batteryPercent: Int?
     @Published private(set) var liveHeartRate: Int?
     @Published private(set) var recentLiveHR: [LiveSample] = []
+    @Published private(set) var liveDayStrain: Double?
+    @Published private(set) var liveDayRawStrain: Double = 0.0
+    private var liveDayStrainKey: String = ""
+    private var lastLiveStrainSampleUnix: Int?
+    private var configuredRestingHR: Double?
     @Published private(set) var lastLiveHRAt: Date?
     @Published private(set) var liveHRNotificationCount = 0
     @Published private(set) var liveRRIntervalsMS: [Int] = []
@@ -514,13 +519,16 @@ final class BandLink: NSObject, ObservableObject {
 
     private var lastRecalculationSettings: String?
 
-    func configure(sex: Sex, maxHR: Double?, needHours: Double) {
+    func configure(sex: Sex, maxHR: Double?, restingHR: Double? = nil, needHours: Double) {
         self.sex = sex
         self.maxHR = maxHR
+        if let restingHR = restingHR {
+            self.configuredRestingHR = restingHR
+        }
         self.needHours = needHours
         // Avoid reprocessing the full BLE archive whenever SwiftUI reconfigures
         // the same BandLink instance with unchanged settings.
-        let settingsKey = "\(sex)|\(String(describing: maxHR))|\(needHours)"
+        let settingsKey = "\(sex)|\(String(describing: maxHR))|\(String(describing: configuredRestingHR))|\(needHours)"
         guard lastRecalculationSettings != settingsKey else { return }
         lastRecalculationSettings = settingsKey
         // Migrate old results and refresh changed settings off the main thread.
@@ -859,10 +867,10 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Connection
 
-    func connect(sex: Sex, maxHR: Double?, needHours: Double) {
+    func connect(sex: Sex, maxHR: Double?, restingHR: Double? = nil, needHours: Double) {
         staleHRReconnects = 0
         hrRecoveryAttempts = 0
-        configure(sex: sex, maxHR: maxHR, needHours: needHours)
+        configure(sex: sex, maxHR: maxHR, restingHR: restingHR, needHours: needHours)
         stopPicker()
         wantsConnection = true
         if let peripheral, peripheral.state == .connected {
@@ -1174,6 +1182,64 @@ final class BandLink: NSObject, ObservableObject {
             recentLiveHR.append(entry)
         }
         recentLiveHR.removeAll { $0.unix < now - 1800 }
+        accumulateLiveStrain(bpm: bpm, unix: now)
+    }
+
+    private func effectiveRestingHR(for dayKey: String) -> Double? {
+        if let configured = configuredRestingHR, configured.isFinite, configured > 0 {
+            return configured
+        }
+        if let day = days.first(where: { $0.dateKey == dayKey }) {
+            if let rhr = day.restingHR, rhr.isFinite, rhr > 0 { return rhr }
+            if let awake = day.awakeRestingHR, awake.isFinite, awake > 0 { return awake }
+        }
+        if let rhr = recovery.restingHR, rhr.isFinite, rhr > 0 {
+            return rhr
+        }
+        return days.lazy.filter { $0.state == "sleep" && $0.restingHR != nil }.last?.restingHR
+    }
+
+    private func accumulateLiveStrain(bpm: Int, unix: Int) {
+        let currentDayKey = JournalStore.dayKey(for: Date(timeIntervalSince1970: Double(unix)))
+
+        if currentDayKey != liveDayStrainKey {
+            liveDayStrainKey = currentDayKey
+            lastLiveStrainSampleUnix = nil
+            if let todayBatchStrain = days.first(where: { $0.dateKey == currentDayKey })?.strain,
+               let baseRaw = WhoopDerivedStrain.raw(forScore: todayBatchStrain) {
+                liveDayRawStrain = baseRaw
+                liveDayStrain = todayBatchStrain
+            } else {
+                liveDayRawStrain = 0.0
+                liveDayStrain = nil
+            }
+        }
+
+        let effectiveMax = maxHR ?? Karvonen.effectiveMaxHR(configuredMaxHR: nil, age: nil)
+        let effectiveResting = effectiveRestingHR(for: currentDayKey) ?? Karvonen.effectiveRestingHR(measuredRestingHR: nil)
+        guard effectiveMax > effectiveResting else { return }
+
+        let delta: Double
+        if let lastUnix = lastLiveStrainSampleUnix {
+            if unix <= lastUnix { return }
+            delta = Double(unix - lastUnix)
+        } else {
+            delta = 1.0
+        }
+        lastLiveStrainSampleUnix = unix
+
+        liveDayRawStrain = WhoopDerivedStrain.accumulateStep(
+            currentRaw: liveDayRawStrain,
+            hr: Double(bpm),
+            deltaSeconds: delta,
+            restingHR: effectiveResting,
+            maxHR: effectiveMax
+        )
+
+        if let score = WhoopDerivedStrain.display(raw: liveDayRawStrain) {
+            let batch = days.first(where: { $0.dateKey == currentDayKey })?.strain ?? 0.0
+            liveDayStrain = max(batch, score)
+        }
     }
 
     // MARK: - Live session
@@ -1858,6 +1924,17 @@ final class BandLink: NSObject, ObservableObject {
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
         preferencesWriter.write(days, forKey: Keys.days)
+        let today = JournalStore.dayKey(for: Date())
+        if let batch = days.first(where: { $0.dateKey == today })?.strain {
+            if let currentLive = liveDayStrain {
+                liveDayStrain = max(batch, currentLive)
+            } else {
+                liveDayStrain = batch
+                if let baseRaw = WhoopDerivedStrain.raw(forScore: batch) {
+                    liveDayRawStrain = max(liveDayRawStrain, baseRaw)
+                }
+            }
+        }
     }
 
     // MARK: - Notifications

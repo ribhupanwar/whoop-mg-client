@@ -8,7 +8,7 @@ final class AppStore: ObservableObject {
     @Published var settings: AppSettings {
         didSet {
             persistSettings()
-            band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
+            band.configure(sex: settings.sex, maxHR: maxHeartRate, restingHR: measuredRestingHR, needHours: settings.sleepNeedHours)
         }
     }
     @Published private(set) var whoopImportedDays: [String: WhoopImportedDay] = [:]
@@ -74,7 +74,7 @@ final class AppStore: ObservableObject {
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--stress-tab-switching") { band.startUIStressReplay() }
         #endif
-        band.configure(sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours)
+        band.configure(sex: settings.sex, maxHR: maxHeartRate, restingHR: measuredRestingHR, needHours: settings.sleepNeedHours)
         // A backfill publishes several diagnostics per sensor packet. Forward
         // at most four UI updates per second, including the final trailing one,
         // rather than rebuilding every screen thousands of times during sync.
@@ -182,7 +182,7 @@ final class AppStore: ObservableObject {
 
     func connectBand() {
         band.connect(
-            sex: settings.sex, maxHR: maxHeartRate, needHours: settings.sleepNeedHours
+            sex: settings.sex, maxHR: maxHeartRate, restingHR: measuredRestingHR, needHours: settings.sleepNeedHours
         )
     }
 

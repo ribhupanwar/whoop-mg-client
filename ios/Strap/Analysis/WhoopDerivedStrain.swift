@@ -71,6 +71,22 @@ enum WhoopDerivedStrain {
         return raw <= (left.raw + right.raw) / 2 ? left.score : right.score
     }
 
+    /// Convert display score (0.0 to 21.0) back to raw integrated strain.
+    static func raw(forScore score: Double) -> Double? {
+        guard score.isFinite, !lookup.isEmpty else { return nil }
+        let clamped = min(21.0, max(0.0, score))
+        let index = min(lookup.count - 1, max(0, Int((clamped * 10).rounded())))
+        return lookup[index].raw
+    }
+
+    /// Incremental step for live stream accumulation.
+    /// Delta seconds is capped at 3 seconds per WHOOP 5.80.2 staleHeartRateInterval.
+    static func accumulateStep(currentRaw: Double, hr: Double, deltaSeconds: Double, restingHR: Double, maxHR: Double) -> Double {
+        guard let weight = intensity(hr: hr, restingHR: restingHR, maxHR: maxHR) else { return currentRaw }
+        let dt = min(3.0, max(0.0, deltaSeconds))
+        return currentRaw + weight * dt / 691200.0
+    }
+
     static func score(_ samples: [V18Sample], restingHR: Double, maxHR: Double) -> Double? {
         guard let value = raw(samples, restingHR: restingHR, maxHR: maxHR) else { return nil }
         return display(raw: value)
