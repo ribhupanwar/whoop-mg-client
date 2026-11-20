@@ -1,0 +1,42 @@
+[
+  {
+    "name": "_$sScTss5NeverORszABRs_rlE5sleep11nanosecondsys6UInt64V_tYaKFZ",
+    "entry": "109086418",
+    "domain": "SLEEP",
+    "callers": [],
+    "decompiled": "\r\nvoid __sScTss5NeverORszABRs_rlE5sleep11nanosecondsys6UInt64V_tYaKFZ(void)\r\n\r\n{\r\n                    /* WARNING: Could not recover jumptable at 0x000109086420. Too many branches */\r\n                    /* WARNING: Treating indirect jump as call */\r\n  (*(code *)PTR___sScTss5NeverORszABRs_rlE5sleep11nanosecondsys6UInt64V_tYaKFZ_10b338498)();\r\n  return;\r\n}\r\n\r\n",
+    "error": ""
+  },
+  {
+    "name": "_$sScTss5NeverORszABRs_rlE5sleep5until9tolerance5clocky7InstantQyd___8DurationQyd__Sgqd__tYaKs5ClockRd__lFZ",
+    "entry": "109086424",
+    "domain": "SLEEP",
+    "callers": [],
+    "decompiled": "\r\nvoid __sScTss5NeverORszABRs_rlE5sleep5until9tolerance5clocky7InstantQyd___8DurationQyd__Sgqd__tYaKs5ClockRd__lFZ\r\n               (void)\r\n\r\n{\r\n                    /* WARNING: Could not recover jumptable at 0x00010908642c. Too many branches */\r\n                    /* WARNING: Treating indirect jump as call */\r\n  (*(code *)\r\n    PTR___sScTss5NeverORszABRs_rlE5sleep5until9tolerance5clocky7InstantQyd___8DurationQyd__Sgqd__tYaKs5ClockRd__lFZ_10b3384a8\r\n  )();\r\n  return;\r\n}\r\n\r\n",
+    "error": ""
+  },
+  {
+    "name": "_$ss5ClockP5sleep5until9tolerancey7InstantQz_8DurationQzSgtYaKFTj",
+    "entry": "109088fbc",
+    "domain": "SLEEP",
+    "callers": [],
+    "decompiled": "\r\nvoid __ss5ClockP5sleep5until9tolerancey7InstantQz_8DurationQzSgtYaKFTj(void)\r\n\r\n{\r\n                    /* WARNING: Could not recover jumptable at 0x000109088fc4. Too many branches */\r\n                    /* WARNING: Treating indirect jump as call */\r\n  (*(code *)PTR___ss5ClockP5sleep5until9tolerancey7InstantQz_8DurationQzSgtYaKFTj_10b338740)();\r\n  return;\r\n}\r\n\r\n",
+    "error": ""
+  },
+  {
+    "name": "_sleep",
+    "entry": "10908bdb8",
+    "domain": "SLEEP",
+    "callers": [],
+    "decompiled": "\r\nvoid _sleep(void)\r\n\r\n{\r\n                    /* WARNING: Could not recover jumptable at 0x00010908bdc0. Too many branches */\r\n                    /* WARNING: Treating indirect jump as call */\r\n  (*(code *)PTR__sleep_10b3326e0)();\r\n  return;\r\n}\r\n\r\n",
+    "error": ""
+  },
+  {
+    "name": "_usleep",
+    "entry": "10908ccb8",
+    "domain": "SLEEP",
+    "callers": [],
+    "decompiled": "\r\nvoid _usleep(void)\r\n\r\n{\r\n                    /* WARNING: Could not recover jumptable at 0x00010908ccc0. Too many branches */\r\n                    /* WARNING: Treating indirect jump as call */\r\n  (*(code *)PTR__usleep_10b332820)();\r\n  return;\r\n}\r\n\r\n",
+    "error": ""
+  }
+]

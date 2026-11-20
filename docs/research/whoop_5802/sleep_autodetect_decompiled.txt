@@ -1,0 +1,39 @@
+FUNCTION: FUN_1000ace18 @ 1000ace18
+
+undefined8 FUN_1000ace18(void)
+
+{
+  undefined8 uVar1;
+  undefined8 uVar2;
+  code *unaff_x27;
+  long unaff_x29;
+  
+  func_0x000107c0e6c0(0xd00000000000001f,0x80000001097632a0);
+  func_0x000107c0d584();
+  func_0x0001000ae130();
+  func_0x000107c0f8a8();
+  func_0x0001000ae234();
+  func_0x0001000ae1fc();
+  func_0x0001000ae150();
+  func_0x0001000ae140();
+  func_0x0001000ae268();
+  uVar1 = *(undefined8 *)(unaff_x29 + -0x60);
+  uVar2 = *(undefined8 *)(unaff_x29 + -0x58);
+  func_0x0001000ae250();
+  func_0x000107c0e628(uVar1,uVar2);
+  func_0x000107c0e628(0xd00000000000003f,0x80000001097632c0);
+  func_0x0001000ae284();
+  func_0x000107c054d8();
+  func_0x0001000ae16c();
+  func_0x0001000a22ac();
+  func_0x000107c0fb58(uVar2);
+  func_0x000107c0f888();
+  func_0x000107c0f870();
+  func_0x000107c0f884();
+  func_0x0001000ae19c();
+  func_0x0001000ae19c(*(undefined8 *)(unaff_x29 + -0xa8));
+  (*unaff_x27)(*(undefined8 *)(unaff_x29 + -0x70));
+  return 0;
+}
+
+
