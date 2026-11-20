@@ -196,8 +196,7 @@ enum ActivityDetect {
             let hasSteps = run.contains { $0.stepCounter != nil }
 
             let detectedKind = kind(spm: spm, hasSteps: hasSteps)
-            let isLowCadence = (!spm.isEmpty && Stats.median(spm) < walkSPM)
-            if detectedKind == "walk" || (hasSteps && isLowCadence) {
+            if detectedKind == "walk" {
                 // Casual steps must not be promoted to an automatic workout.
                 // Keep step counting independent; only gate auto-saved walking sessions.
                 let duration = run[run.count - 1].unix - run[0].unix + 1

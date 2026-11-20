@@ -274,14 +274,50 @@ final class BandConnectionStateMachineTests: XCTestCase {
         XCTAssertTrue(replacesEdited, "A new user edit must be allowed to replace previous bounds")
     }
 
-    // MARK: - Casual Walking Workout Prevention
+    // MARK: - Casual Walking Workout Prevention & Sustained Workout Retention
 
     func testCasualLowCadenceWalkingDoesNotAutoSaveAsWorkout() {
         var samples: [V18Sample] = []
         let baseUnix = 1795000000
+
+        // 1. Establish 300s resting baseline at 60 BPM
+        for i in 0..<300 {
+            samples.append(
+                V18Sample(
+                    header: BandRecordHeader(
+                        version: 18, flags: 0x80, recordIndex: UInt32(i),
+                        unix: UInt32(baseUnix + i), subsecQ15: 0
+                    ),
+                    heartRate: 60,
+                    rrIntervalsMS: [1000],
+                    dynamicAccelG: 0.01,
+                    gravityXG: nil,
+                    gravityYG: nil,
+                    gravityZG: nil,
+                    stepCounter: nil,
+                    stepCadence: nil,
+                    activityClass: nil,
+                    skinTempC: nil,
+                    tempAux1C: nil,
+                    tempAux2C: nil,
+                    sleepStateByte: nil,
+                    sleepState: nil,
+                    cardiacFlags: nil,
+                    hrQualityFlags: nil,
+                    spo2CandidateRaw: nil,
+                    spo2CandidatePct: nil,
+                    spo2CandidateKind: .absent,
+                    signalQualityLogVariance: nil,
+                    psnrB: nil,
+                    psnrA: nil
+                )
+            )
+        }
+
+        // 2. 600s casual walking (~30 spm, HR 75, below exertion floor of 60 + 20 = 80 BPM)
         var counter = 1000
-        for i in 0..<600 {
-            if i % 2 == 0 { counter += 1 } // ~30 spm casual shuffle
+        for i in 300..<900 {
+            if i % 2 == 0 { counter += 1 }
             samples.append(
                 V18Sample(
                     header: BandRecordHeader(
@@ -315,5 +351,85 @@ final class BandConnectionStateMachineTests: XCTestCase {
         }
         let detected = ActivityDetect.detect(samples, sleepPeriods: [])
         XCTAssertTrue(detected.isEmpty, "Casual shuffle with steps < 100 spm must NOT auto-save as a workout")
+    }
+
+    func testSustainedLowCadenceGenericWorkoutIsPreserved() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795000000
+
+        // 1. Establish 300s resting baseline at 60 BPM
+        for i in 0..<300 {
+            samples.append(
+                V18Sample(
+                    header: BandRecordHeader(
+                        version: 18, flags: 0x80, recordIndex: UInt32(i),
+                        unix: UInt32(baseUnix + i), subsecQ15: 0
+                    ),
+                    heartRate: 60,
+                    rrIntervalsMS: [1000],
+                    dynamicAccelG: 0.01,
+                    gravityXG: nil,
+                    gravityYG: nil,
+                    gravityZG: nil,
+                    stepCounter: nil,
+                    stepCadence: nil,
+                    activityClass: nil,
+                    skinTempC: nil,
+                    tempAux1C: nil,
+                    tempAux2C: nil,
+                    sleepStateByte: nil,
+                    sleepState: nil,
+                    cardiacFlags: nil,
+                    hrQualityFlags: nil,
+                    spo2CandidateRaw: nil,
+                    spo2CandidatePct: nil,
+                    spo2CandidateKind: .absent,
+                    signalQualityLogVariance: nil,
+                    psnrB: nil,
+                    psnrA: nil
+                )
+            )
+        }
+
+        // 2. 900s of sustained high exertion workout at 135 BPM with dynamic acceleration and steps at 60 SPM
+        var counter = 2000
+        for i in 300..<1200 {
+            counter += 1 // 60 spm
+            samples.append(
+                V18Sample(
+                    header: BandRecordHeader(
+                        version: 18, flags: 0x80, recordIndex: UInt32(i),
+                        unix: UInt32(baseUnix + i), subsecQ15: 0
+                    ),
+                    heartRate: 135,
+                    rrIntervalsMS: [444],
+                    dynamicAccelG: 0.05,
+                    gravityXG: nil,
+                    gravityYG: nil,
+                    gravityZG: nil,
+                    stepCounter: counter,
+                    stepCadence: nil,
+                    activityClass: nil,
+                    skinTempC: nil,
+                    tempAux1C: nil,
+                    tempAux2C: nil,
+                    sleepStateByte: nil,
+                    sleepState: nil,
+                    cardiacFlags: nil,
+                    hrQualityFlags: nil,
+                    spo2CandidateRaw: nil,
+                    spo2CandidatePct: nil,
+                    spo2CandidateKind: .absent,
+                    signalQualityLogVariance: nil,
+                    psnrB: nil,
+                    psnrA: nil
+                )
+            )
+        }
+        let detected = ActivityDetect.detect(samples, sleepPeriods: [])
+        XCTAssertFalse(detected.isEmpty, "Sustained 900s HR-135 exercise with steps must be detected as a workout")
+        if let first = detected.first {
+            XCTAssertEqual(first.kind, "workout")
+        }
     }
 }

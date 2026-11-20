@@ -56,6 +56,7 @@ enum HistorySyncPolicy {
     static let foregroundSeconds: TimeInterval = 90
     static func shouldSync(now: Date, lastAttempt: Date?, manual: Bool = false,
                            foreground: Bool = false, emptyStreak: Int = 0) -> Bool {
+        if manual { return true }
         guard let last = lastAttempt else { return true }
         let backoff = min(4.0, pow(2, Double(max(0, min(emptyStreak - 2, 2)))))
         let floor = foreground ? foregroundSeconds : periodicSeconds * backoff

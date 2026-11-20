@@ -1395,8 +1395,10 @@ final class BandLink: NSObject, ObservableObject {
         drainTimer = nil
         automaticSyncTimer?.invalidate()
         automaticSyncTimer = nil
+        #if DEBUG
         uiStressTimer?.invalidate()
         uiStressTimer = nil
+        #endif
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = nil
         liveRRFlushWork?.cancel()
@@ -2149,6 +2151,9 @@ extension BandLink: CBCentralManagerDelegate {
             }
         case .poweredOff:
             resetLink()
+            isLiveSession = false
+            sessionStartedUnix = nil
+            liveSamples = []
             reconnectWork?.cancel()
             reconnectWork = nil
             if pickerMode {
