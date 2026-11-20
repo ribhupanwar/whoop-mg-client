@@ -59,7 +59,7 @@ enum SleepDetect {
             let end = index
             let run = Array(ordered[start..<end])
             let duration = run[run.count - 1].unix - run[0].unix + 1
-            guard duration >= minSleepS && duration <= maxSleepS else { continue }
+            guard duration >= minSleepS else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
@@ -295,15 +295,20 @@ enum SleepDetect {
             // Count sustained movement bouts (movement persisting >= 15 seconds), not 1-second edge noise.
             var movingSeconds = 0
             var wakeEvents = 0
+            var lastMovingUnix: Int? = nil
             for index in verifiedIndices {
                 if !quiet[index] {
-                    movingSeconds += 1
+                    if ordered[index].unix != lastMovingUnix {
+                        movingSeconds += 1
+                        lastMovingUnix = ordered[index].unix
+                    }
                     if movingSeconds == 15 { wakeEvents += 1 }
                 } else {
                     movingSeconds = 0
+                    lastMovingUnix = nil
                 }
             }
-            periods.append(
+            periods.append()
                 SleepPeriod(
                     startUnix: verifiedStart,
                     endUnix: verifiedEnd,
