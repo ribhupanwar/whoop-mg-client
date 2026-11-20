@@ -176,11 +176,11 @@ final class DeviceControlTests: XCTestCase {
     // MARK: - UI Parity & Ring Geometry Regression Tests
 
     func testRingGeometryLayoutConstants() {
-        XCTAssertEqual(AppLayout.heroRingDiameter, 84.0)
+        XCTAssertEqual(AppLayout.heroRingDiameter, 60.0)
         XCTAssertEqual(AppLayout.detailRingDiameter, 104.0)
-        XCTAssertEqual(AppLayout.ringStrokeWidth, 5.0)
+        XCTAssertEqual(AppLayout.ringStrokeWidth, 4.5)
         XCTAssertEqual(AppLayout.ringGap, 18.0)
-        XCTAssertEqual(AppLayout.heroMetricFontSize, 23.0)
+        XCTAssertEqual(AppLayout.heroMetricFontSize, 21.0)
         XCTAssertEqual(AppLayout.percentSignScale, 0.72)
     }
 

@@ -81,3 +81,17 @@ The Healthspan implementation currently presents STRAP's independent fitness age
 2. Capture STRAP on the same device class and date states, including missing-data and offline states. Compare chart content, axes, legends, range selections and scroll reachability.
 3. Collect references for the missing screens or use approved STRAP designs. Keep the existing licensed Proxima Nova and DIN Pro fonts and data-driven charts.
 4. Review Healthspan baseline progress and trend coverage before proposing a milestone. Schedule individual UI batches after measuring the remaining gaps on iOS.
+
+## Home comparison from the supplied 589 × 1280 pair
+
+The latest STRAP and WHOOP images are both 589 × 1280 pixels. The measurements below are approximate visible bounds read from the supplied images with a tolerance of about 1–2 px. The proposed 60 pt outer diameter normalizes the 90 px reference diameter to a 393 pt-wide viewport. The original STRAP capture has a visibly larger ring than either the 68 pt token or the patch alone can establish because its app revision and point scale were not supplied.
+
+| Element | STRAP supplied image | WHOOP supplied image | Change | Verification |
+| --- | --- | --- | --- | --- |
+| Sleep ring | x 77–196, center ~137/250 | x 52–142, center ~97/237 | Shared 60 pt outer diameter and 4.5 pt stroke | Awaiting matched simulator capture |
+| Recovery ring | x 234–354, center ~294/250 | x 229–319, center ~274/237 | Same geometry. Unavailable score retains a track and dash. | Awaiting matched simulator capture |
+| Strain ring | x 392–511, center ~452/250 | x 416–506, center ~461/237 | Same geometry. Arc starts at 12 o’clock and follows measured score. | Awaiting matched simulator capture |
+| Ring stroke and track | ~7–8 px; dark track | ~6–7 px; lighter track | Defined 4.5 pt stroke inside the stated outer diameter. Exact track alpha requires the original compositing background. | Source checks |
+| Numerals and labels | Numerals ~24 px tall, labels start near y321 | Numerals ~21–22 px tall, labels start near y285 | 21 pt DIN Pro numeral, baseline-aligned percent sign at 72%, and 3 pt label gap | Awaiting matched font rendering |
+| Header and monitor cards | Header controls centered near y118; monitor cards y466–574 | Header controls centered near y105; monitor cards y558–683 | Compare after capturing the same loaded state. STRAP is preparing history, while the reference shows a strain insight. | Pending |
+| My Day and bottom navigation | My Day near y602; bottom bar begins near y1146 | My Day near y739; bottom bar begins near y1158 | Check scroll reachability with active sync, empty activities and Journal. | Pending |
