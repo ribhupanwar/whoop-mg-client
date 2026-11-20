@@ -1,11 +1,46 @@
 import SwiftUI
 
+private final class LoadChartCache {
+    static let shared = LoadChartCache()
+    private var lastKey: String = ""
+    private var lastPoints: [MetricDay] = []
+    private let lock = NSLock()
+
+    func points(isPreview: Bool, days: [DayMetrics], sleepNeedHours: Double?, imported: [ImportedWhoopDay]) -> [MetricDay] {
+        lock.lock()
+        defer { lock.unlock() }
+        let dayStamp = JournalStore.dayKey(for: Date())
+        let key = "\(isPreview)-\(days.count)-\(days.last?.dateKey ?? "")-\(days.last?.strain ?? 0)-\(days.last?.recovery ?? 0)-\(sleepNeedHours ?? 0)-\(imported.count)-\(dayStamp)"
+        if key == lastKey {
+            return lastPoints
+        }
+        let result = isPreview
+            ? MetricTimeline.preview(ending: Date(), count: 7)
+            : MetricTimeline.make(
+                days: days,
+                live: [],
+                manual: [],
+                caloriesByDay: [:],
+                ending: Date(),
+                count: 7,
+                sleepNeedHours: sleepNeedHours,
+                imported: imported
+            )
+        lastKey = key
+        lastPoints = result
+        return result
+    }
+}
+
 struct CombinedLoadChart: View {
     @EnvironmentObject private var store: AppStore
     private var points: [MetricDay] {
-        if store.isPreview { return MetricTimeline.preview(ending: Date(), count: 7) }
-        return MetricTimeline.make(days: store.band.days, live: [], manual: [], caloriesByDay: [:],
-                            ending: Date(), count: 7, sleepNeedHours: store.settings.sleepNeedHours, imported: store.whoopImportedDays)
+        LoadChartCache.shared.points(
+            isPreview: store.isPreview,
+            days: store.band.days,
+            sleepNeedHours: store.settings.sleepNeedHours,
+            imported: store.whoopImportedDays
+        )
     }
     var body: some View {
         let days = points
