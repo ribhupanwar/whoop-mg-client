@@ -183,7 +183,7 @@ enum ActivityDetect {
             // Preserve existing behavior for HR-only cardio workouts.
             let motionIndices = (start..<end).filter { measuredMotion[$0] }
             let motionEnd = motionIndices.count >= startSustainS
-                ? (motionIndices.last! + 1) : end
+                ? ((motionIndices.last ?? end) + 1) : end
             let run = Array(ordered[start..<motionEnd])
 
             guard run[run.count - 1].unix - run[0].unix + 1 >= minimumDurationS else { continue }
@@ -196,7 +196,8 @@ enum ActivityDetect {
             let hasSteps = run.contains { $0.stepCounter != nil }
 
             let detectedKind = kind(spm: spm, hasSteps: hasSteps)
-            if detectedKind == "walk" {
+            let isLowCadence = (!spm.isEmpty && Stats.median(spm) < walkSPM)
+            if detectedKind == "walk" || (hasSteps && isLowCadence) {
                 // Casual steps must not be promoted to an automatic workout.
                 // Keep step counting independent; only gate auto-saved walking sessions.
                 let duration = run[run.count - 1].unix - run[0].unix + 1
@@ -242,7 +243,8 @@ enum ActivityDetect {
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
-                    runTicks: runTicks
+                    runTicks: runTicks,
+                    maxHR: run.map(\.heartRate).max()
                 )
             )
         }

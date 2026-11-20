@@ -31,7 +31,9 @@ enum AppleHealthImport {
             (.oxygenSaturation, .percent(), "%"), (.stepCount, .count(), "count"),
             (.activeEnergyBurned, .kilocalorie(), "kcal")]
         let quantityTypes = quantities.compactMap { HKObjectType.quantityType(forIdentifier: $0.0) }
-        let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis)!
+        guard let sleep = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) else {
+            throw PersistenceDiagnostics.Failure(message: "Sleep analysis category is unavailable in HealthKit.")
+        }
         let workout = HKObjectType.workoutType()
         let types: [HKSampleType] = quantityTypes + [sleep, workout]
         try await health.requestAuthorization(toShare: [], read: Set(types.map { $0 as HKObjectType }))

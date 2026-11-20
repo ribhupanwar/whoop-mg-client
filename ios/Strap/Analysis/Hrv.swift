@@ -274,7 +274,7 @@ enum Hrv {
         guard !worn.isEmpty else { return "No valid on-wrist heart-rate seconds" }
         let motion = worn.filter { $0.dynamicAccelG != nil }
         guard !motion.isEmpty else { return "Motion data missing; cannot verify rest" }
-        let quiet = motion.filter { $0.dynamicAccelG! <= restingQuietAccelG }
+        let quiet = motion.filter { ($0.dynamicAccelG ?? Double.infinity) <= restingQuietAccelG }
         guard !quiet.isEmpty else { return "No motion-verified quiet seconds" }
         let longest = contiguousRuns(quiet.sorted { $0.unix < $1.unix })
             .map(\.count).max() ?? 0
@@ -304,7 +304,7 @@ enum Hrv {
         let eligible = samples
             .filter {
                 $0.wearing && (35...220).contains($0.heartRate)
-                    && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
             }
             .sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
@@ -360,7 +360,7 @@ enum Hrv {
     ) -> [RestingWindowDiagnostic] {
         let eligible = samples.filter {
             $0.wearing && (35...220).contains($0.heartRate)
-                && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+                && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
         }
         // Use the same contiguous-run and RR quality rules as production HRV.
         return contiguousRuns(eligible)
@@ -395,14 +395,18 @@ enum Hrv {
         let eligible = samples
             .filter {
                 $0.wearing && (35...220).contains($0.heartRate)
-                    && $0.dynamicAccelG != nil && $0.dynamicAccelG! <= quietAccelG
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
             }
             .sorted { $0.unix < $1.unix }
         var best: Double?
         for run in contiguousRuns(eligible) {
             guard let value = minimumRollingMean(run.map { Double($0.heartRate) }, window: windowS)
             else { continue }
-            if best == nil || value < best! { best = value }
+            if let currentBest = best {
+                if value < currentBest { best = value }
+            } else {
+                best = value
+            }
         }
         return best
     }

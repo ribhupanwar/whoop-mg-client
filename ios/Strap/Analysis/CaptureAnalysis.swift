@@ -96,10 +96,16 @@ struct CaptureSummary: Codable, Equatable {
         let restingWindow = Hrv.restingHRV(ordered)
 
         let periods = SleepDetect.detect(ordered)
-        // Nighttime resting HR is not exercise load. Exclude detected sleep
-        // windows before integrating awake training impulse.
+        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
+                                            cache: analysisCache, progress: sleepProgress)
+        // Sleep duration, nightly biometrics and awake load must share the
+        // canonical edited bounds. The measurements remain sensor-derived.
+        let canonicalPeriods = sessions.map {
+            SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                        quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+        }
         let awakeSamples = ordered.filter { sample in
-            !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+            !canonicalPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
         }
         var strain: Double?
         if let maxHR, let resting, maxHR > resting {
@@ -107,11 +113,9 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
-                                            cache: analysisCache, progress: sleepProgress)
         let staging = sessions.last?.staging
-        let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
-        let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
+        let activities = ActivityDetect.detect(ordered, sleepPeriods: canonicalPeriods)
+        let sleepWindows = canonicalPeriods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
         let stressSeries = StressWindows.series(
             samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
@@ -405,10 +409,12 @@ enum DailyAnalysis {
     /// Explicit user edits may change the bounds even when old raw data has expired.
     static func replacesSleep(
         previous: DayMetrics, fresh: DayMetrics, coverageStart: Int?, coverageEnd: Int?,
-        isEdited: Bool = false
+        isEdited: Bool = false,
+        previousIsEdited: Bool = false
     ) -> Bool {
         guard fresh.sleepDurationReliable != nil else { return false }
         if isEdited && fresh.sleepStartUnix != nil { return true }
+        if previousIsEdited && !isEdited { return false }
         guard let start = previous.sleepStartUnix, let end = previous.sleepEndUnix else {
             return fresh.sleepStartUnix != nil
         }
