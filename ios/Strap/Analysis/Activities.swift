@@ -216,6 +216,24 @@ enum ActivityDetect {
                 guard exertionSeconds >= startSustainS else { continue }
             }
 
+            if detectedKind == "workout" {
+                // A low-cadence step-counter trace is not proof of exercise.
+                // Require a longer session with independent, sustained HR
+                // elevation and measured acceleration. HR-only exercise is
+                // classified separately as cardio, not as a step workout.
+                let duration = run[run.count - 1].unix - run[0].unix + 1
+                let baseline = baselines[start]
+                let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
+                let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
+                let movingSeconds = run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count
+                guard confirmsGenericWorkout(
+                    durationS: duration,
+                    exertionSeconds: exertionSeconds,
+                    movingSeconds: movingSeconds,
+                    hasPreActivityBaseline: baseline != nil
+                ) else { continue }
+            }
+
             sessions.append(
                 ActivitySession(
                     startUnix: run[0].unix,
@@ -266,6 +284,16 @@ enum ActivityDetect {
             }
         }
         return result
+    }
+
+    static func confirmsGenericWorkout(
+        durationS: Int, exertionSeconds: Int, movingSeconds: Int,
+        hasPreActivityBaseline: Bool
+    ) -> Bool {
+        hasPreActivityBaseline
+            && durationS >= walkWorkoutMinSessionS
+            && exertionSeconds >= startSustainS
+            && movingSeconds >= 90
     }
 
     static func kind(spm: [Double], hasSteps: Bool) -> String {
