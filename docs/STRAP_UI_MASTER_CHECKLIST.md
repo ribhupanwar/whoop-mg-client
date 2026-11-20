@@ -234,13 +234,15 @@ Sources: user-supplied WHOOP design notes, official WHOOP brand guidance, NOOP d
 
 ## Issue #83 follow-up verification
 
+The [Gen5 GATT fix](https://github.com/ribhupanwar/whoop-mg-client/pull/84) merged as `09fd4893c95aee3b11fee18d8f485aae8039e6f5`. The reviewed PR head `38bdc8743db70ee9a9e5c899f33cf996302440d1` passed 625 unit tests, 3 UI tests, and SideStore IPA packaging with licensed-font and HealthKit checks. [iOS workflow and artifacts](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44746663043)
+
 The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use it to select simulator fixtures and capture matching states. The archive contains only the locked Healthspan state and lacks activity details, More, device settings, sync and alarm editing.
 
 | Area | Existing automated coverage | Remaining verification |
 | --- | --- | --- |
 | Sleep onset, short awakenings and bathroom breaks | `SleepOvernightOnsetBoundaryTests`, `SleepWakeTailBoundaryTests`, `SleepBathroomBreakMergingTests` | Replay a labeled overnight recording with both a short bathroom trip and a final wake. Verify each boundary and the displayed wake durations. |
 | Sleep edits, stages and recovery | `SleepSessionTests`, `SleepStageTests`, `SleepStageDisplayTests`, `BandConnectionStateMachineTests` | Edit a night's start and end, relaunch, refresh history, then reopen the day. Verify saved bounds, stage totals and recovery recalculate for the edited night. |
-| HRV and resting heart rate | `AnalysisTests`, `LiveRRArchiveTests`, `HealthMonitorTests` | Replay a trace with missing seconds, repeated packets and outliers. Compare overnight windows and HRV with a labeled source before making claims about measurement accuracy. |
+| HRV and resting heart rate | `AnalysisTests`, `LiveRRArchiveTests`, `HealthMonitorTests` | Replay a trace with missing seconds, repeated packets and outliers. Compare overnight windows, HRV and resting heart rate with a labeled source before making claims about measurement accuracy. |
 | Activity lifecycle and metrics | `ActivityTests`, `ActivityExertionTests`, `CaloriesTests`, `ManualActivityPreservationTests`, `GPSRunHistoryTests` | Record known-distance walks and runs. Reconcile live and detected records, edit and delete a record, then refresh and verify persistence and totals. |
 | HealthKit, backups and historical retention | `HealthKitTests`, `StrapBackupTests`, `HistoryDatabaseTests`, `HistoricalCaptureRecoveryTests`, `WhoopImportBatchTests` | On a test store, export, round-trip and retry an import. Check date ranges and counts, signed HealthKit authorization and that existing records survive. |
 | BLE and background behavior | `BandConnectionStateMachineTests`, `ReconnectBackoffPolicyTests`, `LiveHeartRateStateTests`, `TabResponsivenessTests` | On firmware 50.43.1.0 capture command and data notifications, the hello ATT result and protocol reply, 2A37 or Type-40 packets, history frames, persisted chunks and ACKs. Repeat for pull-to-refresh and foreground/background reconnect. |
