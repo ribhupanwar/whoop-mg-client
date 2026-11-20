@@ -1328,13 +1328,13 @@ private struct HomeBandDeviceSettingsView: View {
                         .foregroundStyle(store.band.isConnected ? Color.green : muted)
                         .font(StrapTypography.body(11, weight: .bold))
                         .tracking(1)
-                    Text("WHOOP MG")
+                    Text(store.band.preferredBandName ?? "WHOOP MG")
                         .font(StrapTypography.body(17, weight: .bold))
                         .tracking(0.8)
                 }
                 Spacer()
                 VStack(alignment: .trailing, spacing: 5) {
-                    Text("LAST SYNC").foregroundStyle(muted)
+                    Text("LAST HISTORY SYNC").foregroundStyle(muted)
                         .font(StrapTypography.body(11, weight: .bold))
                     Text(store.band.lastHistorySyncAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—").font(StrapTypography.body(13, weight: .bold))
                 }
@@ -1416,7 +1416,7 @@ private struct HomeBandDeviceSettingsView: View {
 
             deviceRow("BROADCAST HEART RATE", icon: "heart.fill",
                       subtitle: "TO COMPATIBLE APPS & DEVICES", enabled: false)
-            Text("Broadcast control is unavailable until the band protocol is verified.")
+            Text("Broadcast control is unavailable until the band protocol is verified. The displayed sync time is the last completed history sync, not a live connection timestamp.")
                 .font(.caption)
                 .foregroundStyle(muted)
                 .padding(.horizontal, 24)
