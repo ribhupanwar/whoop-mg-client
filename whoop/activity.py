@@ -288,8 +288,8 @@ def suppress_duplicates(sessions: list[ActivitySession]) -> list[ActivitySession
         for other in accepted:
             overlap_start = max(candidate.start_unix, other.start_unix)
             overlap_end = min(candidate.end_unix, other.end_unix)
-            if overlap_end > overlap_start:
-                overlap = overlap_end - overlap_start
+            if overlap_end >= overlap_start:
+                overlap = overlap_end - overlap_start + 1
                 if (overlap / cand_duration) >= 0.50:
                     is_dup = True
                     break
