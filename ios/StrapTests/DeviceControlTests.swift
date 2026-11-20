@@ -31,6 +31,37 @@ final class DeviceControlTests: XCTestCase {
         XCTAssertEqual(Array(parsedDisable!.prefix(disableInner.count)), disableInner)
     }
 
+    // MARK: - Reboot Command & Response Framing Tests
+
+    func testRebootStrapCommandOpcode() {
+        // Command 29 (0x1D) is verified non-destructive warm restart
+        XCTAssertEqual(BandCommand.rebootStrap.rawValue, 0x1D)
+        XCTAssertEqual(BandCommand.powerCycleStrap.rawValue, 0x20)
+        XCTAssertEqual(BandCommand.forceTrim.rawValue, 0x19)
+
+        // Inner packet: [0x23, seq, 0x1D]
+        let rebootInner: [UInt8] = [BandPacket.command, 0x03, BandCommand.rebootStrap.rawValue]
+        let rebootFrame = Gen5Frame.build(rebootInner)
+        XCTAssertEqual(rebootFrame[0], 0xAA)
+        XCTAssertEqual(rebootFrame[1], 0x01)
+
+        let parsed = Gen5Frame.parse(rebootFrame)
+        XCTAssertNotNil(parsed)
+        XCTAssertEqual(Array(parsed!.prefix(rebootInner.count)), rebootInner)
+    }
+
+    func testCommandResponseInnerStructure() {
+        // inner[0] = 0x24 (commandResponse)
+        // inner[1] = response seq
+        // inner[2] = cmd (0x1D)
+        // inner[3] = origin seq
+        // inner[4] = result (0x01 = success)
+        let innerResponse: [UInt8] = [BandPacket.commandResponse, 0x05, BandCommand.rebootStrap.rawValue, 0x02, 0x01, 0x00, 0x00]
+        XCTAssertEqual(innerResponse[0], 0x24)
+        XCTAssertEqual(innerResponse[2], 0x1D)
+        XCTAssertEqual(innerResponse[4], 0x01) // Success
+    }
+
     // MARK: - DIS Characteristics Tests
 
     func testDISCharacteristicsUUIDs() {
@@ -136,10 +167,10 @@ final class DeviceControlTests: XCTestCase {
     }
 
     func testQuarantinedCommandsProhibited() {
-        // Reboot (0x20 / 32) and Power-cycle (0x21 / 33) must not be permitted in outgoing command generation
-        let prohibitedOpcodes: Set<UInt8> = [0x20, 0x21]
+        // Cold Power-cycle (0x20 / 32) and Force-trim (0x19 / 25) must remain quarantined
+        let prohibitedOpcodes: Set<UInt8> = [BandCommand.powerCycleStrap.rawValue, BandCommand.forceTrim.rawValue]
         XCTAssertTrue(prohibitedOpcodes.contains(0x20))
-        XCTAssertTrue(prohibitedOpcodes.contains(0x21))
+        XCTAssertTrue(prohibitedOpcodes.contains(0x19))
     }
 
     // MARK: - UI Parity & Ring Geometry Regression Tests
@@ -154,7 +185,6 @@ final class DeviceControlTests: XCTestCase {
     }
 
     func testColorTokensPreservation() {
-        // Semantic color tokens must exist and retain their sampled color properties
         _ = Color.appCanvasTop
         _ = Color.appCanvasMid
         _ = Color.appBG

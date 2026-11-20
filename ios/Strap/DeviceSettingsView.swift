@@ -8,6 +8,8 @@ struct DeviceSettingsView: View {
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
     @State private var showSafetySheet = false
+    @State private var showRebootConfirmation = false
+    @State private var showClearCacheConfirmation = false
     @State private var checkingFirmware = false
     @State private var firmwareCheckResult: String? = nil
 
@@ -43,8 +45,30 @@ struct DeviceSettingsView: View {
                 store.unpairBand()
             }
             Button("Cancel", role: .cancel) { }
+        }
+        .confirmationDialog(
+            "Reboot WHOOP?",
+            isPresented: $showRebootConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Reboot", role: .destructive) {
+                store.rebootBand()
+            }
+            Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This will remove the Bluetooth connection.")
+            Text("It will take a few moments to reboot your WHOOP. Historical data stored on your band and phone is preserved.")
+        }
+        .confirmationDialog(
+            "Clear Local App Cache?",
+            isPresented: $showClearCacheConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Clear Cache", role: .destructive) {
+                store.clearLocalData()
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("This clears downloaded health history on this phone. Data stored on your WHOOP band will re-sync upon connection.")
         }
     }
 
@@ -466,28 +490,64 @@ struct DeviceSettingsView: View {
 
             Divider().background(Color.appLine)
 
-            // REBOOT DEVICE (QUARANTINED)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("REBOOT DEVICE")
-                        .font(StrapTypography.body(13, weight: .bold))
+            // REBOOT DEVICE (VERIFIED 0x1D)
+            Button {
+                showRebootConfirmation = true
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("REBOOT DEVICE")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        if store.band.isRebooting {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Text(store.band.isConnected ? "REBOOT" : "OFFLINE")
+                                .font(StrapTypography.metric(10, weight: .bold))
+                                .foregroundStyle(store.band.isConnected ? Color.appAccent : Color.appMuted)
+                        }
+                    }
+                    Text(store.band.rebootMessage ?? "Reboot your WHOOP to restart the device without losing stored flash data.")
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
-                    Spacer()
-                    Text("QUARANTINED")
-                        .font(StrapTypography.metric(9, weight: .bold))
-                        .foregroundStyle(Color.appWarn)
                 }
-                Text("Reboot your WHOOP to restart the device. (Disabled to protect onboard flash memory).")
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted.opacity(0.8))
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .disabled(!store.band.isConnected || store.band.isRebooting)
 
             Divider().background(Color.appLine)
 
-            // ERASE DEVICE DATA (QUARANTINED)
+            // CLEAR LOCAL APP CACHE (SAFE PHONE DATA RESET)
+            Button {
+                showClearCacheConfirmation = true
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("CLEAR LOCAL APP CACHE")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        Text("RESET")
+                            .font(StrapTypography.metric(10, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    Text("Clear cached history and recalculations on this phone. On-band data remains untouched.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider().background(Color.appLine)
+
+            // ON-BAND FLASH ERASE (QUARANTINED FACTORY CALIBRATION)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("ERASE DEVICE DATA")
+                    Text("ON-BAND FLASH ERASE")
                         .font(StrapTypography.body(13, weight: .bold))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
@@ -495,7 +555,7 @@ struct DeviceSettingsView: View {
                         .font(StrapTypography.metric(9, weight: .bold))
                         .foregroundStyle(Color.appWarn)
                 }
-                Text("Erase all heart rate data currently stored on your WHOOP. (Disabled to prevent data loss).")
+                Text("Destructive hardware flash wipe (FORCE_TRIM 0x19) is quarantined. Restricted to factory calibration harnesses.")
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted.opacity(0.8))
             }

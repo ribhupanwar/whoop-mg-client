@@ -1316,6 +1316,7 @@ private struct HomeBandDeviceSettingsView: View {
     private let panel = Color(hex: 0x252D33)
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
+    @State private var showRebootConfirmation = false
     @State private var showRegulatoryLabels = false
 
     var body: some View {
@@ -1396,6 +1397,10 @@ private struct HomeBandDeviceSettingsView: View {
             Button("Unpair Device", role: .destructive) { store.unpairBand() }
             Button("Cancel", role: .cancel) {}
         } message: { Text("Disconnects the band and clears the saved STRAP association. Historical data is retained.") }
+        .confirmationDialog("Reboot WHOOP Band?", isPresented: $showRebootConfirmation, titleVisibility: .visible) {
+            Button("Reboot Device", role: .destructive) { store.rebootBand() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("It will take a few moments to reboot your WHOOP. Historical data stored on your band and phone is preserved.") }
         .background {
             LinearGradient.appCanvas
                 .ignoresSafeArea()
@@ -1525,11 +1530,18 @@ private struct HomeBandDeviceSettingsView: View {
             deviceRow("FIRMWARE CHECK", icon: "cpu",
                       subtitle: "Updates disabled. Custom firmware flashing (0x53, 0x8E–0x90) is restricted to official signed images to prevent bricking.", enabled: false)
 
-            deviceRow("REBOOT DEVICE", icon: "power",
-                      subtitle: "Disabled for safety. Unverified power-cycle commands (0x20) risk truncating circular flash history.", enabled: false)
+            Button {
+                showRebootConfirmation = true
+            } label: {
+                deviceRow("REBOOT DEVICE", icon: "power",
+                          subtitle: store.band.isRebooting ? "WHOOP is restarting and will reconnect automatically..." : "Verified warm restart (0x1D). Preserves circular flash history without data loss.",
+                          enabled: store.band.isConnected && !store.band.isRebooting)
+            }
+            .buttonStyle(.plain)
+            .disabled(!store.band.isConnected || store.band.isRebooting)
 
             deviceRow("ERASE DEVICE DATA", icon: "trash",
-                      subtitle: "Unavailable: protects stored circular buffer sensor history from irreversible deletion.", enabled: false)
+                      subtitle: "Unavailable: protects stored circular buffer sensor history from irreversible deletion (FORCE_TRIM 0x19 quarantined).", enabled: false)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 36)

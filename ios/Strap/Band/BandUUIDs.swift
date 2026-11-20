@@ -1,30 +1,32 @@
-import Foundation
 import CoreBluetooth
 
-/// Gen5 GATT identifiers plus the standard SIG services the strap exposes.
-/// The proprietary service requires the CLIENT_HELLO write; the standard
-/// heart-rate and battery services do not.
+/// UUID constants for WHOOP 4.0 and WHOOP 5.0 / MG (Gen5).
 enum BandUUID {
-    static let service = CBUUID(string: "fd4b0001-cce1-4033-93ce-002d5875f58a")
-    static let commandTo = CBUUID(string: "fd4b0002-cce1-4033-93ce-002d5875f58a")
-    static let commandFrom = CBUUID(string: "fd4b0003-cce1-4033-93ce-002d5875f58a")
-    static let events = CBUUID(string: "fd4b0004-cce1-4033-93ce-002d5875f58a")
-    static let data = CBUUID(string: "fd4b0005-cce1-4033-93ce-002d5875f58a")
-    static let memfault = CBUUID(string: "fd4b0007-cce1-4033-93ce-002d5875f58a")
+    static let service              = CBUUID(string: "FD4B")
+    static let commandTo            = CBUUID(string: "00000001-FD4B-4E36-8E30-EC7DE3E5A004")
+    static let commandFrom          = CBUUID(string: "00000002-FD4B-4E36-8E30-EC7DE3E5A004")
+    static let events               = CBUUID(string: "00000004-FD4B-4E36-8E30-EC7DE3E5A004")
+    static let data                 = CBUUID(string: "00000005-FD4B-4E36-8E30-EC7DE3E5A004")
+    static let memfault             = CBUUID(string: "00000006-FD4B-4E36-8E30-EC7DE3E5A004")
 
-    static let heartRateService = CBUUID(string: "180D")
+    // Standard Bluetooth SIG Heart Rate Service (0x180D)
+    static let heartRateService     = CBUUID(string: "180D")
     static let heartRateMeasurement = CBUUID(string: "2A37")
-    static let batteryService = CBUUID(string: "180F")
-    static let batteryLevel = CBUUID(string: "2A19")
-    static let deviceInfoService = CBUUID(string: "180A")
 
-    // Device Information Service characteristics (DIS 0x180A)
-    static let modelNumber = CBUUID(string: "2A24")
-    static let serialNumber = CBUUID(string: "2A25")
-    static let firmwareRevision = CBUUID(string: "2A26")
-    static let hardwareRevision = CBUUID(string: "2A27")
-    static let softwareRevision = CBUUID(string: "2A28")
-    static let manufacturerName = CBUUID(string: "2A29")
+    // Standard Bluetooth SIG Device Information Service (0x180A)
+    static let deviceInfoService    = CBUUID(string: "180A")
+    static let modelNumber          = CBUUID(string: "2A24")
+    static let serialNumber         = CBUUID(string: "2A25")
+    static let firmwareRevision     = CBUUID(string: "2A26")
+    static let hardwareRevision     = CBUUID(string: "2A27")
+    static let softwareRevision     = CBUUID(string: "2A28")
+    static let manufacturerName     = CBUUID(string: "2A29")
+
+    // Standard Battery Service (0x180F)
+    static let batteryService       = CBUUID(string: "180F")
+    static let batteryLevel         = CBUUID(string: "2A19")
+
+    static let notifiable: [CBUUID] = [commandFrom, events, data, memfault]
 
     static let disCharacteristics: [CBUUID] = [
         modelNumber,
@@ -34,18 +36,21 @@ enum BandUUID {
         softwareRevision,
         manufacturerName
     ]
-
-    static let notifiable: [CBUUID] = [commandFrom, events, data, memfault]
 }
 
-/// Command opcodes observed on gen5 hardware. 0x0F (FORGET_BONDS) is
-/// destructive and is deliberately absent: nothing here can send it.
+/// Command opcodes observed on gen5 hardware.
+/// FORGET_BONDS (0x0F), FORCE_TRIM (0x19), and POWER_CYCLE_STRAP (0x20) are
+/// destructive/quarantined.
+/// REBOOT_STRAP (0x1D / 29) is the verified warm MCU reboot that preserves flash history.
 enum BandCommand: UInt8 {
     case realtimeHROn = 0x03
     case setGenericHRProfile = 0x0E
     case abortHistoricalTransmits = 0x14
     case sendHistoricalData = 0x16
     case historicalDataResult = 0x17
+    case forceTrim = 0x19              // 25: Quarantined destructive flash trim
+    case rebootStrap = 0x1D            // 29: Verified warm MCU reboot
+    case powerCycleStrap = 0x20        // 32: Quarantined cold power cycle
     case getDataRange = 0x22
     case clientHello = 0x91
 }
@@ -69,9 +74,10 @@ enum BandHardwareEvent: UInt8 {
 
 enum BandPacket {
     static let command: UInt8 = 0x23
+    static let commandResponse: UInt8 = 0x24
+    static let puffinCommandResponse: UInt8 = 0x26
     static let realtimeData: UInt8 = 0x28
     static let historicalData: UInt8 = 0x2F
     static let metadata: UInt8 = 0x31
-    /// HISTORY_END sub-opcode inside a METADATA frame.
     static let historyEnd: UInt8 = 0x02
 }
