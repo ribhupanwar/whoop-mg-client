@@ -117,8 +117,7 @@ struct Screen<Content: View>: View {
         .scrollIndicators(.hidden)
         .font(StrapTypography.body(15))
         .background(
-            LinearGradient(colors: [Color.appCanvasTop, Color.appBG],
-                           startPoint: .top, endPoint: .bottom)
+            LinearGradient.appCanvas
                 .ignoresSafeArea()
         )
     }
