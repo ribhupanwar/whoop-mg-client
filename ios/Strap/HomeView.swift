@@ -292,7 +292,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .center)
-            .frame(height: 122)
+            .frame(height: 108)
         }
         .padding(.bottom, 18)
     }
@@ -560,7 +560,7 @@ struct HomeView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color(hex: 0x362F27), Color(hex: 0x1E252C)], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color(hex: 0x302751), Color(hex: 0x234C58)], startPoint: .leading, endPoint: .trailing)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 )
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 0.5))
