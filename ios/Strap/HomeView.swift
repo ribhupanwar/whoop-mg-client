@@ -84,16 +84,14 @@ struct HomeView: View {
             }
         }
         .safeAreaInset(edge: .top) {
-            ZStack {
-                topBar
-                    .opacity(compactScores ? 0 : 1)
-                    .allowsHitTesting(!compactScores)
-                    .accessibilityHidden(compactScores)
+            Group {
                 if compactScores {
-                    compactRingRow.transition(.opacity)
+                    compactRingRow
+                } else {
+                    topBar
                 }
             }
-            .frame(minHeight: 42)
+            .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .background {
