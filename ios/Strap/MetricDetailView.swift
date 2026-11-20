@@ -301,7 +301,7 @@ struct MetricDetailView: View {
     }
     private func sourceNote(_ metric: DetailMetric) -> String {
         switch metric {
-        case .calories: return "Active calories estimated for recorded sessions; not a full-day calorie total. Profile data is required."
+        case .calories: return "Active calories estimated for recorded sessions; not a full-day calorie total. " + (store.settings.weightKG == nil || store.settings.heightCM == nil ? "To enable estimates, enter weight and height in Settings." : store.settings.sex == .unspecified ? "To enable estimates, select sex in Settings for the Keytel formula." : "Only sessions with recorded HR and a measured resting HR can contribute; missing data stays blank.")
         case .strength: return "Logged strength-session minutes. Sets without a recorded duration stay unknown."
         case .zonesLow, .zonesHigh: return "Recorded awake HR, with live-session zone time used when band history is unavailable. Missing coverage is not zero time."
         case .recovery: return "Local recovery estimate using earlier baseline days; missing inputs stay blank."

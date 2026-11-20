@@ -1084,10 +1084,21 @@ struct HomeView: View {
     }
 
     private var compactRingRow: some View {
-        HStack(spacing: 16) {
-            compactRing("SLEEP", route: .sleepAnalysis, progress: sleepPercent.map { Double($0) / 100 }, color: .appSleep)
-            compactRing("RECOVERY", route: .recovery, progress: recoveryScore.map { $0 / 100 }, color: DetailMetric.recovery.color(recoveryScore))
-            compactRing("STRAIN", route: .strain, progress: strain.map { $0 / 21 }, color: .appAccent)
+        // Use exactly the same progress and palette as the full-size rings.
+        // Otherwise the sticky header changes colors/scores while scrolling.
+        let displayedRecovery = demo ? Double(SampleData.recoveryRingPercent) : recoveryScore
+        let recoveryColor = displayedRecovery.map { score in
+            score >= 67 ? Color(hex: 0x00E66C) : DetailMetric.recovery.color(score)
+        } ?? DetailMetric.recovery.color(nil)
+        return HStack(spacing: 16) {
+            compactRing("SLEEP", route: .sleepAnalysis,
+                        progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
+                        color: Color(hex: 0x82A8C2))
+            compactRing("RECOVERY", route: .recovery,
+                        progress: displayedRecovery.map { $0 / 100 }, color: recoveryColor)
+            compactRing("STRAIN", route: .strain,
+                        progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
+                        color: .appAccent)
         }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -1308,6 +1319,7 @@ private struct HomeBandDeviceSettingsView: View {
     private let panel = Color(hex: 0x30353A)
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
+    @State private var showRegulatoryLabels = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1369,6 +1381,12 @@ private struct HomeBandDeviceSettingsView: View {
             .scrollIndicators(.hidden)
         }
         .foregroundStyle(Color.white)
+        .sheet(isPresented: $showPairingSheet) { PairDeviceView().environmentObject(store) }
+        .sheet(isPresented: $showRegulatoryLabels) { regulatoryLabelsSheet }
+        .confirmationDialog("Unpair WHOOP Band?", isPresented: $showUnpairConfirmation, titleVisibility: .visible) {
+            Button("Unpair Device", role: .destructive) { store.unpairBand() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Disconnects the band and clears the saved STRAP association. Historical data is retained.") }
         .background {
             LinearGradient(colors: [Color(hex: 0x34434D), Color(hex: 0x192127), Color(hex: 0x080D10)],
                            startPoint: .top, endPoint: .bottom)
@@ -1450,8 +1468,7 @@ private struct HomeBandDeviceSettingsView: View {
     private var advancedContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 24) {
-                metadata("DEVICE ID", value: store.band.preferredBandID ?? "UNAVAILABLE", icon: "applewatch")
-                metadata("SERIAL", value: store.band.serialNumber ?? "UNAVAILABLE", icon: "barcode")
+                metadata("DEVICE ID", value: store.band.serialNumber ?? "UNAVAILABLE", icon: "applewatch")
                 metadata("FIRMWARE", value: store.band.firmwareRevision ?? "UNVERIFIED", icon: "cpu")
             }
             .frame(maxWidth: .infinity)
@@ -1462,12 +1479,16 @@ private struct HomeBandDeviceSettingsView: View {
                 deviceRow("PAIR A DEVICE", icon: "plus.rectangle.on.rectangle", subtitle: "Scan and select a nearby WHOOP band.", enabled: true)
             }.buttonStyle(.plain)
             Button { showUnpairConfirmation = true } label: {
-                deviceRow("UNPAIR DEVICE", icon: "minus.rectangle", subtitle: "Disconnect and clear the saved STRAP association.", enabled: store.band.preferredBandID != nil)
-            }.buttonStyle(.plain).disabled(store.band.preferredBandID == nil)
-            deviceRow("REGULATORY LABELS", icon: "tag",
-                      subtitle: "Refer to the official device application for regulatory labels.", enabled: false)
-            deviceRow("SAFETY & REGULATORY", icon: "tag",
-                      subtitle: "Safety and compliance information is provided by the manufacturer.", enabled: false)
+                deviceRow("UNPAIR DEVICE", icon: "minus.rectangle", subtitle: "Disconnect and clear the saved STRAP association.", enabled: store.band.preferredBandID != nil || store.band.isConnected)
+            }.buttonStyle(.plain).disabled(store.band.preferredBandID == nil && !store.band.isConnected)
+            Button { showRegulatoryLabels = true } label: {
+                deviceRow("REGULATORY LABELS", icon: "tag",
+                          subtitle: "Manufacturer regulatory information; no unverified labels are generated.", enabled: true)
+            }.buttonStyle(.plain)
+            Link(destination: URL(string: "https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information")!) {
+                deviceRow("SAFETY & REGULATORY", icon: "tag",
+                          subtitle: "Open official WHOOP safety and regulatory information.", enabled: true)
+            }.buttonStyle(.plain)
             deviceRow("FIRMWARE CHECK", icon: "cpu",
                       subtitle: "Updates disabled. Custom firmware flashing (0x53, 0x8E–0x90) is restricted to official signed images to prevent bricking.", enabled: false)
             deviceRow("REBOOT DEVICE", icon: "power",
@@ -1477,11 +1498,24 @@ private struct HomeBandDeviceSettingsView: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 45)
-        .sheet(isPresented: $showPairingSheet) { PairDeviceView().environmentObject(store) }
-        .confirmationDialog("Unpair WHOOP Band?", isPresented: $showUnpairConfirmation) {
-            Button("Unpair Device", role: .destructive) { store.unpairBand() }
-            Button("Cancel", role: .cancel) {}
-        } message: { Text("Clears the saved STRAP association; historical data is retained.") }
+    }
+
+    private var regulatoryLabelsSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("REGULATORY LABELS").font(StrapTypography.body(17, weight: .bold))
+                Text("STRAP cannot verify manufacturer regulatory markings from the band telemetry. Open WHOOP's official regulatory information instead of displaying invented labels.")
+                    .font(StrapTypography.body(13))
+                Link("VIEW OFFICIAL WHOOP REGULATORY INFORMATION",
+                     destination: URL(string: "https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information")!)
+                Spacer()
+            }
+            .padding(24)
+            .navigationTitle("Regulatory Labels")
+            .toolbar { ToolbarItem(placement: .topBarTrailing) {
+                Button("Done") { showRegulatoryLabels = false }
+            } }
+        }
     }
 
     private func metadata(_ title: String, value: String, icon: String) -> some View {

@@ -1,6 +1,36 @@
 import XCTest
 @testable import Strap
 
+final class GenericWorkoutConfirmationTests: XCTestCase {
+    func testMorningStepsAndMildHeartRateDoNotBecomeWorkout() {
+        XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
+            durationS: 14 * 60, exertionSeconds: 120,
+            movingSeconds: 45, hasPreActivityBaseline: true
+        ))
+    }
+
+    func testMissingBaselineDoesNotInventExertion() {
+        XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
+            durationS: 14 * 60, exertionSeconds: 400,
+            movingSeconds: 250, hasPreActivityBaseline: false
+        ))
+    }
+
+    func testSustainedExerciseWithIndependentEvidenceRemainsEligible() {
+        XCTAssertTrue(ActivityDetect.confirmsGenericWorkout(
+            durationS: 14 * 60, exertionSeconds: 400,
+            movingSeconds: 250, hasPreActivityBaseline: true
+        ))
+    }
+
+    func testShortIncidentalMovementIsNotExercise() {
+        XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
+            durationS: 8 * 60, exertionSeconds: 300,
+            movingSeconds: 150, hasPreActivityBaseline: true
+        ))
+    }
+}
+
 final class ActivityModelTests: XCTestCase {
     func testSetVolume() {
         let set = WorkSet(reps: 10, loadKG: 62.5)
