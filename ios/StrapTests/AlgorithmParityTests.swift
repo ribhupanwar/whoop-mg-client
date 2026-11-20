@@ -53,4 +53,21 @@ final class AlgorithmParityTests: XCTestCase {
         XCTAssertFalse(fallback.isSWS)
         XCTAssertEqual(fallback.windowSeconds, 0)
     }
+
+    func testDuplicateOverlapExactHalfInclusive() {
+        let first = ActivitySession(startUnix: 1000, endUnix: 1299, kind: "run",
+                                    steps: 0, meanHR: 100.0, walkTicks: 0, runTicks: 0)
+        let second = ActivitySession(startUnix: 1150, endUnix: 1449, kind: "run",
+                                     steps: 0, meanHR: 100.0, walkTicks: 0, runTicks: 0)
+        XCTAssertEqual(ActivityDetect.suppressDuplicates([first, second]).count, 1)
+    }
+
+    func testSingleSecondDuplicate() {
+        let first = ActivitySession(startUnix: 1000, endUnix: 1100, kind: "walk",
+                                    steps: 0, meanHR: 100.0, walkTicks: 0, runTicks: 0)
+        let second = ActivitySession(startUnix: 1050, endUnix: 1050, kind: "walk",
+                                     steps: 0, meanHR: 100.0, walkTicks: 0, runTicks: 0)
+        XCTAssertEqual(ActivityDetect.suppressDuplicates([first, second]).count, 1)
+    }
+
 }
