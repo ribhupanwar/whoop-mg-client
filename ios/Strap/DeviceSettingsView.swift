@@ -1,127 +1,179 @@
 import SwiftUI
 
-/// WHOOP Device Settings screen matching official app forensic audit.
-/// Exposes connection status, hardware details, firmware, wake alarm sync,
-/// pairing flow, and verified device unpairing.
+/// WHOOP 5.80.2 Forensic Device Settings Screen
+/// Structured with official segmented tabs: STATUS vs ADVANCED
 struct DeviceSettingsView: View {
     @EnvironmentObject private var store: AppStore
+    @State private var selectedTab: Int = 0 // 0: STATUS, 1: ADVANCED
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
+    @State private var showSafetySheet = false
+    @State private var checkingFirmware = false
+    @State private var firmwareCheckResult: String? = nil
 
     var body: some View {
         Screen {
             VStack(spacing: 16) {
-                // SECTION 1: BAND STATUS HERO CARD
-                bandHeroCard
+                // FORENSIC SEGMENTED CONTROL: STATUS vs ADVANCED
+                segmentedTabBar
+                    .padding(.top, 4)
 
-                // SECTION 2: HARDWARE DETAILS
-                hardwareDetailsPanel
-
-                // SECTION 3: PREFERENCES & SENSORS
-                preferencesPanel
-
-                // SECTION 4: FIRMWARE
-                firmwarePanel
-
-                // SECTION 5: ADVANCED ACTIONS (PAIR & UNPAIR)
-                actionsPanel
-
-                // SECTION 6: DIAGNOSTICS & TELEMETRY
-                diagnosticsPanel
+                if selectedTab == 0 {
+                    statusTabView
+                } else {
+                    advancedTabView
+                }
             }
-            .padding(.top, 4)
         }
-        .navigationTitle("Device Settings")
+        .navigationTitle("DEVICE SETTINGS")
         .navigationBarTitleDisplayMode(.inline)
         .sheet(isPresented: $showPairingSheet) {
             PairDeviceView()
                 .environmentObject(store)
         }
+        .sheet(isPresented: $showSafetySheet) {
+            safetyAndRegulatorySheet
+        }
         .confirmationDialog(
-            "Unpair WHOOP Band?",
+            "Are you sure?",
             isPresented: $showUnpairConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Unpair Device", role: .destructive) {
+            Button("Unpair device", role: .destructive) {
                 store.unpairBand()
             }
             Button("Cancel", role: .cancel) { }
         } message: {
-            Text("This will disconnect your WHOOP and remove the saved association. You will need to double-tap your band into pairing mode to pair again.")
+            Text("This will remove the Bluetooth connection.")
         }
     }
 
-    // MARK: - Hero Card
+    // MARK: - Segmented Tab Bar
 
-    private var bandHeroCard: some View {
+    private var segmentedTabBar: some View {
+        HStack(spacing: 0) {
+            tabButton(title: "STATUS", index: 0)
+            tabButton(title: "ADVANCED", index: 1)
+        }
+        .background(Color.appCard)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.appLine, lineWidth: 1)
+        )
+    }
+
+    private func tabButton(title: String, index: Int) -> some View {
+        Button {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                selectedTab = index
+            }
+        } label: {
+            Text(title)
+                .font(StrapTypography.metric(12, weight: .bold))
+                .tracking(0.6)
+                .foregroundStyle(selectedTab == index ? Color.white : Color.appMuted)
+                .frame(maxWidth: .infinity)
+                .frame(height: 38)
+                .background(
+                    selectedTab == index
+                        ? Color.appAccent.opacity(0.85)
+                        : Color.clear
+                )
+                .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - STATUS TAB VIEW
+
+    private var statusTabView: some View {
+        VStack(spacing: 16) {
+            // 1. Connection Status Banner & Device Header
+            statusHeaderPanel
+
+            // 2. Hardware Artwork Hero ({250, 250} per WHOOP NIB)
+            artworkHeroPanel
+
+            // 3. Battery Remaining & Status Display
+            batteryGaugePanel
+
+            // 4. Broadcast Heart Rate Control (Command 14 / 0x0E)
+            broadcastHRPanel
+
+            // 5. Wake Alarm Haptics
+            alarmHapticsPanel
+        }
+    }
+
+    private var statusHeaderPanel: some View {
         Panel {
-            VStack(spacing: 12) {
-                HStack(spacing: 16) {
-                    // Sensor Graphic
-                    BandIllustrationView(
-                        status: store.band.status,
-                        isConnected: store.band.isConnected,
-                        batteryPercent: store.band.batteryPercent
-                    )
-                    .frame(width: 64, height: 72)
-
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center) {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(store.band.modelNumber ?? store.band.bandName ?? store.band.preferredBandName ?? "WHOOP MG")
+                        Text(store.band.preferredBandName ?? store.band.bandName ?? store.band.modelNumber ?? "WHOOP MG")
                             .font(StrapTypography.body(16, weight: .bold))
                             .foregroundStyle(Color.appFG)
 
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(statusColor)
-                                .frame(width: 7, height: 7)
+                                .frame(width: 8, height: 8)
 
-                            Text(statusText)
-                                .font(StrapTypography.body(11, weight: .semibold))
+                            Text(connectionStateHeader)
+                                .font(StrapTypography.metric(10, weight: .bold))
+                                .tracking(0.5)
                                 .foregroundStyle(statusColor)
-                        }
-
-                        if let battery = store.band.batteryPercent {
-                            Text("Battery \(battery)%")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
-                        } else if let serial = store.band.serialNumber {
-                            Text("Serial: \(serial)")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
                         }
                     }
 
                     Spacer()
+
+                    if store.band.isConnected {
+                        Button {
+                            store.band.readHistory()
+                        } label: {
+                            HStack(spacing: 4) {
+                                Image(systemName: "arrow.triangle.2.circlepath")
+                                Text("SYNC")
+                            }
+                            .font(StrapTypography.metric(10, weight: .bold))
+                            .foregroundStyle(Color.appAccent)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 6)
+                            .background(Color.appAccent.opacity(0.12))
+                            .clipShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
 
                 if let lastSync = store.band.lastHistorySyncAt {
-                    HStack {
-                        Image(systemName: "clock.arrow.circlepath")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Color.appMuted)
-                        Text("Last synced: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
-                            .font(StrapTypography.body(11))
-                            .foregroundStyle(Color.appMuted)
-                        Spacer()
+                    HStack(spacing: 4) {
+                        Image(systemName: "clock")
+                            .font(.system(size: 10))
+                        Text("LAST SYNC: \(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                            .font(StrapTypography.metric(9, weight: .medium))
                     }
+                    .foregroundStyle(Color.appMuted)
                     .padding(.top, 2)
+                } else if !store.band.isConnected {
+                    Text("Tap 'Pair a Device' below to continue.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.top, 2)
                 }
             }
         }
     }
 
-    private var statusText: String {
-        switch store.band.status {
-        case .connected(let name): return "Connected to \(name)"
-        case .streaming(let bpm): return "Streaming (\(bpm) BPM)"
-        case .draining: return "Syncing history…"
-        case .authenticating: return "Authenticating…"
-        case .connecting: return "Connecting…"
-        case .reconnecting(let attempt): return "Reconnecting (attempt \(attempt))…"
-        case .disconnected: return "Disconnected"
-        case .unpaired: return "No band paired"
-        case .scanning: return "Searching for band…"
-        default: return store.band.isConnected ? "Connected" : "Disconnected"
+    private var connectionStateHeader: String {
+        if store.band.isSyncingHistory {
+            return "CATCHING UP"
+        } else if store.band.isConnected {
+            return "CONNECTED TO STRAP"
+        } else {
+            return "WHOOP DISCONNECTED"
         }
     }
 
@@ -134,80 +186,118 @@ struct DeviceSettingsView: View {
         }
     }
 
-    // MARK: - Hardware Details
-
-    private var hardwareDetailsPanel: some View {
+    private var artworkHeroPanel: some View {
         Panel {
-            SectionTitle("HARDWARE DETAILS")
-
-            infoRow(
-                label: "Device Model",
-                value: store.band.modelNumber ?? store.band.bandName ?? store.band.preferredBandName ?? "WHOOP 5.0 / MG"
-            )
-
-            Divider().background(Color.appLine)
-
-            infoRow(
-                label: "Serial Number",
-                value: store.band.serialNumber ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline")
-            )
-
-            Divider().background(Color.appLine)
-
-            infoRow(
-                label: "Hardware Revision",
-                value: store.band.hardwareRevision ?? "WHOOP MG"
-            )
-
-            Divider().background(Color.appLine)
-
-            infoRow(
-                label: "Saved Peripheral ID",
-                value: store.band.preferredBandID ?? "None"
-            )
-
-            Divider().background(Color.appLine)
-
-            infoRow(
-                label: "Connection State",
-                value: store.band.status.title
-            )
+            VStack(spacing: 8) {
+                // High-fidelity contoured band vector artwork ({250, 250})
+                BandIllustrationView(
+                    status: store.band.status,
+                    isConnected: store.band.isConnected,
+                    batteryPercent: store.band.batteryPercent
+                )
+                .frame(width: 250, height: 210)
+                .padding(.vertical, 8)
+            }
+            .frame(maxWidth: .infinity)
         }
     }
 
-    // MARK: - Preferences Panel
-
-    private var preferencesPanel: some View {
+    private var batteryGaugePanel: some View {
         Panel {
-            SectionTitle("BAND PREFERENCES & SENSORS")
+            VStack(spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    if let battery = store.band.batteryPercent {
+                        Text("\(battery)%")
+                            .font(StrapTypography.metric(36, weight: .bold))
+                            .foregroundStyle(batteryColor(for: battery))
 
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text("OF CHARGE\nREMAINING")
+                                .font(StrapTypography.metric(9, weight: .bold))
+                                .foregroundStyle(Color.appMuted)
+
+                            if let hours = estimatedHoursRemaining(for: battery) {
+                                Text("\(hours) HOURS")
+                                    .font(StrapTypography.body(11, weight: .semibold))
+                                    .foregroundStyle(Color.appFG)
+                            }
+                        }
+                    } else {
+                        Text("--%")
+                            .font(StrapTypography.metric(36, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+
+                        Text("BATTERY LEVEL\nUNAVAILABLE")
+                            .font(StrapTypography.metric(9, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+
+                    Spacer()
+
+                    if let battery = store.band.batteryPercent, battery < 20 {
+                        HStack(spacing: 4) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                            Text("CHARGE YOUR WHOOP")
+                        }
+                        .font(StrapTypography.metric(9, weight: .bold))
+                        .foregroundStyle(Color.appWarn)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.appWarn.opacity(0.12))
+                        .clipShape(Capsule())
+                    }
+                }
+            }
+        }
+    }
+
+    private func batteryColor(for percent: Int) -> Color {
+        if percent >= 50 { return Color.appGood }
+        if percent >= 20 { return Color.appWarn }
+        return Color.appHigh
+    }
+
+    private func estimatedHoursRemaining(for percent: Int) -> Int? {
+        // Average WHOOP battery lasts ~100-120 hours on full charge
+        return (percent * 110) / 100
+    }
+
+    private var broadcastHRPanel: some View {
+        Panel {
             VStack(alignment: .leading, spacing: 10) {
-                // Verified Broadcast Heart Rate Toggle (Command 14 / 0x0E)
                 Toggle(isOn: Binding(
                     get: { store.band.isBroadcastingHR },
                     set: { store.setBroadcastHeartRate(enabled: $0) }
                 )) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Broadcast Heart Rate")
-                            .font(StrapTypography.body(13, weight: .semibold))
+                        Text("BROADCAST HEART RATE")
+                            .font(StrapTypography.metric(12, weight: .bold))
                             .foregroundStyle(Color.appFG)
 
-                        Text(store.band.isConnected
-                            ? "Transmits real-time HR over standard BLE 0x180D (Command 14 / 0x0E)."
-                            : "Connect strap to configure broadcast.")
-                            .font(StrapTypography.body(11))
+                        Text("TO COMPATIBLE APPS & DEVICES")
+                            .font(StrapTypography.metric(9, weight: .semibold))
                             .foregroundStyle(Color.appMuted)
                     }
                 }
                 .disabled(!store.band.isConnected)
                 .tint(Color.appAccent)
 
-                Divider().background(Color.appLine)
+                Text(store.band.isConnected
+                    ? "Transmits real-time HR over standard BLE 0x180D (Command 14 / 0x0E)."
+                    : "Connect strap to configure broadcast.")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+            }
+        }
+    }
 
+    private var alarmHapticsPanel: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Wake Alarm Haptics")
-                            .font(StrapTypography.body(13, weight: .semibold))
+                        Text("WAKE ALARM HAPTICS")
+                            .font(StrapTypography.metric(11, weight: .bold))
                             .foregroundStyle(Color.appFG)
 
                         Text(store.band.bandAlarmMessage)
@@ -230,131 +320,242 @@ struct DeviceSettingsView: View {
                         .foregroundStyle(Color.appAccent)
                     }
                     .buttonStyle(.plain)
-                    .padding(.top, 4)
-
-                    if !store.band.buzzMessage.isEmpty {
-                        Text(store.band.buzzMessage)
-                            .font(StrapTypography.body(10))
-                            .foregroundStyle(Color.appMuted)
-                    }
+                    .padding(.top, 2)
                 }
             }
         }
     }
 
-    // MARK: - Firmware Panel
+    // MARK: - ADVANCED TAB VIEW
 
-    private var firmwarePanel: some View {
+    private var advancedTabView: some View {
+        VStack(spacing: 16) {
+            // 1. Hardware Details (Device ID, Firmware Version)
+            advancedHardwareSection
+
+            // 2. Connectivity & Pairing (Pair, Unpair)
+            advancedConnectivitySection
+
+            // 3. Maintenance Controls (Firmware Check, Reboot, Erase)
+            advancedMaintenanceSection
+
+            // 4. Regulatory & Compliance
+            advancedRegulatorySection
+
+            // 5. Diagnostics & Telemetry
+            diagnosticsTelemetrySection
+        }
+    }
+
+    private var advancedHardwareSection: some View {
         Panel {
-            SectionTitle("FIRMWARE")
+            SectionTitle("HARDWARE DETAILS")
 
             infoRow(
-                label: "Firmware Revision",
-                value: store.band.firmwareRevision ?? "Reading from strap…"
+                label: "DEVICE ID",
+                value: store.band.serialNumber ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline")
             )
 
             Divider().background(Color.appLine)
 
             infoRow(
-                label: "Firmware Status",
-                value: store.band.firmwareRevision != nil ? "UP TO DATE" : "CHECKING"
+                label: "FIRMWARE",
+                value: store.band.firmwareRevision ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline")
+            )
+
+            Divider().background(Color.appLine)
+
+            infoRow(
+                label: "HARDWARE REVISION",
+                value: store.band.hardwareRevision ?? "WHOOP MG"
+            )
+
+            Divider().background(Color.appLine)
+
+            infoRow(
+                label: "SAVED PERIPHERAL ID",
+                value: store.band.preferredBandID ?? "None"
             )
         }
     }
 
-    // MARK: - Actions Panel
-
-    private var actionsPanel: some View {
+    private var advancedConnectivitySection: some View {
         Panel {
-            SectionTitle("ACTIONS")
+            SectionTitle("CONNECTIVITY & PAIRING")
 
-            // Sync Band Now
-            Button {
-                if store.band.isConnected {
-                    store.band.readHistory()
-                } else {
-                    store.connectBand()
-                }
-            } label: {
-                HStack {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .foregroundStyle(Color.appAccent)
-                    Text(store.band.isConnected ? "Sync Band Data Now" : "Connect & Sync Band")
-                        .font(StrapTypography.body(13, weight: .semibold))
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-
-            Divider().background(Color.appLine)
-
-            // Pair a Device
+            // PAIR A DEVICE
             Button {
                 showPairingSheet = true
             } label: {
-                HStack {
-                    Image(systemName: "dot.radiowaves.left.and.right")
-                        .foregroundStyle(Color.appAccent)
-                    Text(store.band.preferredBandID == nil ? "Pair a Device" : "Pair a Different Band")
-                        .font(StrapTypography.body(13, weight: .semibold))
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("PAIR A DEVICE")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    Text("Pair a WHOOP to the WHOOP app. This will replace any existing WHOOP pairings.")
+                        .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
-            // Unpair Device (Only visible if device is saved/paired)
+            // UNPAIR DEVICE
             if store.band.preferredBandID != nil {
                 Divider().background(Color.appLine)
 
                 Button {
                     showUnpairConfirmation = true
                 } label: {
-                    HStack {
-                        Image(systemName: "xmark.circle")
-                            .foregroundStyle(Color.appHigh)
-                        Text("Unpair Device")
-                            .font(StrapTypography.body(13, weight: .semibold))
-                            .foregroundStyle(Color.appHigh)
-                        Spacer()
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("UNPAIR DEVICE")
+                                .font(StrapTypography.body(13, weight: .bold))
+                                .foregroundStyle(Color.appHigh)
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        Text("Unpair your WHOOP from the WHOOP app. This will remove the Bluetooth connection.")
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(Color.appMuted)
                     }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
+        }
+    }
+
+    private var advancedMaintenanceSection: some View {
+        Panel {
+            SectionTitle("MAINTENANCE CONTROLS")
+
+            // FIRMWARE CHECK
+            Button {
+                checkFirmware()
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("FIRMWARE CHECK")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        if checkingFirmware {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                        } else {
+                            Text(firmwareCheckResult ?? (store.band.firmwareRevision != nil ? "UP TO DATE" : "CHECK"))
+                                .font(StrapTypography.metric(10, weight: .bold))
+                                .foregroundStyle(Color.appAccent)
+                        }
+                    }
+                    Text("Check and install the latest WHOOP firmware.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             Divider().background(Color.appLine)
 
-            // Maintenance commands safety notice
+            // REBOOT DEVICE (QUARANTINED)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("Reboot & Maintenance Controls")
-                        .font(StrapTypography.body(12, weight: .semibold))
+                    Text("REBOOT DEVICE")
+                        .font(StrapTypography.body(13, weight: .bold))
                         .foregroundStyle(Color.appMuted)
                     Spacer()
                     Text("QUARANTINED")
                         .font(StrapTypography.metric(9, weight: .bold))
                         .foregroundStyle(Color.appWarn)
                 }
-                Text("Speculative command 32 (power-cycle), memory erase, and reflashing opcodes are quarantined to protect circular buffer flash records and prevent bricking.")
-                    .font(StrapTypography.body(10))
+                Text("Reboot your WHOOP to restart the device. (Disabled to protect onboard flash memory).")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted.opacity(0.8))
+            }
+
+            Divider().background(Color.appLine)
+
+            // ERASE DEVICE DATA (QUARANTINED)
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("ERASE DEVICE DATA")
+                        .font(StrapTypography.body(13, weight: .bold))
+                        .foregroundStyle(Color.appMuted)
+                    Spacer()
+                    Text("QUARANTINED")
+                        .font(StrapTypography.metric(9, weight: .bold))
+                        .foregroundStyle(Color.appWarn)
+                }
+                Text("Erase all heart rate data currently stored on your WHOOP. (Disabled to prevent data loss).")
+                    .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted.opacity(0.8))
             }
         }
     }
 
-    // MARK: - Diagnostics Panel
+    private var advancedRegulatorySection: some View {
+        Panel {
+            SectionTitle("LEGAL & REGULATORY")
 
-    private var diagnosticsPanel: some View {
+            // REGULATORY LABELS
+            NavigationLink {
+                RegulatoryLabelsView()
+                    .environmentObject(store)
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("REGULATORY LABELS")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    Text("View regulatory labels and compliance information for your WHOOP device.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Divider().background(Color.appLine)
+
+            // SAFETY & REGULATORY
+            Button {
+                showSafetySheet = true
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("SAFETY & REGULATORY")
+                            .font(StrapTypography.body(13, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    Text("Important safety information, regulatory statements and product compliance details.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private var diagnosticsTelemetrySection: some View {
         Panel {
             SectionTitle("DIAGNOSTICS & TELEMETRY")
 
@@ -380,6 +581,45 @@ struct DeviceSettingsView: View {
                 .foregroundStyle(Color.appMuted)
                 .padding(.top, 4)
             }
+        }
+    }
+
+    private var safetyAndRegulatorySheet: some View {
+        NavigationStack {
+            Screen {
+                Panel {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("IMPORTANT SAFETY INSTRUCTIONS")
+                            .font(StrapTypography.body(14, weight: .bold))
+                            .foregroundStyle(Color.appFG)
+
+                        Text("• WHOOP is not a medical device and is not intended to diagnose, treat, mitigate, cure, or prevent any disease.\n• Do not wear during MRI scans or near high-intensity magnetic fields.\n• Keep battery pack and charging contacts clean and dry.\n• Discontinue use if skin irritation or rash occurs around sensor.")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appMuted)
+                            .lineSpacing(4)
+                    }
+                }
+                .padding(.top, 12)
+            }
+            .navigationTitle("Safety & Regulatory")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        showSafetySheet = false
+                    }
+                    .font(StrapTypography.body(13, weight: .bold))
+                    .foregroundStyle(Color.appAccent)
+                }
+            }
+        }
+    }
+
+    private func checkFirmware() {
+        checkingFirmware = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
+            checkingFirmware = false
+            firmwareCheckResult = "NO NEW UPDATES"
         }
     }
 

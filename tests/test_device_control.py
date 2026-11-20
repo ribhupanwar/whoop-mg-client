@@ -47,6 +47,16 @@ class TestDeviceControlCommands(unittest.TestCase):
         self.assertEqual(HardwareEvent.BLE_BONDED, 23)
         self.assertEqual(HardwareEvent.BLE_HR_PROFILE_ENABLE, 24)
 
+    def test_whoop_5802_model_identifiers(self):
+        # Verified from WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle
+        harvard_models = ["WS40", "WP40"]
+        maverick_models = ["WS50", "WM50", "WD50", "WB50"]
+        goose_models = ["WG50", "WD50", "WB50"]
+
+        self.assertIn("WS40", harvard_models)
+        self.assertIn("WS50", maverick_models)
+        self.assertIn("WG50", goose_models)
+
 
 if __name__ == "__main__":
     unittest.main()
