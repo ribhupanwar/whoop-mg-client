@@ -10,7 +10,7 @@ private final class LoadChartCache {
         lock.lock()
         defer { lock.unlock() }
         let dayStamp = JournalStore.dayKey(for: Date())
-        let key = "\(isPreview)-\(days.count)-\(days.last?.dateKey ?? "")-\(days.last?.strain ?? 0)-\(days.last?.recovery ?? 0)-\(sleepNeedHours)-\(imported.count)-\(dayStamp)"
+        let key = "\(isPreview)-\(days.count)-\(days.last?.dateKey ?? "")-\(days.last?.strain ?? 0)-\(days.last?.restingHR ?? 0)-\(days.last?.sleepHours ?? 0)-\(sleepNeedHours)-\(imported.count)-\(dayStamp)"
         if key == lastKey {
             return lastPoints
         }
