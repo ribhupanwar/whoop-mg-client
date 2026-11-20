@@ -1533,8 +1533,17 @@ private struct HomeBandDeviceSettingsView: View {
             Button {
                 showRebootConfirmation = true
             } label: {
+                let rebootSubtitle: String = {
+                    if store.band.isRebooting {
+                        return "WHOOP is restarting and will reconnect automatically..."
+                    } else if let msg = store.band.rebootMessage, !msg.isEmpty {
+                        return msg
+                    } else {
+                        return "Verified warm restart (0x1D). Preserves circular flash history without data loss."
+                    }
+                }()
                 deviceRow("REBOOT DEVICE", icon: "power",
-                          subtitle: store.band.isRebooting ? "WHOOP is restarting and will reconnect automatically..." : "Verified warm restart (0x1D). Preserves circular flash history without data loss.",
+                          subtitle: rebootSubtitle,
                           enabled: store.band.isConnected && !store.band.isRebooting)
             }
             .buttonStyle(.plain)

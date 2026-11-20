@@ -2176,6 +2176,11 @@ final class BandLink: NSObject, ObservableObject {
                     rebootExpectedDisconnect = true
                     isRebooting = true
                     rebootMessage = "WHOOP acknowledged reboot. Restarting hardware..."
+                } else if resultCode == 2 {
+                    // Result code 2 is PENDING in WHOOP protocol: band is preparing shutdown/reboot
+                    rebootExpectedDisconnect = true
+                    isRebooting = true
+                    rebootMessage = "WHOOP preparing reboot..."
                 } else {
                     isRebooting = false
                     rebootMessage = "WHOOP refused reboot command (result code \(resultCode))"
@@ -2642,8 +2647,11 @@ extension BandLink: CBPeripheralDelegate {
             }
             hrSubscribedBeforeBond = false
             status = .connected(bandName ?? "WHOOP MG")
-            isRebooting = false
-            rebootMessage = nil
+            if rebootExpectedDisconnect {
+                isRebooting = false
+                rebootMessage = nil
+                rebootExpectedDisconnect = false
+            }
             let generation = linkGeneration
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
                 guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }

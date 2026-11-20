@@ -55,11 +55,14 @@ final class DeviceControlTests: XCTestCase {
         // inner[1] = response seq
         // inner[2] = cmd (0x1D)
         // inner[3] = origin seq
-        // inner[4] = result (0x01 = success)
+        // inner[4] = result (0x01 = success, 0x02 = pending)
         let innerResponse: [UInt8] = [BandPacket.commandResponse, 0x05, BandCommand.rebootStrap.rawValue, 0x02, 0x01, 0x00, 0x00]
         XCTAssertEqual(innerResponse[0], 0x24)
         XCTAssertEqual(innerResponse[2], 0x1D)
         XCTAssertEqual(innerResponse[4], 0x01) // Success
+
+        let pendingResponse: [UInt8] = [BandPacket.commandResponse, 0x06, BandCommand.rebootStrap.rawValue, 0x02, 0x02, 0x00, 0x00]
+        XCTAssertEqual(pendingResponse[4], 0x02) // Pending
     }
 
     // MARK: - DIS Characteristics Tests
