@@ -18,6 +18,23 @@ enum BandUUID {
     static let batteryLevel = CBUUID(string: "2A19")
     static let deviceInfoService = CBUUID(string: "180A")
 
+    // Device Information Service characteristics (DIS 0x180A)
+    static let modelNumber = CBUUID(string: "2A24")
+    static let serialNumber = CBUUID(string: "2A25")
+    static let firmwareRevision = CBUUID(string: "2A26")
+    static let hardwareRevision = CBUUID(string: "2A27")
+    static let softwareRevision = CBUUID(string: "2A28")
+    static let manufacturerName = CBUUID(string: "2A29")
+
+    static let disCharacteristics: [CBUUID] = [
+        modelNumber,
+        serialNumber,
+        firmwareRevision,
+        hardwareRevision,
+        softwareRevision,
+        manufacturerName
+    ]
+
     static let notifiable: [CBUUID] = [commandFrom, events, data, memfault]
 }
 
@@ -31,6 +48,23 @@ enum BandCommand: UInt8 {
     case historicalDataResult = 0x17
     case getDataRange = 0x22
     case clientHello = 0x91
+}
+
+/// Hardware event notification codes notified asynchronously on fd4b0004.
+enum BandHardwareEvent: UInt8 {
+    case wristOff = 0x0A              // 10: Optical PPG off-wrist (green LEDs off)
+    case bleConnectionUp = 0x0B       // 11: BLE connected
+    case bleConnectionDown = 0x0C     // 12: BLE disconnected
+    case rtcLost = 0x0D               // 13: RTC desynchronized
+    case doubleTap = 0x0E             // 14: Accelerometer double-tap detected
+    case boot = 0x0F                  // 15: Power-on / reboot
+    case setRTC = 0x10                // 16: Time synchronized
+    case temperatureLevel = 0x11      // 17: Skin temperature update
+    case pairingMode = 0x12           // 18: Pairing mode activated (pulsing blue LED)
+    case batteryPackConnected = 0x15  // 21: Charger attached
+    case batteryPackRemoved = 0x16    // 22: Charger detached
+    case bleBonded = 0x17             // 23: BLE pairing/bonding completed
+    case bleHRProfileEnable = 0x18    // 24: Standard 0x180D HR broadcast active
 }
 
 enum BandPacket {
