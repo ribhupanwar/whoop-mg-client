@@ -5,6 +5,7 @@ import SwiftUI
 /// Demo mode: labelled sample values behind the persistent banner.
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let openPlan: () -> Void
 
     @State private var appOpenDays = AppOpenDayTracker.count()
@@ -54,9 +55,9 @@ struct HomeView: View {
             // near the hero boundary. Do not animate every scroll-position update.
             let shouldCompact = compactScores ? value < 80 : value < 0
             guard shouldCompact != compactScores else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { compactScores = shouldCompact }
+            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                compactScores = shouldCompact
+            }
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
@@ -65,7 +66,9 @@ struct HomeView: View {
                     Text("Activity history · scores show the latest recorded day")
                         .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
                 }
-                if compactScores { compactRingRow }
+                if compactScores {
+                    compactRingRow.transition(.opacity)
+                }
             }
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
@@ -1097,7 +1100,10 @@ struct HomeView: View {
                 RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
                 Text(title).font(StrapTypography.body(11, weight: .bold)).tracking(0.9)
             }.foregroundStyle(Color.appFG)
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home.compact." + title.lowercased())
+        .accessibilityValue(progress == nil ? "Unavailable" : "")
     }
 
     private var planCard: some View {
