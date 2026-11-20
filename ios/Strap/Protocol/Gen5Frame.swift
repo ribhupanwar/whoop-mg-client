@@ -21,6 +21,12 @@ enum Gen5Frame {
         return Int(bytes[2]) | (Int(bytes[3]) << 8)
     }
 
+    static func declaredLength(_ bytes: ArraySlice<UInt8>) -> Int? {
+        guard bytes.count >= 4 else { return nil }
+        let start = bytes.startIndex
+        return Int(bytes[start + 2]) | (Int(bytes[start + 3]) << 8)
+    }
+
     static func build(_ inner: [UInt8]) -> [UInt8] {
         let payload = padded(inner)
         let declared = payload.count + 4
@@ -45,16 +51,22 @@ enum Gen5Frame {
 
     /// Returns the padded inner, or nil when either checksum fails.
     static func parse(_ frame: [UInt8]) -> [UInt8]? {
-        guard frame.count >= headerLength, frame[0] == startOfFrame else { return nil }
-        let storedHeaderCRC = UInt16(frame[6]) | (UInt16(frame[7]) << 8)
-        guard BandChecksums.crc16Modbus(frame[0..<6]) == storedHeaderCRC else { return nil }
+        parse(frame[...])
+    }
+
+    static func parse(_ frame: ArraySlice<UInt8>) -> [UInt8]? {
+        guard frame.count >= headerLength else { return nil }
+        let start = frame.startIndex
+        guard frame[start] == startOfFrame else { return nil }
+        let storedHeaderCRC = UInt16(frame[start + 6]) | (UInt16(frame[start + 7]) << 8)
+        guard BandChecksums.crc16Modbus(frame[start..<(start + 6)]) == storedHeaderCRC else { return nil }
         guard let declared = declaredLength(frame), declared >= 4 else { return nil }
         let total = headerLength + declared
         guard frame.count >= total else { return nil }
-        let body = Array(frame[headerLength..<total])
+        let body = frame[(start + headerLength)..<(start + total)]
         guard body.count >= 4 else { return nil }
-        let payload = Array(body[0..<(body.count - 4)])
-        let tail = body.count - 4
+        let payload = Array(body[body.startIndex..<(body.endIndex - 4)])
+        let tail = body.endIndex - 4
         let stored = UInt32(body[tail])
             | (UInt32(body[tail + 1]) << 8)
             | (UInt32(body[tail + 2]) << 16)
@@ -66,49 +78,53 @@ enum Gen5Frame {
 
 final class FrameReassembler {
     private var buffer: [UInt8] = []
+    private var cursor: Int = 0
     private(set) var droppedBytes = 0
     private(set) var badFrames = 0
 
-    var pending: Int { buffer.count }
+    var pending: Int { buffer.count - cursor }
 
     func feed(_ chunk: [UInt8]) -> [[UInt8]] {
         buffer.append(contentsOf: chunk)
         var frames: [[UInt8]] = []
-        while true {
-            guard buffer.count >= Gen5Frame.headerLength else { break }
-            if buffer[0] != Gen5Frame.startOfFrame {
-                buffer.removeFirst()
+        while buffer.count - cursor >= Gen5Frame.headerLength {
+            let start = cursor
+            if buffer[start] != Gen5Frame.startOfFrame {
+                cursor += 1
                 droppedBytes += 1
                 continue
             }
-            // Validate the header before trusting its length. A corrupt length
-            // otherwise stalls backfill until tens of thousands of bytes arrive.
-            let headerCRC = UInt16(buffer[6]) | (UInt16(buffer[7]) << 8)
-            guard BandChecksums.crc16Modbus(buffer[0..<6]) == headerCRC else {
-                buffer.removeFirst()
+            let headerCRC = UInt16(buffer[start + 6]) | (UInt16(buffer[start + 7]) << 8)
+            guard BandChecksums.crc16Modbus(buffer[start..<(start + 6)]) == headerCRC else {
+                cursor += 1
                 droppedBytes += 1
                 badFrames += 1
                 continue
             }
-            guard let declared = Gen5Frame.declaredLength(buffer) else { break }
+            guard let declared = Gen5Frame.declaredLength(buffer[start..<(start + 4)]) else { break }
             let total = Gen5Frame.headerLength + declared
             if declared < 4 || total > 65_535 {
-                buffer.removeFirst()
+                cursor += 1
                 droppedBytes += 1
                 continue
             }
-            if buffer.count < total { break }
-            let candidate = Array(buffer[0..<total])
+            if buffer.count - cursor < total { break }
+            let candidate = buffer[cursor..<(cursor + total)]
             if let inner = Gen5Frame.parse(candidate) {
-                buffer.removeFirst(total)
+                cursor += total
                 frames.append(inner)
             } else {
-                // A dropped BLE fragment can place the next valid frame inside
-                // this declared span. Do not discard that following frame.
-                buffer.removeFirst()
+                cursor += 1
                 droppedBytes += 1
                 badFrames += 1
             }
+        }
+        if cursor == buffer.count {
+            buffer.removeAll(keepingCapacity: true)
+            cursor = 0
+        } else if cursor >= 4096 || (cursor >= 512 && cursor > buffer.count / 2) {
+            buffer.removeSubrange(0..<cursor)
+            cursor = 0
         }
         return frames
     }

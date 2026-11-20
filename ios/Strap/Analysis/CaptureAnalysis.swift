@@ -123,12 +123,16 @@ struct CaptureSummary: Codable, Equatable {
             samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
         )
 
+        let firstUnix = ordered.first?.unix
+        let lastUnix = ordered.last?.unix
+        let span = (firstUnix != nil && lastUnix != nil) ? max(0, lastUnix! - firstUnix!) : 0
+
         return CaptureSummary(
             sampleCount: ordered.count,
             wearingCount: wearing.count,
-            firstUnix: ordered.first?.unix,
-            lastUnix: ordered.last?.unix,
-            spanSeconds: ordered.last!.unix - ordered.first!.unix,
+            firstUnix: firstUnix,
+            lastUnix: lastUnix,
+            spanSeconds: span,
             lastHeartRate: ordered.last(where: { $0.wearing })?.heartRate,
             heartRateMin: heartRates.min().map { Int($0) },
             heartRateMax: heartRates.max().map { Int($0) },
@@ -179,9 +183,26 @@ enum DailyAnalysis {
         guard !ordered.isEmpty else { return [] }
 
         var byDay: [String: [V18Sample]] = [:]
+        var currentDayKey = ""
+        var currentDayStartUnix = Int.max
+        var currentDayEndUnix = Int.min
+
         for sample in ordered {
-            let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
-            byDay[JournalStore.dayKey(for: date, calendar: calendar), default: []].append(sample)
+            if sample.unix >= currentDayStartUnix && sample.unix < currentDayEndUnix {
+                byDay[currentDayKey, default: []].append(sample)
+            } else {
+                let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
+                let key = JournalStore.dayKey(for: date, calendar: calendar)
+                currentDayKey = key
+                if let interval = calendar.dateInterval(of: .day, for: date) {
+                    currentDayStartUnix = Int(interval.start.timeIntervalSince1970)
+                    currentDayEndUnix = Int(interval.end.timeIntervalSince1970)
+                } else {
+                    currentDayStartUnix = sample.unix
+                    currentDayEndUnix = sample.unix + 1
+                }
+                byDay[key, default: []].append(sample)
+            }
         }
         let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
             samples: ordered, periods: SleepDetect.detect(ordered), overrides: sleepCorrections

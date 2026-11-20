@@ -418,6 +418,12 @@ final class BandLink: NSObject, ObservableObject {
     private var lastFrameAt: Date?
     private var drainTimer: Timer?
     private var liveHRWatchdog: Timer?
+    private var pendingHistoryRRRecords = 0
+    private var pendingHistoryRRDeclared = 0
+    private var pendingHistoryRRAccepted = 0
+    private var pendingHistoryRRRejected = 0
+    private var pendingHistoryUndecodableFrames = 0
+    private var pendingHistoryVersionCounts: [Int: Int] = [:]
     private var lastHRRecoveryAt: Date?
     private var hrRecoveryAttempts = 0
     private var hrDiscoveryRequestedAt: Date?
@@ -483,6 +489,19 @@ final class BandLink: NSObject, ObservableObject {
         recoverSavedCaptures()
     }
 
+    deinit {
+        automaticSyncTimer?.invalidate()
+        drainTimer?.invalidate()
+        liveHRWatchdog?.invalidate()
+        #if DEBUG
+        uiStressTimer?.invalidate()
+        #endif
+        reconnectWork?.cancel()
+        scanTimeout?.cancel()
+        pickerTimeout?.cancel()
+        commandDeadline?.cancel()
+    }
+
     /// Raw chunks are saved before the strap's trim ACK. Recover them after
     /// an app interruption or a decoder update, before relying on old summaries.
     private func recoverSavedCaptures() {
@@ -512,7 +531,9 @@ final class BandLink: NSObject, ObservableObject {
             self.liveHeartRate = 60 + tick % 20
             self.liveHRNotificationCount = tick
             self.historyRRRecords = tick * 100
+            self.pendingHistoryRRRecords = tick * 100
             self.historyVersionCounts[18] = tick
+            self.pendingHistoryVersionCounts[18] = tick
             self.drainStats = DrainStats(frames: tick * 100, samples: tick * 100, acks: tick)
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -1309,8 +1330,11 @@ final class BandLink: NSObject, ObservableObject {
         }
         status = .scanning
         lastMessage = nil
+        // Hardware-filtered scan: passing WHOOP Gen5 service and HR service allows
+        // the iOS Bluetooth controller to filter packets in hardware and wake the app
+        // reliably during background execution without scanning unrelated devices.
         central.scanForPeripherals(
-            withServices: nil,
+            withServices: [BandUUID.service, BandUUID.heartRateService],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         scanTimeout?.cancel()
@@ -1336,13 +1360,34 @@ final class BandLink: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: work)
     }
 
-    /// A pending CoreBluetooth connect survives iOS suspension, unlike a
-    /// DispatchQueue retry timer. Prefer the saved device before scanning.
+    /// 3-tier reconnection architecture derived from WHOOP 5.80.2 runtime forensics:
+    /// Tier 1: Check connected peripherals via retrieveConnectedPeripherals(withServices:)
+    /// Tier 2: Check known peripherals by identifier via retrievePeripherals(withIdentifiers:)
+    /// Tier 3: Hardware-filtered BLE scan matching WHOOP transport service UUIDs.
     private func reconnectSavedPeripheralOrScan() {
         guard wantsConnection, central.state == .poweredOn else { return }
         if let peripheral, peripheral.state == .connected || peripheral.state == .connecting {
             return
         }
+
+        // Tier 1: Instant reconnect if iOS already maintains an active BLE link
+        let connected = central.retrieveConnectedPeripherals(withServices: [BandUUID.service])
+        if let id = preferredBandID, let uuid = UUID(uuidString: id),
+           let matched = connected.first(where: { $0.identifier == uuid }) {
+            matched.delegate = self
+            peripheral = matched
+            status = .connecting(preferredBandName ?? matched.name ?? "Saved WHOOP")
+            central.connect(matched, options: nil)
+            return
+        } else if preferredBandID == nil, let first = connected.first {
+            first.delegate = self
+            peripheral = first
+            status = .connecting(first.name ?? "Connected WHOOP")
+            central.connect(first, options: nil)
+            return
+        }
+
+        // Tier 2: Retrieve known peripheral by saved identifier
         if let id = preferredBandID, let uuid = UUID(uuidString: id),
            let saved = central.retrievePeripherals(withIdentifiers: [uuid]).first {
             saved.delegate = self
@@ -1351,6 +1396,8 @@ final class BandLink: NSObject, ObservableObject {
             central.connect(saved, options: nil)
             return
         }
+
+        // Tier 3: Scan for matching WHOOP peripherals
         beginScan()
     }
 
@@ -1709,6 +1756,12 @@ final class BandLink: NSObject, ObservableObject {
         historyRRRejected = 0
         historyUndecodableFrames = 0
         historyVersionCounts = [:]
+        pendingHistoryRRRecords = 0
+        pendingHistoryRRDeclared = 0
+        pendingHistoryRRAccepted = 0
+        pendingHistoryRRRejected = 0
+        pendingHistoryUndecodableFrames = 0
+        pendingHistoryVersionCounts = [:]
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -1725,6 +1778,16 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
+        // Throttle high-frequency drain diagnostic counters to 1 Hz to prevent
+        // flooding SwiftUI with hundreds of objectWillChange notifications per second.
+        if historyRRRecords != pendingHistoryRRRecords || historyUndecodableFrames != pendingHistoryUndecodableFrames {
+            historyRRRecords = pendingHistoryRRRecords
+            historyRRDeclared = pendingHistoryRRDeclared
+            historyRRAccepted = pendingHistoryRRAccepted
+            historyRRRejected = pendingHistoryRRRejected
+            historyUndecodableFrames = pendingHistoryUndecodableFrames
+            historyVersionCounts = pendingHistoryVersionCounts
+        }
         // A band can keep sending metadata without completing its offload.
         // Analyze durable checkpoints while it is still connected; reopening
         // the app must not be required to discover the night's saved records.
@@ -1764,6 +1827,12 @@ final class BandLink: NSObject, ObservableObject {
         capturedSamples = []
         seenRecordIndices.removeAll()
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
+        historyRRRecords = pendingHistoryRRRecords
+        historyRRDeclared = pendingHistoryRRDeclared
+        historyRRAccepted = pendingHistoryRRAccepted
+        historyRRRejected = pendingHistoryRRRejected
+        historyUndecodableFrames = pendingHistoryUndecodableFrames
+        historyVersionCounts = pendingHistoryVersionCounts
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
         if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
@@ -2039,24 +2108,24 @@ final class BandLink: NSObject, ObservableObject {
             }
         } else if type == BandPacket.historicalData {
             if inner.count > 1 {
-                historyVersionCounts[Int(inner[1]), default: 0] += 1
+                pendingHistoryVersionCounts[Int(inner[1]), default: 0] += 1
             }
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
             if Gen5V26Record.decode(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
-                historyUndecodableFrames += 1
+                pendingHistoryUndecodableFrames += 1
                 return
             }
             if seenRecordIndices.insert(sample.header.recordIndex).inserted {
-                if !sample.rrIntervalsMS.isEmpty { historyRRRecords += 1 }
+                if !sample.rrIntervalsMS.isEmpty { pendingHistoryRRRecords += 1 }
                 let declared = Int(inner[15])
                 if declared <= 4 {
-                    historyRRDeclared += declared
-                    historyRRAccepted += sample.rrIntervalsMS.count
-                    historyRRRejected += declared - sample.rrIntervalsMS.count
+                    pendingHistoryRRDeclared += declared
+                    pendingHistoryRRAccepted += sample.rrIntervalsMS.count
+                    pendingHistoryRRRejected += declared - sample.rrIntervalsMS.count
                 } else {
-                    historyRRRejected += 1 // malformed count byte
+                    pendingHistoryRRRejected += 1 // malformed count byte
                 }
                 capturedSamples.append(sample)
             }
