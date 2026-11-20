@@ -44,6 +44,15 @@ struct HomeView: View {
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 5)
                 }
+                // Reference WHOOP home screen: centered wordmark between the
+                // day selector/header and the three score rings.
+                Text("WHOOP")
+                    .font(StrapTypography.body(22, weight: .medium))
+                    .tracking(2.2)
+                    .foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 66, alignment: .center)
+                    .accessibilityAddTraits(.isHeader)
                 ringTrio
                     .onScrollVisibilityChange(threshold: 0.05) { isVisible in
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
