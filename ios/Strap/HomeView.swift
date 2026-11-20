@@ -292,7 +292,7 @@ struct HomeView: View {
                 .buttonStyle(.plain)
             }
             .frame(maxWidth: .infinity, alignment: .center)
-            .frame(height: 84)
+            .frame(height: 108)
         }
         .padding(.bottom, 18)
     }
@@ -344,7 +344,7 @@ struct HomeView: View {
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
-        VStack(spacing: 3) {
+        VStack(spacing: 8) {
             RingView(progress: progress, color: color, size: ringSize, centerText: text)
                 .accessibilityHidden(true)
             HStack(spacing: 3) {

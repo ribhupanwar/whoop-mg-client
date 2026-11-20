@@ -82,16 +82,18 @@ The Healthspan implementation currently presents STRAP's independent fitness age
 3. Collect references for the missing screens or use approved STRAP designs. Keep the existing licensed Proxima Nova and DIN Pro fonts and data-driven charts.
 4. Review Healthspan baseline progress and trend coverage before proposing a milestone. Schedule individual UI batches after measuring the remaining gaps on iOS.
 
-## Home comparison from the supplied 589 × 1280 pair
+## Home comparison from the two supplied pairs
 
-The latest STRAP and WHOOP images are both 589 × 1280 pixels. The measurements below are approximate visible bounds read from the supplied images with a tolerance of about 1–2 px. The proposed 60 pt outer diameter normalizes the 90 px reference diameter to a 393 pt-wide viewport. The original STRAP capture has a visibly larger ring than either the 68 pt token or the patch alone can establish because its app revision and point scale were not supplied.
+All four images are 589 × 1280 px. The visible bounds below were read from the supplied images and are approximate to 1–2 px. The WHOOP captures show two different ring sizes. The later expanded image has a title and larger figures. The earlier image has smaller rings and a date selector. A static screenshot cannot establish how WHOOP transitions between those states.
 
-| Element | STRAP supplied image | WHOOP supplied image | Change | Verification |
+| Element | STRAP supplied images | WHOOP expanded, 7:57 | WHOOP smaller, 7:44 | STRAP change and verification |
 | --- | --- | --- | --- | --- |
-| Sleep ring | x 77–196, center ~137/250 | x 52–142, center ~97/237 | Shared 60 pt outer diameter and 4.5 pt stroke | Awaiting matched simulator capture |
-| Recovery ring | x 234–354, center ~294/250 | x 229–319, center ~274/237 | Same geometry. Unavailable score retains a track and dash. | Awaiting matched simulator capture |
-| Strain ring | x 392–511, center ~452/250 | x 416–506, center ~461/237 | Same geometry. Arc starts at 12 o’clock and follows measured score. | Awaiting matched simulator capture |
-| Ring stroke and track | ~7–8 px; dark track | ~6–7 px; lighter track | Defined 4.5 pt stroke inside the stated outer diameter. Exact track alpha requires the original compositing background. | Source checks |
-| Numerals and labels | Numerals ~24 px tall, labels start near y321 | Numerals ~21–22 px tall, labels start near y285 | 21 pt DIN Pro numeral, baseline-aligned percent sign at 72%, and 3 pt label gap | Awaiting matched font rendering |
-| Header and monitor cards | Header controls centered near y118; monitor cards y466–574 | Header controls centered near y105; monitor cards y558–683 | Compare after capturing the same loaded state. STRAP is preparing history, while the reference shows a strain insight. | Pending |
-| My Day and bottom navigation | My Day near y602; bottom bar begins near y1146 | My Day near y739; bottom bar begins near y1158 | Check scroll reachability with active sync, empty activities and Journal. | Pending |
+| Sleep ring | x 77–196, center ~137/250 | x 53–171, center ~112/275 | x 52–142, center ~97/237 | Shared 79 pt outer diameter. Matched simulator capture pending. |
+| Recovery ring | x 234–354, center ~294/250 | x 236–354, center ~295/275 | x 229–319, center ~274/237 | Same geometry. First STRAP capture has no score, later capture shows 75%. |
+| Strain ring | x 392–511, center ~452/250 | x 418–536, center ~477/275 | x 416–506, center ~461/237 | Equal-width columns target approximately x 110, 294 and 479 on a 589 px image. |
+| Stroke and track | ~7–8 px, dark track | ~7–8 px, lighter track | ~6–7 px, lighter track | 5 pt stroke is contained within the stated diameter. Track alpha cannot be recovered without its compositing background. |
+| Numerals and labels | Numerals ~24 px tall, labels begin near y321 | Numerals ~25 px tall, labels begin near y349 | Numerals ~21–22 px tall, labels begin near y285 | 23 pt DIN Pro numeral, baseline-aligned 72% percent sign, 8 pt label gap. Runtime comparison pending. |
+| Header and cards | Controls centered near y118. Monitor cards start at y466 while processing, y370 when history is ready. | Controls centered near y105. Monitor cards start at y604 after the strain insight. | Monitor cards start at y558. | Keep legitimate loading, baseline, and missing-data states when measuring card placement. |
+| Bottom navigation | Bar starts near y1146 and overlaps partly visible in-flight content. | Bar starts near y1158. | Bar starts near y1158. | Verify Journal and activity actions can scroll above it. |
+
+The 118 px expanded diameter normalizes to 78.7 pt on a 393 pt-wide viewport. The 90 px reference state normalizes to 60.1 pt. Neither the historical 84 pt layout token nor its 68 pt replacement represents both screenshot states. The expanded measurement drives the Home hero and the sticky row remains a separate compact presentation.

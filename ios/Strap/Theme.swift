@@ -51,11 +51,11 @@ enum AppLayout {
     static let metricRadius: CGFloat = 15
 
     // Ring Geometry Constants (WHOOP Reference Specification)
-    static let heroRingDiameter: CGFloat = 60.0
+    static let heroRingDiameter: CGFloat = 79.0
     static let detailRingDiameter: CGFloat = 104.0
-    static let ringStrokeWidth: CGFloat = 4.5
-    static let ringGap: CGFloat = 18.0
-    static let heroMetricFontSize: CGFloat = 21.0
+    static let ringStrokeWidth: CGFloat = 5.0
+    static let ringGap: CGFloat = 8.0
+    static let heroMetricFontSize: CGFloat = 23.0
     static let percentSignScale: CGFloat = 0.72
 }
 

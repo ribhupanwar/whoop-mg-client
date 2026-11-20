@@ -22,7 +22,7 @@ class HomeRingGeometryGuardTests(unittest.TestCase):
         self.assertIn("RingView(progress: progress, color: color, size: ringSize, centerText: text)", source)
         self.assertEqual(source.count("ringSize: diameter"), 3)
 
-    def test_ring_gap_is_18_pt(self):
+    def test_ring_row_uses_shared_spacing(self):
         source = HOME.read_text(encoding="utf-8")
         self.assertIn("HStack(spacing: AppLayout.ringGap)", source)
 
