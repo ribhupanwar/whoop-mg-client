@@ -62,7 +62,10 @@ final class WhoopDerivedStrainTests: XCTestCase {
                 XCTFail("Missing raw for score \(score)")
                 continue
             }
-            let recovered = WhoopDerivedStrain.display(raw: raw)
+            guard let recovered = WhoopDerivedStrain.display(raw: raw) else {
+                XCTFail("Missing display for raw \(raw)")
+                continue
+            }
             XCTAssertEqual(recovered, score, accuracy: 0.05)
         }
     }
