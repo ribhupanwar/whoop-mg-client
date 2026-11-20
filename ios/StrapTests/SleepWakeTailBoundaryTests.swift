@@ -171,4 +171,24 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
                        "Backtrack through brief rustle to the verified low-HR settling prelude")
     }
 
+    /// Alarm-like wake with band state remaining 2: regression fixture.
+    /// A sustained waking HR/motion tail must not be mistaken for a short
+    /// bathroom visit; a return to sleep must still preserve the night.
+    func testAlarmLikeTerminalWakeWithBandStillReportingSleep() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 19, hour: 23, minute: 0
+        ))!.timeIntervalSince1970)
+        let sleepStart = base + 600
+        let wakeStart = sleepStart + 6 * 3600
+        let end = wakeStart + 5 * 60
+        var rows = (0..<600).map { row(base + $0, hr: 90, accel: 0.3, state: 0) }
+        rows += (sleepStart..<wakeStart).map { row($0, hr: 60, accel: 0.008, state: 2) }
+        rows += (wakeStart..<end).map {
+            row($0, hr: 78, accel: $0 % 20 < 10 ? 0.09 : 0.02, state: 2)
+        }
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertLessThanOrEqual(night.endUnix, wakeStart + 60,
+            "Sustained terminal wake evidence should not require a band-up state")
+    }
+
 }

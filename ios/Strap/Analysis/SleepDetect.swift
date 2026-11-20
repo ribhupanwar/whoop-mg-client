@@ -238,6 +238,34 @@ enum SleepDetect {
                     }
                 }
             }
+            // A band can continue reporting coarse sleep(2) after the wearer
+            // wakes. Require a complete, densely sampled terminal five-minute
+            // HR-and-motion transition before trimming without band-up(3).
+            // Only examine the terminal tail: a bathroom awakening followed by
+            // resumed sleep must not truncate the night.
+            let terminalEnd = run[run.count - 1].unix
+            let terminalStart = terminalEnd - 299
+            let terminal = run.filter {
+                terminalStart <= $0.unix && $0.unix <= terminalEnd
+                    && $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 } ?? false)
+            }
+            let reference = run.filter {
+                terminalStart - 30 * 60 <= $0.unix
+                    && $0.unix < terminalStart - 10 * 60
+                    && $0.wearing && (35...220).contains($0.heartRate)
+            }
+            if Set(terminal.map(\.unix)).count >= 270,
+               Set(reference.map(\.unix)).count >= 600 {
+                let restingHR = Stats.median(reference.map { Double($0.heartRate) })
+                let elevated = terminal.filter { Double($0.heartRate) >= restingHR + 10 }.count
+                let moving = terminal.filter { ($0.dynamicAccelG ?? 0) >= 0.015 }.count
+                // Sustained elevation and measured movement are both required.
+                // A single alarm vibration spike or HR-only rise is insufficient.
+                if elevated >= 240, moving >= 90 {
+                    verifiedEnd = min(verifiedEnd, terminalStart - 1)
+                }
+            }
             guard verifiedEnd - verifiedStart + 1 >= minSleepS else { continue }
 
             // Metrics must describe the verified interval, not the discarded
