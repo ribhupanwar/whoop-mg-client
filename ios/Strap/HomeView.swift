@@ -1002,69 +1002,93 @@ struct HomeView: View {
         Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
-                    .font(StrapTypography.body(11, weight: .medium))
-                    .tracking(0.8)
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .tracking(1.0)
                     .foregroundStyle(Color.appFG)
                 Spacer()
                 NavigationLink(value: Route.sleepCoach) {
-                    Text("›")
-                        .font(StrapTypography.body(15))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 16, weight: .medium))
                         .foregroundStyle(Color.appMuted)
-                        .frame(width: 32, height: 32)
+                        .frame(width: 30, height: 30)
                 }
             }
-            .padding(.bottom, 6)
+            .padding(.bottom, 14)
 
-            HStack(spacing: 10) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
-                        .font(StrapTypography.metric(26, weight: .bold))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.appFG)
+            HStack(alignment: .top, spacing: 8) {
+                VStack(spacing: 8) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "sunrise")
+                            .font(.system(size: 19))
+                            .foregroundStyle(Color.appMuted)
+                        Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
+                            .font(StrapTypography.metric(24, weight: .bold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(Color.appFG)
                     Text("RECOMMENDED\nBEDTIME")
-                        .font(StrapTypography.body(9.5))
-                        .tracking(0.7)
+                        .font(StrapTypography.body(11, weight: .bold))
+                        .tracking(1.0)
+                        .multilineTextAlignment(.center)
                         .foregroundStyle(Color.appMuted)
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity)
 
-                Rectangle().fill(Color.appLine).frame(width: 26, height: 1)
-
-                VStack(alignment: .trailing, spacing: 3) {
-                    Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
-                        .font(StrapTypography.metric(24, weight: .bold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .foregroundStyle(Color.appFG)
-                    Text(demo || nextWake != nil ? "NEXT WAKE ALARM" : "NO ALARM SCHEDULED")
-                        .font(StrapTypography.body(9.5))
-                        .tracking(0.7)
-                        .foregroundStyle(Color.appMuted)
-                        .multilineTextAlignment(.trailing)
+                HStack(spacing: 3) {
+                    ForEach(0..<8, id: \.self) { _ in
+                        Capsule().fill(Color.appMuted.opacity(0.40))
+                            .frame(width: 4, height: 1)
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .frame(width: 48)
+                .padding(.top, 16)
+
+                VStack(spacing: 7) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "applewatch")
+                            .font(.system(size: 19))
+                            .foregroundStyle(Color.appMuted)
+                        Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
+                            .font(StrapTypography.metric(24, weight: .bold))
+                            .monospacedDigit()
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.8)
+                    }
+                    .foregroundStyle(Color.appFG)
+                    if demo || nextWake != nil {
+                        HStack(spacing: 5) {
+                            Circle().fill(Color.green).frame(width: 6, height: 6)
+                            Text("ALARM ON")
+                                .font(StrapTypography.body(11, weight: .bold))
+                                .tracking(0.9)
+                                .foregroundStyle(Color.green)
+                        }
+                        Text("EXACT TIME")
+                            .font(StrapTypography.body(11, weight: .bold))
+                            .tracking(1.0)
+                            .foregroundStyle(Color.appMuted)
+                    } else {
+                        Text("NO ALARM SCHEDULED")
+                            .font(StrapTypography.body(10, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                }
+                .frame(maxWidth: .infinity)
             }
+            .padding(.bottom, 18)
 
             NavigationLink(value: Route.sleepCoach) {
                 Label("EDIT ALARM", systemImage: "pencil")
-                    .font(StrapTypography.body(12, weight: .bold)).foregroundStyle(Color.appFG)
-                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .font(StrapTypography.body(12, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.appFG)
+                    .frame(maxWidth: .infinity, minHeight: 52)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
             }
             .buttonStyle(.plain)
             .accessibilityIdentifier("home.sleepPlanner")
-            .padding(.top, 14)
-            if let nextWake, !demo {
-                Text(nextWake.formatted(.dateTime.weekday(.wide)))
-                    .font(StrapTypography.body(10, weight: .bold))
-                    .foregroundStyle(Color.appMuted)
-                    .padding(.top, 7)
-            }
-            DisclosureGroup("How bedtime is calculated") {
-                Text("The recommendation uses your next scheduled wake time, sleep need, sleep intent and recorded sleep debt.")
-                    .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
-            }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }
         .padding(.bottom, 14)
     }
