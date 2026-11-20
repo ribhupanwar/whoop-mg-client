@@ -253,3 +253,10 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 | HealthKit, backups and historical retention | `HealthKitTests`, `StrapBackupTests`, `HistoryDatabaseTests`, `HistoricalCaptureRecoveryTests`, `WhoopImportBatchTests` | On a test store, export, round-trip and retry an import. Check date ranges and counts, signed HealthKit authorization and that existing records survive. |
 | BLE and background behavior | `BandConnectionStateMachineTests`, `ReconnectBackoffPolicyTests`, `LiveHeartRateStateTests`, `TabResponsivenessTests` | On firmware 50.43.1.0 capture command and data notifications, the hello ATT result and protocol reply, 2A37 or Type-40 packets, history frames, persisted chunks and ACKs. Repeat for pull-to-refresh and foreground/background reconnect. |
 | Visual behavior | `TypographyTests`, `LiveHeartRateChartTests` | Capture STRAP on an iPhone simulator for the inventory's chart states. Check units, axes, gaps, interaction and scroll reachability. |
+
+### Consolidated UI verification
+
+- **VERIFY** PR #92 combines Home, Dashboard, Profile, Day Streak and More, including the earlier #91, #93, #95, #96 and #97 changes. Verify the combined native and UI suites before merging.
+- **DONE** Run 44756200434 failed after building the iPhone simulator app. The sole failed assertion compared 68 pt with a stale expectation of 84 pt. The consolidated branch tests the measured 79 pt hero it ships.
+- **BLOCKED** #85 requires real CLIENT_HELLO acknowledgement evidence. #90 is held for a reproducible ACK issue and regression coverage before touching the working data path.
+- **TODO** Recheck actual font faces, entitlement, iPhone captures and the exact main IPA following merge.

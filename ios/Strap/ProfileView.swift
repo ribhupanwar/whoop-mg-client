@@ -89,7 +89,7 @@ struct ProfileView: View {
     @State private var period: Period = .all
     @State private var showAllActivities = false
 
-    private enum Period: String, CaseIterable {
+    private enum Period: String, CaseIterable, Hashable {
         case month = "1M"
         case quarter = "3M"
         case all = "All time"
@@ -245,7 +245,8 @@ struct ProfileView: View {
             SectionTitle("Activity Summary")
             Text(groups.isEmpty ? "No band-detected activities in this range." : "\(groups.reduce(0) { $0 + $1.count }) band-detected activities")
                 .foregroundStyle(Color.appMuted)
-            ForEach(Array(groups.prefix(showAllActivities ? groups.count : 3)), id: \.name) { group in
+            ForEach(groups.indices.prefix(showAllActivities ? groups.count : 3), id: \.self) { index in
+                let group = groups[index]
                 stat(group.name.capitalized, value: group.count.formatted())
                 ProgressView(value: Double(group.count), total: Double(groups.first?.count ?? 1))
                     .tint(Color.appAccent)

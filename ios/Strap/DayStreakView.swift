@@ -69,7 +69,8 @@ struct DayStreakView: View {
                 Panel {
                     SectionTitle("This week")
                     HStack {
-                        ForEach(snapshot.week, id: \.date) { day in
+                        ForEach(snapshot.week.indices, id: \.self) { index in
+                            let day = snapshot.week[index]
                             VStack(spacing: 8) {
                                 Text(day.date.formatted(.dateTime.weekday(.abbreviated))).font(StrapTypography.body(11, weight: .bold))
                                 Image(systemName: day.opened ? "flame.fill" : "circle.dashed")

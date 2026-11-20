@@ -97,3 +97,9 @@ All four images are 589 × 1280 px. The visible bounds below were read from the 
 | Bottom navigation | Bar starts near y1146 and overlaps partly visible in-flight content. | Bar starts near y1158. | Bar starts near y1158. | Verify Journal and activity actions can scroll above it. |
 
 The 118 px expanded diameter normalizes to 78.7 pt on a 393 pt-wide viewport. The 90 px reference state normalizes to 60.1 pt. Neither the historical 84 pt layout token nor its 68 pt replacement represents both screenshot states. The expanded measurement drives the Home hero and the sticky row remains a separate compact presentation.
+
+## Additional Home Dashboard and Profile captures
+
+The latest image set adds Dashboard, Day Streak and four scroll positions in Profile. The supplied Dashboard pair is 589 × 1280 px. The regular reference rows are approximately 80 px high with 16 px gaps. STRAP's supplied rows measure approximately 85 px high with 15 px gaps. The Dashboard now uses a 54 pt minimum height, 11 pt row gap, and a dedicated lighter charcoal gradient. The 54 pt target normalizes 80 px to a 393 pt-wide viewport. Simulator verification is pending.
+
+The Profile overview follows the reference's avatar, edit action, local streak, Healthspan shortcut, period control, data highlights and activity breakdown. Its values come from local history. Day Streak counts consecutive local calendar days with an app open. There is no band-wear streak, account ranking or referrals in the available data.
