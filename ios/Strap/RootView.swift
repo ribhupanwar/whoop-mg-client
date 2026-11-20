@@ -46,6 +46,7 @@ enum Route: Hashable {
     case sleepCoach
     case sleepAnalysis
     case settings
+    case profile
     case dataQuality
     case healthspan
     case metricHistory(DetailMetric)
@@ -236,6 +237,7 @@ extension View {
             case .sleepCoach: SleepCoachView()
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
+            case .profile: ProfileView()
             case .dataQuality: DataQualityView()
             case .healthspan: HealthspanView()
             case .metricHistory(let metric):

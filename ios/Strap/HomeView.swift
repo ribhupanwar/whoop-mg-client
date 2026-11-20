@@ -170,12 +170,9 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            NavigationLink(value: Route.settings) {
-                Image(systemName: "person.fill").font(StrapTypography.body(17))
-                    .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
-                    .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
-            }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
+            NavigationLink(value: Route.profile) {
+                ProfileAvatarView(size: 32)
+            }.buttonStyle(.plain).accessibilityLabel("Profile")
             HStack(spacing: 4) {
                 Image(systemName: "flame.fill").foregroundStyle(Color.orange)
                 Text("\(appOpenDays)").font(StrapTypography.metric(14, weight: .bold))
