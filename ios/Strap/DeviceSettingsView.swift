@@ -69,8 +69,6 @@ struct DeviceSettingsView: View {
             Button("Cancel", role: .cancel) { }
         } message: {
             Text("This clears downloaded health history on this phone. Data stored on your WHOOP band will re-sync upon connection.")
-        } message: {
-            Text("This will remove the Bluetooth connection.")
         }
     }
 
