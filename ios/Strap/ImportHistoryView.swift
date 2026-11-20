@@ -1,4 +1,5 @@
 import SwiftUI
+import HealthKit
 
 struct ImportHistoryView: View {
     @State private var sections: [(String, [WhoopCSVImport.SupplementalRecord])] = []
