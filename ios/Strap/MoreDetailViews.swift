@@ -767,26 +767,11 @@ struct DataManagementView: View {
     }
 
     private func prepareRawTelemetryExport() {
+        // CaptureSummary contains derived metrics, not raw V18 frames.
+        // Do not fabricate a raw export from aggregated data.
         rawExportURL = nil
-        rawExportStatus = nil
-        exportingRaw = true
-        Task {
-            let samples = store.lastCapture?.samples ?? []
-            guard !samples.isEmpty else {
-                rawExportStatus = "No active sensor samples in memory. Perform a history sync to export raw telemetry."
-                exportingRaw = false
-                return
-            }
-            do {
-                rawExportURL = try await Task.detached(priority: .userInitiated) {
-                    try RawTelemetryDiagnostics.write(samples: samples)
-                }.value
-                rawExportStatus = "Exported \(samples.count) raw V18 sensor frames."
-            } catch {
-                rawExportStatus = "Export failed: " + error.localizedDescription
-            }
-            exportingRaw = false
-        }
+        exportingRaw = false
+        rawExportStatus = "Raw sensor export is unavailable here until the persisted V18 archive reader is wired."
     }
 }
 
