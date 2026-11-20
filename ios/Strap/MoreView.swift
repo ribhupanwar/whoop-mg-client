@@ -6,6 +6,7 @@ import SwiftUI
 /// rows, placeholder alerts, or redundant shortcuts.
 struct MoreView: View {
     @EnvironmentObject private var store: AppStore
+    @AppStorage(ProfileView.nameKey) private var displayName = ""
 
     var body: some View {
         Screen {
@@ -176,37 +177,29 @@ struct MoreView: View {
     }
 
     private var profileHeaderCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "person.crop.circle.fill")
-                .font(.system(size: 42, weight: .light))
-                .foregroundStyle(Color.appAccent)
-                .frame(width: 58, height: 58)
-                .background(Color.appAccent.opacity(0.12), in: Circle())
-            VStack(alignment: .leading, spacing: 3) {
-                Text("STRAP MEMBER")
-                    .font(StrapTypography.body(11, weight: .bold))
-                    .tracking(1.2)
-                    .foregroundStyle(Color.appMuted)
-                Text(store.band.bandName ?? store.band.preferredBandName ?? "Personal Dashboard")
-                    .font(StrapTypography.body(18, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-                    .lineLimit(1)
-                Label(store.band.isConnected ? "Band connected" : "Band disconnected",
-                      systemImage: store.band.isConnected ? "checkmark.circle.fill" : "circle.dotted")
-                    .font(StrapTypography.body(11.5, weight: .medium))
-                    .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
-            }
-            Spacer(minLength: 0)
-            NavigationLink { SettingsView() } label: {
+        NavigationLink(value: Route.profile) {
+            HStack(spacing: 14) {
+                ProfileAvatarView(size: 48)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(displayName.isEmpty ? "Your profile" : displayName)
+                        .font(StrapTypography.body(18, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                        .lineLimit(1)
+                    Text("Edit name and avatar")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Spacer(minLength: 0)
                 Image(systemName: "chevron.right")
                     .font(StrapTypography.body(15, weight: .bold))
                     .foregroundStyle(Color.appMuted)
             }
-            .accessibilityLabel("Open profile and settings")
+            .padding(16)
+            .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
         }
-        .padding(16)
-        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("more.profile")
     }
 
     private func moreRow(_ title: String, subtitle: String? = nil, icon: String) -> some View {

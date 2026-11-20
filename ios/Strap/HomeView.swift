@@ -6,12 +6,20 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
+    let openInsights: () -> Void
 
-    @State private var appOpenDays = AppOpenDayTracker.count()
+    private let sleepRingColor = Color(hex: 0x7CA0BA)
+    private let strainRingColor = Color(hex: 0x0193E8)
+    private let highRecoveryRingColor = Color(hex: 0x24E21A)
+
+    @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
+    @State private var nextWake = WakeAlarm.nextWakeDate()
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
@@ -30,6 +38,12 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                if dayOffset != 0 {
+                    Text("Activity history · scores show the latest recorded day")
+                        .font(StrapTypography.body(9))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 5)
+                }
                 ringTrio
                     .onScrollVisibilityChange(threshold: 0.05) { isVisible in
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
@@ -39,6 +53,7 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
+                if dayOffset == 0 { tonightCard }
                 activitiesCard
                 journalCard
                 planCard
@@ -48,19 +63,35 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            appOpenDays = AppOpenDayTracker.recordOpen()
+            AppOpenDayTracker.recordOpen()
+            appStreak = AppOpenStreak.stored().current
+            nextWake = WakeAlarm.nextWakeDate()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            AppOpenDayTracker.recordOpen()
+            appStreak = AppOpenStreak.stored().current
+            nextWake = WakeAlarm.nextWakeDate()
+        }
+        .task(id: nextWake) {
+            guard let nextWake else { return }
+            let delay = max(0, nextWake.timeIntervalSinceNow)
+            do {
+                try await Task.sleep(for: .seconds(delay))
+                self.nextWake = WakeAlarm.nextWakeDate()
+            } catch {
+                return
+            }
         }
         .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
-                topBar
-                if dayOffset != 0 {
-                    Text("Activity history · scores show the latest recorded day")
-                        .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
-                }
+            Group {
                 if compactScores {
-                    compactRingRow.transition(.opacity)
+                    compactRingRow
+                } else {
+                    topBar
                 }
             }
+            .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .background {
@@ -164,18 +195,20 @@ struct HomeView: View {
 
     private var topBar: some View {
         HStack(spacing: 10) {
-            NavigationLink(value: Route.settings) {
-                Image(systemName: "person.fill").font(StrapTypography.body(17))
-                    .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
-                    .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
-                                               startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
-            }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
-            HStack(spacing: 4) {
-                Image(systemName: "flame.fill").foregroundStyle(Color.orange)
-                Text("\(appOpenDays)").font(StrapTypography.metric(14, weight: .bold))
-            }.padding(.horizontal, 8).padding(.vertical, 7)
+            NavigationLink(value: Route.profile) {
+                ProfileAvatarView(size: 32)
+            }.buttonStyle(.plain).accessibilityLabel("Profile")
+            NavigationLink(value: Route.dayStreak) {
+                HStack(spacing: 4) {
+                    Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                    Text(appStreak.formatted()).font(StrapTypography.metric(14, weight: .bold))
+                }
+                .padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("\(appOpenDays) distinct days STRAP was opened")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Day Streak")
+            .accessibilityValue("\(appStreak) days")
 
             Spacer()
 
@@ -255,7 +288,7 @@ struct HomeView: View {
                         label: "SLEEP",
                         text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
                         progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                        color: .appSleep,
+                        color: sleepRingColor,
                         ringSize: diameter
                     )
                 }
@@ -267,7 +300,7 @@ struct HomeView: View {
                         text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                         progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
                         color: (demo ? Double(SampleData.recoveryRingPercent) : recoveryScore).map { score in
-                            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
+                            score >= 67 ? highRecoveryRingColor : DetailMetric.recovery.color(score)
                         } ?? DetailMetric.recovery.color(nil),
                         ringSize: diameter
                     )
@@ -279,7 +312,7 @@ struct HomeView: View {
                         label: "STRAIN",
                         text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
                         progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
-                        color: .appAccent,
+                        color: strainRingColor,
                         ringSize: diameter
                     )
                 }
@@ -348,7 +381,7 @@ struct HomeView: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
             }
-            .foregroundStyle(Color.appMuted)
+            .foregroundStyle(Color.appFG)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
@@ -426,15 +459,43 @@ struct HomeView: View {
     // MARK: Monitor duo
 
     private var monitorDuo: some View {
-        HStack(spacing: 10) {
+        let health = store.healthMonitor
+        let outside = health.readings.filter { $0.status == .outsideRange }.count
+        let within = health.withinCount
+        let healthState: String
+        let healthColor: Color
+        if demo {
+            healthState = "WITHIN RANGE"
+            healthColor = .appGood
+        } else if outside > 0 {
+            healthState = "\(outside) OUTSIDE RANGE"
+            healthColor = .appWarn
+        } else if within > 0 {
+            healthState = "\(within) IN RANGE"
+            healthColor = .appGood
+        } else {
+            healthState = health.availableCount == 0 ? "UNAVAILABLE" : "BASELINE PENDING"
+            healthColor = .appMuted
+        }
+
+        let stress = store.band.stress
+        let stressColor: Color
+        switch demo ? "low" : stress.band {
+        case "low": stressColor = .appSleep
+        case "elevated": stressColor = .appGood
+        case "high": stressColor = .appWarn
+        default: stressColor = .appMuted
+        }
+
+        return HStack(alignment: .top, spacing: 10) {
             NavigationLink(value: Route.health) {
                 tapCard(
                     title: "Health monitor",
-                    pill: demo ? "✓" : healthPill,
-                    pillColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    state: demo ? "WITHIN RANGE" : (healthCount > 0 ? "\(healthCount) IN RANGE" : "BASELINE PENDING"),
-                    stateColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    detail: demo ? "5 metrics · sample" : healthDetail
+                    pill: demo ? "✓" : "\(within)/\(HealthVital.allCases.count)",
+                    pillColor: healthColor,
+                    state: healthState,
+                    stateColor: healthColor,
+                    detail: demo ? "5 metrics · sample" : "\(health.availableCount)/\(HealthVital.allCases.count) available"
                 )
             }
             .buttonStyle(.plain)
@@ -442,35 +503,16 @@ struct HomeView: View {
             NavigationLink(value: Route.stress) {
                 tapCard(
                     title: "Stress monitor",
-                    pill: demo ? String(format: "%.1f", SampleData.stressHome) : stressPill,
-                    pillColor: demo ? .appAccent : .appMuted,
-                    state: demo ? "LOW" : store.band.stress.band.uppercased(),
-                    stateColor: demo ? .appAccent : .appWarn,
-                    detail: demo ? "11:49 · sample" : stressDetail
+                    pill: (demo ? SampleData.stressHome : stress.index).map { String(format: "%.1f", $0) } ?? "—",
+                    pillColor: stressColor,
+                    state: demo ? "LOW" : stress.band.uppercased(),
+                    stateColor: stressColor,
+                    detail: demo ? "11:49 · sample" : stress.reason ?? "Awake-quiet estimate"
                 )
             }
             .buttonStyle(.plain)
         }
         .padding(.bottom, 14)
-    }
-
-    private var healthCount: Int {
-        store.healthMonitor.withinCount
-    }
-
-    private var healthPill: String { "\(healthCount)/5" }
-
-    private var healthDetail: String {
-        "\(store.healthMonitor.availableCount)/5 available · personal ranges"
-    }
-
-    private var stressPill: String {
-        guard let index = store.band.stress.index else { return "—" }
-        return String(format: "%.1f", index)
-    }
-
-    private var stressDetail: String {
-        store.band.stress.reason ?? "awake baseline · \(store.recordedDayCount)/7 days"
     }
 
     private func tapCard(title: String, pill: String, pillColor: Color, state: String, stateColor: Color, detail: String) -> some View {
@@ -499,7 +541,7 @@ struct HomeView: View {
                 }
                 .frame(minWidth: 22, minHeight: 22)
                 .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0x112E20)))
+                .background(RoundedRectangle(cornerRadius: 5).fill(pillColor.opacity(0.12)))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(pillColor.opacity(0.3), lineWidth: 0.5))
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -514,7 +556,7 @@ struct HomeView: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 83, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
@@ -538,18 +580,18 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add activity")
             }
-            Button(action: openPlan) {
+            Button(action: openInsights) {
                 HStack(spacing: 10) {
-                    Image(systemName: "sun.max")
+                    Image(systemName: "moon")
                         .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: 0xC59F7A))
-                    Text("Your Daily Outlook")
+                        .foregroundStyle(Color(hex: 0x89B9DD))
+                    Text(dayInReviewTitle)
                         .font(StrapTypography.body(13.5, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0xC59F7A))
+                        .foregroundStyle(Color(hex: 0x89B9DD))
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -562,6 +604,13 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(.bottom, 14)
+    }
+
+    private var dayInReviewTitle: String {
+        guard let first = profileName.split(whereSeparator: \.isWhitespace).first else {
+            return "Day in Review"
+        }
+        return "\(first)’s Day in Review"
     }
 
     // MARK: Today's activities
@@ -900,13 +949,13 @@ struct HomeView: View {
                 Rectangle().fill(Color.appLine).frame(width: 26, height: 1)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
+                    Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
                         .font(StrapTypography.metric(24, weight: .bold))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .foregroundStyle(Color.appFG)
-                    Text(WakeAlarm.isEnabled ? "ALARM ON\nEXACT TIME" : "ALARM OFF\nEXACT TIME")
+                    Text(demo || nextWake != nil ? "NEXT WAKE ALARM" : "NO ALARM SCHEDULED")
                         .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
@@ -920,23 +969,31 @@ struct HomeView: View {
                     .font(StrapTypography.body(12, weight: .bold)).foregroundStyle(Color.appFG)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
-            }.buttonStyle(.plain).padding(.top, 14)
-            Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
-                .font(StrapTypography.body(10, weight: .bold))
-                .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home.sleepPlanner")
+            .padding(.top, 14)
+            if let nextWake, !demo {
+                Text(nextWake.formatted(.dateTime.weekday(.wide)))
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 7)
+            }
             DisclosureGroup("How bedtime is calculated") {
-                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The next alarm is sent to your connected band, with a daily phone notification as well. Open Sleep Coach to test band vibration.")
+                Text("The recommendation uses your next scheduled wake time, sleep need, sleep intent and recorded sleep debt.")
                     .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
             }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }
+        .padding(.bottom, 14)
     }
 
     private var bedtimeRecommendation: SleepRecommendation {
-        SleepCoach.recommendation(
+        let wakeMinutes = nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
+        return SleepCoach.recommendation(
             baseNeedHours: store.settings.sleepNeedHours,
             intent: store.settings.sleepIntent,
             debtHours: SleepCoach.sleepDebt(nights: store.recordedNights),
-            wakeMinutes: store.settings.wakeTimeMinutes
+            wakeMinutes: wakeMinutes
         )
     }
 
@@ -1071,26 +1128,33 @@ struct HomeView: View {
         // Otherwise the sticky header changes colors/scores while scrolling.
         let displayedRecovery = demo ? Double(SampleData.recoveryRingPercent) : recoveryScore
         let recoveryColor = displayedRecovery.map { score in
-            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
+            score >= 67 ? highRecoveryRingColor : DetailMetric.recovery.color(score)
         } ?? DetailMetric.recovery.color(nil)
-        return HStack(spacing: 16) {
+        return HStack(spacing: 4) {
             compactRing("SLEEP", route: .sleepAnalysis,
                         progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                        color: .appSleep)
+                        color: sleepRingColor)
             compactRing("RECOVERY", route: .recovery,
                         progress: displayedRecovery.map { $0 / 100 }, color: recoveryColor)
             compactRing("STRAIN", route: .strain,
                         progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
-                        color: .appAccent)
-        }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
+                        color: strainRingColor)
+        }.frame(maxWidth: .infinity)
     }
 
     private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
         NavigationLink(value: route) {
             HStack(spacing: 6) {
-                RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
-                Text(title).font(StrapTypography.body(11, weight: .bold)).tracking(0.9)
-            }.foregroundStyle(Color.appFG)
+                RingView(progress: progress, color: color, lineWidth: 2.2, size: 22, centerText: "")
+                Text(title)
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .tracking(0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .foregroundStyle(Color.appFG)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("home.compact." + title.lowercased())

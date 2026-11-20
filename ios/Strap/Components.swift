@@ -655,10 +655,10 @@ struct MetricRow: View {
             .layoutPriority(1)
         }
         .padding(.horizontal, AppLayout.cardInset)
-        .frame(height: 64)
-        .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
-        .padding(.bottom, 11)
+        .frame(minHeight: AppLayout.dashboardRowHeight)
+        .background(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).fill(LinearGradient.dashboardCard))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+        .padding(.bottom, AppLayout.dashboardRowSpacing)
         .accessibilityElement(children: .combine)
     }
 }

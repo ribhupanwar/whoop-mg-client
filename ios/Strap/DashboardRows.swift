@@ -233,14 +233,14 @@ struct DashboardRows: View {
                         .foregroundStyle(Color.appMuted)
                 }
                 .padding(.horizontal, AppLayout.cardInset)
-                .frame(height: 60)
-                .background(RoundedRectangle(cornerRadius: AppLayout.metricRadius).fill(LinearGradient.appCard))
-                .overlay(RoundedRectangle(cornerRadius: AppLayout.metricRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+                .frame(minHeight: AppLayout.dashboardRowHeight)
+                .background(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).fill(LinearGradient.dashboardCard))
+                .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
             .buttonStyle(.plain)
 
         }
-        .padding(.bottom, 10)
+        .padding(.bottom, AppLayout.dashboardRowSpacing)
     }
 
     // MARK: Stress monitor row
@@ -274,7 +274,7 @@ struct DashboardRows: View {
                 }
             }
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 13).fill(LinearGradient.appCard))
+            .background(RoundedRectangle(cornerRadius: 13).fill(LinearGradient.dashboardCard))
             .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
         }
         .buttonStyle(.plain)

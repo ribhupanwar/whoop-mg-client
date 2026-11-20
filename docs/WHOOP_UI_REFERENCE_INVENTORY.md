@@ -97,3 +97,13 @@ All four images are 589 × 1280 px. The visible bounds below were read from the 
 | Bottom navigation | Bar starts near y1146 and overlaps partly visible in-flight content. | Bar starts near y1158. | Bar starts near y1158. | Verify Journal and activity actions can scroll above it. |
 
 The 118 px expanded diameter normalizes to 78.7 pt on a 393 pt-wide viewport. The 90 px reference state normalizes to 60.1 pt. Neither the historical 84 pt layout token nor its 68 pt replacement represents both screenshot states. The expanded measurement drives the Home hero and the sticky row remains a separate compact presentation.
+
+## Additional Home Dashboard and Profile captures
+
+The latest image set adds Dashboard, Day Streak and four scroll positions in Profile. The supplied Dashboard pair is 589 × 1280 px. The regular reference rows are approximately 80 px high with 16 px gaps. STRAP's supplied rows measure approximately 85 px high with 15 px gaps. The Dashboard now uses a 54 pt minimum height, 11 pt row gap, and a dedicated lighter charcoal gradient. The 54 pt target normalizes 80 px to a 393 pt-wide viewport. Simulator verification is pending.
+
+The Profile overview follows the reference's avatar, edit action, local streak, Healthspan shortcut, period control, data highlights and activity breakdown. Its values come from local history. Day Streak counts consecutive local calendar days with an app open. There is no band-wear streak, account ranking or referrals in the available data.
+
+The expanded simulator rings from the passing #91 test attachment measured 237–238 horizontal pixels in a 1206 × 2622 px capture, about 116 px at the width of the 589 px reference. In the ZIP's 736 × 1600 Dashboard capture, thresholded card edges measured about 100 px high and 20 px apart, independently yielding the 54 pt and 11 pt targets at a 393 pt viewport.
+
+The added scrolled Home capture shows the compact row replacing the expanded header. STRAP's updated header reserves the same space for either layout, with three equal-width compact controls. The Sleep Planner reference adds suggested bedtime, wake target, time-in-bed and alarm settings. STRAP uses its existing coach calculation and weekly alarm schedule for those fields. An estimated sleep consistency score is omitted. Native screenshots of these latest changes are pending.

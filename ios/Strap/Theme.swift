@@ -50,6 +50,10 @@ enum AppLayout {
     static let cardSpacing: CGFloat = 14
     static let metricRadius: CGFloat = 15
 
+    static let dashboardRowHeight: CGFloat = 54
+    static let dashboardRowSpacing: CGFloat = 11
+    static let dashboardRowRadius: CGFloat = 11
+
     // Ring Geometry Constants (WHOOP Reference Specification)
     static let heroRingDiameter: CGFloat = 79.0
     static let detailRingDiameter: CGFloat = 104.0
@@ -63,6 +67,11 @@ enum AppLayout {
 extension LinearGradient {
     static var appCard: LinearGradient {
         LinearGradient(colors: [Color(hex: 0x252D33), Color(hex: 0x1D2429)],
+                       startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    static var dashboardCard: LinearGradient {
+        LinearGradient(colors: [Color(hex: 0x30363A), Color(hex: 0x282D30)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
