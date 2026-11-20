@@ -55,7 +55,7 @@ struct DeviceSettingsView: View {
             tabButton(title: "STATUS", index: 0)
             tabButton(title: "ADVANCED", index: 1)
         }
-        .background(Color.appCard)
+        .background(Color.appCanvasTop)
         .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -168,7 +168,7 @@ struct DeviceSettingsView: View {
     }
 
     private var connectionStateHeader: String {
-        if store.band.isSyncingHistory {
+        if store.band.status == .draining {
             return "CATCHING UP"
         } else if store.band.isConnected {
             return "CONNECTED TO STRAP"
