@@ -142,6 +142,9 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var isSavingHistory = false
     @Published private(set) var historyProgress: HistoryProgress?
     @Published private(set) var historySyncError: String?
+    @Published private(set) var packetGapCount = 0
+    @Published private(set) var duplicatePacketCount = 0
+    @Published private(set) var lastPacketReceivedAt: Date?
     private var pendingArchiveWrites = 0
     private var hasUnsavedArchiveRecords = false
     @Published private(set) var historicalRestQualityReason = "Loading retained historical records…"
@@ -231,18 +234,18 @@ final class BandLink: NSObject, ObservableObject {
     func syncWakeAlarm(force: Bool = false) {
         guard WakeAlarm.hasPreference else { return }
         guard peripheral?.state == .connected, commandCharacteristic != nil, hrBondConfirmed else {
-            bandAlarmMessage = WakeAlarm.isEnabled ? "Reconnect to send the next wake alarm to your band." : "Alarm off. Reconnect to cancel any previously sent band alarm."
+            bandAlarmMessage = WakeAlarm.isEnabled ? "Reconnect strap to arm the next wake alarm on your band." : "Alarm off. Reconnect to cancel any previously sent band alarm."
             return
         }
         guard !alarmWritePending else { return }
         if !force, let lastAlarmAttempt, Date().timeIntervalSince(lastAlarmAttempt) < 30 { return }
         let on = WakeAlarm.isEnabled
         let minutes = WakeAlarm.wakeMinutes
+        let next = on ? WakeAlarm.nextWakeDate() : nil
         if !force {
-            if on, syncedAlarmMinutes == minutes, let nextBandAlarm, nextBandAlarm > Date() { return }
+            if on, syncedAlarmMinutes == minutes, let nextBandAlarm, nextBandAlarm > Date(), WakeAlarm.isBandConfirmed(for: next) { return }
             if !on && alarmWasDisabled { return }
         }
-        let next = on ? BandHaptics.nextWake(minutes: minutes) : nil
         guard !on || next != nil else { bandAlarmMessage = "Could not calculate the next wake time."; return }
         let body = next.flatMap(BandHaptics.alarmBody) ?? BandHaptics.disableBody
         let opcode = on ? BandHaptics.alarmOpcode : BandHaptics.disableOpcode
@@ -256,13 +259,15 @@ final class BandLink: NSObject, ObservableObject {
                 self.nextBandAlarm = next
                 self.syncedAlarmMinutes = on ? minutes : nil
                 self.alarmWasDisabled = !on
+                WakeAlarm.bandConfirmedEpoch = next.map { Int($0.timeIntervalSince1970) }
                 self.bandAlarmMessage = next.map {
-                    "Alarm sent to band for " + $0.formatted(date: .abbreviated, time: .shortened) + ". Wrist verification pending."
+                    "Alarm armed on band for " + $0.formatted(date: .abbreviated, time: .shortened) + "."
                 } ?? "Band alarm cancellation delivered."
                 // A preference may have changed while this write was queued.
                 if WakeAlarm.isEnabled != on || WakeAlarm.wakeMinutes != minutes { self.syncWakeAlarm(force: true) }
             }, onFailure: { [weak self] error in
                 self?.alarmWritePending = false
+                WakeAlarm.bandConfirmedEpoch = nil
                 self?.bandAlarmMessage = "Band alarm could not be sent: " + error
             }))
         pump()
@@ -1281,7 +1286,7 @@ final class BandLink: NSObject, ObservableObject {
     private func scheduleReconnect() {
         guard wantsConnection, central.state == .poweredOn else { return }
         reconnectWork?.cancel()
-        reconnectAttempt = min(reconnectAttempt + 1, 6)
+        reconnectAttempt = min(reconnectAttempt + 1, ReconnectBackoffPolicy.maximumAttempts)
         status = .reconnecting(attempt: reconnectAttempt)
         if reconnectAttempt >= 3 {
             let target = peripheral ?? (preferredBandID.flatMap { UUID(uuidString: $0) }.flatMap { central.retrievePeripherals(withIdentifiers: [$0]).first })
@@ -1293,7 +1298,7 @@ final class BandLink: NSObject, ObservableObject {
                 return
             }
         }
-        let delay = min(30.0, Double(1 << min(reconnectAttempt, 5)))
+        let delay = ReconnectBackoffPolicy.delay(forAttempt: reconnectAttempt)
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.wantsConnection, self.central.state == .poweredOn else { return }
             self.reconnectSavedPeripheralOrScan()
@@ -2322,6 +2327,7 @@ extension BandLink: CBPeripheralDelegate {
         error: Error?
     ) {
         guard error == nil, peripheral === self.peripheral, peripheral.state == .connected else { return }
+        lastPacketReceivedAt = Date()
         switch characteristic.uuid {
         case BandUUID.heartRateMeasurement:
             handleHeartRate(characteristic)

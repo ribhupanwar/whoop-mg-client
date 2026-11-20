@@ -31,4 +31,25 @@ enum BandHaptics {
         return calendar.nextDate(after: now, matching: DateComponents(hour: minutes / 60, minute: minutes % 60, second: 0),
                                  matchingPolicy: .nextTime, repeatedTimePolicy: .first)
     }
+
+    /// Evaluates the earliest upcoming wake date across a 7-day per-weekday schedule.
+    static func nextWake(schedule: [DayAlarmSchedule], after now: Date = Date(), calendar: Calendar = .current) -> Date? {
+        var earliest: Date? = nil
+        for dayOffset in 0...7 {
+            guard let checkDate = calendar.date(byAdding: .day, value: dayOffset, to: now) else { continue }
+            let weekday = calendar.component(.weekday, from: checkDate)
+            guard let entry = schedule.first(where: { $0.weekday == weekday }), entry.isEnabled else { continue }
+
+            var components = calendar.dateComponents([.year, .month, .day], from: checkDate)
+            components.hour = (entry.wakeMinutes / 60) % 24
+            components.minute = entry.wakeMinutes % 60
+            components.second = 0
+
+            guard let candidate = calendar.date(from: components), candidate > now else { continue }
+            if earliest == nil || candidate < earliest! {
+                earliest = candidate
+            }
+        }
+        return earliest
+    }
 }

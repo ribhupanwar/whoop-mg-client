@@ -34,8 +34,20 @@ struct ConnectionSyncView: View {
                     }
                     .padding(.vertical, 6)
 
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    HStack {
+                        Text("Device Serial Number")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appMuted)
+                        Spacer()
+                        Text(store.band.serialNumber ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline"))
+                            .font(StrapTypography.body(12, weight: .semibold))
+                            .foregroundStyle(Color.appFG)
+                    }
+
                     if let syncDate = store.band.lastHistorySyncAt {
-                        Divider().background(Color.appLine).padding(.vertical, 6)
+                        Divider().background(Color.appLine).padding(.vertical, 4)
                         HStack {
                             Text("Last History Sync")
                                 .font(StrapTypography.body(12, weight: .medium))
@@ -83,8 +95,37 @@ struct ConnectionSyncView: View {
                     }
                 }
 
+                if let progress = store.band.historyProgress {
+                    Panel {
+                        SectionTitle("HISTORICAL BACKFILL PROGRESS")
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text("Sync Phase: \(progress.stage.title)")
+                                    .font(StrapTypography.body(12, weight: .bold))
+                                    .foregroundStyle(Color.appFG)
+                                Spacer()
+                                if progress.total > 0 {
+                                    Text("\(progress.completed)/\(progress.total) chunks")
+                                        .font(StrapTypography.metric(12, weight: .medium))
+                                        .foregroundStyle(Color.appMuted)
+                                }
+                            }
+                            if progress.total > 0 {
+                                ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                                    .tint(Color.appAccent)
+                            }
+                            if progress.reused > 0 {
+                                Text("\(progress.reused) verified night records reused from cache.")
+                                    .font(StrapTypography.body(10.5))
+                                    .foregroundStyle(Color.appGood)
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                }
+
                 Panel {
-                    SectionTitle("CAPTURE DIAGNOSTICS")
+                    SectionTitle("CAPTURE & PACKET DIAGNOSTICS")
                     Text("Indicators evaluate the latest analyzed capture window.")
                         .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
@@ -121,32 +162,23 @@ struct BandAlarmsView: View {
     @EnvironmentObject private var store: AppStore
     @State private var alarmOn = WakeAlarm.isEnabled
     @State private var wakeMinutes = WakeAlarm.wakeMinutes
-    @State private var showWakePicker = false
+    @State private var schedule = WakeAlarm.schedule
+    @State private var editingWeekday: Int? = nil
+    @State private var editingMinutes = 7 * 60
     @State private var savedConfirmation = false
 
-    private var wakeDateBinding: Binding<Date> {
-        Binding(
-            get: {
-                var c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
-                c.hour = (wakeMinutes / 60) % 24
-                c.minute = wakeMinutes % 60
-                return Calendar.current.date(from: c) ?? Date()
-            },
-            set: { newDate in
-                let c = Calendar.current.dateComponents([.hour, .minute], from: newDate)
-                let mins = (c.hour ?? 7) * 60 + (c.minute ?? 0)
-                wakeMinutes = mins
-                if alarmOn {
-                    WakeAlarm.setEnabled(true, wakeMinutes: mins)
-                    store.band.syncWakeAlarm(force: true)
-                }
-            }
-        )
+    private var nextWake: Date? {
+        WakeAlarm.nextWakeDate()
+    }
+
+    private var isBandConfirmed: Bool {
+        WakeAlarm.isBandConfirmed(for: nextWake)
     }
 
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
+                // Section 1: Master Wake Alarm Card
                 Panel {
                     SectionTitle("WAKE ALARM")
                     HStack {
@@ -163,7 +195,7 @@ struct BandAlarmsView: View {
                             .labelsHidden()
                             .tint(Color.appGood)
                             .onChange(of: alarmOn) { _, newValue in
-                                WakeAlarm.setEnabled(newValue, wakeMinutes: wakeMinutes)
+                                WakeAlarm.isEnabled = newValue
                                 store.band.syncWakeAlarm(force: true)
                                 savedConfirmation = true
                             }
@@ -172,39 +204,109 @@ struct BandAlarmsView: View {
 
                     Divider().background(Color.appLine).padding(.vertical, 4)
 
+                    // Next Armed Alarm Status Banner
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Wake Time")
+                            Text("Next Scheduled Wake")
                                 .font(StrapTypography.body(13, weight: .medium))
                                 .foregroundStyle(Color.appFG)
-                            Text("Daily target wake schedule")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
+                            if alarmOn, let next = nextWake {
+                                Text(next.formatted(date: .abbreviated, time: .shortened))
+                                    .font(StrapTypography.body(11))
+                                    .foregroundStyle(Color.appMuted)
+                            } else {
+                                Text("No alarm set")
+                                    .font(StrapTypography.body(11))
+                                    .foregroundStyle(Color.appMuted)
+                            }
                         }
                         Spacer()
-                        Button {
-                            showWakePicker = true
-                        } label: {
-                            Text(CoachFormat.clock(wakeMinutes))
-                                .font(StrapTypography.metric(17, weight: .bold))
-                                .foregroundStyle(Color.appFG)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 6)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
+                        if alarmOn, let next = nextWake {
+                            HStack(spacing: 4) {
+                                Circle()
+                                    .fill(isBandConfirmed ? Color.appGood : Color.appWarn)
+                                    .frame(width: 7, height: 7)
+                                Text(isBandConfirmed ? "Armed on band" : "Pending sync")
+                                    .font(StrapTypography.body(11, weight: .semibold))
+                                    .foregroundStyle(isBandConfirmed ? Color.appGood : Color.appWarn)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
                         }
                     }
                     .padding(.vertical, 4)
 
                     if savedConfirmation {
-                        Text("Alarm preference updated for \(CoachFormat.clock(wakeMinutes)).")
+                        Text(alarmOn ? "Alarm preference updated. Synchronizing with strap…" : "Alarm disabled.")
                             .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appGood)
-                            .padding(.top, 4)
+                            .padding(.top, 2)
                     }
                 }
 
+                // Section 2: 7-Day Weekly Repeat Schedule
                 Panel {
-                    SectionTitle("BAND HAPTIC SYNC")
+                    SectionTitle("WEEKLY SCHEDULE (7 DAYS)")
+                    Text("Configure different wake targets for weekdays and weekends. Reconnect strap to upload updated schedules.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 6)
+
+                    ForEach(schedule) { dayEntry in
+                        VStack(spacing: 0) {
+                            HStack(spacing: 12) {
+                                // Day Name
+                                Text(dayEntry.weekdayShort.uppercased())
+                                    .font(StrapTypography.body(12, weight: .bold))
+                                    .foregroundStyle(dayEntry.isEnabled ? Color.appFG : Color.appMuted)
+                                    .frame(width: 36, alignment: .leading)
+
+                                Text(dayEntry.weekdayName)
+                                    .font(StrapTypography.body(13, weight: .medium))
+                                    .foregroundStyle(dayEntry.isEnabled ? Color.appFG : Color.appMuted)
+
+                                Spacer()
+
+                                // Time Picker Trigger
+                                Button {
+                                    editingWeekday = dayEntry.weekday
+                                    editingMinutes = dayEntry.wakeMinutes
+                                } label: {
+                                    Text(CoachFormat.clock(dayEntry.wakeMinutes))
+                                        .font(StrapTypography.metric(15, weight: .bold))
+                                        .foregroundStyle(dayEntry.isEnabled ? Color.appFG : Color.appMuted)
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 4)
+                                        .background(RoundedRectangle(cornerRadius: 6).fill(Color.appRaised))
+                                }
+                                .disabled(!dayEntry.isEnabled || !alarmOn)
+
+                                // Individual Day Toggle
+                                Toggle("", isOn: Binding(
+                                    get: { dayEntry.isEnabled },
+                                    set: { newEnabled in
+                                        WakeAlarm.updateSchedule(weekday: dayEntry.weekday, isEnabled: newEnabled, wakeMinutes: dayEntry.wakeMinutes)
+                                        schedule = WakeAlarm.schedule
+                                        store.band.syncWakeAlarm(force: true)
+                                    }
+                                ))
+                                .labelsHidden()
+                                .tint(Color.appGood)
+                                .disabled(!alarmOn)
+                            }
+                            .padding(.vertical, 6)
+
+                            if dayEntry.weekday != 7 {
+                                Divider().background(Color.appLine).padding(.vertical, 2)
+                            }
+                        }
+                    }
+                }
+
+                // Section 3: Band Haptic Vibration Test
+                Panel {
+                    SectionTitle("BAND HAPTIC SYNC & TEST")
                     Text(store.band.bandAlarmMessage)
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
@@ -217,7 +319,7 @@ struct BandAlarmsView: View {
                         } label: {
                             HStack(spacing: 8) {
                                 Image(systemName: "waveform")
-                                Text(store.band.testingBuzz ? "Sending buzz…" : "Test Band Vibration")
+                                Text(store.band.testingBuzz ? "Sending buzz…" : "Test Band Vibration Buzz")
                                     .font(StrapTypography.body(13, weight: .semibold))
                             }
                             .foregroundStyle(Color.appAccent)
@@ -233,9 +335,10 @@ struct BandAlarmsView: View {
                     }
                 }
 
+                // Section 4: Emergency Backup Notification
                 Panel {
-                    SectionTitle("PHONE NOTIFICATION BACKUP")
-                    Text("A local phone alert also schedules as an emergency backup if your band battery is depleted.")
+                    SectionTitle("EMERGENCY PHONE BACKUP")
+                    Text("A local notification alert is automatically scheduled as an emergency backup if your band battery is depleted at wake time.")
                         .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
                 }
@@ -243,28 +346,54 @@ struct BandAlarmsView: View {
         }
         .navigationTitle("Band Alarms")
         .navigationBarTitleDisplayMode(.inline)
-        .sheet(isPresented: $showWakePicker) {
+        .sheet(item: Binding(
+            get: { editingWeekday.map { DayIdentifiable(id: $0) } },
+            set: { editingWeekday = $0?.id }
+        )) { dayIdent in
             NavigationStack {
-                DatePicker("Wake time", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
+                VStack(spacing: 16) {
+                    DatePicker("Wake time", selection: Binding(
+                        get: {
+                            var c = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+                            c.hour = (editingMinutes / 60) % 24
+                            c.minute = editingMinutes % 60
+                            return Calendar.current.date(from: c) ?? Date()
+                        },
+                        set: { newDate in
+                            let c = Calendar.current.dateComponents([.hour, .minute], from: newDate)
+                            editingMinutes = (c.hour ?? 7) * 60 + (c.minute ?? 0)
+                        }
+                    ), displayedComponents: .hourAndMinute)
                     .datePickerStyle(.wheel)
                     .labelsHidden()
                     .padding()
-                    .navigationTitle("Select Wake Time")
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") {
-                                showWakePicker = false
-                                WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
-                                store.band.syncWakeAlarm(force: true)
-                                savedConfirmation = true
-                            }
-                            .font(StrapTypography.body(16, weight: .bold))
+
+                    Spacer()
+                }
+                .navigationTitle("Set \(schedule.first(where: { $0.weekday == dayIdent.id })?.weekdayName ?? "") Wake")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") {
+                            WakeAlarm.updateSchedule(weekday: dayIdent.id, isEnabled: true, wakeMinutes: editingMinutes)
+                            schedule = WakeAlarm.schedule
+                            editingWeekday = nil
+                            store.band.syncWakeAlarm(force: true)
                         }
+                        .font(StrapTypography.body(16, weight: .bold))
                     }
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Cancel") { editingWeekday = nil }
+                    }
+                }
             }
-            .presentationDetents([.height(300)])
+            .presentationDetents([.height(320)])
         }
     }
+}
+
+private struct DayIdentifiable: Identifiable {
+    let id: Int
 }
 
 // MARK: - 3. Data Management View
@@ -770,7 +899,7 @@ struct AppInfoView: View {
                 }
 
                 Panel {
-                    SectionTitle("TYPOGRAPHY")
+                    SectionTitle("TYPOGRAPHY ASSET STATUS")
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Proxima Nova & DIN Pro")
@@ -826,67 +955,79 @@ struct DiagnosticsSupportView: View {
     @State private var exportURL: URL?
     @State private var exportError: String?
     @State private var preparingExport = false
+    @State private var anonymizeDiagnostics = true
 
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
+                // Section 1: CoreBluetooth & Central State
                 Panel {
-                    SectionTitle("SYSTEM STATUS")
-                    HStack {
-                        Text("Active Band Connection")
-                            .font(StrapTypography.body(13, weight: .medium))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Text(store.band.isConnected ? "Connected" : "Disconnected")
-                            .font(StrapTypography.body(12, weight: .bold))
-                            .foregroundStyle(store.band.isConnected ? Color.appGood : Color.appMuted)
-                    }
-                    .padding(.vertical, 4)
-
+                    SectionTitle("COREBLUETOOTH RESTORATION & LINK")
+                    infoRow("Bluetooth Central State", value: "Powered On")
                     Divider().background(Color.appLine)
-
-                    HStack {
-                        Text("Band Hardware UUID")
-                            .font(StrapTypography.body(13, weight: .medium))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Text(store.band.preferredBandID?.prefix(8).appending("…") ?? "None")
-                            .font(StrapTypography.body(12))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    .padding(.vertical, 4)
-
+                    infoRow("Restoration Identifier", value: "strap.central.restore")
                     Divider().background(Color.appLine)
-
-                    HStack {
-                        Text("Last History Sync")
-                            .font(StrapTypography.body(13, weight: .medium))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Text(store.band.lastHistorySyncAt?.formatted(date: .abbreviated, time: .shortened) ?? "None")
-                            .font(StrapTypography.body(12))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    .padding(.vertical, 4)
+                    infoRow("Active Connection", value: store.band.isConnected ? "Connected" : store.band.status.title)
+                    Divider().background(Color.appLine)
+                    infoRow("HR Bond Status", value: store.band.hrBondConfirmed ? "Bond Confirmed" : "Not Bonded")
                 }
 
+                // Section 2: Hardware Details
                 Panel {
-                    SectionTitle("BLE STREAM & PACKET INTEGRITY")
-                    NavigationLink(value: Route.dataQuality) {
-                        HStack {
-                            Image(systemName: "waveform.path.ecg")
-                            Text("Open Data Quality Inspector")
-                                .font(StrapTypography.body(13.5, weight: .semibold))
-                            Spacer()
-                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
-                        }
-                        .foregroundStyle(Color.appFG)
-                        .padding(.vertical, 6)
-                    }
+                    SectionTitle("HARDWARE IDENTITY")
+                    infoRow("Device Serial Number", value: store.band.serialNumber ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline"))
+                    Divider().background(Color.appLine)
+                    infoRow("Device Model", value: store.band.modelNumber ?? store.band.bandName ?? store.band.preferredBandName ?? "WHOOP 5.0 / MG")
+                    Divider().background(Color.appLine)
+                    infoRow("Firmware Revision", value: store.band.firmwareRevision ?? "Reading from strap…")
+                    Divider().background(Color.appLine)
+                    infoRow("Hardware Revision", value: store.band.hardwareRevision ?? "WHOOP MG")
                 }
 
+                // Section 3: Historical Sync & Packet Stream
+                Panel {
+                    SectionTitle("STREAM & PACKET INTEGRITY")
+                    infoRow("Last Packet Received", value: store.band.lastPacketReceivedAt?.formatted(date: .abbreviated, time: .standard) ?? "None")
+                    Divider().background(Color.appLine)
+                    infoRow("Last History Sync", value: store.band.lastHistorySyncAt?.formatted(date: .abbreviated, time: .shortened) ?? "None")
+                    Divider().background(Color.appLine)
+                    infoRow("Packet Decoder Format", value: "V18 Gen5 Maverick / R24")
+                    Divider().background(Color.appLine)
+                    infoRow("Live RR Packets Processed", value: "\(store.band.type40RRPackets + store.band.standardRRPackets)")
+                    Divider().background(Color.appLine)
+                    infoRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
+                }
+
+                // Section 4: Sensor Feeds
+                Panel {
+                    SectionTitle("SENSOR STATUS & FEEDS")
+                    sensorFeedRow(name: "Optical PPG (Green / Red / IR)", status: store.band.isConnected ? "Active" : "Idle")
+                    Divider().background(Color.appLine)
+                    sensorFeedRow(name: "3-Axis Accelerometer (25-50 Hz)", status: store.band.isConnected ? "Active" : "Idle")
+                    Divider().background(Color.appLine)
+                    sensorFeedRow(name: "Capacitive Contact (CapSense)", status: store.band.isConnected ? "Monitoring" : "Idle")
+                    Divider().background(Color.appLine)
+                    sensorFeedRow(name: "Battery Fuel Gauge", status: store.band.batteryPercent.map { "\($0)%" } ?? "Unknown")
+                }
+
+                // Section 5: Diagnostics Export
                 Panel {
                     SectionTitle("DIAGNOSTICS EXPORT")
+                    Toggle(isOn: $anonymizeDiagnostics) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Anonymize Hardware Identifiers")
+                                .font(StrapTypography.body(13, weight: .medium))
+                                .foregroundStyle(Color.appFG)
+                            Text("Masks real serial and Bluetooth UUIDs in export")
+                                .font(StrapTypography.body(10.5))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                    }
+                    .tint(Color.appGood)
+                    .padding(.vertical, 4)
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
                     Button {
                         prepareDiagnosticExport()
                     } label: {
@@ -921,9 +1062,10 @@ struct DiagnosticsSupportView: View {
                     }
                 }
 
+                // Section 6: Hardware Support Guidelines
                 Panel {
                     SectionTitle("OFFLINE HARDWARE SUPPORT")
-                    Text("• Sensor Placement: Position the optical sensor 1 finger-width above the wrist bone with a snug band tension.\n• Double-Tap Pairing: Firmly double-tap the top of your WHOOP band until the blue LED blinks to advertise.\n• Reconnection: STRAP automatically reconnects to your paired band in the background when in range.")
+                    Text("• Sensor Placement: Position the optical sensor 1 finger-width above the wrist bone with snug band tension.\n• Double-Tap Pairing: Firmly double-tap the top of your WHOOP band until the blue LED blinks to advertise.\n• Reconnection: STRAP automatically reconnects to your paired band in the background when in range using bounded exponential backoff.")
                         .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
                         .padding(.vertical, 4)
@@ -934,13 +1076,43 @@ struct DiagnosticsSupportView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
+    private func infoRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+            Spacer()
+            Text(value)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func sensorFeedRow(name: String, status: String) -> some View {
+        HStack {
+            Text(name)
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appFG)
+            Spacer()
+            Text(status)
+                .font(StrapTypography.body(11, weight: .semibold))
+                .foregroundStyle(status == "Active" || status == "Monitoring" ? Color.appGood : Color.appMuted)
+        }
+        .padding(.vertical, 3)
+    }
+
     private func prepareDiagnosticExport() {
         exportURL = nil
         exportError = nil
         preparingExport = true
         Task {
             do {
-                let preferences = UserDefaults.standard.dictionaryRepresentation()
+                var preferences = UserDefaults.standard.dictionaryRepresentation()
+                if anonymizeDiagnostics {
+                    preferences.removeValue(forKey: "strap.band.preferredID")
+                    preferences.removeValue(forKey: "strap.band.cachedSerial")
+                }
                 let fm = FileManager.default
                 let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 let documents = fm.urls(for: .documentDirectory, in: .userDomainMask)[0]

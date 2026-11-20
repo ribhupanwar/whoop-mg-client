@@ -22,7 +22,7 @@ struct MoreView: View {
                     NavigationLink { DeviceSettingsView() } label: {
                         moreRow(
                             "Device Settings",
-                            subtitle: "\(store.band.bandName ?? store.band.preferredBandName ?? "STRAP Band") · \(store.band.isConnected ? "Connected" : (store.band.preferredBandID == nil ? "Not Paired" : "Disconnected"))",
+                            subtitle: deviceSettingsSubtitle,
                             icon: "radiowaves.right"
                         )
                     }
@@ -44,7 +44,7 @@ struct MoreView: View {
                     NavigationLink { BandAlarmsView() } label: {
                         moreRow(
                             "Band Alarms",
-                            subtitle: WakeAlarm.isEnabled ? "Alarm set for " + CoachFormat.clock(WakeAlarm.wakeMinutes) : "Alarm off",
+                            subtitle: bandAlarmsSubtitle,
                             icon: "alarm"
                         )
                     }
@@ -150,6 +150,29 @@ struct MoreView: View {
             }
         }
         .strapTabTypography("More")
+    }
+
+    private var deviceSettingsSubtitle: String {
+        let name = store.band.bandName ?? store.band.preferredBandName ?? "STRAP Band"
+        let status = store.band.isConnected ? "Connected" : (store.band.preferredBandID == nil ? "Not Paired" : "Disconnected")
+        if let serial = store.band.serialNumber, !serial.isEmpty {
+            return "\(name) (SN: \(serial)) · \(status)"
+        } else if let model = store.band.modelNumber, !model.isEmpty {
+            return "\(name) (\(model)) · \(status)"
+        } else {
+            return "\(name) · \(status)"
+        }
+    }
+
+    private var bandAlarmsSubtitle: String {
+        guard WakeAlarm.isEnabled else { return "Alarm off" }
+        guard let next = WakeAlarm.nextWakeDate() else { return "Alarm off" }
+        let timeStr = DateFormatter.localizedString(from: next, dateStyle: .none, timeStyle: .short)
+        if WakeAlarm.isBandConfirmed(for: next) {
+            return "Armed on band · \(timeStr)"
+        } else {
+            return "Pending sync · \(timeStr)"
+        }
     }
 
     private var profileHeaderCard: some View {
