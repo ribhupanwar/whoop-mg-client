@@ -427,7 +427,11 @@ def _stage_epochs(feats: list[_Epoch]) -> list[str]:
         since_onset = f.minutes - origin
         emissions[index]["rem"] -= _rem_latency_guard(since_onset)
         emissions[index]["deep"] -= _deep_latency_guard(since_onset)
-    return _viterbi(emissions)
+    labels = _viterbi(emissions)
+    if onset_index is not None and onset_index > 0:
+        for idx in range(onset_index):
+            labels[idx] = "awake"
+    return labels
 
 
 def stage_sleep(samples: list[V18Sample], period: SleepPeriod) -> SleepStaging:

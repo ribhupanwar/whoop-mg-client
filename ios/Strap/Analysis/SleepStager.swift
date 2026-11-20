@@ -662,7 +662,13 @@ enum SleepStager {
                 emissions[index][.deep] = (emissions[index][.deep] ?? 0) - deepGuard(sinceOnset)
             }
         }
-        return viterbi(emissions)
+        var labels = viterbi(emissions)
+        if let onsetMinutes, onsetMinutes > epochs[0].minutes {
+            for index in epochs.indices where epochs[index].minutes < onsetMinutes {
+                labels[index] = .wake
+            }
+        }
+        return labels
     }
 
     private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {

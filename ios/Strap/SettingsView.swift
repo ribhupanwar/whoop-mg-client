@@ -280,7 +280,7 @@ struct SettingsView: View {
 
             // Read-only hardware identity: never substitute a fabricated serial number.
             if let identifier = store.band.preferredBandID {
-                Text("DEVICE ID  \\(identifier)")
+                Text("DEVICE ID  \(identifier)")
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .textSelection(.enabled)
@@ -289,7 +289,7 @@ struct SettingsView: View {
                 Hint("Device ID unavailable until a band is selected.")
             }
             if let lastSync = store.band.lastHistorySyncAt {
-                Text("LAST SYNC  \\(lastSync.formatted(date: .abbreviated, time: .shortened))")
+                Text("LAST SYNC  \(lastSync.formatted(date: .abbreviated, time: .shortened))")
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .padding(.top, 4)
