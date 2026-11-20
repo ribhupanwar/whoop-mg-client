@@ -432,15 +432,43 @@ struct HomeView: View {
     // MARK: Monitor duo
 
     private var monitorDuo: some View {
-        HStack(spacing: 10) {
+        let health = store.healthMonitor
+        let outside = health.readings.filter { $0.status == .outsideRange }.count
+        let within = health.withinCount
+        let healthState: String
+        let healthColor: Color
+        if demo {
+            healthState = "WITHIN RANGE"
+            healthColor = .appGood
+        } else if outside > 0 {
+            healthState = "\(outside) OUTSIDE RANGE"
+            healthColor = .appWarn
+        } else if within > 0 {
+            healthState = "\(within) IN RANGE"
+            healthColor = .appGood
+        } else {
+            healthState = health.availableCount == 0 ? "UNAVAILABLE" : "BASELINE PENDING"
+            healthColor = .appMuted
+        }
+
+        let stress = store.band.stress
+        let stressColor: Color
+        switch demo ? "low" : stress.band {
+        case "low": stressColor = .appSleep
+        case "elevated": stressColor = .appGood
+        case "high": stressColor = .appWarn
+        default: stressColor = .appMuted
+        }
+
+        return HStack(alignment: .top, spacing: 10) {
             NavigationLink(value: Route.health) {
                 tapCard(
                     title: "Health monitor",
-                    pill: demo ? "✓" : healthPill,
-                    pillColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    state: demo ? "WITHIN RANGE" : (healthCount > 0 ? "\(healthCount) IN RANGE" : "BASELINE PENDING"),
-                    stateColor: demo ? .appGood : (healthCount > 0 ? .appGood : .appWarn),
-                    detail: demo ? "5 metrics · sample" : healthDetail
+                    pill: demo ? "✓" : "\(within)/\(HealthVital.allCases.count)",
+                    pillColor: healthColor,
+                    state: healthState,
+                    stateColor: healthColor,
+                    detail: demo ? "5 metrics · sample" : "\(health.availableCount)/\(HealthVital.allCases.count) available"
                 )
             }
             .buttonStyle(.plain)
@@ -448,35 +476,16 @@ struct HomeView: View {
             NavigationLink(value: Route.stress) {
                 tapCard(
                     title: "Stress monitor",
-                    pill: demo ? String(format: "%.1f", SampleData.stressHome) : stressPill,
-                    pillColor: demo ? .appAccent : .appMuted,
-                    state: demo ? "LOW" : store.band.stress.band.uppercased(),
-                    stateColor: demo ? .appAccent : .appWarn,
-                    detail: demo ? "11:49 · sample" : stressDetail
+                    pill: (demo ? SampleData.stressHome : stress.index).map { String(format: "%.1f", $0) } ?? "—",
+                    pillColor: stressColor,
+                    state: demo ? "LOW" : stress.band.uppercased(),
+                    stateColor: stressColor,
+                    detail: demo ? "11:49 · sample" : stress.reason ?? "Awake-quiet estimate"
                 )
             }
             .buttonStyle(.plain)
         }
         .padding(.bottom, 14)
-    }
-
-    private var healthCount: Int {
-        store.healthMonitor.withinCount
-    }
-
-    private var healthPill: String { "\(healthCount)/5" }
-
-    private var healthDetail: String {
-        "\(store.healthMonitor.availableCount)/5 available · personal ranges"
-    }
-
-    private var stressPill: String {
-        guard let index = store.band.stress.index else { return "—" }
-        return String(format: "%.1f", index)
-    }
-
-    private var stressDetail: String {
-        store.band.stress.reason ?? "awake baseline · \(store.recordedDayCount)/7 days"
     }
 
     private func tapCard(title: String, pill: String, pillColor: Color, state: String, stateColor: Color, detail: String) -> some View {
@@ -505,7 +514,7 @@ struct HomeView: View {
                 }
                 .frame(minWidth: 22, minHeight: 22)
                 .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color(hex: 0x112E20)))
+                .background(RoundedRectangle(cornerRadius: 5).fill(pillColor.opacity(0.12)))
                 .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(pillColor.opacity(0.3), lineWidth: 0.5))
 
                 VStack(alignment: .leading, spacing: 2) {
@@ -520,7 +529,7 @@ struct HomeView: View {
             }
         }
         .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 83, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
     }
