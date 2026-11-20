@@ -269,7 +269,7 @@ struct HomeView: View {
                             label: "SLEEP",
                             text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
                             progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                            color: .appSleep,
+                            color: Color(hex: 0x82A8C2),
                             ringSize: diameter
                         )
                     }
@@ -281,7 +281,7 @@ struct HomeView: View {
                             label: "RECOVERY",
                             text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                             progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
-                            color: DetailMetric.recovery.color(demo ? Double(SampleData.recoveryRingPercent) : recoveryScore),
+                            color: Color(hex: 0x00D66D),
                             ringSize: diameter
                         )
                     }
@@ -1298,6 +1298,8 @@ private struct HomeBandDeviceSettingsView: View {
     @State private var advanced = false
     private let muted = Color(hex: 0x92979F)
     private let panel = Color(hex: 0x30353A)
+    @State private var showPairingSheet = false
+    @State private var showUnpairConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1332,9 +1334,9 @@ private struct HomeBandDeviceSettingsView: View {
                 VStack(alignment: .trailing, spacing: 5) {
                     Text("LAST SYNC").foregroundStyle(muted)
                         .font(StrapTypography.body(11, weight: .bold))
-                    Text("—").font(StrapTypography.body(13, weight: .bold))
+                    Text(store.band.lastHistorySyncAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—").font(StrapTypography.body(13, weight: .bold))
                 }
-                Image(systemName: "icloud")
+                Image(systemName: store.band.lastHistorySyncAt == nil ? "icloud" : "checkmark.icloud")
                     .font(.system(size: 24))
                     .foregroundStyle(muted)
             }
@@ -1384,11 +1386,9 @@ private struct HomeBandDeviceSettingsView: View {
     private var statusContent: some View {
         VStack(spacing: 24) {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: "applewatch")
-                    .font(.system(size: 150, weight: .ultraLight))
-                    .foregroundStyle(Color.white.opacity(0.72))
+                bandIllustration
                     .frame(maxWidth: .infinity)
-                    .accessibilityLabel("Band illustration placeholder")
+                    .accessibilityLabel("WHOOP-style band illustration")
                 VStack(alignment: .trailing, spacing: 8) {
                     Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
                         .font(StrapTypography.metric(33, weight: .bold))
@@ -1426,17 +1426,19 @@ private struct HomeBandDeviceSettingsView: View {
     private var advancedContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 65) {
-                metadata("DEVICE ID", value: "UNAVAILABLE", icon: "applewatch")
-                metadata("FIRMWARE", value: "UNVERIFIED", icon: "cpu")
+                metadata("DEVICE ID", value: store.band.preferredBandID ?? "UNAVAILABLE", icon: "applewatch")
+                metadata("FIRMWARE", value: store.band.firmwareRevision ?? "UNVERIFIED", icon: "cpu")
             }
             .frame(maxWidth: .infinity)
             .padding(.top, 52)
             .padding(.bottom, 55)
 
-            deviceRow("PAIR A DEVICE", icon: "plus.rectangle.on.rectangle",
-                      subtitle: "Pairing is managed by the official WHOOP app.", enabled: false)
-            deviceRow("UNPAIR DEVICE", icon: "minus.rectangle",
-                      subtitle: "Removes a Bluetooth pairing. Unavailable in STRAP.", enabled: false)
+            Button { showPairingSheet = true } label: {
+                deviceRow("PAIR A DEVICE", icon: "plus.rectangle.on.rectangle", subtitle: "Scan and select a nearby WHOOP band.", enabled: true)
+            }.buttonStyle(.plain)
+            Button { showUnpairConfirmation = true } label: {
+                deviceRow("UNPAIR DEVICE", icon: "minus.rectangle", subtitle: "Disconnect and clear the saved STRAP association.", enabled: store.band.preferredBandID != nil)
+            }.buttonStyle(.plain).disabled(store.band.preferredBandID == nil)
             deviceRow("REGULATORY LABELS", icon: "tag",
                       subtitle: "Refer to the official device application for regulatory labels.", enabled: false)
             deviceRow("SAFETY & REGULATORY", icon: "tag",
@@ -1450,6 +1452,23 @@ private struct HomeBandDeviceSettingsView: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 45)
+        .sheet(isPresented: $showPairingSheet) { PairDeviceView().environmentObject(store) }
+        .confirmationDialog("Unpair WHOOP Band?", isPresented: $showUnpairConfirmation) {
+            Button("Unpair Device", role: .destructive) { store.unpairBand() }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("Clears the saved STRAP association; historical data is retained.") }
+    }
+
+    private var bandIllustration: some View {
+        ZStack {
+            Ellipse().stroke(Color(hex: 0x111619), lineWidth: 35).frame(width: 140, height: 220).rotationEffect(.degrees(-24))
+            Ellipse().stroke(Color(hex: 0x30383E), lineWidth: 15).frame(width: 140, height: 220).rotationEffect(.degrees(-24))
+            RoundedRectangle(cornerRadius: 18)
+                .fill(LinearGradient(colors: [Color(hex: 0xCFD3D5), Color(hex: 0x56616A), Color(hex: 0xE0E2E3)], startPoint: .topLeading, endPoint: .bottomTrailing))
+                .frame(width: 112, height: 156).rotationEffect(.degrees(-24))
+            RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x171C20))
+                .frame(width: 88, height: 126).rotationEffect(.degrees(-24))
+        }.frame(height: 280)
     }
 
     private func metadata(_ title: String, value: String, icon: String) -> some View {
