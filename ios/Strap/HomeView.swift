@@ -5,6 +5,7 @@ import SwiftUI
 /// Demo mode: labelled sample values behind the persistent banner.
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let openPlan: () -> Void
 
     @State private var compactScores = false
@@ -29,10 +30,11 @@ struct HomeView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 ringTrio
-                    .background(GeometryReader { geometry in
-                        Color.clear.preference(key: HomeHeroPosition.self,
-                            value: geometry.frame(in: .named("home-scroll")).maxY)
-                    })
+                    .onScrollVisibilityChange(threshold: 0.05) { isVisible in
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                            compactScores = !isVisible
+                        }
+                    }
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
@@ -47,16 +49,6 @@ struct HomeView: View {
         .onAppear {
             AppOpenDayTracker.recordOpen()
         }
-        .coordinateSpace(name: "home-scroll")
-        .onPreferenceChange(HomeHeroPosition.self) { value in
-            // Hysteresis prevents repeated whole-home re-layout while dragging
-            // near the hero boundary. Do not animate every scroll-position update.
-            let shouldCompact = compactScores ? value < 80 : value < 0
-            guard shouldCompact != compactScores else { return }
-            var transaction = Transaction()
-            transaction.disablesAnimations = true
-            withTransaction(transaction) { compactScores = shouldCompact }
-        }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
                 topBar
@@ -64,7 +56,9 @@ struct HomeView: View {
                     Text("Activity history · scores show the latest recorded day")
                         .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
                 }
-                if compactScores { compactRingRow }
+                if compactScores {
+                    compactRingRow.transition(.opacity)
+                }
             }
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
@@ -344,8 +338,8 @@ struct HomeView: View {
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
-        VStack(spacing: 10) {
-            RingView(progress: progress, color: color, lineWidth: 5.0, size: ringSize, centerText: text, centerFont: 23)
+        VStack(spacing: 8) {
+            RingView(progress: progress, color: color, size: ringSize, centerText: text)
                 .accessibilityHidden(true)
             HStack(spacing: 3) {
                 Text(label)
@@ -358,7 +352,7 @@ struct HomeView: View {
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
-        .frame(width: ringSize + 16)
+        .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label + ", " + (text == "—" ? "unavailable" : text))
@@ -1106,7 +1100,10 @@ struct HomeView: View {
                 RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
                 Text(title).font(StrapTypography.body(11, weight: .bold)).tracking(0.9)
             }.foregroundStyle(Color.appFG)
-        }.buttonStyle(.plain)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("home.compact." + title.lowercased())
+        .accessibilityValue(progress == nil ? "Unavailable" : "")
     }
 
     private var planCard: some View {
@@ -1206,12 +1203,6 @@ struct HomeView: View {
         return formatter
     }()
 }
-
-private struct HomeHeroPosition: PreferenceKey {
-    static var defaultValue: CGFloat = 200
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 
 private struct PlanOrbitView: View {
     private let symbols = ["moon.stars", "heart", "figure.strengthtraining.traditional", "book.closed"]
