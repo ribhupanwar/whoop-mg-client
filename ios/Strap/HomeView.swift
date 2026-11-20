@@ -31,10 +31,11 @@ struct HomeView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 ringTrio
-                    .background(GeometryReader { geometry in
-                        Color.clear.preference(key: HomeHeroPosition.self,
-                            value: geometry.frame(in: .named("home-scroll")).maxY)
-                    })
+                    .onScrollVisibilityChange(threshold: 0.05) { isVisible in
+                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
+                            compactScores = !isVisible
+                        }
+                    }
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
@@ -48,16 +49,6 @@ struct HomeView: View {
         }
         .onAppear {
             appOpenDays = AppOpenDayTracker.recordOpen()
-        }
-        .coordinateSpace(name: "home-scroll")
-        .onPreferenceChange(HomeHeroPosition.self) { value in
-            // Hysteresis prevents repeated whole-home re-layout while dragging
-            // near the hero boundary. Do not animate every scroll-position update.
-            let shouldCompact = compactScores ? value < 80 : value < 0
-            guard shouldCompact != compactScores else { return }
-            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
-                compactScores = shouldCompact
-            }
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
@@ -1203,12 +1194,6 @@ struct HomeView: View {
         return formatter
     }()
 }
-
-private struct HomeHeroPosition: PreferenceKey {
-    static var defaultValue: CGFloat = 200
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
-}
-
 
 private struct PlanOrbitView: View {
     private let symbols = ["moon.stars", "heart", "figure.strengthtraining.traditional", "book.closed"]

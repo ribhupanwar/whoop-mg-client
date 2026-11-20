@@ -8,13 +8,13 @@ final class HomeScoreRingTests: XCTestCase {
         app.launch()
         XCTAssertTrue(app.buttons["tab.home"].waitForExistence(timeout: 15))
 
-        let compactSleep = app.buttons["home.compact.sleep"]
+        let compactSleep = app.descendants(matching: .any)["home.compact.sleep"].firstMatch
         XCTAssertFalse(compactSleep.exists)
         capture("Home expanded scores", in: app)
 
         let scrollingContent = app.scrollViews.firstMatch
         XCTAssertTrue(scrollingContent.exists)
-        scrollingContent.swipeUp()
+        for _ in 0..<3 where !compactSleep.exists { scrollingContent.swipeUp() }
         XCTAssertTrue(compactSleep.waitForExistence(timeout: 5))
         capture("Home compact scores", in: app)
 
