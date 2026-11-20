@@ -29,10 +29,11 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                Text("STRAP")
-                    .font(StrapTypography.body(14, weight: .bold))
-                    .tracking(3.5)
-                    .foregroundStyle(Color.appFG.opacity(0.85))
+                Image("WhoopWordmark")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 14)
+                    .accessibilityLabel("STRAP · WHOOP Client")
                     .frame(maxWidth: .infinity)
                     .padding(.top, 10)
                     .padding(.bottom, 12)
@@ -261,49 +262,44 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            GeometryReader { geometry in
-                let diameter: CGFloat = 84.0
-                HStack(spacing: 0) {
-                    NavigationLink(value: Route.sleepAnalysis) {
-                        trioItem(
-                            label: "SLEEP",
-                            text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
-                            progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                            color: Color(hex: 0x82A8C2),
-                            ringSize: diameter
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-
-                    NavigationLink(value: Route.recovery) {
-                        trioItem(
-                            label: "RECOVERY",
-                            text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
-                            progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
-                            color: (demo ? Double(SampleData.recoveryRingPercent) : recoveryScore).map { score in
-                                score >= 67 ? Color(hex: 0x00E66C) : DetailMetric.recovery.color(score)
-                            } ?? DetailMetric.recovery.color(nil),
-                            ringSize: diameter
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
-
-                    NavigationLink(value: Route.strain) {
-                        trioItem(
-                            label: "STRAIN",
-                            text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
-                            progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
-                            color: .appAccent,
-                            ringSize: diameter
-                        )
-                    }
-                    .buttonStyle(.plain)
-                    .frame(maxWidth: .infinity)
+            let diameter: CGFloat = AppLayout.heroRingDiameter
+            HStack(spacing: AppLayout.ringGap) {
+                NavigationLink(value: Route.sleepAnalysis) {
+                    trioItem(
+                        label: "SLEEP",
+                        text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
+                        progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
+                        color: .appSleep,
+                        ringSize: diameter
+                    )
                 }
-                .frame(maxWidth: .infinity, alignment: .center)
+                .buttonStyle(.plain)
+
+                NavigationLink(value: Route.recovery) {
+                    trioItem(
+                        label: "RECOVERY",
+                        text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
+                        progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
+                        color: (demo ? Double(SampleData.recoveryRingPercent) : recoveryScore).map { score in
+                            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
+                        } ?? DetailMetric.recovery.color(nil),
+                        ringSize: diameter
+                    )
+                }
+                .buttonStyle(.plain)
+
+                NavigationLink(value: Route.strain) {
+                    trioItem(
+                        label: "STRAIN",
+                        text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
+                        progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
+                        color: .appAccent,
+                        ringSize: diameter
+                    )
+                }
+                .buttonStyle(.plain)
             }
+            .frame(maxWidth: .infinity, alignment: .center)
             .frame(height: 122)
         }
         .padding(.bottom, 18)
@@ -356,8 +352,8 @@ struct HomeView: View {
     }
 
     private func trioItem(label: String, text: String, progress: Double?, color: Color, ringSize: CGFloat) -> some View {
-        VStack(spacing: 12) {
-            RingView(progress: progress, color: color, lineWidth: 6.0, size: ringSize, centerText: text, centerFont: 27)
+        VStack(spacing: 10) {
+            RingView(progress: progress, color: color, lineWidth: 5.0, size: ringSize, centerText: text, centerFont: 23)
                 .accessibilityHidden(true)
             HStack(spacing: 3) {
                 Text(label)
@@ -366,11 +362,11 @@ struct HomeView: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
             }
-            .foregroundStyle(Color(hex: 0xA3ADB5))
+            .foregroundStyle(Color.appMuted)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
-        .frame(width: ringSize + 28)
+        .frame(width: ringSize + 16)
         .contentShape(Rectangle())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(label + ", " + (text == "—" ? "unavailable" : text))
@@ -1088,12 +1084,12 @@ struct HomeView: View {
         // Otherwise the sticky header changes colors/scores while scrolling.
         let displayedRecovery = demo ? Double(SampleData.recoveryRingPercent) : recoveryScore
         let recoveryColor = displayedRecovery.map { score in
-            score >= 67 ? Color(hex: 0x00E66C) : DetailMetric.recovery.color(score)
+            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
         } ?? DetailMetric.recovery.color(nil)
         return HStack(spacing: 16) {
             compactRing("SLEEP", route: .sleepAnalysis,
                         progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                        color: Color(hex: 0x82A8C2))
+                        color: .appSleep)
             compactRing("RECOVERY", route: .recovery,
                         progress: displayedRecovery.map { $0 / 100 }, color: recoveryColor)
             compactRing("STRAIN", route: .strain,
@@ -1315,55 +1311,67 @@ private struct HomeBandDeviceSettingsView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var advanced = false
-    private let muted = Color(hex: 0x92979F)
-    private let panel = Color(hex: 0x30353A)
+    private let muted = Color.appMuted
+    private let panel = Color(hex: 0x252D33)
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
     @State private var showRegulatoryLabels = false
 
     var body: some View {
         VStack(spacing: 0) {
+            // HEADER BAR
             HStack {
                 Button { dismiss() } label: {
-                    Image(systemName: "xmark").font(.system(size: 23, weight: .medium))
+                    Image(systemName: "xmark")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Color.appFG)
                 }
                 Spacer()
                 Text("DEVICE SETTINGS")
-                    .font(StrapTypography.body(17, weight: .bold))
-                    .tracking(1.4)
+                    .font(StrapTypography.body(15, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(Color.appFG)
                 Spacer()
-                Image(systemName: "info.circle")
-                    .font(.system(size: 25))
+                Image(systemName: "xmark")
+                    .font(.system(size: 18))
+                    .opacity(0)
                     .accessibilityHidden(true)
             }
             .padding(.horizontal, 24)
-            .padding(.top, 22)
-            .padding(.bottom, 43)
+            .padding(.top, 20)
+            .padding(.bottom, 24)
 
+            // CONNECTED DEVICE STATUS & SYNC BANNER
             HStack(alignment: .bottom) {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(store.band.isConnected ? "CONNECTED TO" : "DISCONNECTED")
-                        .foregroundStyle(store.band.isConnected ? Color.green : muted)
+                        .foregroundStyle(store.band.isConnected ? Color.appGood : muted)
                         .font(StrapTypography.body(11, weight: .bold))
-                        .tracking(1)
+                        .tracking(1.0)
                     Text(store.band.preferredBandName ?? "WHOOP MG")
                         .font(StrapTypography.body(17, weight: .bold))
                         .tracking(0.8)
+                        .foregroundStyle(Color.appFG)
                 }
                 Spacer()
-                VStack(alignment: .trailing, spacing: 5) {
-                    Text("LAST HISTORY SYNC").foregroundStyle(muted)
-                        .font(StrapTypography.body(11, weight: .bold))
-                    Text(store.band.lastHistorySyncAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—").font(StrapTypography.body(13, weight: .bold))
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("LAST HISTORY SYNC")
+                        .foregroundStyle(muted)
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.6)
+                    Text(store.band.lastHistorySyncAt.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—")
+                        .font(StrapTypography.body(13, weight: .bold))
+                        .foregroundStyle(Color.appFG)
                 }
                 Image(systemName: store.band.lastHistorySyncAt == nil ? "icloud" : "checkmark.icloud")
-                    .font(.system(size: 24))
+                    .font(.system(size: 22))
                     .foregroundStyle(muted)
             }
             .padding(.horizontal, 24)
-            .padding(.bottom, 23)
+            .padding(.bottom, 20)
 
-            HStack(spacing: 43) {
+            // SEGMENTED TABS: STATUS vs ADVANCED
+            HStack(spacing: 36) {
                 tab("STATUS", selected: !advanced) { advanced = false }
                 tab("ADVANCED", selected: advanced) { advanced = true }
                 Spacer()
@@ -1388,20 +1396,20 @@ private struct HomeBandDeviceSettingsView: View {
             Button("Cancel", role: .cancel) {}
         } message: { Text("Disconnects the band and clears the saved STRAP association. Historical data is retained.") }
         .background {
-            LinearGradient(colors: [Color(hex: 0x34434D), Color(hex: 0x192127), Color(hex: 0x080D10)],
-                           startPoint: .top, endPoint: .bottom)
+            LinearGradient.appCanvas
                 .ignoresSafeArea()
         }
     }
 
     private func tab(_ name: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            VStack(spacing: 9) {
+            VStack(spacing: 8) {
                 Text(name)
                     .font(StrapTypography.body(11, weight: .bold))
-                    .tracking(1)
+                    .tracking(1.0)
                     .foregroundStyle(selected ? Color.white : muted)
-                Rectangle().fill(selected ? Color.white : Color.clear)
+                Rectangle()
+                    .fill(selected ? Color.white : Color.clear)
                     .frame(height: 2)
             }
             .fixedSize(horizontal: true, vertical: false)
@@ -1410,39 +1418,52 @@ private struct HomeBandDeviceSettingsView: View {
     }
 
     private var statusContent: some View {
-        VStack(spacing: 24) {
-            HStack(alignment: .center, spacing: 14) {
+        VStack(spacing: 20) {
+            // HARDWARE ARTWORK HERO & VERTICAL BATTERY GAUGE
+            HStack(alignment: .center, spacing: 18) {
                 BandIllustrationView(
                     status: store.band.status,
                     isConnected: store.band.isConnected,
                     batteryPercent: store.band.batteryPercent
                 )
                 .frame(maxWidth: .infinity)
-                .accessibilityLabel("WHOOP MG band illustration with live indicator")
+                .frame(height: 240)
+                .accessibilityLabel("WHOOP MG genuine band hardware with live indicator")
 
-                VStack(alignment: .trailing, spacing: 8) {
+                VStack(alignment: .trailing, spacing: 6) {
                     Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
-                        .font(StrapTypography.metric(33, weight: .bold))
+                        .font(StrapTypography.metric(34, weight: .bold))
+                        .foregroundStyle(batteryColor)
+
+                    Text("OF CHARGE\nREMAINING")
+                        .font(StrapTypography.metric(9, weight: .bold))
+                        .tracking(0.5)
+                        .foregroundStyle(muted)
+                        .multilineTextAlignment(.trailing)
+
                     Text(store.band.modelNumber ?? store.band.preferredBandName ?? "WHOOP MG")
-                        .font(StrapTypography.body(12, weight: .bold))
-                        .tracking(1.6)
+                        .font(StrapTypography.body(11, weight: .bold))
+                        .tracking(1.2)
                         .foregroundStyle(muted)
                 }
-                Capsule().fill(Color(hex: 0x444C51))
-                    .frame(width: 5, height: 142)
+
+                // VERTICAL BATTERY CAPSULE GAUGE
+                Capsule().fill(Color(hex: 0x2A333A))
+                    .frame(width: 6, height: 140)
                     .overlay(alignment: .bottom) {
                         GeometryReader { geo in
                             VStack {
                                 Spacer(minLength: 0)
-                                Capsule().fill(Color.yellow)
+                                Capsule().fill(batteryColor)
                                     .frame(height: geo.size.height * CGFloat(min(100, max(0, store.band.batteryPercent ?? 0))) / 100)
                             }
                         }
                     }
             }
-            .frame(height: 380)
+            .frame(height: 280)
             .padding(.horizontal, 24)
 
+            // BROADCAST HEART RATE
             deviceRow(
                 "BROADCAST HEART RATE",
                 icon: "heart.fill",
@@ -1457,12 +1478,19 @@ private struct HomeBandDeviceSettingsView: View {
             Text(store.band.isConnected
                  ? "Verified Command 14 (0x0E) enables standard BLE 0x180D heart-rate broadcast to gym equipment and apps."
                  : "Connect your WHOOP to adjust live broadcast.")
-                .font(.caption)
+                .font(StrapTypography.body(11))
                 .foregroundStyle(muted)
                 .padding(.horizontal, 24)
         }
-        .padding(.top, 38)
-        .padding(.bottom, 45)
+        .padding(.top, 16)
+        .padding(.bottom, 36)
+    }
+
+    private var batteryColor: Color {
+        guard let p = store.band.batteryPercent else { return muted }
+        if p >= 50 { return Color.appGood }
+        if p >= 20 { return Color.appWarn }
+        return Color.appHigh
     }
 
     private var advancedContent: some View {
@@ -1472,32 +1500,38 @@ private struct HomeBandDeviceSettingsView: View {
                 metadata("FIRMWARE", value: store.band.firmwareRevision ?? "UNVERIFIED", icon: "cpu")
             }
             .frame(maxWidth: .infinity)
-            .padding(.top, 52)
-            .padding(.bottom, 55)
+            .padding(.top, 36)
+            .padding(.bottom, 36)
 
             Button { showPairingSheet = true } label: {
                 deviceRow("PAIR A DEVICE", icon: "plus.rectangle.on.rectangle", subtitle: "Scan and select a nearby WHOOP band.", enabled: true)
             }.buttonStyle(.plain)
+
             Button { showUnpairConfirmation = true } label: {
                 deviceRow("UNPAIR DEVICE", icon: "minus.rectangle", subtitle: "Disconnect and clear the saved STRAP association.", enabled: store.band.preferredBandID != nil || store.band.isConnected)
             }.buttonStyle(.plain).disabled(store.band.preferredBandID == nil && !store.band.isConnected)
+
             Button { showRegulatoryLabels = true } label: {
                 deviceRow("REGULATORY LABELS", icon: "tag",
                           subtitle: "Manufacturer regulatory information; no unverified labels are generated.", enabled: true)
             }.buttonStyle(.plain)
+
             Link(destination: URL(string: "https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information")!) {
                 deviceRow("SAFETY & REGULATORY", icon: "tag",
                           subtitle: "Open official WHOOP safety and regulatory information.", enabled: true)
             }.buttonStyle(.plain)
+
             deviceRow("FIRMWARE CHECK", icon: "cpu",
                       subtitle: "Updates disabled. Custom firmware flashing (0x53, 0x8E–0x90) is restricted to official signed images to prevent bricking.", enabled: false)
+
             deviceRow("REBOOT DEVICE", icon: "power",
                       subtitle: "Disabled for safety. Unverified power-cycle commands (0x20) risk truncating circular flash history.", enabled: false)
+
             deviceRow("ERASE DEVICE DATA", icon: "trash",
                       subtitle: "Unavailable: protects stored circular buffer sensor history from irreversible deletion.", enabled: false)
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 45)
+        .padding(.bottom, 36)
     }
 
     private var regulatoryLabelsSheet: some View {
@@ -1535,15 +1569,16 @@ private struct HomeBandDeviceSettingsView: View {
         toggleValue: Bool = false,
         onToggle: ((Bool) -> Void)? = nil
     ) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 20) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 16) {
                 Image(systemName: icon)
-                    .font(.system(size: 23))
-                    .frame(width: 30)
+                    .font(.system(size: 20))
+                    .frame(width: 26)
                     .foregroundStyle(muted)
                 Text(title)
-                    .font(StrapTypography.body(14, weight: .bold))
+                    .font(StrapTypography.body(13, weight: .bold))
                     .tracking(0.8)
+                    .foregroundStyle(Color.appFG)
                 Spacer()
                 if isToggle {
                     Toggle(title, isOn: Binding(
@@ -1552,19 +1587,24 @@ private struct HomeBandDeviceSettingsView: View {
                     ))
                     .labelsHidden()
                     .disabled(!enabled)
-                    .tint(Color(hex: 0x00F076))
+                    .tint(Color.appGood)
                 }
             }
-            .padding(.horizontal, 22)
-            .frame(height: 65)
-            .background(panel, in: RoundedRectangle(cornerRadius: 4))
+            .padding(.horizontal, 18)
+            .frame(height: 58)
+            .background(panel, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .stroke(Color.appCardBorder.opacity(0.5), lineWidth: 0.5)
+            )
+
             Text(subtitle)
-                .font(StrapTypography.body(12))
+                .font(StrapTypography.body(11))
                 .foregroundStyle(muted)
-                .padding(.horizontal, 14)
+                .padding(.horizontal, 10)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .accessibilityElement(children: .combine)
-        .padding(.bottom, 35)
+        .padding(.bottom, 22)
     }
 }

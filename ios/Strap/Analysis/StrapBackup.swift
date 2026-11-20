@@ -204,7 +204,10 @@ enum StrapBackup {
         let pending = support.appendingPathComponent("restore-pending", isDirectory: true)
         guard fm.fileExists(atPath: pending.path) else { return }
         let preview = try validate(pending, allowJournal: true)
-        let preferences = try PropertyListSerialization.propertyList(from: Data(contentsOf: pending.appendingPathComponent("persisted-records.plist")), format: nil) as! [String: Any]
+        let plistData = try Data(contentsOf: pending.appendingPathComponent("persisted-records.plist"))
+        guard let preferences = try PropertyListSerialization.propertyList(from: plistData, format: nil) as? [String: Any] else {
+            throw failure("Corrupt persisted-records.plist in restore payload")
+        }
         let journalURL = pending.appendingPathComponent("restore-journal.json")
         let database = try HistoryDatabase(url: support.appendingPathComponent("strap-history-v18.sqlite"))
         func destination(_ path: String) -> URL {

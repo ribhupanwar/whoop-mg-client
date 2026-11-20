@@ -183,7 +183,7 @@ enum ActivityDetect {
             // Preserve existing behavior for HR-only cardio workouts.
             let motionIndices = (start..<end).filter { measuredMotion[$0] }
             let motionEnd = motionIndices.count >= startSustainS
-                ? (motionIndices.last! + 1) : end
+                ? ((motionIndices.last ?? end) + 1) : end
             let run = Array(ordered[start..<motionEnd])
 
             guard run[run.count - 1].unix - run[0].unix + 1 >= minimumDurationS else { continue }
@@ -242,7 +242,8 @@ enum ActivityDetect {
                     steps: steps,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
-                    runTicks: runTicks
+                    runTicks: runTicks,
+                    maxHR: run.map(\.heartRate).max()
                 )
             )
         }

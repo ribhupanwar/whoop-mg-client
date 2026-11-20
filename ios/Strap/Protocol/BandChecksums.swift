@@ -12,6 +12,14 @@ enum BandChecksums {
         return value
     }
 
+    private static let crc16Table: [UInt16] = (0..<256).map { index in
+        var value = UInt16(index)
+        for _ in 0..<8 {
+            value = (value & 1) == 1 ? (value >> 1) ^ 0xA001 : value >> 1
+        }
+        return value
+    }
+
     /// CRC-32 (zlib polynomial, reflected, init/xorout 0xFFFFFFFF).
     static func crc32(_ bytes: ArraySlice<UInt8>) -> UInt32 {
         var crc: UInt32 = 0xFFFF_FFFF
@@ -26,13 +34,12 @@ enum BandChecksums {
     }
 
     /// CRC-16/MODBUS: reflected poly 0xA001, init 0xFFFF, no xorout.
+    /// Evaluated via precomputed 256-entry table for O(1) single-cycle byte processing.
     static func crc16Modbus(_ bytes: ArraySlice<UInt8>) -> UInt16 {
         var crc: UInt16 = 0xFFFF
         for byte in bytes {
-            crc ^= UInt16(byte)
-            for _ in 0..<8 {
-                crc = (crc & 1) == 1 ? (crc >> 1) ^ 0xA001 : crc >> 1
-            }
+            let index = Int((crc ^ UInt16(byte)) & 0xFF)
+            crc = (crc >> 8) ^ crc16Table[index]
         }
         return crc
     }

@@ -105,7 +105,12 @@ enum SleepDetect {
             // trim the false early onset to the first sustained band sleep
             // declaration instead. Keep the rest of the night available.
             var verifiedStart = run[0].unix
-            if (8..<24).contains(startHour) {
+            // Only daytime/evening rest before 22:00 needs a positive five-minute
+            // band-sleep declaration. The device's coarse state=2 may lag true
+            // overnight sleep onset by minutes. Overnight 22:00–07:59 quiet
+            // candidates already require worn, observed, low-HR evidence above;
+            // advancing to state=2 must not discard that measured prefix.
+            if daytime {
                 let sleepRows = run.filter {
                     $0.sleepState == 2 && $0.wearing && (35...220).contains($0.heartRate)
                 }
@@ -199,7 +204,8 @@ enum SleepDetect {
             if let upStart, upSeconds >= 300 {
                 verifiedEnd = upStart - 1
             } else if let terminalUp = run.last(where: { $0.sleepState == 3 }),
-                      run.last!.unix - terminalUp.unix <= 60 {
+                      let lastSample = run.last,
+                      lastSample.unix - terminalUp.unix <= 60 {
                 // A fresh terminal band-up transition corroborates wake, but
                 // cannot alone establish when waking began. Require sustained
                 // elevated HR AND motion relative to the preceding resting

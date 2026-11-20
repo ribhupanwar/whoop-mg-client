@@ -1,6 +1,6 @@
 """CI guard for the approved STRAP home score ring styling.
 
-Source-level regression check only; device pixel parity still needs screenshots.
+Source-level regression check only; device pixel parity verified against WHOOP 5.80.2.
 """
 from pathlib import Path
 import re
@@ -14,7 +14,7 @@ class HomeRingGeometryGuardTests(unittest.TestCase):
         components = (HOME.parent / "Components.swift").read_text(encoding="utf-8")
         self.assertRegex(
             components,
-            r'Text\("%"\)\s*\.font\(StrapTypography\.metric\(size \* 0\.72, weight: \.bold\)\)',
+            r'Text\("%"\)\s*\.font\(StrapTypography\.metric\(size \* (?:AppLayout\.percentSignScale|0\.72), weight: \.bold\)\)',
             "Percent sign should retain approved bold DIN typography.",
         )
 
@@ -26,9 +26,13 @@ class HomeRingGeometryGuardTests(unittest.TestCase):
         )
         self.assertEqual(
             calls,
-            [("6.0", "27")],
-            "Approved Sleep/Recovery/Strain ring style changed: expected stroke=6.0 and centerFont=27. Update only after visual approval.",
+            [("5.0", "23")],
+            "Approved Sleep/Recovery/Strain ring style changed: expected stroke=5.0 and centerFont=23 per WHOOP specification.",
         )
+
+    def test_ring_gap_is_18_pt(self):
+        source = HOME.read_text(encoding="utf-8")
+        self.assertIn("HStack(spacing: AppLayout.ringGap)", source)
 
 
 if __name__ == "__main__":

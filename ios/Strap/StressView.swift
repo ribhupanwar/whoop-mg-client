@@ -109,9 +109,10 @@ struct StressView: View {
     }
 
     private func stressTimeLabels(_ series: [StressPoint]) -> [String] {
+        guard let first = series.first, let last = series.last else { return [] }
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm"
-        let stamps = [series.first!.unix, series[series.count / 2].unix, series.last!.unix]
+        let stamps = [first.unix, series[series.count / 2].unix, last.unix]
         return stamps.map { formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0))) }
     }
 

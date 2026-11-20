@@ -46,8 +46,8 @@ enum PersistenceDiagnostics {
         var errorDescription: String? { message }
     }
     static func inventory(_ values: [String: Any]) -> [RecordInventory] {
-        values.keys.sorted().map { key in
-            var decoded: Any = values[key]!
+        values.keys.sorted().compactMap { key in
+            guard var decoded = values[key] else { return nil }
             var status = "property list"
             if let data = decoded as? Data {
                 if let json = try? JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) {

@@ -894,7 +894,7 @@ final class SleepDetectTests: XCTestCase {
 
     func testLateEveningOnsetRequiresSustainedBandEvidence() {
         let bedtime = Calendar.current.date(
-            bySettingHour: 22, minute: 18, second: 0, of: Date()
+            bySettingHour: 21, minute: 18, second: 0, of: Date()
         )!
         let start = Int(bedtime.timeIntervalSince1970)
         var rows = stretch(start, 600, hr: 100, accel: 0.5)
