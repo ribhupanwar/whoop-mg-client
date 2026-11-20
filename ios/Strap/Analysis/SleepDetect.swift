@@ -324,7 +324,81 @@ enum SleepDetect {
                 )
             )
         }
-        return periods
+        return mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
+    }
+
+    private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {
+        let startHour = Calendar.current.component(
+            .hour, from: Date(timeIntervalSince1970: TimeInterval(period.startUnix))
+        )
+        let endHour = Calendar.current.component(
+            .hour, from: Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+        )
+        // Nocturnal sleep starts in the evening (>= 20) or overnight/early morning (< 8),
+        // or extends into the morning hours (<= 12).
+        return startHour >= 20 || startHour < 8 || endHour <= 12
+    }
+
+    /// Merges consecutive nocturnal sleep candidates separated by a brief
+    /// awakening (e.g. bathroom break, hydration, or restless wakefulness <= 30 minutes)
+    /// into a single continuous overnight sleep session, preserving the awakening as
+    /// in-bed awake time for downstream staging.
+    static func mergeNocturnalPeriods(
+        _ periods: [SleepPeriod],
+        samples: [V18Sample],
+        quietAccelG: Double = SleepDetect.quietAccelG,
+        maxAwakeningGapS: Int = 30 * 60,
+        maxCombinedSleepS: Int = maxSleepS
+    ) -> [SleepPeriod] {
+        guard periods.count > 1 else { return periods }
+        var merged: [SleepPeriod] = []
+        var current = periods[0]
+
+        for next in periods.dropFirst() {
+            let gap = next.startUnix - current.endUnix - 1
+            let combinedEnd = max(current.endUnix, next.endUnix)
+            let combinedSpan = combinedEnd - current.startUnix + 1
+
+            let isNocturnal = isNocturnalPeriod(current) && isNocturnalPeriod(next)
+
+            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
+            let wornDuringGap: Bool
+            if gapSamples.isEmpty {
+                wornDuringGap = true
+            } else {
+                let wornCount = gapSamples.filter { $0.wearing }.count
+                wornDuringGap = Double(wornCount) / Double(gapSamples.count) >= 0.60
+            }
+
+            // A sustained active workout (e.g. >= 180s of HR >= 90 and accel >= 0.15g) is not
+            // an in-bed nocturnal awakening or bathroom break.
+            let activeWorkoutDuringGap = gapSamples.filter {
+                ($0.dynamicAccelG ?? 0) >= 0.15 && Double($0.heartRate) >= 90
+            }.count >= 180
+
+            if isNocturnal && gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap && !activeWorkoutDuringGap {
+                let allIndices = samples.filter { current.startUnix <= $0.unix && $0.unix <= combinedEnd }
+                let quietCount = allIndices.filter { sample in
+                    guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
+                    return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
+                }.count
+                let validHRs = allIndices.compactMap {
+                    $0.wearing && (35...220).contains($0.heartRate) ? Double($0.heartRate) : nil
+                }
+                current = SleepPeriod(
+                    startUnix: current.startUnix,
+                    endUnix: combinedEnd,
+                    quietFraction: Double(quietCount) / Double(max(1, allIndices.count)),
+                    meanHR: Stats.mean(validHRs),
+                    wakeEvents: current.wakeEvents + next.wakeEvents + 1
+                )
+            } else {
+                merged.append(current)
+                current = next
+            }
+        }
+        merged.append(current)
+        return merged
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {
