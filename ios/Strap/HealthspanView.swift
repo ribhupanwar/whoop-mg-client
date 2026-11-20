@@ -16,6 +16,7 @@ struct HealthspanView: View {
     @State private var points: [HealthspanPoint] = []
     @State private var window = 30
     @State private var snapshot: FitnessAgeSnapshot?
+    @State private var baselineCoverage = (restingNights: 0, stepDays: 0)
     private func makeSnapshot() -> FitnessAgeSnapshot? {
         guard !store.isPreview else {
             return FitnessAgeSnapshot(years: 25, chronologicalYears: 30, restingHeartRate: 54,
@@ -134,7 +135,13 @@ struct HealthspanView: View {
     private var readiness: some View {
         Panel {
             CardHead(title: "Build your baseline")
-            Text("Confirm your age and sex, then record at least four resting-HR nights, four days of steps and one workout within seven days.")
+            Text("Rolling seven-day window")
+                .font(StrapTypography.body(13, weight: .semibold))
+            baselineRow("Resting heart rate nights", observed: baselineCoverage.restingNights,
+                        required: FitnessAgeModel.minRestingNights)
+            baselineRow("Days with steps", observed: baselineCoverage.stepDays,
+                        required: FitnessAgeModel.minCapturedDays)
+            Text("The estimate also requires a confirmed profile and an eligible workout of at least 10 minutes with recorded heart rate.")
                 .font(StrapTypography.body(13)).foregroundStyle(Color.appMuted)
             NavigationLink(value: Route.settings) {
                 Label("Review your profile", systemImage: "person.crop.circle")
@@ -142,9 +149,21 @@ struct HealthspanView: View {
             }.buttonStyle(.plain)
         }
     }
+    private func baselineRow(_ title: String, observed: Int, required: Int) -> some View {
+        ProgressView(value: Double(min(observed, required)), total: Double(required)) {
+            Text(title)
+        } currentValueLabel: {
+            Text("\(observed) recorded · \(required) needed")
+        }
+        .font(StrapTypography.body(12))
+        .tint(healthspanMint)
+        .padding(.vertical, 4)
+    }
+
     @MainActor private func rebuildTrend() async {
         snapshot = makeSnapshot()
         let days = store.band.days
+        baselineCoverage = FitnessAgeModel.baselineCoverage(days: days)
         let live = store.liveActivities
         let detected = store.detectedBandActivities
         let age = store.settings.age

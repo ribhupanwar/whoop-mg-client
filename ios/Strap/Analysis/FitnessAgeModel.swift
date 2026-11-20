@@ -78,6 +78,35 @@ enum FitnessAgeModel {
         return frequency * intensity * duration
     }
 
+    static func baselineCoverage(days: [DayMetrics], asOf: Date = Date()) -> (restingNights: Int, stepDays: Int) {
+        guard let window = measurementWindow(ending: asOf) else { return (0, 0) }
+        let result = measuredCoverage(days: days, from: window.startKey, through: window.endKey)
+        return (result.resting.count, result.stepDays)
+    }
+
+    private static func measuredCoverage(days: [DayMetrics], from startKey: String, through endKey: String)
+        -> (resting: [Double], stepDays: Int) {
+        let captured = days.filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
+        let resting = captured.compactMap { day -> Double? in
+            guard day.state == "sleep", let hr = day.restingHR,
+                  hr.isFinite, (35...110).contains(hr) else { return nil }
+            return hr
+        }
+        return (resting, captured.filter { $0.steps != nil }.count)
+    }
+
+    private static func measurementWindow(ending asOf: Date)
+        -> (firstDay: Date, today: Date, startKey: String, endKey: String, formatter: DateFormatter)? {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: asOf)
+        guard let firstDay = calendar.date(byAdding: .day, value: -6, to: today) else { return nil }
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return (firstDay, today, formatter.string(from: firstDay), formatter.string(from: today), formatter)
+    }
+
     /// Require a populated 7-day window rather than confusing a failed band
     /// sync with a sedentary week. Only measured RHR is accepted; overrides
     /// and design-preview samples never feed this calculation.
@@ -91,32 +120,18 @@ enum FitnessAgeModel {
         asOf: Date = Date()
     ) -> FitnessAgeSnapshot? {
         guard ageConfirmed, sex != .unspecified else { return nil }
-        let calendar = Calendar.current
-        let today = calendar.startOfDay(for: asOf)
-        guard let firstDay = calendar.date(byAdding: .day, value: -6, to: today) else {
-            return nil
-        }
-        let formatter = DateFormatter()
-        formatter.calendar = calendar
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "yyyy-MM-dd"
-        let startKey = formatter.string(from: firstDay)
-        let endKey = formatter.string(from: today)
-        let captured = days.filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
-        let resting = captured.compactMap { day -> Double? in
-            guard day.state == "sleep", let hr = day.restingHR,
-                  hr.isFinite, (35...110).contains(hr) else { return nil }
-            return hr
-        }
-        let capturedSteps = captured.filter { $0.steps != nil }.count
+        guard let window = measurementWindow(ending: asOf) else { return nil }
+        let coverage = measuredCoverage(days: days, from: window.startKey, through: window.endKey)
+        let resting = coverage.resting
+        let capturedSteps = coverage.stepDays
         guard resting.count >= minRestingNights, capturedSteps >= minCapturedDays else {
             return nil
         }
         let medianRHR = Stats.median(resting)
         let predictedMaxHR = 208.0 - 0.7 * Double(age)
         guard predictedMaxHR > medianRHR + 30 else { return nil }
-        let cutoff = Int(firstDay.timeIntervalSince1970)
-        let end = Int((calendar.date(byAdding: .day, value: 1, to: today)
+        let cutoff = Int(window.firstDay.timeIntervalSince1970)
+        let end = Int((Calendar.current.date(byAdding: .day, value: 1, to: window.today)
                        ?? asOf).timeIntervalSince1970)
         var sessions: [(start: Int, minutes: Double, highMinutes: Double)] = []
         let acceptedDetected = detected.filter {
@@ -151,7 +166,7 @@ enum FitnessAgeModel {
         }
         guard !sessions.isEmpty else { return nil }
         let exerciseDays = Set(sessions.map {
-            formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0.start)))
+            window.formatter.string(from: Date(timeIntervalSince1970: TimeInterval($0.start)))
         }).count
         let totalMinutes = sessions.reduce(0.0) { $0 + $1.minutes }
         guard totalMinutes > 0 else { return nil }

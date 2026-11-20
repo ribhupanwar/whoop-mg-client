@@ -2,6 +2,11 @@
 
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
+## Issue #83 Healthspan
+
+- [ ] Verify the native Healthspan baseline progress bars against saved observations. The bars and the fitness-age model share a rolling seven-day window and eligibility filters for resting-HR nights and days with steps.
+- [ ] Biological age and a milestone countdown require a supported model and evidence. The available reference archive shows only the locked Healthspan card.
+
 ## Phase 1–12 current implementation matrix (2026-11-19)
 - [x] **DONE (code/tests/CI, 2026-11-20):** Multi-PR Reconciliation and Integration across PRs #62, #65, #67, #68, #70 into `main` (commit with PR #69 preserved):
   - **PR #67:** Incidental workout prevention, walk/run cadence gates, and clear explanations for missing calorie inputs.
