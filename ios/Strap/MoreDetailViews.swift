@@ -223,7 +223,6 @@ struct ConnectionSyncView: View {
         .padding(.vertical, 2)
     }
 }
-}
 
 // MARK: - 2. Band Alarms View
 
