@@ -20,7 +20,7 @@ final class MoreTabHardeningTests: XCTestCase {
     }
 
     func testReconnectStateFormatting() {
-        let status = BandLink.Status.reconnecting(attempt: 3)
+        let status = BandStatus.reconnecting(attempt: 3)
         XCTAssertEqual(status.title, "Reconnecting (attempt 3)…")
         XCTAssertFalse(status.isConnected)
 
