@@ -1,0 +1,752 @@
+[
+  {
+    "term": "setAlarmInfo",
+    "offset": "0xa3bfa35",
+    "vmaddr": "0x10a3bfa35",
+    "string": "setAlarmInfo"
+  },
+  {
+    "term": "getAlarmInfo",
+    "offset": "0xa3bfa42",
+    "vmaddr": "0x10a3bfa42",
+    "string": "getAlarmInfo"
+  },
+  {
+    "term": "runAlarm",
+    "offset": "0x9ab6a8f",
+    "vmaddr": "0x109ab6a8f",
+    "string": "runAlarmCount"
+  },
+  {
+    "term": "runAlarm",
+    "offset": "0x9ab6aa2",
+    "vmaddr": "0x109ab6aa2",
+    "string": "runAlarmResult"
+  },
+  {
+    "term": "runAlarm",
+    "offset": "0xa3adde0",
+    "vmaddr": "0x10a3adde0",
+    "string": "runAlarm"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x98a0e10",
+    "vmaddr": "0x1098a0e10",
+    "string": "disableAlarm(with:)"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x98a6260",
+    "vmaddr": "0x1098a6260",
+    "string": "disableAlarmGen4()"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x98a6380",
+    "vmaddr": "0x1098a6380",
+    "string": "disableAlarmGen5()"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x98a6a20",
+    "vmaddr": "0x1098a6a20",
+    "string": "disableAlarm(smartAlarmUserInfo:completion:)"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x98a6d10",
+    "vmaddr": "0x1098a6d10",
+    "string": "disableAlarmOnStrap()"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x9a7af30",
+    "vmaddr": "0x109a7af30",
+    "string": "disableAlarmCount"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0x9a7af50",
+    "vmaddr": "0x109a7af50",
+    "string": "disableAlarmResult"
+  },
+  {
+    "term": "disableAlarm",
+    "offset": "0xa3adde9",
+    "vmaddr": "0x10a3adde9",
+    "string": "disableAlarm"
+  },
+  {
+    "term": "alarmSchedule",
+    "offset": "0x9894e61",
+    "vmaddr": "0x109894e61",
+    "string": "alarmSchedule"
+  },
+  {
+    "term": "alarmSchedule",
+    "offset": "0x9a60d70",
+    "vmaddr": "0x109a60d70",
+    "string": "alarmScheduleLogic"
+  },
+  {
+    "term": "alarmSchedule",
+    "offset": "0xa459e10",
+    "vmaddr": "0x10a459e10",
+    "string": "alarmScheduleNavigationFix"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x913c660",
+    "vmaddr": "0x10913c660",
+    "string": "#\u0001&\u0001WHPBLECommandManager"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x9777076",
+    "vmaddr": "0x109777076",
+    "string": "BLE - WHPBLECommandManager asked to send an unidentified command type:"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x97770f7",
+    "vmaddr": "0x1097770f7",
+    "string": "/Users/distiller/project/Whoop/Code/BLE/CommandManager/WHPBLECommandManager.swift"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x9777856",
+    "vmaddr": "0x109777856",
+    "string": "Whoop.WHPBLECommandManager"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x99ea32c",
+    "vmaddr": "0x1099ea32c",
+    "string": "_TtC5Whoop20WHPBLECommandManager"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x9a4d44f",
+    "vmaddr": "0x109a4d44f",
+    "string": "T@\"_TtC5Whoop20WHPBLECommandManager\",N,R"
+  },
+  {
+    "term": "WHPBLECommandManager",
+    "offset": "0x9ae9d68",
+    "vmaddr": "0x109ae9d68",
+    "string": "@\"_TtC5Whoop20WHPBLECommandManager\""
+  },
+  {
+    "term": "toggleHeartRateBroadcast",
+    "offset": "0xa3bf740",
+    "vmaddr": "0x10a3bf740",
+    "string": "toggleHeartRateBroadcast"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x97646a1",
+    "vmaddr": "0x1097646a1",
+    "string": "CBCentralManager willRestoreState"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x97646d1",
+    "vmaddr": "0x1097646d1",
+    "string": "CBCentralManager willRestoreState - Paired Peripheral:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764711",
+    "vmaddr": "0x109764711",
+    "string": "CBCentralManager willRestoreState - Restored State - Scan Services:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764761",
+    "vmaddr": "0x109764761",
+    "string": "CBCentralManager willRestoreState - Restored State - Scan Options:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764951",
+    "vmaddr": "0x109764951",
+    "string": "CBCentralManager willRestoreState - CBCentralManagerRestoredStatePeripheralsKey is nil"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x97649b1",
+    "vmaddr": "0x1097649b1",
+    "string": "CBCentralManager willRestoreState - Current Peripheral does not match none of the Restored Pe"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764a21",
+    "vmaddr": "0x109764a21",
+    "string": "CBCentralManager willRestoreState - Restored State Peripheral:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764a61",
+    "vmaddr": "0x109764a61",
+    "string": "CBCentralManager willRestoreState - Peripherals:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764aa1",
+    "vmaddr": "0x109764aa1",
+    "string": "CBCentralManager willRestoreState - Restored State - Peripherals:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764af1",
+    "vmaddr": "0x109764af1",
+    "string": "CBCentralManager willRestoreState - Ignoring restored peripehrals as the paired peripheral id"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764b61",
+    "vmaddr": "0x109764b61",
+    "string": "CBCentralManager willRestoreState - Peripheral with identifier matching paired peripheral ide"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9764bd1",
+    "vmaddr": "0x109764bd1",
+    "string": "CBCentralManager willRestoreState - None of the restored peripehrals match paired peripheral"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9765d21",
+    "vmaddr": "0x109765d21",
+    "string": "CBCentralManager willRestoreState - Trying restore and connect"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0x9a6d6df",
+    "vmaddr": "0x109a6d6df",
+    "string": "centralManager:willRestoreState:"
+  },
+  {
+    "term": "willRestoreState",
+    "offset": "0xbff773d",
+    "vmaddr": "0x10bff773d",
+    "string": "\ufffd\u02ae\u0003willRestoreStateySo09CBCentralF0C_SDySSypGtF"
+  },
+  {
+    "term": "CBCentralManagerRestoredState",
+    "offset": "0xb8dbe81",
+    "vmaddr": "0x10b8dbe81",
+    "string": "_CBCentralManagerRestoredStatePeripheralsKey"
+  },
+  {
+    "term": "CBCentralManagerRestoredState",
+    "offset": "0xb8dbeae",
+    "vmaddr": "0x10b8dbeae",
+    "string": "_CBCentralManagerRestoredStateScanOptionsKey"
+  },
+  {
+    "term": "CBCentralManagerRestoredState",
+    "offset": "0xb8dbedb",
+    "vmaddr": "0x10b8dbedb",
+    "string": "_CBCentralManagerRestoredStateScanServicesKey"
+  },
+  {
+    "term": "RestoreIdentifierKey",
+    "offset": "0xb8dbe42",
+    "vmaddr": "0x10b8dbe42",
+    "string": "_CBCentralManagerOptionRestoreIdentifierKey"
+  },
+  {
+    "term": "autoConnect",
+    "offset": "0xb918c8f",
+    "vmaddr": "0x10b918c8f",
+    "string": "_$s7Combine20ConnectablePublisherPAAE11autoconnectAA10PublishersO11AutoconnectCy_xGyF"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x98c5d60",
+    "vmaddr": "0x1098c5d60",
+    "string": "batteryLevelAboveThreshold"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x99d7615",
+    "vmaddr": "0x1099d7615",
+    "string": "batteryLevel is unknown."
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a375a0",
+    "vmaddr": "0x109a375a0",
+    "string": "T@\"UIView\",N,W,VbatteryLevelBackgroundView"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a48b40",
+    "vmaddr": "0x109a48b40",
+    "string": "T@\"UIView\",N,W,VbatteryLevelFillView"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a52600",
+    "vmaddr": "0x109a52600",
+    "string": "Tf,N,V_batteryLevel"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a52b26",
+    "vmaddr": "0x109a52b26",
+    "string": "Tq,N,VbatteryLevel"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a54f53",
+    "vmaddr": "0x109a54f53",
+    "string": "_batteryLevel"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67e78",
+    "vmaddr": "0x109a67e78",
+    "string": "batteryLevel"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67e90",
+    "vmaddr": "0x109a67e90",
+    "string": "batteryLevelBackgroundView"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67eb0",
+    "vmaddr": "0x109a67eb0",
+    "string": "batteryLevelDomainState"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67ed0",
+    "vmaddr": "0x109a67ed0",
+    "string": "batteryLevelFillView"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67ef0",
+    "vmaddr": "0x109a67ef0",
+    "string": "batteryLevelMetricsReporter"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67f10",
+    "vmaddr": "0x109a67f10",
+    "string": "batteryLevelResponse"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a67f30",
+    "vmaddr": "0x109a67f30",
+    "string": "batteryLevelSubject"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9a9cb15",
+    "vmaddr": "0x109a9cb15",
+    "string": "logSleepCoachOpenEventWithLabelSource:value:batteryLevel:"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9b21ebe",
+    "vmaddr": "0x109b21ebe",
+    "string": "Si12batteryLevel_t"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9f62b61",
+    "vmaddr": "0x109f62b61",
+    "string": "\u0002#\u0003=\u0001y_\u0002\u0004\u0001=\u0001y_\u0002\ufffd\u0002=\u0001y_\u0002\ufffd\u0006=\u0001y\u0002`C;\u0001\u0002cF=\u0001G\u0002\u0005D;\u0001GSiGSiSg12batteryLevel_Sb20turnedToFullyChargedtG"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9f62bc3",
+    "vmaddr": "0x109f62bc3",
+    "string": "=\u0001y_\u0002\ufffd\u0002=\u0001y_AAy_\u0002S\u0002=\u0001y_\u0002<\u0006=\u0001y\u0002\ufffdB;\u0001\u0002\u0001F=\u0001G\u0002\ufffdC;\u0001GSiGSiSg12batteryLevel_Sb20turnedToFullyChargedtGSiG"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9f62ca8",
+    "vmaddr": "0x109f62ca8",
+    "string": "SiSg12batteryLevel_Sb20turnedToFullyChargedt"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9f62d45",
+    "vmaddr": "0x109f62d45",
+    "string": "\u0002\u0011\ufffd<\u000111triggerDate_Si12batteryLevelt"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0x9f62eb9",
+    "vmaddr": "0x109f62eb9",
+    "string": "\u0002\ufffd~<\u00018fireDate_Si12batteryLevelSS11analyticsIdt"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa067977",
+    "vmaddr": "0x10a067977",
+    "string": "\u0002Q\ufffd*\u00016status_SS16batteryLevelTextt"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa189be2",
+    "vmaddr": "0x10a189be2",
+    "string": "SiSg12batteryLevel_SSSg15firmwareVersiont"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa1a14a5",
+    "vmaddr": "0x10a1a14a5",
+    "string": "\u0002up\u0017\u00016device_SiSg17batteryLevelValue\u0002\u0011o\u0017\u0001Sg17adjustmentContentt"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa3c47a0",
+    "vmaddr": "0x10a3c47a0",
+    "string": "batteryLevelFailedToParse"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa3c4c30",
+    "vmaddr": "0x10a3c4c30",
+    "string": "batteryLevelInTenthsOfPercent"
+  },
+  {
+    "term": "batteryLevel",
+    "offset": "0xa3c4ed0",
+    "vmaddr": "0x10a3c4ed0",
+    "string": "batteryLevelInTenthsOfPercentFailedToParse"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0x98c5938",
+    "vmaddr": "0x1098c5938",
+    "string": "onBatteryLowEvent(level:chargingStatus:)"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0x98c59d2",
+    "vmaddr": "0x1098c59d2",
+    "string": "performLowBatteryProcessing(level:chargingStatus:)"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0x99add39",
+    "vmaddr": "0x1099add39",
+    "string": "isher] - Strap comms established, got first vitals state... chargingStatus:"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0x9a4f706",
+    "vmaddr": "0x109a4f706",
+    "string": "TB,N,VchargingStatus"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0x9a6ddf8",
+    "vmaddr": "0x109a6ddf8",
+    "string": "chargingStatus"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xa3c47c0",
+    "vmaddr": "0x10a3c47c0",
+    "string": "chargingStatusFailedToParse"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xa3cc9d0",
+    "vmaddr": "0x10a3cc9d0",
+    "string": "chargingStatusRaw"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc2cadd",
+    "vmaddr": "0x10bc2cadd",
+    "string": "\u0002chargingStatusAA0c8ChargingG0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc2cec8",
+    "vmaddr": "0x10bc2cec8",
+    "string": "\u000214chargingStatus5epoch012serialNumberE07version14strapSignature14hardwareFam"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc2eb18",
+    "vmaddr": "0x10bc2eb18",
+    "string": "\u0002chargingStatusAA0c8ChargingH0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3373a",
+    "vmaddr": "0x10bc3373a",
+    "string": "\u00020G7Voltage0G9ChargerOn14chargingStatusACs6UInt32V_AIS2btcfC"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc339d4",
+    "vmaddr": "0x10bc339d4",
+    "string": "\ufffd\u03fd\u0001chargingStatusSbSgv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc33a68",
+    "vmaddr": "0x10bc33a68",
+    "string": "\ufffd\u043d\u00017chargingStatusRaws5UInt8Vv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc33ca0",
+    "vmaddr": "0x10bc33ca0",
+    "string": "\u00020G7Voltage0G9ChargerOn14chargingStatus15timeToEmptyMins0qrS5Hours0qrS4Days0qr4FullT00qrwU00qrwV0AC"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc33fe5",
+    "vmaddr": "0x10bc33fe5",
+    "string": "\ufffd\u06bd\u0001chargingStatusSbSgv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc341b3",
+    "vmaddr": "0x10bc341b3",
+    "string": "\u0002chargingStatusRaws5UInt8Vv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc381c8",
+    "vmaddr": "0x10bc381c8",
+    "string": "\u000214chargingStatus12serialNumber11versionHash14strapSignature14hardwareFamily1"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc38600",
+    "vmaddr": "0x10bc38600",
+    "string": "\u0003chargingStatusAA0c8ChargingG0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3d1c9",
+    "vmaddr": "0x10bc3d1c9",
+    "string": "\ufffd\ufffd\ufffd\u00014chargingStatusAC0cde8ChargingG0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3dc12",
+    "vmaddr": "0x10bc3dc12",
+    "string": "\u000214chargingStatus12epochSeconds03subK012serialNumber11versionHash14strapSigna"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3eb5f",
+    "vmaddr": "0x10bc3eb5f",
+    "string": "\u000214chargingStatus12epochSeconds03subL012serialNumber11versionHash14strapSigna"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3f086",
+    "vmaddr": "0x10bc3f086",
+    "string": "\u0003chargingStatusAA0c8ChargingH0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc3fdce",
+    "vmaddr": "0x10bc3fdce",
+    "string": "\u0002chargingStatusAA0c8ChargingI0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc5c5c4",
+    "vmaddr": "0x10bc5c5c4",
+    "string": "\u0002chargingStatusSbSgv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbc60bc5",
+    "vmaddr": "0x10bc60bc5",
+    "string": "\ufffd\ufffd\ufffd\u0001chargingStatusSbSgv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbd8a404",
+    "vmaddr": "0x10bd8a404",
+    "string": "\u000214chargingStatus0g7ChargerF005wristjF0AcA0c7BatteryheF0O_AA0c8ChargingjeF0OA"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbd8a4b9",
+    "vmaddr": "0x10bd8a4b9",
+    "string": "\u0224\ufffd\u00024chargingStatusAA0c8ChargingheF0Ov"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbd8cf15",
+    "vmaddr": "0x10bd8cf15",
+    "string": "\ufffd\ufffd\ufffd\u00024chargingStatusSbSgv"
+  },
+  {
+    "term": "chargingStatus",
+    "offset": "0xbd8cf64",
+    "vmaddr": "0x10bd8cf64",
+    "string": "\u000212batteryLevel14chargingStatus0J16ChargerConnected7onWristAcA0bcI0V_SiSgSbSgA2LtcfC"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0x9a2ecde",
+    "vmaddr": "0x109a2ecde",
+    "string": "firmwareVersion"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa189b0b",
+    "vmaddr": "0x10a189b0b",
+    "string": "\u0002\ufffd\u0019\u00014type_SSSg15firmwareVersiont"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa189b86",
+    "vmaddr": "0x10a189b86",
+    "string": "SSSg10deviceName_SiSg17batteryPercentageAA15firmwareVersiont"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c46b0",
+    "vmaddr": "0x10a3c46b0",
+    "string": "firmwareVersionRaw"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c48a0",
+    "vmaddr": "0x10a3c48a0",
+    "string": "firmwareVersionFailedToParse"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c4d00",
+    "vmaddr": "0x10a3c4d00",
+    "string": "firmwareVersionMajor"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c4d20",
+    "vmaddr": "0x10a3c4d20",
+    "string": "firmwareVersionMinor"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c4d40",
+    "vmaddr": "0x10a3c4d40",
+    "string": "firmwareVersionPoint"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c4d60",
+    "vmaddr": "0x10a3c4d60",
+    "string": "firmwareVersionExtra"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c5000",
+    "vmaddr": "0x10a3c5000",
+    "string": "firmwareVersionMajorFailedToParse"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c5030",
+    "vmaddr": "0x10a3c5030",
+    "string": "firmwareVersionMinorFailedToParse"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c5060",
+    "vmaddr": "0x10a3c5060",
+    "string": "firmwareVersionPointFailedToParse"
+  },
+  {
+    "term": "firmwareVersion",
+    "offset": "0xa3c5090",
+    "vmaddr": "0x10a3c5090",
+    "string": "firmwareVersionExtraFailedToParse"
+  },
+  {
+    "term": "getSerialNumber",
+    "offset": "0xa3bf6b2",
+    "vmaddr": "0x10a3bf6b2",
+    "string": "getSerialNumber"
+  },
+  {
+    "term": "reportVersionInfo",
+    "offset": "0xa3bf6a0",
+    "vmaddr": "0x10a3bf6a0",
+    "string": "reportVersionInfo"
+  },
+  {
+    "term": "reportHardwareInfo",
+    "offset": "0xa3bf680",
+    "vmaddr": "0x10a3bf680",
+    "string": "reportHardwareInfo"
+  },
+  {
+    "term": "hapticPattern",
+    "offset": "0xa3d6880",
+    "vmaddr": "0x10a3d6880",
+    "string": "hapticPattern"
+  },
+  {
+    "term": "runHapticsPattern",
+    "offset": "0x9787579",
+    "vmaddr": "0x109787579",
+    "string": "StrapHapticsBLEManager - runHapticsPattern | We could not find the response with sequence number:"
+  },
+  {
+    "term": "runHapticsPattern",
+    "offset": "0x9ab6af0",
+    "vmaddr": "0x109ab6af0",
+    "string": "runHapticsPatternResponseList"
+  },
+  {
+    "term": "runHapticsPattern",
+    "offset": "0xa3bfae0",
+    "vmaddr": "0x10a3bfae0",
+    "string": "runHapticsPattern"
+  },
+  {
+    "term": "stopHaptics",
+    "offset": "0x9ad58e0",
+    "vmaddr": "0x109ad58e0",
+    "string": "stopHapticsCount"
+  },
+  {
+    "term": "stopHaptics",
+    "offset": "0xa3bfd64",
+    "vmaddr": "0x10a3bfd64",
+    "string": "stopHaptics"
+  },
+  {
+    "term": "calibrateCapsense",
+    "offset": "0xa3bfbe0",
+    "vmaddr": "0x10a3bfbe0",
+    "string": "calibrateCapsense"
+  },
+  {
+    "term": "rebootStrap",
+    "offset": "0xa3add25",
+    "vmaddr": "0x10a3add25",
+    "string": "rebootStrap"
+  },
+  {
+    "term": "powerCycleStrap",
+    "offset": "0xa3bf92d",
+    "vmaddr": "0x10a3bf92d",
+    "string": "powerCycleStrap"
+  }
+]

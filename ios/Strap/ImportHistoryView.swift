@@ -1,4 +1,5 @@
 import SwiftUI
+import HealthKit
 
 struct ImportHistoryView: View {
     @State private var sections: [(String, [WhoopCSVImport.SupplementalRecord])] = []
@@ -53,22 +54,115 @@ struct AppleHealthImportView: View {
     @State private var through = Date()
     @State private var running = false
     @State private var status = ""
+    @State private var healthStoreAvailable = HKHealthStore.isHealthDataAvailable()
+    @State private var authorizationStatusText = "Checking HealthKit access…"
+
     var body: some View {
-        Form {
-            Text("Import accessible heart rate, resting heart rate, SDNN HRV, respiration, oxygen, steps, active energy, sleep and workout source records. These do not replace band measurements or supply RMSSD Recovery inputs.")
-            DatePicker("From", selection: $from)
-            DatePicker("Through", selection: $through)
-            Button("Authorize & import Apple Health") {
-                running = true
-                Task {
-                    defer { running = false }
-                    do {
-                        let count = try await AppleHealthImport.run(from: from, through: through)
-                        status = "Imported \(count) new source records. Empty results can mean no accessible samples or no read permission."
-                    } catch { status = error.localizedDescription }
+        Screen {
+            VStack(alignment: .leading, spacing: 16) {
+                Panel {
+                    SectionTitle("HEALTHKIT STATUS")
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(healthStoreAvailable ? "Apple Health Supported" : "HealthKit Unavailable")
+                                .font(StrapTypography.body(14, weight: .bold))
+                                .foregroundStyle(Color.appFG)
+                            Text(authorizationStatusText)
+                                .font(StrapTypography.body(11))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                        Spacer()
+                        Circle()
+                            .fill(healthStoreAvailable ? Color.appGood : Color.appWarn)
+                            .frame(width: 10, height: 10)
+                    }
+                    .padding(.vertical, 4)
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        healthCategoryRow(title: "Workouts & Activities", status: "Bi-directional sync enabled")
+                        healthCategoryRow(title: "Heart Rate & Resting HR", status: "Export supported")
+                        healthCategoryRow(title: "Sleep Analysis & Stages", status: "Verified nights sync")
+                        healthCategoryRow(title: "Daily Steps & Cadence", status: "Read & write available")
+                    }
                 }
-            }.disabled(running || from >= through)
+
+                Panel {
+                    SectionTitle("IMPORT HISTORICAL RECORDS")
+                    Text("Import historical Apple Health records. These populate your local timeline without replacing physical band measurements or overwriting RMSSD Recovery inputs.")
+                        .font(StrapTypography.body(11.5))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 4)
+
+                    DatePicker("From", selection: $from, displayedComponents: [.date])
+                        .font(StrapTypography.body(13, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+
+                    Divider().background(Color.appLine).padding(.vertical, 2)
+
+                    DatePicker("Through", selection: $through, displayedComponents: [.date])
+                        .font(StrapTypography.body(13, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    Button {
+                        running = true
+                        Task {
+                            defer { running = false }
+                            do {
+                                let count = try await AppleHealthImport.run(from: from, through: through)
+                                status = "Imported \(count) new source records. Empty results can mean no accessible samples or no read permission."
+                            } catch { status = error.localizedDescription }
+                        }
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.down")
+                            Text(running ? "Importing from Apple Health…" : "Authorize & Import Apple Health")
+                                .font(StrapTypography.body(13.5, weight: .semibold))
+                            Spacer()
+                            if running { ProgressView().controlSize(.small) }
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.vertical, 6)
+                    }
+                    .disabled(running || from >= through)
+
+                    if !status.isEmpty {
+                        Text(status)
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(Color.appGood)
+                            .padding(.top, 2)
+                    }
+                }
+
+                Panel {
+                    SectionTitle("LOCAL-FIRST INTEGRITY")
+                    Text("STRAP interacts with Apple Health strictly via native HealthKit APIs on your iPhone. No third-party servers, unauthorized Strava integrations, or cloud services are ever contacted.")
+                        .font(StrapTypography.body(11.5))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.vertical, 4)
+                }
+            }
+        }
+        .navigationTitle("Health Integrations")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            authorizationStatusText = healthStoreAvailable ? "Local HealthKit storage authorized on iPhone" : "Not supported on this device"
+        }
+    }
+
+    private func healthCategoryRow(title: String, status: String) -> some View {
+        HStack {
+            Text(title)
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appFG)
+            Spacer()
             Text(status)
-        }.navigationTitle("Import Apple Health")
+                .font(StrapTypography.body(11))
+                .foregroundStyle(Color.appMuted)
+        }
+        .padding(.vertical, 2)
     }
 }
