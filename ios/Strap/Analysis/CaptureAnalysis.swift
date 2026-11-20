@@ -96,10 +96,16 @@ struct CaptureSummary: Codable, Equatable {
         let restingWindow = Hrv.restingHRV(ordered)
 
         let periods = SleepDetect.detect(ordered)
-        // Nighttime resting HR is not exercise load. Exclude detected sleep
-        // windows before integrating awake training impulse.
+        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
+                                            cache: analysisCache, progress: sleepProgress)
+        // Sleep duration, nightly biometrics and awake load must share the
+        // canonical edited bounds. The measurements remain sensor-derived.
+        let canonicalPeriods = sessions.map {
+            SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                        quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+        }
         let awakeSamples = ordered.filter { sample in
-            !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+            !canonicalPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
         }
         var strain: Double?
         if let maxHR, let resting, maxHR > resting {
@@ -107,22 +113,24 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
-                                            cache: analysisCache, progress: sleepProgress)
         let staging = sessions.last?.staging
-        let activities = ActivityDetect.detect(ordered, sleepPeriods: periods)
-        let sleepWindows = periods.map { (start: $0.startUnix, end: $0.endUnix) }
+        let activities = ActivityDetect.detect(ordered, sleepPeriods: canonicalPeriods)
+        let sleepWindows = canonicalPeriods.map { (start: $0.startUnix, end: $0.endUnix) }
         let workoutWindows = sleepWindows + activities.map { (start: $0.startUnix, end: $0.endUnix) }
         let stressSeries = StressWindows.series(
             samples: ordered, baseline: awakeBaseline, excluded: sleepWindows
         )
 
+        let firstUnix = ordered.first?.unix
+        let lastUnix = ordered.last?.unix
+        let span = (firstUnix != nil && lastUnix != nil) ? max(0, lastUnix! - firstUnix!) : 0
+
         return CaptureSummary(
             sampleCount: ordered.count,
             wearingCount: wearing.count,
-            firstUnix: ordered.first?.unix,
-            lastUnix: ordered.last?.unix,
-            spanSeconds: ordered.last!.unix - ordered.first!.unix,
+            firstUnix: firstUnix,
+            lastUnix: lastUnix,
+            spanSeconds: span,
             lastHeartRate: ordered.last(where: { $0.wearing })?.heartRate,
             heartRateMin: heartRates.min().map { Int($0) },
             heartRateMax: heartRates.max().map { Int($0) },
@@ -173,9 +181,26 @@ enum DailyAnalysis {
         guard !ordered.isEmpty else { return [] }
 
         var byDay: [String: [V18Sample]] = [:]
+        var currentDayKey = ""
+        var currentDayStartUnix = Int.max
+        var currentDayEndUnix = Int.min
+
         for sample in ordered {
-            let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
-            byDay[JournalStore.dayKey(for: date, calendar: calendar), default: []].append(sample)
+            if sample.unix >= currentDayStartUnix && sample.unix < currentDayEndUnix {
+                byDay[currentDayKey, default: []].append(sample)
+            } else {
+                let date = Date(timeIntervalSince1970: TimeInterval(sample.unix))
+                let key = JournalStore.dayKey(for: date, calendar: calendar)
+                currentDayKey = key
+                if let interval = calendar.dateInterval(of: .day, for: date) {
+                    currentDayStartUnix = Int(interval.start.timeIntervalSince1970)
+                    currentDayEndUnix = Int(interval.end.timeIntervalSince1970)
+                } else {
+                    currentDayStartUnix = sample.unix
+                    currentDayEndUnix = sample.unix + 1
+                }
+                byDay[key, default: []].append(sample)
+            }
         }
         let sleepSessions = analyzedSleepSessions ?? SleepSession.makeAll(
             samples: ordered, periods: SleepDetect.detect(ordered), overrides: sleepCorrections
@@ -405,10 +430,12 @@ enum DailyAnalysis {
     /// Explicit user edits may change the bounds even when old raw data has expired.
     static func replacesSleep(
         previous: DayMetrics, fresh: DayMetrics, coverageStart: Int?, coverageEnd: Int?,
-        isEdited: Bool = false
+        isEdited: Bool = false,
+        previousIsEdited: Bool = false
     ) -> Bool {
         guard fresh.sleepDurationReliable != nil else { return false }
         if isEdited && fresh.sleepStartUnix != nil { return true }
+        if previousIsEdited && !isEdited { return false }
         guard let start = previous.sleepStartUnix, let end = previous.sleepEndUnix else {
             return fresh.sleepStartUnix != nil
         }
