@@ -378,6 +378,52 @@ final class BandLink: NSObject, ObservableObject {
         }.value
     }
 
+    /// Export the exact retained samples and metrics for a specific workout window.
+    /// Used for controlled dual-band gym trials against WHOOP reference devices.
+    func exportWorkoutDiagnostics(session: DetectedActivitySession) async throws -> URL {
+        let lookback = 60
+        let lookahead = 60
+        let (candidateStart, underflow) = session.startUnix.subtractingReportingOverflow(lookback)
+        let archiveStart = underflow ? Int.min : candidateStart
+        let (candidateEnd, overflow) = session.endUnix.addingReportingOverflow(lookahead)
+        let archiveEnd = overflow ? Int.max : candidateEnd
+
+        let archiveRows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
+            archiveWriter.samples(from: archiveStart, through: archiveEnd) { result in
+                continuation.resume(with: result)
+            }
+        }
+        let samples = HistoricalCaptureRecovery.merged(retainedHistoricalSamples + archiveRows)
+            .values.sorted { $0.unix < $1.unix }
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("workout-exports", isDirectory: true)
+        
+        let summary = WorkoutDiagnostics.WorkoutSummary(
+            activityKind: session.kind,
+            startUnix: session.startUnix,
+            endUnix: session.endUnix,
+            meanHR: session.meanHR,
+            maxHR: session.maxHR,
+            workoutStrain: session.strain,
+            dayStrain: nil,
+            activeKcal: nil,
+            steps: session.steps,
+            detectionConfidence: "HIGH",
+            detectionReason: "ELEVATED_HR_PERSISTENT_MOTION",
+            firmwareVersion: deviceFirmwareVersion ?? "50.42.1.0",
+            decoderVersion: "V18-Gen5"
+        )
+        return try await Task.detached(priority: .utility) {
+            try WorkoutDiagnostics.write(
+                samples: samples,
+                summary: summary,
+                directory: directory,
+                preActivitySeconds: lookback,
+                postActivitySeconds: lookahead
+            )
+        }.value
+    }
+
     private var historicalArchiveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("strap-history-v18.json")

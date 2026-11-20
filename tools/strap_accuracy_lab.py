@@ -35,6 +35,7 @@ from whoop.accuracy import (
     SensorQualityMonitor,
     WhoopStrapComparator,
     WireImpairmentConfig,
+    DualBandGymComparator,
 )
 from whoop.records import V18Sample
 
@@ -204,6 +205,66 @@ def cmd_monitor(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_gym_compare(args: argparse.Namespace) -> int:
+    """Execute controlled dual-band gym workout comparison."""
+    if not os.path.exists(args.strap_csv):
+        print(f"Error: STRAP CSV not found: {args.strap_csv}", file=sys.stderr)
+        return 1
+    if not os.path.exists(args.whoop_csv):
+        print(f"Error: WHOOP CSV not found: {args.whoop_csv}", file=sys.stderr)
+        return 1
+
+    with open(args.strap_csv, "r", encoding="utf-8", errors="replace") as f:
+        strap_csv_content = f.read()
+
+    with open(args.whoop_csv, "r", encoding="utf-8", errors="replace") as f:
+        whoop_csv_content = f.read()
+
+    comparator = DualBandGymComparator()
+    strap_telem = comparator.parse_strap_workout_csv(strap_csv_content)
+    whoop_telem = comparator.parse_whoop_workout_stream(
+        whoop_csv_content,
+        activity_kind=args.activity,
+        start_unix=strap_telem.start_unix,
+        end_unix=strap_telem.end_unix,
+        whoop_strain=args.whoop_strain,
+        whoop_kcal=args.whoop_kcal,
+    )
+
+    res = comparator.compare(strap_telem, whoop_telem)
+    md_report = comparator.generate_markdown_report(res)
+
+    print("\n" + md_report)
+
+    if args.output_md:
+        with open(args.output_md, "w", encoding="utf-8") as f:
+            f.write(md_report)
+        print(f"[OK] Markdown report saved to: {args.output_md}")
+
+    if args.output_json:
+        result_dict = {
+            "activity_kind": res.activity_kind,
+            "duration_seconds": res.duration_seconds,
+            "hr_mae": res.hr_mae,
+            "hr_rmse": res.hr_rmse,
+            "hr_pearson_r": res.hr_pearson_r,
+            "optimal_lag_seconds": res.optimal_lag_seconds,
+            "strap_mean_hr": res.strap_mean_hr,
+            "whoop_mean_hr": res.whoop_mean_hr,
+            "mean_hr_delta": res.mean_hr_delta,
+            "strap_max_hr": res.strap_max_hr,
+            "whoop_max_hr": res.whoop_max_hr,
+            "max_hr_delta": res.max_hr_delta,
+            "strain_delta": res.strain_delta,
+            "is_parity_acceptable": res.is_parity_acceptable,
+        }
+        with open(args.output_json, "w", encoding="utf-8") as f:
+            json.dump(result_dict, f, indent=2)
+        print(f"[OK] JSON comparison saved to: {args.output_json}")
+
+    return 0 if res.is_parity_acceptable else 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="STRAP WHOOP Accuracy Lab, Sensor Validation & BLE Replay Engine"
@@ -236,6 +297,16 @@ def main() -> int:
     p_mon.add_argument("--input", required=True, help="Path to STRAP sensor CSV file")
     p_mon.add_argument("--expected-seconds", type=float, help="Expected duration in seconds")
 
+    # Subcommand: gym-compare
+    p_gym = subparsers.add_parser("gym-compare", help="Controlled dual-band gym trial comparison")
+    p_gym.add_argument("--strap-csv", required=True, help="Path to STRAP workout export CSV")
+    p_gym.add_argument("--whoop-csv", required=True, help="Path to WHOOP workout HR stream CSV")
+    p_gym.add_argument("--activity", default="Weightlifting", help="Activity name")
+    p_gym.add_argument("--whoop-strain", type=float, help="Official WHOOP workout strain")
+    p_gym.add_argument("--whoop-kcal", type=float, help="Official WHOOP active calories")
+    p_gym.add_argument("--output-md", help="Path to save Markdown comparison report")
+    p_gym.add_argument("--output-json", help="Path to save JSON comparison result")
+
     args = parser.parse_args()
 
     if args.command == "compare":
@@ -244,6 +315,8 @@ def main() -> int:
         return cmd_replay(args)
     elif args.command == "monitor":
         return cmd_monitor(args)
+    elif args.command == "gym-compare":
+        return cmd_gym_compare(args)
 
     return 0
 

@@ -75,6 +75,32 @@ struct SettingsView: View {
     private var profilePanel: some View {
         Panel {
             SectionTitle("Profile")
+            fieldRow(label: "Name") {
+                TextField("Ribhu", text: $store.settings.userName)
+                    .focused($profileEditing)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(StrapTypography.body(15))
+                    .foregroundStyle(Color.appFG)
+                    .frame(width: 120)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+            }
+            fieldRow(label: "Initials") {
+                TextField("RP", text: $store.settings.userInitials)
+                    .focused($profileEditing)
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(StrapTypography.body(15))
+                    .foregroundStyle(Color.appFG)
+                    .frame(width: 60)
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 8)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+            }
             fieldRow(label: "Age") {
                 HStack(spacing: 6) {
                 TextField("30", value: $store.settings.age, format: .number)

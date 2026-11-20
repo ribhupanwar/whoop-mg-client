@@ -111,6 +111,18 @@ class WhoopUIParityTests(unittest.TestCase):
         self.assertIn('"STRAP · WHOOP Client"', home_src)
         # Ensure hardcoded approximate "STRAP" text heading is replaced
         self.assertNotIn('Text("STRAP")\n                    .font', home_src.replace("\r\n", "\n"))
+        # Ensure user initials avatar and personalized greeting title
+        self.assertIn("userInitials", home_src)
+        self.assertIn("outlookTitle", home_src)
+
+    def test_workout_diagnostics_exporter_present(self):
+        diag_path = IOS_DIR / "Analysis" / "WorkoutDiagnostics.swift"
+        self.assertTrue(diag_path.is_file(), "WorkoutDiagnostics.swift must exist in ios/Strap/Analysis")
+        diag_src = diag_path.read_text(encoding="utf-8")
+        self.assertIn("enum WorkoutDiagnostics", diag_src)
+        self.assertIn("static func csv(", diag_src)
+        self.assertIn("heart_rate_bpm", diag_src)
+        self.assertIn("is_workout_epoch", diag_src)
 
     def test_device_settings_hardware_and_quarantine(self):
         home_src = (IOS_DIR / "HomeView.swift").read_text(encoding="utf-8")

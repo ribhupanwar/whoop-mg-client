@@ -76,6 +76,8 @@ enum DashboardRow: String, Codable, CaseIterable, Identifiable {
 /// Persisted user settings. Defaults match the spec: age 30, sleep need 8 h,
 /// wake 07:00, design preview OFF (live mode never invents a value).
 struct AppSettings: Codable, Equatable {
+    var userName: String = "Ribhu"
+    var userInitials: String = "RP"
     var age: Int = 30
     /// Default age is only a placeholder until the wearer confirms it.
     var ageConfirmed: Bool = false
@@ -99,6 +101,7 @@ struct AppSettings: Codable, Equatable {
     var hiddenDashboardRows: [DashboardRow] = []
 
     enum CodingKeys: String, CodingKey {
+        case userName, userInitials
         case age, ageConfirmed, sex, restingHROverride, maxHROverride
         case weightKG, heightCM
         case sleepNeedHours, wakeTimeMinutes, sleepIntent, designPreview
@@ -112,6 +115,8 @@ struct AppSettings: Codable, Equatable {
     /// instead of falling back to every default.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        userName = try container.decodeIfPresent(String.self, forKey: .userName) ?? "Ribhu"
+        userInitials = try container.decodeIfPresent(String.self, forKey: .userInitials) ?? "RP"
         age = try container.decodeIfPresent(Int.self, forKey: .age) ?? 30
         ageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .ageConfirmed) ?? false
         sex = try container.decodeIfPresent(Sex.self, forKey: .sex) ?? .unspecified

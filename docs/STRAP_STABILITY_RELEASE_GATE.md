@@ -51,9 +51,11 @@ Based on direct side-by-side telemetry comparison on Thursday:
 ```
 
 ### Why Strain Differed (11.4 vs 1.0):
-1. **Activity Detection Isolation:**
-   - In WHOOP, the user performed a **24-minute Dance activity (8:01 AM - 8:25 AM)** which accumulated **9.1 strain**, plus an **Other session (6:58 AM - 7:12 AM)**.
-   - In STRAP, automatic workout classification did not trigger for the dance activity, meaning the day's strain only accumulated from background sedentary heart rates (1.0).
+1. **Activity Detection & Dual-Band Context:**
+   - **User Confirmation:** The user confirmed that the STRAP band was **not worn during the gym workout** on Thursday. Consequently, STRAP recorded only resting sedentary baseline heart rate ($1.0\text{ strain}$).
+   - In WHOOP, the band was worn during the workout and recorded two sessions: `OTHER` (14 min, 0.0 strain) and `DANCE` (24 min, **9.1 strain**).
+   - Once the workout is captured, Karvonen reserve integration directly aligns $1.0\text{ (sedentary)} + 9.1\text{ (workout)} + \text{daily drift} = 11.4\text{ day strain}$.
+   - **Controlled Dual-Band Gym Trial (21 Nov 2026):** To evaluate exact strength-training parity under identical physical exertion, STRAP has been equipped with a dedicated `WorkoutDiagnostics.swift` telemetry exporter and `tools/strap_accuracy_lab.py gym-compare` validation engine.
 2. **Heart Rate Reserve Integration:**
    - WHOOP integrates Karvonen heart-rate reserve exponentially:
      $$\text{Reserve} = \frac{\text{HR} - \text{RHR}}{(\text{MaxHR} + 3.0) - \text{RHR}}$$

@@ -30,6 +30,12 @@ from .report import (
     generate_svg_hypnogram,
     generate_svg_metric_bars,
 )
+from .gym_comparison import (
+    DualBandGymComparator,
+    DualBandGymComparisonResult,
+    GymSample,
+    WorkoutTelemetry,
+)
 
 __all__ = [
     "AccuracyReportGenerator",
@@ -40,8 +46,11 @@ __all__ = [
     "Diagnosis",
     "DiagnosticStatus",
     "DiscrepancyCategory",
+    "DualBandGymComparator",
+    "DualBandGymComparisonResult",
     "GHIDRA_EVIDENCE_REGISTRY",
     "GhidraEvidence",
+    "GymSample",
     "MetricComparison",
     "QualityReport",
     "ReplayStats",
@@ -49,6 +58,7 @@ __all__ = [
     "SensorQualityMonitor",
     "WhoopStrapComparator",
     "WireImpairmentConfig",
+    "WorkoutTelemetry",
     "generate_svg_hypnogram",
     "generate_svg_metric_bars",
     "parse_timestamp",

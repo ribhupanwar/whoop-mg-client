@@ -26,6 +26,24 @@ struct HomeView: View {
 
     private var demo: Bool { store.isPreview }
 
+    private var userInitials: String {
+        let trimmed = store.settings.userInitials.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty { return trimmed }
+        let name = store.settings.userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        let parts = name.split(separator: " ")
+        if parts.count >= 2, let first = parts.first?.first, let last = parts.last?.first {
+            return "\(first)\(last)".uppercased()
+        } else if let first = name.first {
+            return String(first).uppercased()
+        }
+        return "RP"
+    }
+
+    private var outlookTitle: String {
+        let name = store.settings.userName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? "Your Daily Outlook" : "\(name)'s Daily Outlook"
+    }
+
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
@@ -179,11 +197,12 @@ struct HomeView: View {
     private var topBar: some View {
         HStack(spacing: 10) {
             NavigationLink(value: Route.settings) {
-                Image(systemName: "person.fill").font(StrapTypography.body(17))
+                Text(userInitials)
+                    .font(StrapTypography.body(13, weight: .bold))
                     .foregroundStyle(Color.appBG).frame(width: 32, height: 32)
                     .background(LinearGradient(colors: [Color(hex: 0x80F5DE), Color(hex: 0x51BADB)],
                                                startPoint: .topLeading, endPoint: .bottomTrailing), in: Circle())
-            }.buttonStyle(.plain).accessibilityLabel("Profile and settings")
+            }.buttonStyle(.plain).accessibilityLabel("Profile and settings for \(userInitials)")
             HStack(spacing: 4) {
                 Image(systemName: "flame.fill").foregroundStyle(Color.orange)
                 Text("\(appOpenDays)").font(StrapTypography.metric(14, weight: .bold))
@@ -557,7 +576,7 @@ struct HomeView: View {
                     Image(systemName: "sun.max")
                         .font(.system(size: 16))
                         .foregroundStyle(Color(hex: 0xC59F7A))
-                    Text("Your Daily Outlook")
+                    Text(outlookTitle)
                         .font(StrapTypography.body(13.5, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Spacer()
@@ -637,14 +656,14 @@ struct HomeView: View {
                     }
                 }
                 if demo {
-                    activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
-                    activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands")
-                    activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push")
-                    activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
+                    activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2", score: "9.4", timeRange: "08:15\n08:57")
+                    activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands", score: "3.2", timeRange: "12:10\n12:38")
+                    activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push", score: "11.2", timeRange: "17:30\n18:25")
+                    activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured", score: "0.0", timeRange: "19:00\n19:15")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            activityRow(icon: row.icon, name: row.name, detail: row.detail, score: row.score, timeRange: row.timeRangeText)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -671,7 +690,7 @@ struct HomeView: View {
                     // Manual entries have a date but no recorded start time.
                     // Keep them separate rather than inventing a clock time.
                     ForEach(manualRows, id: \.id) { row in
-                        activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                        activityRow(icon: row.icon, name: row.name, detail: row.detail, score: row.score, timeRange: row.timeRangeText)
                             .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
                             .contentShape(Rectangle())
                             .contextMenu {
@@ -729,6 +748,8 @@ struct HomeView: View {
         let icon: String
         let name: String
         let detail: String
+        let score: String?
+        let timeRangeText: String?
         let startUnix: Int?
     }
 
@@ -745,6 +766,15 @@ struct HomeView: View {
         return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))–\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
     }
 
+    private static func clockRangeVertical(_ start: Int, _ end: Int) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        let s = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start)))
+        let e = formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end)))
+        return "\(s)\n\(e)"
+    }
+
     private var selectedDayKey: String {
         JournalStore.dayKey(for: shiftedDate)
     }
@@ -756,13 +786,17 @@ struct HomeView: View {
             let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
             let kcal = store.activeKcal(for: session).map { " · \(Int($0.rounded())) kcal" } ?? ""
             let strainText = session.strain.map { " · Strain \(String(format: "%.1f", $0))" } ?? ""
+            let scoreStr = session.strain.map { String(format: "%.1f", $0) } ?? "0.0"
+            let timeRange = Self.clockRangeVertical(session.startUnix, session.endUnix)
             let key = "band-\(session.startUnix)"
             let corrected = correctedLabels[key].flatMap(ActivityKind.init(rawValue:))
             return ActivityRowModel(
                 id: key,
                 icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
+                detail: "\(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
+                score: scoreStr,
+                timeRangeText: timeRange,
                 startUnix: session.startUnix
             )
         }
@@ -773,11 +807,14 @@ struct HomeView: View {
             let minutes = Int(record.minutes.rounded())
             let heart = record.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
             let kcal = store.activeKcal(for: record).map { " · \(Int($0.rounded())) kcal" } ?? ""
+            let timeRange = Self.clockRangeVertical(record.startedUnix, record.endedUnix)
             return ActivityRowModel(
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
+                detail: "\(minutes) min\(heart)\(kcal)",
+                score: "—",
+                timeRangeText: timeRange,
                 startUnix: record.startedUnix
             )
         }
@@ -790,6 +827,8 @@ struct HomeView: View {
                 icon: activity.kind.icon,
                 name: "\(activity.name) · logged",
                 detail: activity.summary,
+                score: "—",
+                timeRangeText: nil,
                 startUnix: nil
             )
         }
@@ -818,12 +857,12 @@ struct HomeView: View {
         }
     }
 
-    private func activityRow(icon: String, name: String, detail: String) -> some View {
+    private func activityRow(icon: String, name: String, detail: String, score: String? = nil, timeRange: String? = nil) -> some View {
         HStack(spacing: 11) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .medium))
-                Text(activityScore(name, detail))
+                Text(score ?? activityScore(name, detail))
                     .font(StrapTypography.metric(14, weight: .bold))
             }
             .foregroundStyle(Color.appFG)
@@ -839,10 +878,24 @@ struct HomeView: View {
                 .tracking(0.6)
                 .foregroundStyle(Color.appFG)
             Spacer(minLength: 8)
-            Text(detail)
-                .font(StrapTypography.metric(11, weight: .medium))
-                .foregroundStyle(Color.appMuted)
-                .multilineTextAlignment(.trailing)
+            if let timeRange, !timeRange.isEmpty {
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(timeRange)
+                        .font(StrapTypography.metric(11, weight: .medium))
+                        .foregroundStyle(Color.appMuted)
+                        .multilineTextAlignment(.trailing)
+                    if !detail.isEmpty {
+                        Text(detail)
+                            .font(StrapTypography.body(9))
+                            .foregroundStyle(Color.appMuted.opacity(0.8))
+                    }
+                }
+            } else {
+                Text(detail)
+                    .font(StrapTypography.metric(11, weight: .medium))
+                    .foregroundStyle(Color.appMuted)
+                    .multilineTextAlignment(.trailing)
+            }
             RoundedRectangle(cornerRadius: 1.5)
                 .fill(Color.appAccent)
                 .frame(width: 3, height: 26)
