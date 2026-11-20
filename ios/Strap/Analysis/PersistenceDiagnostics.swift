@@ -83,12 +83,19 @@ enum PersistenceDiagnostics {
     }
     // Explicit data keys only: never export arbitrary strap.* tokens/credentials.
     static func permittedKey(_ key: String) -> Bool {
-        let exact: Set<String> = ["strap.days.v1", "strap.capture.summary.v1", "strap.sleep.analysis.v1",
+        let exact: Set<String> = [
+            "strap.days.v1", "strap.capture.summary.v1", "strap.sleep.analysis.v1",
             "strap.live.rr.samples.v1", "strap.history.retained.count.v1", "strap.history.lastComplete.v1",
-            SleepCorrectionStore.defaultsKey, "strap.settings.v1", "strap.activities.v1", "strap.journal.entries.v1", "strap.live.sessions.v1", "strap.detected.activities.v1",
+            SleepCorrectionStore.defaultsKey, "strap.settings.v1", "strap.activities.v1", "strap.journal.entries.v1",
+            "strap.live.sessions.v1", "strap.detected.activities.v1",
             "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1",
-            WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1", "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
-            "strap.wake.alarm.minutes.v1", "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"]
+            WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1",
+            "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
+            "strap.wake.alarm.minutes.v1", "strap.wake.alarm.schedule.v1",
+            "strap.preferences.useMetric", "strap.preferences.use24HourTime",
+            "strap.notifications.bedtimeReminders", "strap.notifications.targetAlerts",
+            "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"
+        ]
         return exact.contains(key) || ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains { key == "strap.whoop.import." + $0 + ".v1" }
     }
 

@@ -48,16 +48,40 @@ struct ConnectionSyncView: View {
                             .foregroundStyle(Color.appFG)
                     }
 
-                    if let syncDate = store.band.lastHistorySyncAt {
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    HStack {
+                        Text("Last History Sync")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appMuted)
+                        Spacer()
+                        Text(store.band.lastHistorySyncAt?.formatted(date: .abbreviated, time: .shortened) ?? "No sync recorded yet")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(store.band.lastHistorySyncAt != nil ? Color.appFG : Color.appMuted)
+                    }
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    HStack {
+                        Text("History Processing")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appMuted)
+                        Spacer()
+                        Text(pendingDataDescription)
+                            .font(StrapTypography.body(12, weight: .semibold))
+                            .foregroundStyle(store.band.isAnalyzingHistory || store.band.status == .draining ? Color.appAccent : Color.appFG)
+                    }
+
+                    if case .reconnecting(let attempt) = store.band.status {
                         Divider().background(Color.appLine).padding(.vertical, 4)
                         HStack {
-                            Text("Last History Sync")
+                            Text("Reconnect Attempt")
                                 .font(StrapTypography.body(12, weight: .medium))
-                                .foregroundStyle(Color.appMuted)
+                                .foregroundStyle(Color.appWarn)
                             Spacer()
-                            Text(syncDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(StrapTypography.body(12))
-                                .foregroundStyle(Color.appFG)
+                            Text("Attempt \(attempt) · Backoff \(Int(ReconnectBackoffPolicy.delay(forAttempt: attempt)))s")
+                                .font(StrapTypography.metric(11, weight: .semibold))
+                                .foregroundStyle(Color.appWarn)
                         }
                     }
                 }
@@ -163,10 +187,54 @@ struct ConnectionSyncView: View {
                         .padding(.vertical, 4)
                     }
                 }
+
+                Panel {
+                    SectionTitle("STREAM INTEGRITY & PACKET ERRORS")
+                    VStack(alignment: .leading, spacing: 6) {
+                        metricDiagnosticsRow("Packet Gap Drops", value: "\(store.band.packetGapCount)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Duplicate Packets", value: "\(store.band.duplicatePacketCount)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Undecodable Frames", value: "\(store.band.historyUndecodableFrames)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Live Packets Processed", value: "\(store.band.type40HRPackets + store.band.standardHRPackets)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("History Records With R-R Data", value: "\(store.band.historyRRRecords)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Sync Stream Error", value: store.band.historySyncError ?? "No error recorded")
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
         .navigationTitle("Connection & Sync")
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var pendingDataDescription: String {
+        if store.band.isAnalyzingHistory || store.band.isSavingHistory {
+            if let p = store.band.historyProgress, p.total > 0 {
+                return p.detail(now: Date())
+            }
+            return "Analyzing history…"
+        } else if store.band.status == .draining {
+            return "Draining flash frames…"
+        } else {
+            return "Idle · band backlog unknown"
+        }
+    }
+
+    private func metricDiagnosticsRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+            Spacer()
+            Text(value)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+        }
+        .padding(.vertical, 2)
     }
 }
 
@@ -1009,7 +1077,7 @@ struct DiagnosticsSupportView: View {
                     Divider().background(Color.appLine)
                     infoRow("Live RR Packets Processed", value: "\(store.band.type40RRPackets + store.band.standardRRPackets)")
                     Divider().background(Color.appLine)
-                    infoRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
+                    infoRow("History Records With R-R Data", value: "\(store.band.historyRRRecords)")
                 }
 
                 // Section 4: Sensor Feeds

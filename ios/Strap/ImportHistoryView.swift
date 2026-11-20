@@ -56,6 +56,11 @@ struct AppleHealthImportView: View {
     @State private var status = ""
     @State private var healthStoreAvailable = HKHealthStore.isHealthDataAvailable()
     @State private var authorizationStatusText = "Checking HealthKit access…"
+    @State private var workoutAuth = "Checking…"
+    @State private var hrAuth = "Checking…"
+    @State private var sleepAuth = "Checking…"
+    @State private var stepsAuth = "Checking…"
+    private let healthStore = HKHealthStore()
 
     var body: some View {
         Screen {
@@ -81,10 +86,10 @@ struct AppleHealthImportView: View {
                     Divider().background(Color.appLine).padding(.vertical, 4)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        healthCategoryRow(title: "Workouts & Activities", status: "Bi-directional sync enabled")
-                        healthCategoryRow(title: "Heart Rate & Resting HR", status: "Export supported")
-                        healthCategoryRow(title: "Sleep Analysis & Stages", status: "Verified nights sync")
-                        healthCategoryRow(title: "Daily Steps & Cadence", status: "Read & write available")
+                        healthCategoryRow(title: "Workouts & Activities", status: workoutAuth)
+                        healthCategoryRow(title: "Heart Rate & Resting HR", status: hrAuth)
+                        healthCategoryRow(title: "Sleep Analysis & Stages", status: sleepAuth)
+                        healthCategoryRow(title: "Daily Steps & Cadence", status: stepsAuth)
                     }
                 }
 
@@ -114,6 +119,7 @@ struct AppleHealthImportView: View {
                             do {
                                 let count = try await AppleHealthImport.run(from: from, through: through)
                                 status = "Imported \(count) new source records. Empty results can mean no accessible samples or no read permission."
+                                updateAuthStatuses()
                             } catch { status = error.localizedDescription }
                         }
                     } label: {
@@ -139,7 +145,7 @@ struct AppleHealthImportView: View {
 
                 Panel {
                     SectionTitle("LOCAL-FIRST INTEGRITY")
-                    Text("STRAP interacts with Apple Health strictly via native HealthKit APIs on your iPhone. No third-party servers, unauthorized Strava integrations, or cloud services are ever contacted.")
+                    Text("STRAP interacts with Apple Health strictly via native HealthKit APIs on your iPhone. Workouts are exported with unique external UUIDs for deduplication. No third-party servers or unauthorized cloud services are ever contacted.")
                         .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
                         .padding(.vertical, 4)
@@ -149,7 +155,44 @@ struct AppleHealthImportView: View {
         .navigationTitle("Health Integrations")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
-            authorizationStatusText = healthStoreAvailable ? "Local HealthKit storage authorized on iPhone" : "Not supported on this device"
+            updateAuthStatuses()
+        }
+    }
+
+    private func updateAuthStatuses() {
+        guard healthStoreAvailable else {
+            authorizationStatusText = "HealthKit not supported on this device"
+            workoutAuth = "Unavailable"
+            hrAuth = "Unavailable"
+            sleepAuth = "Unavailable"
+            stepsAuth = "Unavailable"
+            return
+        }
+        authorizationStatusText = "Write permissions · Apple Health manages read access"
+        workoutAuth = authLabel(for: HKObjectType.workoutType())
+        if let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) {
+            hrAuth = authLabel(for: hrType)
+        } else {
+            hrAuth = "Not Supported"
+        }
+        if let sleepType = HKObjectType.categoryType(forIdentifier: .sleepAnalysis) {
+            sleepAuth = authLabel(for: sleepType)
+        } else {
+            sleepAuth = "Not Supported"
+        }
+        if let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) {
+            stepsAuth = authLabel(for: stepType)
+        } else {
+            stepsAuth = "Not Supported"
+        }
+    }
+
+    private func authLabel(for objectType: HKObjectType) -> String {
+        switch healthStore.authorizationStatus(for: objectType) {
+        case .sharingAuthorized: return "Write allowed"
+        case .sharingDenied: return "Write denied"
+        case .notDetermined: return "Write access undecided"
+        @unknown default: return "Unknown"
         }
     }
 
@@ -160,9 +203,17 @@ struct AppleHealthImportView: View {
                 .foregroundStyle(Color.appFG)
             Spacer()
             Text(status)
-                .font(StrapTypography.body(11))
-                .foregroundStyle(Color.appMuted)
+                .font(StrapTypography.body(11, weight: .semibold))
+                .foregroundStyle(statusColor(status))
         }
         .padding(.vertical, 2)
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "Write allowed": return Color.appGood
+        case "Write denied": return Color.appWarn
+        default: return Color.appMuted
+        }
     }
 }

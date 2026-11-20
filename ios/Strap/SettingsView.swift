@@ -27,6 +27,7 @@ struct SettingsView: View {
                 strapPanel
                 overridesPanel
                 sleepPanel
+                baselinePanel
                 healthPanel
                 spo2ResearchPanel
                 whoopImportPanel
@@ -466,6 +467,76 @@ struct SettingsView: View {
                 store.settings.wakeTimeMinutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
             }
         )
+    }
+
+    // MARK: Baseline & Calibration Progress
+
+    private var baselinePanel: some View {
+        let requiredNights = Recovery.minBaselineDays
+        let rollingWindow = DailyAnalysis.rollingBaselineDays
+        let eligibleNights = store.band.days.filter { $0.state == "sleep" }
+            .suffix(rollingWindow)
+            .filter { $0.lnRMSSD != nil && $0.restingHR != nil }
+            .count
+        return Panel {
+            SectionTitle("Baseline & Calibration")
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("\(rollingWindow)-Day Rolling Baseline")
+                        .font(StrapTypography.body(13, weight: .semibold))
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Text("\(eligibleNights) qualifying nights")
+                        .font(StrapTypography.metric(13, weight: .bold))
+                        .foregroundStyle(Color.appAccent)
+                }
+
+                ProgressView(value: Double(min(eligibleNights, rollingWindow)), total: Double(rollingWindow))
+                    .tint(Color.appAccent)
+
+                HStack {
+                    Text(eligibleNights >= requiredNights
+                        ? "Minimum night coverage met"
+                        : "Initial coverage: \(eligibleNights)/\(requiredNights) nights")
+                        .font(StrapTypography.body(11, weight: .medium))
+                        .foregroundStyle(eligibleNights >= requiredNights ? Color.appGood : Color.appWarn)
+                    Spacer()
+                }
+
+                Divider().background(Color.appLine).padding(.vertical, 2)
+
+                Text("METRIC REQUIREMENTS & GAPS")
+                    .font(StrapTypography.metric(10, weight: .bold))
+                    .foregroundStyle(Color.appMuted)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    metricRequirementRow(
+                        metric: "Recovery & Overnight HRV",
+                        requirement: "Uses qualifying overnight heart-rate data and earlier baseline nights. Missing measurements appear as gaps."
+                    )
+                    metricRequirementRow(
+                        metric: "Daytime Stress",
+                        requirement: "Derived from awake quiet R-R intervals. Pauses automatically during active motion or recorded workouts."
+                    )
+                    metricRequirementRow(
+                        metric: "Active Calorie Burn",
+                        requirement: "Estimates energy from eligible recorded activities and available profile inputs."
+                    )
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func metricRequirementRow(metric: String, requirement: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(metric)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+            Text(requirement)
+                .font(StrapTypography.body(10.5))
+                .foregroundStyle(Color.appMuted)
+        }
     }
 
     // MARK: Apple Health
