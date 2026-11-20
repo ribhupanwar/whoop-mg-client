@@ -6,11 +6,15 @@ import SwiftUI
 struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.scenePhase) private var scenePhase
     let openPlan: () -> Void
 
+    @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
+    @State private var showWakeSchedule = false
+    @State private var nextWake = WakeAlarm.nextWakeDate()
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
     @State private var correctedKind: ActivityKind = .other
@@ -38,6 +42,7 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
+                if dayOffset == 0 { tonightCard }
                 activitiesCard
                 journalCard
                 planCard
@@ -48,6 +53,24 @@ struct HomeView: View {
         }
         .onAppear {
             AppOpenDayTracker.recordOpen()
+            appStreak = AppOpenStreak.stored().current
+            nextWake = WakeAlarm.nextWakeDate()
+        }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            AppOpenDayTracker.recordOpen()
+            appStreak = AppOpenStreak.stored().current
+            nextWake = WakeAlarm.nextWakeDate()
+        }
+        .task(id: nextWake) {
+            guard let nextWake else { return }
+            let delay = max(0, nextWake.timeIntervalSinceNow)
+            do {
+                try await Task.sleep(for: .seconds(delay))
+                self.nextWake = WakeAlarm.nextWakeDate()
+            } catch {
+                return
+            }
         }
         .safeAreaInset(edge: .top) {
             VStack(spacing: 0) {
@@ -83,6 +106,16 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
+        }
+        .sheet(isPresented: $showWakeSchedule, onDismiss: { nextWake = WakeAlarm.nextWakeDate() }) {
+            NavigationStack {
+                BandAlarmsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showWakeSchedule = false }
+                        }
+                    }
+            }
         }
         .sheet(isPresented: Binding(get: { editingDetectedID != nil }, set: { if !$0 { editingDetectedID = nil } })) {
             NavigationStack {
@@ -169,7 +202,7 @@ struct HomeView: View {
             NavigationLink(value: Route.dayStreak) {
                 HStack(spacing: 4) {
                     Image(systemName: "flame.fill").foregroundStyle(Color.orange)
-                    Text(AppOpenStreak.stored().current.formatted()).font(StrapTypography.metric(14, weight: .bold))
+                    Text(appStreak.formatted()).font(StrapTypography.metric(14, weight: .bold))
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
@@ -909,13 +942,13 @@ struct HomeView: View {
                 Rectangle().fill(Color.appLine).frame(width: 26, height: 1)
 
                 VStack(alignment: .trailing, spacing: 3) {
-                    Text(demo ? SampleData.latestAlarm : CoachFormat.clock(store.settings.wakeTimeMinutes))
+                    Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
                         .font(StrapTypography.metric(24, weight: .bold))
                         .monospacedDigit()
                         .lineLimit(1)
                         .minimumScaleFactor(0.8)
                         .foregroundStyle(Color.appFG)
-                    Text(WakeAlarm.isEnabled ? "ALARM ON\nEXACT TIME" : "ALARM OFF\nEXACT TIME")
+                    Text(demo || nextWake != nil ? "NEXT WAKE ALARM" : "NO ALARM SCHEDULED")
                         .font(StrapTypography.body(9.5))
                         .tracking(0.7)
                         .foregroundStyle(Color.appMuted)
@@ -924,28 +957,38 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            NavigationLink(value: Route.sleepCoach) {
+            Button {
+                showWakeSchedule = true
+            } label: {
                 Label("EDIT ALARM", systemImage: "pencil")
                     .font(StrapTypography.body(12, weight: .bold)).foregroundStyle(Color.appFG)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
             }.buttonStyle(.plain).padding(.top, 14)
-            Text(WakeAlarm.isEnabled ? "PHONE ALARM ON" : "PHONE ALARM OFF")
-                .font(StrapTypography.body(10, weight: .bold))
-                .foregroundStyle(WakeAlarm.isEnabled ? Color.appGood : Color.appMuted).padding(.top, 7)
+            if let nextWake, !demo {
+                Text(nextWake.formatted(.dateTime.weekday(.wide)))
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.top, 7)
+            }
             DisclosureGroup("How bedtime is calculated") {
-                Text("Your wake time, stated sleep need, tomorrow's intent and recorded sleep debt determine this recommendation. The next alarm is sent to your connected band, with a daily phone notification as well. Open Sleep Coach to test band vibration.")
+                Text("The recommendation uses your next scheduled wake time, sleep need, sleep intent and recorded sleep debt.")
                     .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
             }.font(StrapTypography.body(10)).tint(Color.appMuted).padding(.top, 8)
         }
+        .padding(.bottom, 14)
     }
 
     private var bedtimeRecommendation: SleepRecommendation {
-        SleepCoach.recommendation(
+        let wakeMinutes = nextWake.map { date in
+            let time = Calendar.current.dateComponents([.hour, .minute], from: date)
+            return (time.hour ?? 0) * 60 + (time.minute ?? 0)
+        } ?? store.settings.wakeTimeMinutes
+        return SleepCoach.recommendation(
             baseNeedHours: store.settings.sleepNeedHours,
             intent: store.settings.sleepIntent,
             debtHours: SleepCoach.sleepDebt(nights: store.recordedNights),
-            wakeMinutes: store.settings.wakeTimeMinutes
+            wakeMinutes: wakeMinutes
         )
     }
 
