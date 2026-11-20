@@ -1,297 +1,178 @@
 import SwiftUI
 
-/// Sleep Coach — computes the recommended bedtime LIVE in Swift:
-///   need = base + extra(intent) + min(debt, 2.0)
-///   timeInBed = need / 0.90 + 0.25
-///   bedtime = wake − timeInBed
-/// Debt is the Kitamura 2016 running shortfall over the last 14 recorded
-/// nights, floored at 0. With no nights: "debt unknown — starts counting
-/// tonight". This is our own published-science coach, not a proprietary one.
 struct SleepCoachView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var alarmOn = WakeAlarm.isEnabled
+    @State private var nextWake = WakeAlarm.nextWakeDate()
+    @State private var showSchedule = false
 
-    @State private var wakeMinutes = 7 * 60
-    @State private var intent: SleepIntent = .easy
-    @State private var alarmOn = false
-    @State private var alarmConfirmation = false
-    @State private var seeded = false
-    @State private var showWakePicker = false
-
-    private var demo: Bool { store.isPreview }
-
-    private var nights: [RecordedNight] {
-        demo ? SampleData.nights : store.recordedNights
+    private var plannedWakeMinutes: Int {
+        if store.isPreview { return SampleData.demoWakeMinutes }
+        return nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
     }
 
-    private var debt: Double? {
-        SleepCoach.sleepDebt(nights: nights)
-    }
-
-    private var rec: SleepRecommendation {
+    private var recommendation: SleepRecommendation {
         SleepCoach.recommendation(
             baseNeedHours: store.settings.sleepNeedHours,
-            intent: intent,
-            debtHours: debt,
-            wakeMinutes: wakeMinutes
+            intent: store.settings.sleepIntent,
+            debtHours: SleepCoach.sleepDebt(nights: store.isPreview ? SampleData.nights : store.recordedNights),
+            wakeMinutes: plannedWakeMinutes
         )
     }
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 0) {
-                coachPanel
-                statsRow
-                debtPanel
-                alarmPanel
+            VStack(spacing: 16) {
+                planCard
+                alarmCard
+                DisclosureGroup("How the plan is calculated") {
+                    Text("STRAP uses your sleep need, goal and recorded sleep debt. The plan allows 15 minutes to fall asleep and assumes 90% sleep efficiency.")
+                    if recommendation.debtHours == nil {
+                        Text("Sleep debt will appear once you have recorded nights.")
+                    }
+                }
+                .font(StrapTypography.body(13))
+                .foregroundStyle(Color.appMuted)
+                .padding(.vertical, 8)
             }
         }
-        .strapTabTypography("Sleep Coach")
-        .sheet(isPresented: $showWakePicker) {
+        .navigationTitle("Sleep Planner")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showSchedule = true } label: {
+                    Image(systemName: "calendar")
+                }
+                .accessibilityLabel("Edit weekly alarm schedule")
+            }
+        }
+        .sheet(isPresented: $showSchedule, onDismiss: refreshAlarm) {
             NavigationStack {
-                DatePicker("Wake time", selection: wakeDateBinding, displayedComponents: .hourAndMinute)
-                    .datePickerStyle(.wheel).labelsHidden().padding()
-                    .navigationTitle("Wake time")
-                    .toolbar { ToolbarItem(placement: .confirmationAction) {
-                        Button("Done") { showWakePicker = false }.font(StrapTypography.body(16, weight: .bold))
-                    } }
-            }.presentationDetents([.height(300)])
-        }
-        .onAppear {
-            if !seeded {
-                wakeMinutes = demo ? SampleData.demoWakeMinutes : store.settings.wakeTimeMinutes
-                intent = store.settings.sleepIntent
-                alarmOn = WakeAlarm.isEnabled
-                seeded = true
+                BandAlarmsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showSchedule = false }
+                        }
+                    }
             }
         }
-        .onChange(of: wakeMinutes) { _, newValue in
-            if store.settings.wakeTimeMinutes != newValue {
-                store.settings.wakeTimeMinutes = newValue
-            }
-            if alarmOn {
-                WakeAlarm.setEnabled(true, wakeMinutes: newValue)
-                store.band.syncWakeAlarm(force: true)
-            }
-        }
-        .onChange(of: alarmOn) { _, newValue in
-            WakeAlarm.setEnabled(newValue, wakeMinutes: wakeMinutes)
-            store.band.syncWakeAlarm(force: true)
-        }
-        .onChange(of: intent) { _, newValue in
-            if store.settings.sleepIntent != newValue {
-                store.settings.sleepIntent = newValue
-            }
+        .onAppear(perform: refreshAlarm)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshAlarm() }
         }
     }
 
-    // MARK: Coach panel
-
-    private var coachPanel: some View {
-        Panel {
-            Text(introSentence)
-                .font(StrapTypography.body(12.5))
-                .foregroundStyle(Color.appFG)
-                .lineSpacing(3)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 12)
-
-            SectionTitle("Tomorrow I want to")
-            ChipPicker(options: SleepIntent.allCases, label: { $0.label }, selection: intentBinding)
-                .padding(.bottom, 12)
-
-            timesRow
-
+    private var planCard: some View {
+        let rec = recommendation
+        return Panel {
+            Image(systemName: "moon.stars")
+                .font(.system(size: 27, weight: .light))
+                .foregroundStyle(Color.appSleep)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 10)
+                .accessibilityHidden(true)
+            Text("Aim for bed at \(CoachFormat.clock(rec.bedtimeMinutes)). Your estimated sleep need is \(CoachFormat.duration(rec.needHours)).")
+                .font(StrapTypography.body(19, weight: .semibold))
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+            Picker("Tomorrow’s goal", selection: $store.settings.sleepIntent) {
+                ForEach(SleepIntent.allCases) { option in Text(option.label).tag(option) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.bottom, 14)
+            HStack(alignment: .top) {
+                timeLabel("Suggested bedtime", minutes: rec.bedtimeMinutes)
+                Spacer(minLength: 12)
+                timeLabel(nextWake == nil && !store.isPreview ? "Target wake time" : "Scheduled wake time",
+                          minutes: plannedWakeMinutes)
+            }
             SectionTitle("Time in bed")
-            SplitBar(segments: [
-                SplitBar.Segment(fraction: rec.needHours / rec.timeInBedHours, color: .appSleep),
-                SplitBar.Segment(fraction: 1.0 - rec.needHours / rec.timeInBedHours, color: .appRaised)
-            ])
-            .padding(.bottom, 4)
-
-            Hint("Time in bed runs longer than sleep need: 15 min assumed latency and 90% assumed efficiency. This band cannot measure either, so both stay stated assumptions, not readings.")
-        }
-    }
-
-    private var introSentence: String {
-        var sentence = "Get to bed by \(CoachFormat.clock(rec.bedtimeMinutes)) to reach \(String(format: "%.1f", rec.needHours)) h of sleep by \(CoachFormat.clock(wakeMinutes))."
-        if let debt {
-            sentence += " Includes \(String(format: "%.1f", debt)) h of sleep debt\(demo ? " (sample)" : "")."
-        } else {
-            sentence += " Debt unknown until nights are recorded."
-        }
-        return sentence
-    }
-
-    private var timesRow: some View {
-        HStack(alignment: .top, spacing: 10) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(CoachFormat.clock(rec.bedtimeMinutes))
-                    .font(StrapTypography.body(26, weight: .medium))
-                    .foregroundStyle(Color.appFG)
-                Text("SUGGESTED\nBEDTIME")
-                    .font(StrapTypography.body(9.5))
-                    .tracking(0.7)
-                    .foregroundStyle(Color.appMuted)
+                .padding(.top, 12)
+            ZStack {
+                Capsule()
+                    .fill(LinearGradient(colors: [.appSleep.opacity(0.65), .appSleep.opacity(0.22)],
+                                         startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 12)
+                Text(CoachFormat.duration(rec.timeInBedHours))
+                    .font(StrapTypography.metric(17, weight: .bold))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.appBG, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.appSleep, lineWidth: 1))
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-
-            VStack(alignment: .trailing, spacing: 3) {
-                Button { showWakePicker = true } label: {
-                    Text(CoachFormat.clock(wakeMinutes))
-                        .font(StrapTypography.metric(26, weight: .bold))
-                        .foregroundStyle(Color.appFG)
-                }.buttonStyle(.plain).accessibilityLabel("Change wake time")
-                Text("YOUR WAKE\nTIME")
-                    .font(StrapTypography.body(9.5))
-                    .tracking(0.7)
-                    .foregroundStyle(Color.appMuted)
-                    .multilineTextAlignment(.trailing)
-            }
+            .accessibilityLabel("Time in bed \(CoachFormat.duration(rec.timeInBedHours))")
         }
-        .padding(.bottom, 12)
+        .foregroundStyle(Color.appFG)
     }
 
-    private var intentBinding: Binding<SleepIntent?> {
-        Binding(
-            get: { Optional(intent) },
-            set: { if let value = $0 { intent = value } }
-        )
-    }
-
-    private var wakeDateBinding: Binding<Date> {
-        Binding(
-            get: {
-                Calendar.current.startOfDay(for: Date()).addingTimeInterval(TimeInterval(wakeMinutes * 60))
-            },
-            set: { newDate in
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: newDate)
-                wakeMinutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
-            }
-        )
-    }
-
-    // MARK: Need / in-bed / debt cards
-
-    private var statsRow: some View {
-        HStack(spacing: 8) {
-            StatCard(title: "Sleep need", value: CoachFormat.duration(rec.needHours))
-            StatCard(title: "Time in bed", value: CoachFormat.duration(rec.timeInBedHours))
-            StatCard(
-                title: "Sleep debt",
-                value: debt.map { String(format: "%.1f h", $0) } ?? "—",
-                detail: debt == nil ? "starts counting tonight" : (demo ? "sample nights" : "last 14 nights")
-            )
+    private func timeLabel(_ label: String, minutes: Int) -> some View {
+        VStack(spacing: 3) {
+            Text(CoachFormat.clock(minutes))
+                .font(StrapTypography.metric(28, weight: .bold))
+                .monospacedDigit()
+            Text(label)
+                .font(StrapTypography.body(11, weight: .medium))
+                .foregroundStyle(Color.appMuted)
         }
-        .padding(.bottom, 11)
+        .frame(maxWidth: .infinity)
     }
 
-    private var debtPanel: some View {
-        Panel {
-            SectionTitle("Sleep debt")
-            Text(debtSentence)
-                .font(StrapTypography.body(15, weight: .medium))
-                .foregroundStyle(Color.appFG)
-                .padding(.bottom, 2)
-            Hint("The running shortfall against your need over the last 14 nights; a longer night repays it. At most 2 h of debt joins one night's need, so a bad week cannot demand an impossible bedtime. Our own coach built on the Kitamura 2016 sleep-debt model — not a proprietary algorithm.")
-        }
-    }
-
-    private var debtSentence: String {
-        if let debt {
-            return String(format: "%.1f h", debt) + (demo ? " · sample" : "")
-        }
-        return "debt unknown — starts counting tonight"
-    }
-
-    // MARK: Alarm (local phone notification)
-
-    private var alarmPanel: some View {
+    private var alarmCard: some View {
         Panel {
             HStack {
-                Text("ALARM")
-                    .font(StrapTypography.body(11, weight: .medium))
-                    .tracking(0.8)
-                    .foregroundStyle(Color.appFG)
-                Spacer()
-                Toggle("", isOn: $alarmOn)
-                    .labelsHidden()
-                    .tint(.appGood)
-            }
-            .padding(.bottom, 10)
-
-            HStack(spacing: 9) {
-                coachButton("ALARM SET TO \(alarmOn ? "ON" : "OFF")") {
-                    alarmOn.toggle()
-                }
-                VStack(spacing: 3) {
-                    Text("WAKE TIME")
-                        .font(StrapTypography.body(10, weight: .bold))
-                        .tracking(0.6)
+                VStack(alignment: .leading, spacing: 4) {
+                    SectionTitle("Alarm")
+                    Text(nextWake.map { $0.formatted(.dateTime.weekday(.wide)) } ?? "No alarm scheduled")
+                        .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
-                    Text(CoachFormat.clock(wakeMinutes))
-                        .font(StrapTypography.metric(19, weight: .bold))
-                        .monospacedDigit()
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                        .foregroundStyle(Color.appFG)
                 }
-                .frame(maxWidth: .infinity, minHeight: 52)
-                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
-                .accessibilityElement(children: .combine)
-                .accessibilityIdentifier("alarm.wakeTime")
+                Spacer()
+                Toggle("Wake alarm", isOn: Binding(
+                    get: { alarmOn },
+                    set: { enabled in
+                        WakeAlarm.isEnabled = enabled
+                        store.band.syncWakeAlarm(force: true)
+                        refreshAlarm()
+                    }
+                ))
+                .labelsHidden()
+                .tint(Color.appGood)
             }
-
-            Button("OK") {
-                WakeAlarm.setEnabled(alarmOn, wakeMinutes: wakeMinutes)
-                store.band.syncWakeAlarm(force: true)
-                alarmConfirmation = true
+            Button { showSchedule = true } label: {
+                HStack {
+                    Label("Weekly schedule", systemImage: "calendar")
+                    Spacer()
+                    Text(nextWake.map { $0.formatted(date: .omitted, time: .shortened) } ?? "—")
+                        .monospacedDigit()
+                    Image(systemName: "chevron.right").font(.caption)
+                }
+                .frame(minHeight: 44)
+                .padding(.horizontal, 12)
+                .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 10))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.appAccent)
-            .font(StrapTypography.body(12, weight: .bold))
-            .controlSize(.small)
-            .frame(maxWidth: .infinity, alignment: .trailing)
-            if alarmConfirmation {
-                Text("Alarm preference saved for \(CoachFormat.clock(wakeMinutes)).")
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appGood)
-            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("alarm.wakeTime")
             Text(store.band.bandAlarmMessage)
-                .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).padding(.top, 10)
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+                .padding(.top, 8)
             Button { store.band.testBuzz() } label: {
                 Label(store.band.testingBuzz ? "Sending…" : "Test band buzz", systemImage: "waveform")
-                    .font(StrapTypography.body(13, weight: .bold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }.buttonStyle(.bordered).tint(Color.appSleep)
-                .disabled(demo || !store.band.canTestBuzz).padding(.top, 12)
+            }
+            .buttonStyle(.bordered)
+            .disabled(store.isPreview || !store.band.canTestBuzz)
+            .padding(.top, 4)
             if !store.band.buzzMessage.isEmpty {
                 Text(store.band.buzzMessage).font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
             }
-            Hint("The next wake alarm is sent to your connected band. Use Test band buzz to check vibration on your wrist. Reconnect after waking to send the following day's alarm. The phone notification repeats daily; allow notifications when prompted.")
         }
+        .foregroundStyle(Color.appFG)
     }
 
-    private func coachButton(_ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            coachLabel(title)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func coachTile(_ title: String) -> some View {
-        coachLabel(title)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(title)
-    }
-
-    private func coachLabel(_ title: String) -> some View {
-        Text(title)
-            .font(StrapTypography.body(10.5, weight: .medium))
-            .tracking(0.4)
-            .foregroundStyle(Color.appFG)
-            .frame(maxWidth: .infinity, minHeight: 42)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
-            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+    private func refreshAlarm() {
+        alarmOn = WakeAlarm.isEnabled
+        nextWake = WakeAlarm.nextWakeDate()
     }
 }

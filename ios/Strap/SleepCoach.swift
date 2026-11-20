@@ -90,6 +90,11 @@ enum SleepCoach {
 // MARK: - Formatting helpers
 
 enum CoachFormat {
+    static func minutesSinceMidnight(_ date: Date) -> Int {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
+    }
+
     /// Minutes since midnight → "HH:mm", wrapped.
     static func clock(_ minutes: Int) -> String {
         let m = ((minutes % 1440) + 1440) % 1440

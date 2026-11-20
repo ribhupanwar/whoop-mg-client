@@ -19,7 +19,6 @@ struct HomeView: View {
     @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
-    @State private var showWakeSchedule = false
     @State private var nextWake = WakeAlarm.nextWakeDate()
     @State private var showLiveSession = false
     @State private var editingDetectedID: String?
@@ -118,16 +117,6 @@ struct HomeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
             ActivityLoggerView()
-        }
-        .sheet(isPresented: $showWakeSchedule, onDismiss: { nextWake = WakeAlarm.nextWakeDate() }) {
-            NavigationStack {
-                BandAlarmsView()
-                    .toolbar {
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Done") { showWakeSchedule = false }
-                        }
-                    }
-            }
         }
         .sheet(isPresented: Binding(get: { editingDetectedID != nil }, set: { if !$0 { editingDetectedID = nil } })) {
             NavigationStack {
@@ -977,14 +966,15 @@ struct HomeView: View {
                 .frame(maxWidth: .infinity, alignment: .trailing)
             }
 
-            Button {
-                showWakeSchedule = true
-            } label: {
+            NavigationLink(value: Route.sleepCoach) {
                 Label("EDIT ALARM", systemImage: "pencil")
                     .font(StrapTypography.body(12, weight: .bold)).foregroundStyle(Color.appFG)
                     .frame(maxWidth: .infinity, minHeight: 40)
                     .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 9))
-            }.buttonStyle(.plain).padding(.top, 14)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("home.sleepPlanner")
+            .padding(.top, 14)
             if let nextWake, !demo {
                 Text(nextWake.formatted(.dateTime.weekday(.wide)))
                     .font(StrapTypography.body(10, weight: .bold))
@@ -1000,10 +990,7 @@ struct HomeView: View {
     }
 
     private var bedtimeRecommendation: SleepRecommendation {
-        let wakeMinutes = nextWake.map { date in
-            let time = Calendar.current.dateComponents([.hour, .minute], from: date)
-            return (time.hour ?? 0) * 60 + (time.minute ?? 0)
-        } ?? store.settings.wakeTimeMinutes
+        let wakeMinutes = nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
         return SleepCoach.recommendation(
             baseNeedHours: store.settings.sleepNeedHours,
             intent: store.settings.sleepIntent,
