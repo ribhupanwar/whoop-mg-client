@@ -278,17 +278,17 @@ struct EmptyState: View {
 struct RingView: View {
     let progress: Double?
     let color: Color
-    var lineWidth: CGFloat = 5.0
-    var size: CGFloat = 84
+    var lineWidth: CGFloat = AppLayout.ringStrokeWidth
+    var size: CGFloat = AppLayout.heroRingDiameter
     let centerText: String
-    // WHOOP reference Home rings use DIN Pro 22 pt bold with 84 pt outer diameter
+    // WHOOP reference Home rings use DIN Pro 22-24 pt bold with 84 pt outer diameter
     // and 5.0 pt stroke width.
-    var centerFont: CGFloat = 22
+    var centerFont: CGFloat = AppLayout.heroMetricFontSize
 
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color(hex: 0x2A333A).opacity(0.85), lineWidth: lineWidth)
+                .stroke(Color.appRingTrack, lineWidth: lineWidth)
             if let progress, progress > 0 {
                 Circle()
                     .trim(from: 0, to: min(max(progress, 0), 1))

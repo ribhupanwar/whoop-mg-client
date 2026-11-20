@@ -280,7 +280,7 @@ struct DeviceSettingsView: View {
                     }
                 }
                 .disabled(!store.band.isConnected)
-                .tint(Color.appAccent)
+                .tint(Color.appGood)
 
                 Text(store.band.isConnected
                     ? "Transmits real-time HR over standard BLE 0x180D (Command 14 / 0x0E)."
