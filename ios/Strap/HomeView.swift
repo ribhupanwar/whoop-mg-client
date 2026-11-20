@@ -759,13 +759,14 @@ struct HomeView: View {
             let heart = session.meanHR.map { " · \(Int($0.rounded())) bpm" } ?? ""
             let steps = session.steps > 0 ? " · \(session.steps.formatted()) steps" : ""
             let kcal = store.activeKcal(for: session).map { " · \(Int($0.rounded())) kcal" } ?? ""
+            let strainText = session.strain.map { " · Strain \(String(format: "%.1f", $0))" } ?? ""
             let key = "band-\(session.startUnix)"
             let corrected = correctedLabels[key].flatMap(ActivityKind.init(rawValue:))
             return ActivityRowModel(
                 id: key,
                 icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(steps)\(heart)\(kcal)",
+                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix
             )
         }

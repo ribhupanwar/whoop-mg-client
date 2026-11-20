@@ -197,6 +197,7 @@ struct ActivitySession: Codable, Equatable, Identifiable {
     let walkTicks: Int
     let runTicks: Int
     var maxHR: Int? = nil
+    var strain: Double? = nil
 
     var id: Int { startUnix }
     var durationS: Int { endUnix - startUnix + 1 }

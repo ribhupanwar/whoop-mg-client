@@ -49,7 +49,9 @@ enum ActivityDetect {
     static func detect(
         _ samples: [V18Sample],
         sleepPeriods: [SleepPeriod] = [],
-        minimumDurationS: Int = minSessionS
+        minimumDurationS: Int = minSessionS,
+        restingHR: Double? = nil,
+        maxHR: Double? = nil
     ) -> [ActivitySession] {
         // Preserve the established five-minute behavior unless a caller
         // explicitly opts into a longer, independently evaluated duration.
@@ -234,6 +236,27 @@ enum ActivityDetect {
                 ) else { continue }
             }
 
+            if detectedKind == "cardio" {
+                // Cardio requires genuine cardiovascular exertion with physical motion.
+                // Resting tachycardia or sedentary psychological stress must not be
+                // auto-saved as a workout.
+                let duration = run[run.count - 1].unix - run[0].unix + 1
+                let baseline = baselines[start]
+                let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
+                let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
+                let movingSeconds = run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count
+                guard duration >= minimumDurationS,
+                      exertionSeconds >= startSustainS,
+                      movingSeconds >= 60 else { continue }
+            }
+
+            var sessionStrain: Double? = nil
+            let resting = restingHR ?? baselines[start] ?? 60.0
+            let maxHeart = maxHR ?? 190.0
+            if maxHeart > resting {
+                sessionStrain = WhoopDerivedStrain.score(run, restingHR: resting, maxHR: maxHeart)
+            }
+
             sessions.append(
                 ActivitySession(
                     startUnix: run[0].unix,
@@ -243,7 +266,8 @@ enum ActivityDetect {
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     walkTicks: walkTicks,
                     runTicks: runTicks,
-                    maxHR: run.map(\.heartRate).max()
+                    maxHR: run.map(\.heartRate).max(),
+                    strain: sessionStrain
                 )
             )
         }
@@ -314,10 +338,12 @@ enum ActivityDetect {
         durationS: Int, exertionSeconds: Int, movingSeconds: Int,
         hasPreActivityBaseline: Bool
     ) -> Bool {
-        hasPreActivityBaseline
-            && durationS >= walkWorkoutMinSessionS
-            && exertionSeconds >= startSustainS
-            && movingSeconds >= 90
+        guard durationS >= walkWorkoutMinSessionS else { return false }
+        if hasPreActivityBaseline {
+            return exertionSeconds >= startSustainS && movingSeconds >= 90
+        } else {
+            return exertionSeconds >= startSustainS * 2 && movingSeconds >= 180
+        }
     }
 
     static func kind(spm: [Double], hasSteps: Bool) -> String {

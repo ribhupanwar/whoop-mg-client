@@ -324,7 +324,54 @@ enum SleepDetect {
                 )
             )
         }
-        return periods
+        return mergeNocturnalPeriods(periods, samples: ordered)
+    }
+
+    /// Merges consecutive nocturnal sleep candidates separated by a brief
+    /// awakening (e.g. bathroom break, hydration, or restless wakefulness <= 30 minutes)
+    /// into a single continuous overnight sleep session, preserving the awakening as
+    /// in-bed awake time for downstream staging.
+    static func mergeNocturnalPeriods(
+        _ periods: [SleepPeriod],
+        samples: [V18Sample],
+        maxAwakeningGapS: Int = 30 * 60,
+        maxCombinedSleepS: Int = maxSleepS
+    ) -> [SleepPeriod] {
+        guard periods.count > 1 else { return periods }
+        var merged: [SleepPeriod] = []
+        var current = periods[0]
+
+        for next in periods.dropFirst() {
+            let gap = next.startUnix - current.endUnix - 1
+            let combinedEnd = max(current.endUnix, next.endUnix)
+            let combinedSpan = combinedEnd - current.startUnix + 1
+
+            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
+            let wornDuringGap = gapSamples.isEmpty || gapSamples.contains { $0.wearing }
+
+            if gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap {
+                let allIndices = samples.filter { current.startUnix <= $0.unix && $0.unix <= combinedEnd }
+                let quietCount = allIndices.filter { sample in
+                    guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
+                    return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
+                }.count
+                let validHRs = allIndices.compactMap {
+                    $0.wearing && (35...220).contains($0.heartRate) ? Double($0.heartRate) : nil
+                }
+                current = SleepPeriod(
+                    startUnix: current.startUnix,
+                    endUnix: combinedEnd,
+                    quietFraction: Double(quietCount) / Double(max(1, allIndices.count)),
+                    meanHR: Stats.mean(validHRs),
+                    wakeEvents: current.wakeEvents + next.wakeEvents + 1
+                )
+            } else {
+                merged.append(current)
+                current = next
+            }
+        }
+        merged.append(current)
+        return merged
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {
