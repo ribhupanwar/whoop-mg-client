@@ -2,6 +2,12 @@
 
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
+## Issue #83 BLE recovery
+
+- [x] Found the Gen5 GATT UUID regression in `fe78b2c`. The iOS UUIDs now agree with the earlier iOS transport and the hardware-backed Python Gen5 profile. Added a native regression test for the service, command write and four notification UUIDs.
+- [ ] Validate protocol-level CLIENT_HELLO, notification recovery, and manual history readiness. Commit `46bbe62b` alone still relies on a flag set by the ATT write callback.
+- [ ] On firmware 50.43.1.0 verify live HR packets, history frames and persisted chunks/ACKs, pull-to-refresh, and foreground/background reconnect with diagnostics.
+
 ## Phase 1–12 current implementation matrix (2026-11-19)
 - [x] **DONE (code/tests/CI, 2026-11-20):** Multi-PR Reconciliation and Integration across PRs #62, #65, #67, #68, #70 into `main` (commit with PR #69 preserved):
   - **PR #67:** Incidental workout prevention, walk/run cadence gates, and clear explanations for missing calorie inputs.
