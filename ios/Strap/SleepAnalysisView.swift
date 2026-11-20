@@ -37,51 +37,34 @@ struct SleepAnalysisView: View {
         demo ? nil : SleepCoach.sleepDebt(nights: nights)
     }
 
-    private var typicalRestorativeMinutes: Double {
-        if nights.count >= 3 {
-            let avgSleepMinutes = nights.map { $0.actualHours * 60 }.reduce(0, +) / Double(nights.count)
-            return avgSleepMinutes * 0.43
-        }
-        // Baseline 3h 36m (216 min) matching WHOOP reference
-        return 216.0
+    // RecordedNight contains daily sleep duration and need, not historical staging.
+    // Don't fabricate restorative or per-stage typical values from reference artwork.
+    private var typicalRestorativeMinutes: Double? { nil }
+
+    private var typicalHoursVsNeededPct: Double? {
+        let ratios = nights.sorted { $0.dateKey < $1.dateKey }.suffix(30)
+            .compactMap { night -> Double? in
+                guard night.neededHours.isFinite, night.neededHours > 0,
+                      night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
+                return min(100.0, max(0.0, 100.0 * night.actualHours / night.neededHours))
+            }
+        guard ratios.count >= 3 else { return nil }
+        return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
     }
 
-    private var typicalHoursVsNeededPct: Double {
-        let ratios = nights.compactMap { $0.neededHours > 0 ? ($0.actualHours / $0.neededHours * 100.0) : nil }
-        if ratios.count >= 3 {
-            return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
-        }
-        // Baseline 67% matching WHOOP reference
-        return 67.0
-    }
-
-    private func typicalRange(for stage: SleepStage) -> ClosedRange<Double> {
-        // Standard WHOOP reference ranges matching typical sleep architecture
-        switch stage {
-        case .wake: return 0.07...0.15
-        case .light: return 0.35...0.47
-        case .deep: return 0.20...0.30
-        case .rem: return 0.21...0.31
-        }
+    private func typicalRange(for stage: SleepStage) -> ClosedRange<Double>? {
+        // No historical per-stage distribution is available in RecordedNight.
+        nil
     }
 
     private var coachSummaryText: String {
-        let name = "Ribhu"
-        if let staging, staging.deepMinutes > 0, staging.remMinutes > 0 {
-            let total = max(1.0, staging.deepMinutes + staging.lightMinutes + staging.remMinutes + staging.wakeMinutes)
-            let deepPct = staging.deepMinutes / total
-            let remPct = staging.remMinutes / total
-            if deepPct >= 0.20 && remPct >= 0.20 {
-                return "Hi \(name) — your deep and REM sleep both outpaced your usual pattern last night 🧩 Your restorative rest was well above baseline."
-            }
-        }
         if let pct = reconciledHoursVsNeededPct, pct >= 80 {
-            return "Hi \(name) — great sleep performance last night set you up with solid restorative rest 🔋"
+            return "Your recorded sleep covered at least 80% of your estimated sleep need."
         }
         if let debt = debt, debt > 1.0 {
-            return "Hi \(name) — you logged solid time in bed, but accumulated sleep debt can be repaid over upcoming nights 🌙"
+            return "Your recorded sleep history suggests accumulated sleep debt."
         }
-        return "Hi \(name) — your deep and REM sleep both outpaced your usual pattern last night 🧩 Your restorative rest was solid."
+        return "This summary uses recorded sleep duration and available sensor estimates. Personal stage comparisons need historical staging data."
     }
 
     var body: some View {
@@ -703,15 +686,16 @@ struct SleepAnalysisView: View {
                     Text(displayed.duration(displayed.restorative))
                         .font(StrapTypography.metric(19, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                    let baseline = typicalRestorativeMinutes
-                    HStack(spacing: 3) {
-                        Image(systemName: "triangle.fill")
-                            .font(.system(size: 6))
-                            .rotationEffect(Double(displayed.restorative) >= baseline ? .zero : .degrees(180))
-                            .foregroundStyle(Double(displayed.restorative) >= baseline ? Color.appGood : Color.appWarn)
-                        Text(CoachFormat.duration(baseline / 60.0))
-                            .font(StrapTypography.metric(11, weight: .medium))
-                            .foregroundStyle(Color.appMuted)
+                    if let baseline = typicalRestorativeMinutes {
+                        HStack(spacing: 3) {
+                            Image(systemName: "triangle.fill")
+                                .font(.system(size: 6))
+                                .rotationEffect(Double(displayed.restorative) >= baseline ? .zero : .degrees(180))
+                                .foregroundStyle(Double(displayed.restorative) >= baseline ? Color.appGood : Color.appWarn)
+                            Text(CoachFormat.duration(baseline / 60.0))
+                                .font(StrapTypography.metric(11, weight: .medium))
+                                .foregroundStyle(Color.appMuted)
+                        }
                     }
                 }
             }
@@ -745,16 +729,23 @@ struct SleepAnalysisView: View {
                     Text(percentText(demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct))
                         .font(StrapTypography.metric(34, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                    if let pct = (demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct) {
+                    if let pct = (demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct),
+                       let typical = typicalHoursVsNeededPct {
                         Image(systemName: "triangle.fill")
                             .font(.system(size: 9))
-                            .rotationEffect(pct >= typicalHoursVsNeededPct ? .zero : .degrees(180))
-                            .foregroundStyle(pct >= typicalHoursVsNeededPct ? Color.appGood : Color.appWarn)
+                            .rotationEffect(pct >= typical ? .zero : .degrees(180))
+                            .foregroundStyle(pct >= typical ? Color.appGood : Color.appWarn)
                     }
                 }
-                Text(String(format: "%.0f%%", typicalHoursVsNeededPct))
-                    .font(StrapTypography.metric(13, weight: .medium))
-                    .foregroundStyle(Color.appMuted)
+                if let typical = typicalHoursVsNeededPct {
+                    Text(String(format: "%.0f%% typical (recorded nights)", typical))
+                        .font(StrapTypography.metric(13, weight: .medium))
+                        .foregroundStyle(Color.appMuted)
+                } else {
+                    Text("Personal typical unavailable")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
             }
 
             VStack(spacing: 6) {
