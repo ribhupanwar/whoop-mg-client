@@ -276,7 +276,26 @@ def detect_activities(
                 run_ticks=run_ticks,
             )
         )
-    return sessions
+    return suppress_duplicates(sessions)
+
+
+def suppress_duplicates(sessions: list[ActivitySession]) -> list[ActivitySession]:
+    """Suppress auto-detected sessions that overlap by >= 50% with an earlier accepted session."""
+    accepted: list[ActivitySession] = []
+    for candidate in sorted(sessions, key=lambda s: s.start_unix):
+        cand_duration = max(1, candidate.duration_s)
+        is_dup = False
+        for other in accepted:
+            overlap_start = max(candidate.start_unix, other.start_unix)
+            overlap_end = min(candidate.end_unix, other.end_unix)
+            if overlap_end > overlap_start:
+                overlap = overlap_end - overlap_start
+                if (overlap / cand_duration) >= 0.50:
+                    is_dup = True
+                    break
+        if not is_dup:
+            accepted.append(candidate)
+    return accepted
 
 
 def evaluate_candidates(
