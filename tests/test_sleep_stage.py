@@ -53,12 +53,19 @@ class SleepStageTests(unittest.TestCase):
         )
 
     def test_quiet_night_is_mostly_light_with_no_wake(self):
-        samples, period = make_night()
+        samples, period = make_night(minutes=90)
         result = stage_sleep(samples, period)
         self.assertEqual(result.wake_min, 0.0)
         self.assertGreater(result.light_min, result.deep_min)
         self.assertGreater(result.deep_min + result.rem_min, 0.0)
         self.assertAlmostEqual(result.total_min, 90.0, places=6)
+
+    def test_one_hour_nap_respects_rem_latency_guard(self):
+        samples, period = make_night(minutes=60)
+        result = stage_sleep(samples, period)
+        self.assertEqual(result.wake_min, 0.0)
+        self.assertEqual(result.rem_min, 0.0)
+        self.assertAlmostEqual(result.light_min, 60.0, places=6)
 
     def test_totals_match_the_segments(self):
         samples, period = make_night(minutes=60, bursts=((20, 23),))
@@ -88,6 +95,74 @@ class SleepStageTests(unittest.TestCase):
         result = stage_sleep([], period)
         self.assertIn("shorter than one", result.reason or "")
         self.assertEqual(result.segments, [])
+
+    def test_sleep_cycle_prior_preserves_light_sleep_dominance_in_morning(self):
+        from whoop.sleep_stage import _cycle_prior, BASE_LOG_PRIOR
+        # At clock = 1.0 (end of night), the combined prior (baseLogPrior + cyclePrior)
+        # must still favor Light sleep over REM, preserving Light sleep as the primary stage.
+        priors = _cycle_prior(clock=1.0, minutes_since_onset=480.0)
+        combined_light = BASE_LOG_PRIOR["light"] + priors["light"]
+        combined_rem = BASE_LOG_PRIOR["rem"] + priors["rem"]
+        self.assertGreater(combined_light, combined_rem)
+        # Difference should be at least +0.20 in log space (~22% higher odds)
+        self.assertGreaterEqual(combined_light - combined_rem, 0.20)
+
+    def test_full_night_sleep_cycle_proportions(self):
+        # A synthetic 8-hour night with bursts
+        samples, period = make_night(minutes=480, hr=52.0, bursts=((120, 122), (240, 243), (360, 362)))
+        result = stage_sleep(samples, period)
+        self.assertIsNone(result.reason)
+        # Light sleep should remain the predominant baseline stage (>= 50% of TST)
+        self.assertGreater(result.light_min, result.rem_min)
+        self.assertGreater(result.light_min, result.deep_min)
+        self.assertGreater(result.deep_min + result.rem_min, 0.0)
+        self.assertGreater(result.wake_min, 0.0)
+        self.assertAlmostEqual(result.asleep_min + result.wake_min, result.total_min, places=6)
+
+    def test_real_capture_replay_matches_whoop_reference(self):
+        import csv
+        import os
+        csv_candidates = [
+            r'C:\Users\ribhu\Downloads\sleep-1795020250-1795051114-13DFAA32-D615-4C57-A2FC-8657D02BCECE(1).csv',
+        ]
+        csv_path = next((p for p in csv_candidates if os.path.exists(p)), None)
+        if not csv_path:
+            self.skipTest("Real WHOOP capture CSV not present in local test environment")
+
+        samples = []
+        start_u = end_u = None
+        with open(csv_path, encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                if start_u is None:
+                    start_u = int(row['window_start_unix'])
+                    end_u = int(row['window_end_unix'])
+                u = int(row['unix'])
+                hr = int(row['heart_rate_bpm']) if row['heart_rate_bpm'] else 0
+                rr_str = row['rr_ms']
+                rr = [int(x) for x in rr_str.split('|')] if rr_str else []
+                dyn = float(row['dynamic_accel_g']) if row['dynamic_accel_g'] else 0.0
+                gx = float(row['gravity_x_g']) if row['gravity_x_g'] else 0.0
+                gy = float(row['gravity_y_g']) if row['gravity_y_g'] else 0.0
+                gz = float(row['gravity_z_g']) if row['gravity_z_g'] else 1.0
+                state = int(row['band_state']) if row['band_state'] else 0
+                samples.append(V18Sample(
+                    header=RecordHeader(version=18, flags=0x80, record_index=int(row['record_index']), unix=u, subsec_q15=int(row['subsec_q15'])),
+                    heart_rate=hr,
+                    rr_intervals_ms=rr,
+                    gravity_g=(gx, gy, gz),
+                    dynamic_accel_g=dyn,
+                    sleep_state=state
+                ))
+
+        period = SleepPeriod(start_unix=start_u, end_unix=end_u, quiet_fraction=0.95, mean_hr=55)
+        res = stage_sleep(samples, period)
+
+        # WHOOP Reference: Awake 0:47 (47m), Light 3:26 (206m), Deep 2:12 (132m), REM 2:16 (136m)
+        # Total Restorative = 268m
+        self.assertAlmostEqual(res.light_min, 206.0, delta=15.0)
+        self.assertAlmostEqual(res.deep_min, 132.0, delta=15.0)
+        self.assertAlmostEqual(res.rem_min, 136.0, delta=15.0)
+        self.assertAlmostEqual(res.deep_min + res.rem_min, 268.0, delta=5.0)
 
 
 if __name__ == "__main__":

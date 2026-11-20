@@ -330,7 +330,7 @@ def _deep_latency_guard(minutes_since_onset: float) -> float:
 def _cycle_prior(clock: float, minutes_since_onset: float) -> dict[str, float]:
     return {
         "deep": 1.2 * max(0.0, 1.0 - clock / 0.55),
-        "rem": 1.0 * clock - _rem_latency_guard(minutes_since_onset),
+        "rem": 0.60 * clock - _rem_latency_guard(minutes_since_onset),
         "light": 0.0,
         "awake": 0.0,
     }
