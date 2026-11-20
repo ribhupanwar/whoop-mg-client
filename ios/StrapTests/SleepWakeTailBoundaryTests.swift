@@ -159,7 +159,7 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         // Prelude has settling HR (62-64) but includes a 4-second position shift rustle (accel 0.25, HR 70)
         rows += (bedtime..<(bedtime + 960)).map { offset in
             let isRustle = (bedtime + 300..<(bedtime + 305)).contains(offset)
-            return row(offset, hr: isRustle ? 70 : 62, accel: isRustle ? 0.25 : 0.008, state: 1)
+            return row(offset, hr: isRustle ? 70 : (offset < bedtime + 300 ? 74 : 62), accel: isRustle ? 0.25 : 0.008, state: 1)
         }
         let confirmedStart = bedtime + 960
         rows += (confirmedStart..<(confirmedStart + 7200)).map {
@@ -167,7 +167,8 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
         }
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
         // Backtracking should successfully traverse the momentary rustle back to bedtime settling
-        XCTAssertEqual(night.startUnix, bedtime)
+        XCTAssertEqual(night.startUnix, bedtime + 300,
+                       "Backtrack through brief rustle to the verified low-HR settling prelude")
     }
 
 }
