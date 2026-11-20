@@ -419,6 +419,8 @@ final class BandLink: NSObject, ObservableObject {
     private var hrResubscribePending = false
     private var hrSubscribedBeforeBond = false
     private var hrBondConfirmed = false
+    /// Read-only authentication status for diagnostics; not equivalent to GATT connection.
+    var isHRBondConfirmed: Bool { hrBondConfirmed }
     private var hrSubscriptionConfirmedAt: Date?
     private var hrConnectedAt: Date?
     private var reconnectWork: DispatchWorkItem?

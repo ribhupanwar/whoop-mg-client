@@ -100,7 +100,7 @@ struct ConnectionSyncView: View {
                         SectionTitle("HISTORICAL BACKFILL PROGRESS")
                         VStack(alignment: .leading, spacing: 6) {
                             HStack {
-                                Text("Sync Phase: \(progress.stage.title)")
+                                Text("Sync Phase: \(progress.title)")
                                     .font(StrapTypography.body(12, weight: .bold))
                                     .foregroundStyle(Color.appFG)
                                 Spacer()
@@ -221,7 +221,7 @@ struct BandAlarmsView: View {
                             }
                         }
                         Spacer()
-                        if alarmOn, let next = nextWake {
+                        if alarmOn, nextWake != nil {
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(isBandConfirmed ? Color.appGood : Color.appWarn)
@@ -969,7 +969,7 @@ struct DiagnosticsSupportView: View {
                     Divider().background(Color.appLine)
                     infoRow("Active Connection", value: store.band.isConnected ? "Connected" : store.band.status.title)
                     Divider().background(Color.appLine)
-                    infoRow("HR Bond Status", value: store.band.hrBondConfirmed ? "Bond Confirmed" : "Not Bonded")
+                    infoRow("HR Bond Status", value: store.band.isHRBondConfirmed ? "Bond Confirmed" : "Not Bonded")
                 }
 
                 // Section 2: Hardware Details
