@@ -1542,9 +1542,11 @@ final class BandLink: NSObject, ObservableObject {
             lastMessage = "History transfer already in progress."
             return
         }
-        guard status != .authenticating else {
-            historySyncError = "WHOOP handshake is still pending. History sync cannot start until the band acknowledges pairing."
+        guard hrBondConfirmed, status != .authenticating else {
+            historySyncError = "WHOOP protocol handshake is not confirmed. Battery and Bluetooth connection alone do not establish history readiness."
             lastMessage = historySyncError ?? "WHOOP handshake pending"
+            // A connected transport can outlive a failed hello attempt. Do not
+            // send history commands over an unauthenticated session.
             return
         }
         startDraining()
