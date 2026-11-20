@@ -408,9 +408,9 @@ final class BandLink: NSObject, ObservableObject {
             dayStrain: nil,
             activeKcal: nil,
             steps: session.steps,
-            detectionConfidence: "HIGH",
-            detectionReason: "ELEVATED_HR_PERSISTENT_MOTION",
-            firmwareVersion: deviceFirmwareVersion ?? "50.42.1.0",
+            detectionConfidence: "UNKNOWN",
+            detectionReason: "NOT_RECORDED",
+            firmwareVersion: "UNKNOWN",
             decoderVersion: "V18-Gen5"
         )
         return try await Task.detached(priority: .utility) {
