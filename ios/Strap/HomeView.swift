@@ -7,7 +7,6 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     let openPlan: () -> Void
 
-    @State private var appOpenDays = AppOpenDayTracker.count()
     @State private var compactScores = false
     @State private var dayOffset = 0
     @State private var showLogger = false
@@ -46,7 +45,7 @@ struct HomeView: View {
             }
         }
         .onAppear {
-            appOpenDays = AppOpenDayTracker.recordOpen()
+            AppOpenDayTracker.recordOpen()
         }
         .coordinateSpace(name: "home-scroll")
         .onPreferenceChange(HomeHeroPosition.self) { value in
@@ -173,12 +172,16 @@ struct HomeView: View {
             NavigationLink(value: Route.profile) {
                 ProfileAvatarView(size: 32)
             }.buttonStyle(.plain).accessibilityLabel("Profile")
-            HStack(spacing: 4) {
-                Image(systemName: "flame.fill").foregroundStyle(Color.orange)
-                Text("\(appOpenDays)").font(StrapTypography.metric(14, weight: .bold))
-            }.padding(.horizontal, 8).padding(.vertical, 7)
+            NavigationLink(value: Route.dayStreak) {
+                HStack(spacing: 4) {
+                    Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                    Text(AppOpenStreak.stored().current.formatted()).font(StrapTypography.metric(14, weight: .bold))
+                }
+                .padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
-                .accessibilityLabel("\(appOpenDays) distinct days STRAP was opened")
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Day Streak")
 
             Spacer()
 

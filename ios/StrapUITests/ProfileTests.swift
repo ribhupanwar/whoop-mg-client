@@ -10,6 +10,7 @@ final class ProfileTests: XCTestCase {
         let openProfile = app.buttons["Profile"]
         XCTAssertTrue(openProfile.waitForExistence(timeout: 15))
         openProfile.tap()
+        app.buttons["profile.edit"].tap()
         let name = app.textFields["profile.displayName"]
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         name.tap()
@@ -25,6 +26,7 @@ final class ProfileTests: XCTestCase {
         let profile = app.buttons["more.profile"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
         profile.tap()
+        app.buttons["profile.edit"].tap()
         XCTAssertTrue(name.waitForExistence(timeout: 5))
         XCTAssertEqual(name.value as? String, "Morgan")
     }

@@ -47,6 +47,7 @@ enum Route: Hashable {
     case sleepAnalysis
     case settings
     case profile
+    case dayStreak
     case dataQuality
     case healthspan
     case metricHistory(DetailMetric)
@@ -238,6 +239,7 @@ extension View {
             case .sleepAnalysis: SleepAnalysisView()
             case .settings: SettingsView()
             case .profile: ProfileView()
+            case .dayStreak: DayStreakView()
             case .dataQuality: DataQualityView()
             case .healthspan: HealthspanView()
             case .metricHistory(let metric):
@@ -325,7 +327,7 @@ private struct HumansView: View {
                                 Text("PERSONAL BASELINE CLUB")
                                     .font(StrapTypography.body(13, weight: .bold))
                                     .foregroundStyle(Color.appFG)
-                                Text("On-device streak: \(AppOpenDayTracker.count()) days recorded")
+                                Text("App-open streak: \(AppOpenStreak.stored().current) days")
                                     .font(StrapTypography.body(11))
                                     .foregroundStyle(Color.appMuted)
                             }
