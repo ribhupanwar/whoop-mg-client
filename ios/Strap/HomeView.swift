@@ -1388,13 +1388,18 @@ private struct HomeBandDeviceSettingsView: View {
     private var statusContent: some View {
         VStack(spacing: 24) {
             HStack(alignment: .center, spacing: 14) {
-                bandIllustration
-                    .frame(maxWidth: .infinity)
-                    .accessibilityLabel("WHOOP-style band illustration")
+                BandIllustrationView(
+                    status: store.band.status,
+                    isConnected: store.band.isConnected,
+                    batteryPercent: store.band.batteryPercent
+                )
+                .frame(maxWidth: .infinity)
+                .accessibilityLabel("WHOOP MG band illustration with live indicator")
+
                 VStack(alignment: .trailing, spacing: 8) {
                     Text(store.band.batteryPercent.map { "\($0)%" } ?? "—")
                         .font(StrapTypography.metric(33, weight: .bold))
-                    Text("WHOOP MG")
+                    Text(store.band.modelNumber ?? store.band.preferredBandName ?? "WHOOP MG")
                         .font(StrapTypography.body(12, weight: .bold))
                         .tracking(1.6)
                         .foregroundStyle(muted)
@@ -1411,12 +1416,23 @@ private struct HomeBandDeviceSettingsView: View {
                         }
                     }
             }
-            .frame(height: 440)
+            .frame(height: 380)
             .padding(.horizontal, 24)
 
-            deviceRow("BROADCAST HEART RATE", icon: "heart.fill",
-                      subtitle: "TO COMPATIBLE APPS & DEVICES", enabled: false)
-            Text("Broadcast control is unavailable until the band protocol is verified. The displayed sync time is the last completed history sync, not a live connection timestamp.")
+            deviceRow(
+                "BROADCAST HEART RATE",
+                icon: "heart.fill",
+                subtitle: "TO COMPATIBLE APPS & DEVICES",
+                enabled: store.band.isConnected,
+                isToggle: true,
+                toggleValue: store.band.isBroadcastingHR,
+                onToggle: { enabled in
+                    store.setBroadcastHeartRate(enabled: enabled)
+                }
+            )
+            Text(store.band.isConnected
+                 ? "Verified Command 14 (0x0E) enables standard BLE 0x180D heart-rate broadcast to gym equipment and apps."
+                 : "Connect your WHOOP to adjust live broadcast.")
                 .font(.caption)
                 .foregroundStyle(muted)
                 .padding(.horizontal, 24)
@@ -1427,8 +1443,9 @@ private struct HomeBandDeviceSettingsView: View {
 
     private var advancedContent: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 65) {
+            HStack(spacing: 24) {
                 metadata("DEVICE ID", value: store.band.preferredBandID ?? "UNAVAILABLE", icon: "applewatch")
+                metadata("SERIAL", value: store.band.serialNumber ?? "UNAVAILABLE", icon: "barcode")
                 metadata("FIRMWARE", value: store.band.firmwareRevision ?? "UNVERIFIED", icon: "cpu")
             }
             .frame(maxWidth: .infinity)
@@ -1446,11 +1463,11 @@ private struct HomeBandDeviceSettingsView: View {
             deviceRow("SAFETY & REGULATORY", icon: "tag",
                       subtitle: "Safety and compliance information is provided by the manufacturer.", enabled: false)
             deviceRow("FIRMWARE CHECK", icon: "cpu",
-                      subtitle: "Firmware updates are not supported by STRAP.", enabled: false)
+                      subtitle: "Updates disabled. Custom firmware flashing (0x53, 0x8E–0x90) is restricted to official signed images to prevent bricking.", enabled: false)
             deviceRow("REBOOT DEVICE", icon: "power",
-                      subtitle: "Reboot requires a verified device command.", enabled: false)
+                      subtitle: "Disabled for safety. Unverified power-cycle commands (0x20) risk truncating circular flash history.", enabled: false)
             deviceRow("ERASE DEVICE DATA", icon: "trash",
-                      subtitle: "Unavailable: protects stored heart-rate history.", enabled: false)
+                      subtitle: "Unavailable: protects stored circular buffer sensor history from irreversible deletion.", enabled: false)
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 45)
@@ -1461,18 +1478,6 @@ private struct HomeBandDeviceSettingsView: View {
         } message: { Text("Clears the saved STRAP association; historical data is retained.") }
     }
 
-    private var bandIllustration: some View {
-        ZStack {
-            Ellipse().stroke(Color(hex: 0x111619), lineWidth: 35).frame(width: 140, height: 220).rotationEffect(.degrees(-24))
-            Ellipse().stroke(Color(hex: 0x30383E), lineWidth: 15).frame(width: 140, height: 220).rotationEffect(.degrees(-24))
-            RoundedRectangle(cornerRadius: 18)
-                .fill(LinearGradient(colors: [Color(hex: 0xCFD3D5), Color(hex: 0x56616A), Color(hex: 0xE0E2E3)], startPoint: .topLeading, endPoint: .bottomTrailing))
-                .frame(width: 112, height: 156).rotationEffect(.degrees(-24))
-            RoundedRectangle(cornerRadius: 12).fill(Color(hex: 0x171C20))
-                .frame(width: 88, height: 126).rotationEffect(.degrees(-24))
-        }.frame(height: 280)
-    }
-
     private func metadata(_ title: String, value: String, icon: String) -> some View {
         VStack(spacing: 8) {
             Image(systemName: icon).font(.system(size: 23)).foregroundStyle(muted)
@@ -1481,7 +1486,15 @@ private struct HomeBandDeviceSettingsView: View {
         }
     }
 
-    private func deviceRow(_ title: String, icon: String, subtitle: String, enabled: Bool) -> some View {
+    private func deviceRow(
+        _ title: String,
+        icon: String,
+        subtitle: String,
+        enabled: Bool,
+        isToggle: Bool = false,
+        toggleValue: Bool = false,
+        onToggle: ((Bool) -> Void)? = nil
+    ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 20) {
                 Image(systemName: icon)
@@ -1492,10 +1505,14 @@ private struct HomeBandDeviceSettingsView: View {
                     .font(StrapTypography.body(14, weight: .bold))
                     .tracking(0.8)
                 Spacer()
-                if title == "BROADCAST HEART RATE" {
-                    Toggle(title, isOn: .constant(false))
-                        .labelsHidden()
-                        .disabled(true)
+                if isToggle {
+                    Toggle(title, isOn: Binding(
+                        get: { toggleValue },
+                        set: { onToggle?($0) }
+                    ))
+                    .labelsHidden()
+                    .disabled(!enabled)
+                    .tint(Color(hex: 0x00F076))
                 }
             }
             .padding(.horizontal, 22)

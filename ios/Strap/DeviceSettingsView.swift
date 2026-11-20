@@ -58,28 +58,15 @@ struct DeviceSettingsView: View {
             VStack(spacing: 12) {
                 HStack(spacing: 16) {
                     // Sensor Graphic
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(LinearGradient.appCard)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 12)
-                                    .strokeBorder(Color.appLine, lineWidth: 1)
-                            )
-                            .frame(width: 64, height: 42)
-
-                        Circle()
-                            .fill(statusColor)
-                            .frame(width: 8, height: 8)
-                            .offset(x: 22, y: -10)
-
-                        Text("WHOOP")
-                            .font(StrapTypography.metric(10, weight: .bold))
-                            .tracking(1.5)
-                            .foregroundStyle(Color.appFG.opacity(0.8))
-                    }
+                    BandIllustrationView(
+                        status: store.band.status,
+                        isConnected: store.band.isConnected,
+                        batteryPercent: store.band.batteryPercent
+                    )
+                    .frame(width: 64, height: 72)
 
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(store.band.bandName ?? store.band.preferredBandName ?? "WHOOP MG")
+                        Text(store.band.modelNumber ?? store.band.bandName ?? store.band.preferredBandName ?? "WHOOP MG")
                             .font(StrapTypography.body(16, weight: .bold))
                             .foregroundStyle(Color.appFG)
 
@@ -95,6 +82,10 @@ struct DeviceSettingsView: View {
 
                         if let battery = store.band.batteryPercent {
                             Text("Battery \(battery)%")
+                                .font(StrapTypography.body(11))
+                                .foregroundStyle(Color.appMuted)
+                        } else if let serial = store.band.serialNumber {
+                            Text("Serial: \(serial)")
                                 .font(StrapTypography.body(11))
                                 .foregroundStyle(Color.appMuted)
                         }
@@ -151,7 +142,21 @@ struct DeviceSettingsView: View {
 
             infoRow(
                 label: "Device Model",
-                value: store.band.bandName ?? store.band.preferredBandName ?? "WHOOP 5.0 / MG"
+                value: store.band.modelNumber ?? store.band.bandName ?? store.band.preferredBandName ?? "WHOOP 5.0 / MG"
+            )
+
+            Divider().background(Color.appLine)
+
+            infoRow(
+                label: "Serial Number",
+                value: store.band.serialNumber ?? (store.band.isConnected ? "Reading from strap…" : "Unavailable offline")
+            )
+
+            Divider().background(Color.appLine)
+
+            infoRow(
+                label: "Hardware Revision",
+                value: store.band.hardwareRevision ?? "WHOOP MG"
             )
 
             Divider().background(Color.appLine)
@@ -176,7 +181,29 @@ struct DeviceSettingsView: View {
         Panel {
             SectionTitle("BAND PREFERENCES & SENSORS")
 
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 10) {
+                // Verified Broadcast Heart Rate Toggle (Command 14 / 0x0E)
+                Toggle(isOn: Binding(
+                    get: { store.band.isBroadcastingHR },
+                    set: { store.setBroadcastHeartRate(enabled: $0) }
+                )) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Broadcast Heart Rate")
+                            .font(StrapTypography.body(13, weight: .semibold))
+                            .foregroundStyle(Color.appFG)
+
+                        Text(store.band.isConnected
+                            ? "Transmits real-time HR over standard BLE 0x180D (Command 14 / 0x0E)."
+                            : "Connect strap to configure broadcast.")
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                }
+                .disabled(!store.band.isConnected)
+                .tint(Color.appAccent)
+
+                Divider().background(Color.appLine)
+
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Wake Alarm Haptics")
@@ -303,6 +330,24 @@ struct DeviceSettingsView: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            }
+
+            Divider().background(Color.appLine)
+
+            // Maintenance commands safety notice
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("Reboot & Maintenance Controls")
+                        .font(StrapTypography.body(12, weight: .semibold))
+                        .foregroundStyle(Color.appMuted)
+                    Spacer()
+                    Text("QUARANTINED")
+                        .font(StrapTypography.metric(9, weight: .bold))
+                        .foregroundStyle(Color.appWarn)
+                }
+                Text("Speculative command 32 (power-cycle), memory erase, and reflashing opcodes are quarantined to protect circular buffer flash records and prevent bricking.")
+                    .font(StrapTypography.body(10))
+                    .foregroundStyle(Color.appMuted.opacity(0.8))
             }
         }
     }
