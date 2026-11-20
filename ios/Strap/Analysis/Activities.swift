@@ -141,12 +141,15 @@ enum ActivityDetect {
             let elevated: Bool
             if let baseline = baseline {
                 elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
-            } else {
-                // When no pre-activity resting baseline exists (e.g. sync boundary or workout starts at sample 0),
-                // allow sustained elevated HR combined with dynamic acceleration to initiate a candidate session
+            } else if sample.stepCounter == nil {
+                // When no pre-activity resting baseline exists and device has no step counter
+                // (e.g. cardio, cycling, rowing starting at sync boundary), allow sustained
+                // elevated HR combined with dynamic acceleration to initiate a candidate session
                 // while strictly rejecting sedentary resting stress.
                 let moving = (sample.dynamicAccelG ?? 0) >= 0.03
                 elevated = Double(sample.heartRate) >= hrStartAbsolute && moving
+            } else {
+                elevated = false
             }
             measuredMotion.append(locomotion)
             let isActive = locomotion || elevated

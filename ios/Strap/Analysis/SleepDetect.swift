@@ -370,7 +370,13 @@ enum SleepDetect {
                 wornDuringGap = Double(wornCount) / Double(gapSamples.count) >= 0.60
             }
 
-            if isNocturnal && gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap {
+            // A sustained active workout (e.g. >= 180s of HR >= 90 and accel >= 0.15g) is not
+            // an in-bed nocturnal awakening or bathroom break.
+            let activeWorkoutDuringGap = gapSamples.filter {
+                ($0.dynamicAccelG ?? 0) >= 0.15 && Double($0.heartRate) >= 90
+            }.count >= 180
+
+            if isNocturnal && gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap && !activeWorkoutDuringGap {
                 let allIndices = samples.filter { current.startUnix <= $0.unix && $0.unix <= combinedEnd }
                 let quietCount = allIndices.filter { sample in
                     guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }

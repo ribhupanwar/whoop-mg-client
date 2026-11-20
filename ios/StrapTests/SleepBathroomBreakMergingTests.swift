@@ -27,7 +27,7 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
     func testNocturnalBathroomBreakMergesIntoSingleSleepSession() {
         var samples: [V18Sample] = []
-        let baseUnix = 1795000000 // Overnight timestamp
+        let baseUnix = 1795039200 // Overnight timestamp
 
         // 1. Daytime / active reference (1 hour at HR 85, accel 0.15) to establish active median
         for i in 0..<3600 {
@@ -73,7 +73,7 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
     func testLongAwakeningDoesNotMergeIntoSingleSession() {
         var samples: [V18Sample] = []
-        let baseUnix = 1795000000
+        let baseUnix = 1795039200
 
         // Active baseline
         for i in 0..<3600 {
@@ -101,7 +101,7 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
     func testOffWristGapDoesNotMergeAsBathroomBreak() {
         var samples: [V18Sample] = []
-        let baseUnix = 1795000000
+        let baseUnix = 1795039200
 
         // Active baseline
         for i in 0..<3600 {
@@ -129,7 +129,7 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
     func testGapWithMostlyOffWristSamplesDoesNotMerge() {
         var samples: [V18Sample] = []
-        let baseUnix = 1795000000
+        let baseUnix = 1795039200
 
         for i in 0..<3600 {
             samples.append(makeV18Sample(unix: baseUnix + i, hr: 85, accel: 0.15, state: 0))
