@@ -138,7 +138,7 @@ enum V18Decoder {
         var gravity: (Double, Double, Double)?
         if let x = axes.0, let y = axes.1, let z = axes.2,
            abs(x) <= fullScaleG, abs(y) <= fullScaleG, abs(z) <= fullScaleG {
-            gravity = (round(x, 4), round(y, 4), round(z, 4))
+            gravity = (round4(x), round4(y), round4(z))
         }
 
         let sleepByte = inner.count > 73 ? Int(inner[73]) : nil
@@ -149,7 +149,7 @@ enum V18Decoder {
             header: header,
             heartRate: hr,
             rrIntervalsMS: rr,
-            dynamicAccelG: dyn.map { round($0, 4) },
+            dynamicAccelG: dyn.map { round4($0) },
             gravityXG: gravity?.0,
             gravityYG: gravity?.1,
             gravityZG: gravity?.2,
@@ -166,7 +166,7 @@ enum V18Decoder {
             spo2CandidateRaw: spo2Raw,
             spo2CandidatePct: spo2.pct,
             spo2CandidateKind: spo2.kind,
-            signalQualityLogVariance: f32(inner, 105).map { round($0, 4) },
+            signalQualityLogVariance: f32(inner, 105).map { round4($0) },
             psnrB: signedByte(inner, 100),
             psnrA: signedByte(inner, 101)
         )
@@ -220,11 +220,26 @@ enum V18Decoder {
 
     private static func temp(_ bytes: [UInt8], _ offset: Int, scale: Double) -> Double? {
         guard let raw = i16(bytes, offset) else { return nil }
-        return round(Double(raw) / scale, 2)
+        return round2(Double(raw) / scale)
+    }
+
+    private static func round4(_ value: Double) -> Double {
+        (value * 10_000.0).rounded() / 10_000.0
+    }
+
+    private static func round2(_ value: Double) -> Double {
+        (value * 100.0).rounded() / 100.0
     }
 
     private static func round(_ value: Double, _ digits: Int) -> Double {
-        let scale = pow(10.0, Double(digits))
+        let scale: Double
+        switch digits {
+        case 1: scale = 10.0
+        case 2: scale = 100.0
+        case 3: scale = 1_000.0
+        case 4: scale = 10_000.0
+        default: scale = pow(10.0, Double(digits))
+        }
         return (value * scale).rounded() / scale
     }
 }
