@@ -6,11 +6,11 @@ private final class LoadChartCache {
     private var lastPoints: [MetricDay] = []
     private let lock = NSLock()
 
-    func points(isPreview: Bool, days: [DayMetrics], sleepNeedHours: Double?, imported: [ImportedWhoopDay]) -> [MetricDay] {
+    func points(isPreview: Bool, days: [DayMetrics], sleepNeedHours: Double, imported: [String: WhoopImportedDay]) -> [MetricDay] {
         lock.lock()
         defer { lock.unlock() }
         let dayStamp = JournalStore.dayKey(for: Date())
-        let key = "\(isPreview)-\(days.count)-\(days.last?.dateKey ?? "")-\(days.last?.strain ?? 0)-\(days.last?.recovery ?? 0)-\(sleepNeedHours ?? 0)-\(imported.count)-\(dayStamp)"
+        let key = "\(isPreview)-\(days.count)-\(days.last?.dateKey ?? "")-\(days.last?.strain ?? 0)-\(days.last?.recovery ?? 0)-\(sleepNeedHours)-\(imported.count)-\(dayStamp)"
         if key == lastKey {
             return lastPoints
         }
