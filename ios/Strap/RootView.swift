@@ -71,7 +71,7 @@ struct RootView: View {
     var body: some View {
         TabView(selection: $tab) {
             NavigationStack(path: $homePath) {
-                HomeView(openPlan: { showPlan = true })
+                HomeView(openPlan: { showPlan = true }, openInsights: { showInsights = true })
                     .strapDestinations()
             }
             .font(StrapTypography.body(15))

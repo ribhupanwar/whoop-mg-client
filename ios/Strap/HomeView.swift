@@ -7,7 +7,13 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
+    let openInsights: () -> Void
+
+    private let sleepRingColor = Color(hex: 0x7CA0BA)
+    private let strainRingColor = Color(hex: 0x0193E8)
+    private let highRecoveryRingColor = Color(hex: 0x24E21A)
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
@@ -33,6 +39,12 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                if dayOffset != 0 {
+                    Text("Activity history · scores show the latest recorded day")
+                        .font(StrapTypography.body(9))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 5)
+                }
                 ringTrio
                     .onScrollVisibilityChange(threshold: 0.05) { isVisible in
                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.18)) {
@@ -73,16 +85,16 @@ struct HomeView: View {
             }
         }
         .safeAreaInset(edge: .top) {
-            VStack(spacing: 0) {
+            ZStack {
                 topBar
-                if dayOffset != 0 {
-                    Text("Activity history · scores show the latest recorded day")
-                        .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted).padding(.bottom, 5)
-                }
+                    .opacity(compactScores ? 0 : 1)
+                    .allowsHitTesting(!compactScores)
+                    .accessibilityHidden(compactScores)
                 if compactScores {
                     compactRingRow.transition(.opacity)
                 }
             }
+            .frame(minHeight: 42)
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .background {
@@ -289,7 +301,7 @@ struct HomeView: View {
                         label: "SLEEP",
                         text: demo ? "\(SampleData.sleepRingPercent)%" : percentText(sleepPercent),
                         progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                        color: .appSleep,
+                        color: sleepRingColor,
                         ringSize: diameter
                     )
                 }
@@ -301,7 +313,7 @@ struct HomeView: View {
                         text: demo ? "\(SampleData.recoveryRingPercent)%" : percentText(recoveryScore.map { Int($0.rounded()) }),
                         progress: demo ? Double(SampleData.recoveryRingPercent) / 100 : recoveryScore.map { $0 / 100 },
                         color: (demo ? Double(SampleData.recoveryRingPercent) : recoveryScore).map { score in
-                            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
+                            score >= 67 ? highRecoveryRingColor : DetailMetric.recovery.color(score)
                         } ?? DetailMetric.recovery.color(nil),
                         ringSize: diameter
                     )
@@ -313,7 +325,7 @@ struct HomeView: View {
                         label: "STRAIN",
                         text: demo ? String(format: "%.1f", SampleData.strain) : strain.map { String(format: "%.1f", $0) } ?? "—",
                         progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
-                        color: .appAccent,
+                        color: strainRingColor,
                         ringSize: diameter
                     )
                 }
@@ -382,7 +394,7 @@ struct HomeView: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 8, weight: .semibold))
             }
-            .foregroundStyle(Color.appMuted)
+            .foregroundStyle(Color.appFG)
             .lineLimit(1)
             .minimumScaleFactor(0.85)
         }
@@ -581,18 +593,18 @@ struct HomeView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel("Add activity")
             }
-            Button(action: openPlan) {
+            Button(action: openInsights) {
                 HStack(spacing: 10) {
-                    Image(systemName: "sun.max")
+                    Image(systemName: "moon")
                         .font(.system(size: 16))
-                        .foregroundStyle(Color(hex: 0xC59F7A))
-                    Text("Your Daily Outlook")
+                        .foregroundStyle(Color(hex: 0x89B9DD))
+                    Text(dayInReviewTitle)
                         .font(StrapTypography.body(13.5, weight: .medium))
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Image(systemName: "chevron.right")
                         .font(.system(size: 9.5, weight: .semibold))
-                        .foregroundStyle(Color(hex: 0xC59F7A))
+                        .foregroundStyle(Color(hex: 0x89B9DD))
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -605,6 +617,13 @@ struct HomeView: View {
             .buttonStyle(.plain)
         }
         .padding(.bottom, 14)
+    }
+
+    private var dayInReviewTitle: String {
+        guard let first = profileName.split(whereSeparator: \.isWhitespace).first else {
+            return "Day in Review"
+        }
+        return "\(first)’s Day in Review"
     }
 
     // MARK: Today's activities
@@ -1124,26 +1143,33 @@ struct HomeView: View {
         // Otherwise the sticky header changes colors/scores while scrolling.
         let displayedRecovery = demo ? Double(SampleData.recoveryRingPercent) : recoveryScore
         let recoveryColor = displayedRecovery.map { score in
-            score >= 67 ? Color.appGood : DetailMetric.recovery.color(score)
+            score >= 67 ? highRecoveryRingColor : DetailMetric.recovery.color(score)
         } ?? DetailMetric.recovery.color(nil)
-        return HStack(spacing: 16) {
+        return HStack(spacing: 4) {
             compactRing("SLEEP", route: .sleepAnalysis,
                         progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
-                        color: .appSleep)
+                        color: sleepRingColor)
             compactRing("RECOVERY", route: .recovery,
                         progress: displayedRecovery.map { $0 / 100 }, color: recoveryColor)
             compactRing("STRAIN", route: .strain,
                         progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
-                        color: .appAccent)
-        }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
+                        color: strainRingColor)
+        }.frame(maxWidth: .infinity)
     }
 
     private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
         NavigationLink(value: route) {
             HStack(spacing: 6) {
-                RingView(progress: progress, color: color, lineWidth: 2.5, size: 23, centerText: "")
-                Text(title).font(StrapTypography.body(11, weight: .bold)).tracking(0.9)
-            }.foregroundStyle(Color.appFG)
+                RingView(progress: progress, color: color, lineWidth: 2.2, size: 22, centerText: "")
+                Text(title)
+                    .font(StrapTypography.body(10, weight: .bold))
+                    .tracking(0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .frame(maxWidth: .infinity, minHeight: 42)
+            .foregroundStyle(Color.appFG)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("home.compact." + title.lowercased())
