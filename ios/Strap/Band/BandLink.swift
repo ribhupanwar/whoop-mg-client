@@ -1962,9 +1962,13 @@ final class BandLink: NSObject, ObservableObject {
                 switch result {
                 case .success:
                     guard !self.historyPersistenceStalled else { return }
-                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
-                    self.drainAcks += 1
                     self.lastFrameAt = Date()
+                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token) { [weak self, weak writer] in
+                        guard let self, let writer, self.captureWriter === writer,
+                              self.drainStartedAt != nil else { return }
+                        self.drainAcks += 1
+                        self.lastFrameAt = Date()
+                    }
                 case .failure(let error):
                     self.historyPersistenceStalled = true
                     self.hasUnsavedArchiveRecords = true
