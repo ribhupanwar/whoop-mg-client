@@ -114,12 +114,12 @@ struct SleepSession: Codable, Equatable {
         // Prefer the closest source (then latest source), and never count overlapping edits twice.
         var accepted: [Int: (distance: Int, times: [Int])] = [:]
         for index in assigned.keys.sorted(by: {
-            let lhs = assigned[$0]!, rhs = assigned[$1]!
+            guard let lhs = assigned[$0], let rhs = assigned[$1] else { return false }
             return lhs.distance == rhs.distance
                 ? ordered[$0].startUnix > ordered[$1].startUnix
                 : lhs.distance < rhs.distance
         }) {
-            let candidate = assigned[index]!
+            guard let candidate = assigned[index] else { continue }
             guard !accepted.values.contains(where: {
                 max($0.times[0], candidate.times[0]) < min($0.times[1], candidate.times[1])
             }) else { continue }
@@ -269,11 +269,15 @@ struct SleepSession: Codable, Equatable {
                   accel > SleepDetect.quietAccelG else { continue }
             movingSeconds[(sample.unix - start) / 30, default: 0] += 1
         }
-        let movingEpochs = movingSeconds.keys.filter { movingSeconds[$0]! >= 15 }.sorted()
+        let movingEpochs = movingSeconds.keys.filter { (movingSeconds[$0] ?? 0) >= 15 }.sorted()
         var bouts = 0
         var previous: Int?
         for epoch in movingEpochs {
-            if previous == nil || epoch - previous! > 4 { bouts += 1 }
+            if let prev = previous {
+                if epoch - prev > 4 { bouts += 1 }
+            } else {
+                bouts += 1
+            }
             previous = epoch
         }
         return SleepSession(

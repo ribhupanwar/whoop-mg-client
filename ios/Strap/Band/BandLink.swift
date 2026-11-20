@@ -623,13 +623,18 @@ final class BandLink: NSObject, ObservableObject {
                         && $0.endUnix - 1 == day.sleepEndUnix
                 } ?? false
             }.map(\.dateKey))
+            let previousEditedDays = Set(sessionsSnapshot.filter(\.isEdited).compactMap { session in
+                JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)), calendar: .current)
+            })
             var byDay: [String: DayMetrics] = [:]
             for day in daysSnapshot { byDay[day.dateKey] = day }
             for day in freshDays {
+                let previousIsEdited = previousEditedDays.contains(day.dateKey)
                 if let previous = byDay[day.dateKey], previous.sleepStartUnix != nil,
                    !DailyAnalysis.replacesSleep(previous: previous, fresh: day,
                                                 coverageStart: fresh.firstUnix, coverageEnd: fresh.lastUnix,
-                                                isEdited: editedDays.contains(day.dateKey)) {
+                                                isEdited: editedDays.contains(day.dateKey),
+                                                previousIsEdited: previousIsEdited) {
                     continue
                 }
                 byDay[day.dateKey] = day
@@ -1390,8 +1395,16 @@ final class BandLink: NSObject, ObservableObject {
         drainTimer = nil
         automaticSyncTimer?.invalidate()
         automaticSyncTimer = nil
+        #if DEBUG
+        uiStressTimer?.invalidate()
+        uiStressTimer = nil
+        #endif
         liveHRWatchdog?.invalidate()
         liveHRWatchdog = nil
+        liveRRFlushWork?.cancel()
+        liveRRFlushWork = nil
+        pickerTimeout?.cancel()
+        pickerTimeout = nil
         lastHRRecoveryAt = nil
         hrRecoveryAttempts = 0
         hrDiscoveryRequestedAt = nil
@@ -1766,8 +1779,12 @@ final class BandLink: NSObject, ObservableObject {
         let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
         let rrBeats = samples.reduce(0) { $0 + $1.rrIntervalsMS.count }
         let uniqueSeconds = Set(samples.map(\.unix))
-        let missingSeconds = uniqueSeconds.isEmpty ? 0
-            : (uniqueSeconds.max()! - uniqueSeconds.min()! + 1 - uniqueSeconds.count)
+        let missingSeconds: Int
+        if let maxSec = uniqueSeconds.max(), let minSec = uniqueSeconds.min() {
+            missingSeconds = maxSec - minSec + 1 - uniqueSeconds.count
+        } else {
+            missingSeconds = 0
+        }
         let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
         let completed = reason == "explicit completion" && !historyPersistenceStalled && historyUndecodableFrames == 0
         let newest = uniqueSeconds.max()
@@ -1912,6 +1929,10 @@ final class BandLink: NSObject, ObservableObject {
         editedDays: Set<String> = []
     ) {
         guard !fresh.isEmpty else { return }
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let previousEditedDays = Set((summary?.sleepSessions ?? []).filter(\.isEdited).compactMap { session in
+            JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)), calendar: .current)
+        })
         var map = Dictionary(uniqueKeysWithValues: days.map { ($0.dateKey, $0) })
         // A short subsequent capture must not erase a fuller day's steps.
         // This is a conservative lower bound, NOT an additive daily total:
@@ -1921,9 +1942,12 @@ final class BandLink: NSObject, ObservableObject {
                 map[day.dateKey] = day
                 continue
             }
+            let isPrevEdited = previousEditedDays.contains(day.dateKey)
+                || (previous.sleepStartUnix.map { overrides[String($0)] != nil } ?? false)
             let replacesSleep = DailyAnalysis.replacesSleep(
                 previous: previous, fresh: day, coverageStart: coverageStart, coverageEnd: coverageEnd,
-                isEdited: editedDays.contains(day.dateKey)
+                isEdited: editedDays.contains(day.dateKey),
+                previousIsEdited: isPrevEdited
             )
             map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
@@ -2126,6 +2150,12 @@ extension BandLink: CBCentralManagerDelegate {
                 status = preferredBandID == nil ? .unpaired : .idle
             }
         case .poweredOff:
+            resetLink()
+            isLiveSession = false
+            sessionStartedUnix = nil
+            liveSamples = []
+            reconnectWork?.cancel()
+            reconnectWork = nil
             if pickerMode {
                 pickerTimeout?.cancel()
                 pickerTimeout = nil

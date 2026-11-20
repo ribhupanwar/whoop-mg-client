@@ -204,7 +204,8 @@ enum SleepDetect {
             if let upStart, upSeconds >= 300 {
                 verifiedEnd = upStart - 1
             } else if let terminalUp = run.last(where: { $0.sleepState == 3 }),
-                      run.last!.unix - terminalUp.unix <= 60 {
+                      let lastSample = run.last,
+                      lastSample.unix - terminalUp.unix <= 60 {
                 // A fresh terminal band-up transition corroborates wake, but
                 // cannot alone establish when waking began. Require sustained
                 // elevated HR AND motion relative to the preceding resting

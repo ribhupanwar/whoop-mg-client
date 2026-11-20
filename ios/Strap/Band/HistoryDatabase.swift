@@ -153,8 +153,9 @@ final class HistoryDatabase {
             sqlite3_bind_int64(lookup, 1, Int64(row.unix))
             let status = sqlite3_step(lookup)
             if status == SQLITE_ROW {
-                let old = try decoder.decode(V18Sample.self, from: blob(lookup, column: 0))
-                if !HistoricalRecordSelection.prefers(row, over: old) { continue }
+                if let old = try? decoder.decode(V18Sample.self, from: blob(lookup, column: 0)) {
+                    if !HistoricalRecordSelection.prefers(row, over: old) { continue }
+                }
             } else if status != SQLITE_DONE { throw failure() }
             let data = try encoder.encode(row)
             sqlite3_reset(write); sqlite3_clear_bindings(write)
