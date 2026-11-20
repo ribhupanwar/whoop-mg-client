@@ -32,8 +32,22 @@ final class TabResponsivenessTests: XCTestCase {
                 let button = app.buttons["tab." + tab]
                 let start = Date()
                 button.tap()
+                // UI test snapshots can lag while the stress-sync fixture updates
+                // the accessibility tree. Wait for the actual selected state without
+                // incorrectly treating an XCTest predicate snapshot as permanent.
                 let selected = XCTNSPredicateExpectation(predicate: NSPredicate(format: "isSelected == true"), object: button)
-                XCTAssertEqual(XCTWaiter.wait(for: [selected], timeout: 5), .completed,
+                let result = XCTWaiter.wait(for: [selected], timeout: 10)
+                if result != .completed {
+                    let hierarchy = XCTAttachment(string: app.debugDescription)
+                    hierarchy.name = "Tab \(tab) selection timeout hierarchy"
+                    hierarchy.lifetime = .keepAlways
+                    add(hierarchy)
+                    let screenshot = XCTAttachment(screenshot: app.screenshot())
+                    screenshot.name = "Tab \(tab) selection timeout"
+                    screenshot.lifetime = .keepAlways
+                    add(screenshot)
+                }
+                XCTAssertEqual(result, .completed,
                                "Tab \(tab) must respond while sync notifications continue")
                 durations.append(Date().timeIntervalSince(start))
             }
