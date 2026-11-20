@@ -1084,10 +1084,21 @@ struct HomeView: View {
     }
 
     private var compactRingRow: some View {
-        HStack(spacing: 16) {
-            compactRing("SLEEP", route: .sleepAnalysis, progress: sleepPercent.map { Double($0) / 100 }, color: .appSleep)
-            compactRing("RECOVERY", route: .recovery, progress: recoveryScore.map { $0 / 100 }, color: DetailMetric.recovery.color(recoveryScore))
-            compactRing("STRAIN", route: .strain, progress: strain.map { $0 / 21 }, color: .appAccent)
+        // Use exactly the same progress and palette as the full-size rings.
+        // Otherwise the sticky header changes colors/scores while scrolling.
+        let displayedRecovery = demo ? Double(SampleData.recoveryRingPercent) : recoveryScore
+        let recoveryColor = displayedRecovery.map { score in
+            score >= 67 ? Color(hex: 0x00E66C) : DetailMetric.recovery.color(score)
+        } ?? DetailMetric.recovery.color(nil)
+        return HStack(spacing: 16) {
+            compactRing("SLEEP", route: .sleepAnalysis,
+                        progress: demo ? Double(SampleData.sleepRingPercent) / 100 : sleepPercent.map { Double($0) / 100 },
+                        color: Color(hex: 0x82A8C2))
+            compactRing("RECOVERY", route: .recovery,
+                        progress: displayedRecovery.map { $0 / 100 }, color: recoveryColor)
+            compactRing("STRAIN", route: .strain,
+                        progress: demo ? SampleData.strain / 21 : strain.map { $0 / 21 },
+                        color: .appAccent)
         }.padding(.vertical, 9).frame(maxWidth: .infinity, alignment: .leading)
     }
 
