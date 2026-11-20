@@ -2,6 +2,7 @@ import SwiftUI
 import ZIPFoundation
 import UniformTypeIdentifiers
 import UserNotifications
+import UIKit
 
 // MARK: - 1. Connection & Sync View
 
@@ -675,9 +676,9 @@ struct DataManagementView: View {
 // MARK: - 4. Notification Settings View
 
 struct NotificationSettingsView: View {
-    @AppStorage("strap.wake.alarm.enabled.v1") private var wakeAlarmEnabled = false
-    @AppStorage("strap.notifications.bedtimeReminders") private var bedtimeReminders = false
-    @AppStorage("strap.notifications.targetAlerts") private var targetAlerts = false
+    @Environment(\.openURL) private var openURL
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var denied = false
     @State private var permissionStatus: String = "Checking permissions…"
     @State private var authorized = false
 
@@ -705,9 +706,13 @@ struct NotificationSettingsView: View {
                     if !authorized {
                         Divider().background(Color.appLine).padding(.vertical, 4)
                         Button {
-                            requestPermission()
+                            if denied, let url = URL(string: UIApplication.openSettingsURLString) {
+                                openURL(url)
+                            } else {
+                                requestPermission()
+                            }
                         } label: {
-                            Text("Request Notification Access")
+                            Text(denied ? "Open iOS Settings" : "Request Notification Access")
                                 .font(StrapTypography.body(13, weight: .semibold))
                                 .foregroundStyle(Color.appAccent)
                         }
@@ -715,48 +720,14 @@ struct NotificationSettingsView: View {
                 }
 
                 Panel {
-                    SectionTitle("ALERT CHANNELS")
-                    Toggle(isOn: $wakeAlarmEnabled) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Wake Alarm Phone Alert")
-                                .font(StrapTypography.body(13.5, weight: .medium))
-                                .foregroundStyle(Color.appFG)
-                            Text("Fires backup phone sound at scheduled wake time")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
-                        }
+                    SectionTitle("WAKE ALARM")
+                    NavigationLink {
+                        BandAlarmsView()
+                    } label: {
+                        Label("Edit wake alarm schedule", systemImage: "alarm")
+                            .font(StrapTypography.body(13.5, weight: .semibold))
+                            .foregroundStyle(Color.appAccent)
                     }
-                    .tint(Color.appGood)
-                    .padding(.vertical, 6)
-
-                    Divider().background(Color.appLine)
-
-                    Toggle(isOn: $bedtimeReminders) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Bedtime Reminder")
-                                .font(StrapTypography.body(13.5, weight: .medium))
-                                .foregroundStyle(Color.appFG)
-                            Text("Notifies when your optimal sleep window approaches")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
-                        }
-                    }
-                    .tint(Color.appGood)
-                    .padding(.vertical, 6)
-
-                    Divider().background(Color.appLine)
-
-                    Toggle(isOn: $targetAlerts) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Recovery & Strain Target Alerts")
-                                .font(StrapTypography.body(13.5, weight: .medium))
-                                .foregroundStyle(Color.appFG)
-                            Text("Alerts when morning recovery or day strain target is reached")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
-                        }
-                    }
-                    .tint(Color.appGood)
                     .padding(.vertical, 6)
                 }
 
@@ -771,11 +742,15 @@ struct NotificationSettingsView: View {
         .navigationTitle("Notifications")
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { checkPermission() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { checkPermission() }
+        }
     }
 
     private func checkPermission() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
+                denied = settings.authorizationStatus == .denied
                 switch settings.authorizationStatus {
                 case .authorized, .provisional, .ephemeral:
                     permissionStatus = "Notifications Allowed"
@@ -807,8 +782,6 @@ struct NotificationSettingsView: View {
 
 struct AppPreferencesView: View {
     @EnvironmentObject private var store: AppStore
-    @AppStorage("strap.preferences.useMetric") private var useMetric = true
-    @AppStorage("strap.preferences.use24HourTime") private var use24HourTime = false
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet."
 
@@ -816,28 +789,10 @@ struct AppPreferencesView: View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
                 Panel {
-                    SectionTitle("MEASUREMENT UNITS")
-                    Picker("Unit System", selection: $useMetric) {
-                        Text("Metric (kg, cm)").tag(true)
-                        Text("Imperial (lbs, ft/in)").tag(false)
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.vertical, 4)
-
-                    Divider().background(Color.appLine).padding(.vertical, 6)
-
-                    Toggle(isOn: $use24HourTime) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("24-Hour Clock")
-                                .font(StrapTypography.body(13.5, weight: .medium))
-                                .foregroundStyle(Color.appFG)
-                            Text("Use 24:00 time notation across timelines")
-                                .font(StrapTypography.body(11))
-                                .foregroundStyle(Color.appMuted)
-                        }
-                    }
-                    .tint(Color.appGood)
-                    .padding(.vertical, 4)
+                    SectionTitle("DISPLAY FORMATS")
+                    Text("Measurements are shown in metric units. Localized times follow your iPhone settings.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
                 }
 
                 Panel {
