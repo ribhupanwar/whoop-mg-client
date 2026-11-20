@@ -10,7 +10,10 @@ struct SleepHRPoint: Codable, Equatable, Identifiable {
 /// The sole source of sleep durations on every screen. All ends here are exclusive.
 /// A missing interval is unknown, never an awakening and never sleep debt.
 struct SleepSession: Codable, Equatable {
-    static let algorithmVersion = 5
+    // v6 invalidates v5 sleep-stage estimates that could classify prolonged
+    // V18 sleepState=3 ("up") as Deep/Light. The retained sensor archive and
+    // authoritative manual bed/wake corrections are not modified.
+    static let algorithmVersion = 6
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int

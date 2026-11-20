@@ -27,6 +27,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
     }
 
     private func capture(startHour: Int, startMinute: Int,
+                         totalMinutes: Int = 75,
                          sleepStateDelay: Int = 14 * 60,
                          evidence: Bool = true) -> ([V18Sample], Int) {
         var calendar = Calendar(identifier: .gregorian)
@@ -40,7 +41,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
             records.append(row(start - 900 + second, seconds: second,
                                sleeping: false, sleepState: 0))
         }
-        for second in 0..<(75 * 60) {
+        for second in 0..<(totalMinutes * 60) {
             let state: Int? = second >= sleepStateDelay && evidence ? 2 : 1
             records.append(row(start + second, seconds: second + 900,
                                sleeping: true, sleepState: state))
@@ -57,7 +58,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
     }
 
     func testLateEveningBefore2200StillTrimsUnconfirmedRest() throws {
-        let (rows, start) = capture(startHour: 21, startMinute: 45)
+        let (rows, start) = capture(startHour: 21, startMinute: 45, totalMinutes: 105)
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
         XCTAssertEqual(night.startUnix, start + 14 * 60,
                        "Pre-22:00 lying-still evidence must not bypass the safety gate")
@@ -75,10 +76,13 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let rows = original.map { sample -> V18Sample in
             guard upStart <= sample.unix, sample.unix < upEnd else { return sample }
             return row(sample.unix, seconds: Int(sample.header.recordIndex),
-                       sleeping: true, sleepState: 3)
+                       sleeping: false, sleepState: 3)
         }
-        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        let stages = SleepStager.stage(samples: rows, period: night)
+        let period = SleepPeriod(
+            startUnix: start, endUnix: start + 75 * 60 - 1,
+            quietFraction: 0.95, meanHR: 60, wakeEvents: 1
+        )
+        let stages = SleepStager.stage(samples: rows, period: period)
         let duringUp = stages.segments.filter {
             max($0.startUnix, upStart) < min($0.endUnix, upEnd)
         }
