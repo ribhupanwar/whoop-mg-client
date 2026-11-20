@@ -80,6 +80,23 @@ jobs:
               print("Validated iOS font naming:", filename, postscript)
           PY
 
+      # Source artwork may be uploaded larger than Apple's required 1024x1024.
+      # Normalize only the checked-out build copy, preserving the original art.
+      - name: Normalize AppIcon dimensions before asset catalog compilation
+        run: |
+          set -euo pipefail
+          icon="ios/Strap/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png"
+          test -f "$icon"
+          width=$(sips -g pixelWidth "$icon" | awk '/pixelWidth:/ {print $2}')
+          height=$(sips -g pixelHeight "$icon" | awk '/pixelHeight:/ {print $2}')
+          if [ "$width" != "1024" ] || [ "$height" != "1024" ]; then
+            echo "::notice::Resizing AppIcon from ${width}x${height} to 1024x1024 for iOS asset catalog"
+            sips -z 1024 1024 "$icon" >/dev/null
+          fi
+          sips -g pixelWidth -g pixelHeight "$icon"
+          test "$(sips -g pixelWidth "$icon" | awk '/pixelWidth:/ {print $2}')" = "1024"
+          test "$(sips -g pixelHeight "$icon" | awk '/pixelHeight:/ {print $2}')" = "1024"
+
       - name: Generate Xcode project
         working-directory: ios
         run: xcodegen generate
