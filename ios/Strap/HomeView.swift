@@ -29,14 +29,6 @@ struct HomeView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                Image("WhoopWordmark")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(height: 14)
-                    .accessibilityLabel("STRAP · WHOOP Client")
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-                    .padding(.bottom, 12)
                 ringTrio
                     .background(GeometryReader { geometry in
                         Color.clear.preference(key: HomeHeroPosition.self,
