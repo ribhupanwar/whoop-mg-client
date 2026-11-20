@@ -472,9 +472,12 @@ struct SettingsView: View {
     // MARK: Baseline & Calibration Progress
 
     private var baselinePanel: some View {
-        let eligibleNights = store.band.sleepBaseline?.days ?? 0
         let requiredNights = Recovery.minBaselineDays
         let rollingWindow = DailyAnalysis.rollingBaselineDays
+        let eligibleNights = store.band.days.filter { $0.state == "sleep" }
+            .suffix(rollingWindow)
+            .filter { $0.lnRMSSD != nil && $0.restingHR != nil }
+            .count
         return Panel {
             SectionTitle("Baseline & Calibration")
             VStack(alignment: .leading, spacing: 8) {
