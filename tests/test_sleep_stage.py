@@ -53,12 +53,19 @@ class SleepStageTests(unittest.TestCase):
         )
 
     def test_quiet_night_is_mostly_light_with_no_wake(self):
-        samples, period = make_night()
+        samples, period = make_night(minutes=90)
         result = stage_sleep(samples, period)
         self.assertEqual(result.wake_min, 0.0)
         self.assertGreater(result.light_min, result.deep_min)
         self.assertGreater(result.deep_min + result.rem_min, 0.0)
         self.assertAlmostEqual(result.total_min, 90.0, places=6)
+
+    def test_one_hour_nap_respects_rem_latency_guard(self):
+        samples, period = make_night(minutes=60)
+        result = stage_sleep(samples, period)
+        self.assertEqual(result.wake_min, 0.0)
+        self.assertEqual(result.rem_min, 0.0)
+        self.assertAlmostEqual(result.light_min, 60.0, places=6)
 
     def test_totals_match_the_segments(self):
         samples, period = make_night(minutes=60, bursts=((20, 23),))

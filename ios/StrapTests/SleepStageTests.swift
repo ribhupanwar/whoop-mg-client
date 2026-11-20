@@ -153,12 +153,20 @@ final class SleepStageTests: XCTestCase {
     }
 
     func testQuietNightIsMostlyLightWithoutWake() {
-        let (samples, period) = makeNight()
+        let (samples, period) = makeNight(minutes: 90)
         let staging = SleepStager.stage(samples: samples, period: period)
         XCTAssertEqual(staging.wakeMinutes, 0)
         XCTAssertGreaterThan(staging.lightMinutes, staging.deepMinutes)
         XCTAssertGreaterThan(staging.restorativeMinutes, 0)
         XCTAssertEqual(staging.asleepMinutes + staging.wakeMinutes, staging.totalMinutes, accuracy: 0.001)
+    }
+
+    func testOneHourNapRespectsRemLatencyGuard() {
+        let (samples, period) = makeNight(minutes: 60)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertEqual(staging.wakeMinutes, 0)
+        XCTAssertEqual(staging.remMinutes, 0, "A 60-minute nap must not produce premature REM before the 60-minute latency guard expires")
+        XCTAssertEqual(staging.lightMinutes, 60, accuracy: 0.001)
     }
 
     func testTotalsMatchSegments() {
