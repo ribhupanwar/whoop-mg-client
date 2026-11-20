@@ -406,7 +406,7 @@ struct DeviceSettingsView: View {
             .buttonStyle(.plain)
 
             // UNPAIR DEVICE
-            if store.band.preferredBandID != nil {
+            if store.band.preferredBandID != nil || store.band.isConnected {
                 Divider().background(Color.appLine)
 
                 Button {

@@ -221,7 +221,7 @@ struct BandAlarmsView: View {
                             }
                         }
                         Spacer()
-                        if alarmOn, let next = nextWake {
+                        if alarmOn, nextWake != nil {
                             HStack(spacing: 4) {
                                 Circle()
                                     .fill(isBandConfirmed ? Color.appGood : Color.appWarn)

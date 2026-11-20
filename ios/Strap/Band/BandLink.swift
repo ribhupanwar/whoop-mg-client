@@ -423,7 +423,7 @@ final class BandLink: NSObject, ObservableObject {
     private var hrDiscoveryRequestedAt: Date?
     private var hrResubscribePending = false
     private var hrSubscribedBeforeBond = false
-    private var hrBondConfirmed = false
+    @Published private(set) var hrBondConfirmed = false
     private var hrSubscriptionConfirmedAt: Date?
     private var hrConnectedAt: Date?
     private var reconnectWork: DispatchWorkItem?

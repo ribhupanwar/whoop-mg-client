@@ -90,18 +90,18 @@ struct AppleHealthImportView: View {
 
                 Panel {
                     SectionTitle("IMPORT HISTORICAL RECORDS")
-                    Text("Import historical Apple Health records. These populate your local timeline without replacing physical band measurements or overwriting RMSSD Recovery inputs.")
+                    Text("Import historical Apple Health records. Imported records are stored safely in STRAP's local database and their count is displayed; they do not replace physical band measurements or overwrite raw sensor RMSSD Recovery inputs.")
                         .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 4)
 
-                    DatePicker("From", selection: $from, displayedComponents: [.date])
+                    DatePicker("From", selection: $from, displayedComponents: [.date, .hourAndMinute])
                         .font(StrapTypography.body(13, weight: .medium))
                         .foregroundStyle(Color.appFG)
 
                     Divider().background(Color.appLine).padding(.vertical, 2)
 
-                    DatePicker("Through", selection: $through, displayedComponents: [.date])
+                    DatePicker("Through", selection: $through, displayedComponents: [.date, .hourAndMinute])
                         .font(StrapTypography.body(13, weight: .medium))
                         .foregroundStyle(Color.appFG)
 

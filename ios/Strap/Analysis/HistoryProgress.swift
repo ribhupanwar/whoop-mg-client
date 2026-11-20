@@ -2,7 +2,18 @@ import Foundation
 
 /// Counters describe measured work. Network progress has no invented percentage.
 struct HistoryProgress: Equatable {
-    enum Stage: String { case preparing, nights, days, finishing }
+    enum Stage: String {
+        case preparing, nights, days, finishing
+
+        var title: String {
+            switch self {
+            case .preparing: return "Preparing"
+            case .nights: return "Analyzing Sleep"
+            case .days: return "Updating Daily Metrics"
+            case .finishing: return "Saving Results"
+            }
+        }
+    }
     let stage: Stage
     let completed: Int
     let total: Int
