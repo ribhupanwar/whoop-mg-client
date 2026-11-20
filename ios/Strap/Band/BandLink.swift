@@ -310,6 +310,9 @@ final class BandLink: NSObject, ObservableObject {
     private var reassemblers: [CBUUID: FrameReassembler] = [:]
     private var subscribed: Set<CBUUID> = []
     private var helloExchange: BandHelloExchange?
+    private var needsBondBootstrap = false
+    private var bondBootstrapInProgress = false
+    private var bondBootstrapAttempted = false
     private var helloResponseDeadline: DispatchWorkItem?
 
     /// Public read-only stage helps distinguish GATT connection from an
@@ -1516,6 +1519,9 @@ final class BandLink: NSObject, ObservableObject {
         reassemblers = [:]
         subscribed = []
         helloExchange = nil
+        needsBondBootstrap = false
+        bondBootstrapInProgress = false
+        bondBootstrapAttempted = false
         helloResponseDeadline?.cancel()
         helloResponseDeadline = nil
         handshakeStarted = false
@@ -1539,9 +1545,13 @@ final class BandLink: NSObject, ObservableObject {
     private func maybeBeginHandshake() {
         guard !handshakeStarted,
               commandCharacteristic != nil,
-              subscribed.contains(BandUUID.commandFrom),
-              subscribed.contains(BandUUID.data),
               peripheral?.state == .connected else { return }
+        let notificationsReady = subscribed.contains(BandUUID.commandFrom) && subscribed.contains(BandUUID.data)
+        if !notificationsReady {
+            guard needsBondBootstrap, !bondBootstrapAttempted else { return }
+            bondBootstrapAttempted = true
+            bondBootstrapInProgress = true
+        }
         handshakeStarted = true
         status = .authenticating
         enqueue(BandCommand.clientHello.rawValue, body: [0x01])
@@ -1732,7 +1742,7 @@ final class BandLink: NSObject, ObservableObject {
         let writeID = UUID()
         currentWriteID = writeID
         let inner: [UInt8] = [BandPacket.command, commandSeq, next.opcode] + next.body
-        if next.opcode == BandCommand.clientHello.rawValue {
+        if next.opcode == BandCommand.clientHello.rawValue, !bondBootstrapInProgress {
             helloExchange = BandHelloExchange(sequence: commandSeq)
         }
         commandSeq &+= 1
@@ -2469,6 +2479,7 @@ extension BandLink: CBCentralManagerDelegate {
 
 extension BandLink: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard peripheral === self.peripheral, peripheral.state == .connected else { return }
         if let error {
             status = .failed("Service discovery failed: \(error.localizedDescription)")
             return
@@ -2496,6 +2507,7 @@ extension BandLink: CBPeripheralDelegate {
         didDiscoverCharacteristicsFor service: CBService,
         error: Error?
     ) {
+        guard peripheral === self.peripheral, peripheral.state == .connected else { return }
         if let error {
             lastMessage = "Characteristics unavailable: \(error.localizedDescription)"
             if service.uuid == BandUUID.service {
@@ -2549,8 +2561,17 @@ extension BandLink: CBPeripheralDelegate {
             if characteristic.uuid == BandUUID.heartRateMeasurement {
                 hrResubscribePending = false
             }
-            if BandUUID.notifiable.contains(characteristic.uuid) {
-                status = .failed("WHOOP notification subscription failed: \(error.localizedDescription)")
+            if characteristic.uuid == BandUUID.commandFrom || characteristic.uuid == BandUUID.data {
+                if isAuthenticationError(error), !bondBootstrapAttempted, !handshakeStarted {
+                    needsBondBootstrap = true
+                    maybeBeginHandshake()
+                    return
+                }
+                if bondBootstrapInProgress { return }
+                historySyncError = "WHOOP notification subscription failed: \(error.localizedDescription)"
+                lastMessage = historySyncError ?? "WHOOP notifications unavailable"
+                central.cancelPeripheralConnection(peripheral)
+                return
             }
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
@@ -2645,12 +2666,14 @@ extension BandLink: CBPeripheralDelegate {
         if let error {
             if commandQueue.first?.opcode == BandCommand.clientHello.rawValue { helloExchange = nil }
             commandInFlight = false
-            if isAuthenticationError(error), helloAttempts < 2 {
+            if commandQueue.first?.opcode == BandCommand.clientHello.rawValue,
+               isAuthenticationError(error), helloAttempts < 2 {
                 helloAttempts += 1
-                commandInFlight = false
                 lastMessage = "Waiting for the pairing prompt — accept it to authenticate the strap."
+                let generation = linkGeneration
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.pump()
+                    guard let self, self.linkGeneration == generation else { return }
+                    self.pump()
                 }
                 return
             }
@@ -2686,6 +2709,14 @@ extension BandLink: CBPeripheralDelegate {
         }
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {
+            if bondBootstrapInProgress {
+                bondBootstrapInProgress = false
+                handshakeStarted = false
+                helloAttempts = 0
+                resubscribeNotifyCharacteristics()
+                maybeBeginHandshake()
+                return
+            }
             helloExchange?.writeCompleted = true
             confirmHelloIfReady()
             if !hrBondConfirmed {
