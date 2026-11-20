@@ -38,48 +38,24 @@ struct SleepAnalysisView: View {
     }
 
     private var typicalRestorativeMinutes: Double {
-        let history = nights.compactMap { night -> Double? in
-            guard let staging = night.staging, staging.epochs > 0 else { return nil }
-            return staging.deepMinutes + staging.remMinutes
-        }
-        if history.count >= 3 {
-            return history.reduce(0, +) / Double(history.count)
+        if nights.count >= 3 {
+            let avgSleepMinutes = nights.map { $0.actualHours * 60 }.reduce(0, +) / Double(nights.count)
+            return avgSleepMinutes * 0.43
         }
         // Baseline 3h 36m (216 min) matching WHOOP reference
         return 216.0
     }
 
     private var typicalHoursVsNeededPct: Double {
-        let history = nights.compactMap { night -> Double? in
-            guard let analysis = night.analysis else { return nil }
-            return analysis.hoursVsNeededPct
-        }
-        if history.count >= 3 {
-            return (history.reduce(0, +) / Double(history.count)).rounded()
+        let ratios = nights.compactMap { $0.neededHours > 0 ? ($0.actualHours / $0.neededHours * 100.0) : nil }
+        if ratios.count >= 3 {
+            return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
         }
         // Baseline 67% matching WHOOP reference
         return 67.0
     }
 
     private func typicalRange(for stage: SleepStage) -> ClosedRange<Double> {
-        let history = nights.compactMap { night -> Double? in
-            guard let staging = night.staging, staging.epochs > 0 else { return nil }
-            let total = max(1.0, staging.deepMinutes + staging.lightMinutes + staging.remMinutes + staging.wakeMinutes)
-            let stageMin: Double
-            switch stage {
-            case .wake: stageMin = staging.wakeMinutes
-            case .light: stageMin = staging.lightMinutes
-            case .deep: stageMin = staging.deepMinutes
-            case .rem: stageMin = staging.remMinutes
-            }
-            return stageMin / total
-        }
-        if history.count >= 3 {
-            let sorted = history.sorted()
-            let p25 = sorted[max(0, Int(Double(sorted.count) * 0.25))]
-            let p75 = sorted[min(sorted.count - 1, Int(Double(sorted.count) * 0.75))]
-            return max(0.02, p25 - 0.02)...min(0.95, p75 + 0.02)
-        }
         // Standard WHOOP reference ranges matching typical sleep architecture
         switch stage {
         case .wake: return 0.07...0.15
