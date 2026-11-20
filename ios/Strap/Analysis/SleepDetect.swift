@@ -308,7 +308,7 @@ enum SleepDetect {
                     lastMovingUnix = nil
                 }
             }
-            periods.append()
+            periods.append(
                 SleepPeriod(
                     startUnix: verifiedStart,
                     endUnix: verifiedEnd,
