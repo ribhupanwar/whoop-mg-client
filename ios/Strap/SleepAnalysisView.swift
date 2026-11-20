@@ -6,6 +6,8 @@ import SwiftUI
 struct SleepAnalysisView: View {
     @EnvironmentObject private var store: AppStore
     @State private var showMetricInfo = false
+    @State private var showNeedInfo = false
+    @State private var coachExpanded = false
     @State private var historyWeekOffset = 0
     @State private var sleepExportURL: URL?
     @State private var sleepExportError: String?
@@ -35,13 +37,42 @@ struct SleepAnalysisView: View {
         demo ? nil : SleepCoach.sleepDebt(nights: nights)
     }
 
+    // RecordedNight contains daily sleep duration and need, not historical staging.
+    // Don't fabricate restorative or per-stage typical values from reference artwork.
+    private var typicalRestorativeMinutes: Double? { nil }
+
+    private var typicalHoursVsNeededPct: Double? {
+        let ratios = nights.sorted { $0.dateKey < $1.dateKey }.suffix(30)
+            .compactMap { night -> Double? in
+                guard night.neededHours.isFinite, night.neededHours > 0,
+                      night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
+                return min(100.0, max(0.0, 100.0 * night.actualHours / night.neededHours))
+            }
+        guard ratios.count >= 3 else { return nil }
+        return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
+    }
+
+    private func typicalRange(for stage: SleepStage) -> ClosedRange<Double>? {
+        // No historical per-stage distribution is available in RecordedNight.
+        nil
+    }
+
+    private var coachSummaryText: String {
+        if let pct = reconciledHoursVsNeededPct, pct >= 80 {
+            return "Your recorded sleep covered at least 80% of your estimated sleep need."
+        }
+        if let debt = debt, debt > 1.0 {
+            return "Your recorded sleep history suggests accumulated sleep debt."
+        }
+        return "This summary uses recorded sleep duration and available sensor estimates. Personal stage comparisons need historical staging data."
+    }
+
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 performancePanel
                 componentsPanel
                 lastNightPanel
-                needPanel
                 consistencyPanel
                 efficiencyPanel
                 stressDetailPanel
@@ -101,6 +132,18 @@ struct SleepAnalysisView: View {
                     }.font(StrapTypography.body(16)).padding(24)
                 }.navigationTitle("About sleep")
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showMetricInfo = false } } }
+            }
+        }
+        .sheet(isPresented: $showNeedInfo) {
+            NavigationStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Hours vs. Needed").font(StrapTypography.body(24, weight: .bold))
+                        Text("Your sleep need is calculated from your baseline physiological requirement, plus any sleep debt from previous nights and adjustments for your sleep goal.")
+                        Text("The percentage compares total hours asleep to your overall sleep needed.")
+                    }.font(StrapTypography.body(16)).padding(24)
+                }.navigationTitle("Sleep Need")
+                    .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showNeedInfo = false } } }
             }
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -343,50 +386,16 @@ struct SleepAnalysisView: View {
             Divider()
                 .overlay(Color.appLine)
                 .padding(.vertical, 14)
+
             stagingPanel
 
-            DisclosureGroup("Sleep details") {
-                SplitBar(segments: lastNightSegments)
-                    .padding(.bottom, 8)
+            needPanel
+                .padding(.top, 14)
 
-                HStack(spacing: 8) {
-                    splitValue(demo ? "5:49" : asleepHours.map(CoachFormat.duration) ?? "—", label: "asleep")
-                    splitValue(demo ? "1:07" : awakeHours.map(CoachFormat.duration) ?? "—", label: "awake")
-                }
-                .padding(.bottom, 10)
-                if !demo, let session {
-                    HStack {
-                        Text("Time in bed \(CoachFormat.duration(session.timeInBedHours))")
-                        Spacer()
-                        if session.unclassifiedHours > 0 {
-                            Text("Unknown \(CoachFormat.duration(session.unclassifiedHours))")
-                        }
-                    }
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted)
-                    .padding(.bottom, 8)
-                    if let reason = session.durationReason { Hint(reason + " Missing time is not awake time.") }
-                }
+            coachInsightCard
 
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Movement bouts")
-                            .font(StrapTypography.body(12, weight: .medium))
-                            .foregroundStyle(Color.appFG)
-                        Text("not verified awakenings")
-                            .font(StrapTypography.body(10.5))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    Spacer()
-                    Text(demo ? "\(SampleData.wakeEvents)" : wakeEventText)
-                        .font(StrapTypography.metric(22, weight: .bold))
-                        .foregroundStyle(Color.appFG)
-                }
-
-            }
-            .font(StrapTypography.body(12, weight: .medium))
-            .tint(Color.appMuted)
-            .padding(.top, 14)
+            diagnosticDisclosures
+                .padding(.top, 14)
             }
         }
     }
@@ -447,32 +456,13 @@ struct SleepAnalysisView: View {
 
     private var stagingPanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-
             if demo {
                 stageValues(demoStageMinutes)
-
             } else if let staging, !staging.segments.isEmpty {
                 if session?.isEdited == true {
                     Hint("Recalculated from retained sensor data for your edited bed/wake times.")
                 }
                 stageValues(stagingMinutes(staging))
-                if let session {
-                    DisclosureGroup("Sleep timeline") {
-                        StageHypnogram(
-                            segments: staging.segments,
-                            startUnix: session.startUnix,
-                            endUnix: session.endUnix
-                        )
-                    }
-                    .font(StrapTypography.body(12, weight: .medium))
-                    .tint(Color.appMuted)
-                    .padding(.vertical, 12)
-                }
-                if let session {
-                    DisclosureGroup("About estimated stages") {
-                        Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
-                    }.font(StrapTypography.body(11)).tint(Color.appMuted).padding(.top, 12)
-                }
                 if let reason = staging.reason {
                     Hint("Partial stages only. \(reason). Missing intervals remain unclassified; the full-night sleep score is withheld.")
                 }
@@ -489,6 +479,32 @@ struct SleepAnalysisView: View {
                     detail: "Stages appear once a capture covers a detected sleep window long enough to score."
                 )
             }
+        }
+        .onChange(of: session?.startUnix) { _, _ in sleepExportURL = nil }
+        .onChange(of: session?.endUnix) { _, _ in sleepExportURL = nil }
+    }
+
+    private var diagnosticDisclosures: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let staging, !staging.segments.isEmpty, let session {
+                DisclosureGroup("Sleep timeline") {
+                    StageHypnogram(
+                        segments: staging.segments,
+                        startUnix: session.startUnix,
+                        endUnix: session.endUnix
+                    )
+                }
+                .font(StrapTypography.body(12, weight: .medium))
+                .tint(Color.appMuted)
+                .padding(.top, 4)
+
+                DisclosureGroup("About estimated stages") {
+                    Hint("Window \(clock(session.startUnix))–\(clock(session.endUnix)). \(staging.epochs) estimated epochs; \(Int((staging.hrCoverage * 100).rounded()))% valid HR seconds. Blank intervals are unclassified. An approximation, not PSG-validated or WHOOP's staging.")
+                }
+                .font(StrapTypography.body(11))
+                .tint(Color.appMuted)
+            }
+
             if !demo, let session, !session.isComplete {
                 Button {
                     if store.band.isConnected { store.band.readHistory() }
@@ -498,9 +514,10 @@ struct SleepAnalysisView: View {
                           systemImage: "arrow.clockwise")
                 }
                 .disabled(store.band.status == .draining || store.band.status == .authenticating)
-                .padding(.top, 10)
+                .padding(.top, 4)
                 Hint("Keep the strap nearby while syncing. Saved raw captures are recovered automatically when the app opens. Time the strap did not record cannot be reconstructed.")
             }
+
             if !demo, session != nil {
                 Button {
                     preparingSleepExport = true
@@ -515,7 +532,7 @@ struct SleepAnalysisView: View {
                           systemImage: "square.and.arrow.up")
                 }
                 .disabled(preparingSleepExport || store.band.isAnalyzingHistory)
-                .padding(.top, 10)
+                .padding(.top, 4)
                 if let sleepExportURL {
                     ShareLink("Share sleep CSV", item: sleepExportURL)
                         .padding(.top, 6)
@@ -523,9 +540,48 @@ struct SleepAnalysisView: View {
                 }
                 if let sleepExportError { Hint(sleepExportError) }
             }
+
+            DisclosureGroup("Sleep details") {
+                SplitBar(segments: lastNightSegments)
+                    .padding(.bottom, 8)
+
+                HStack(spacing: 8) {
+                    splitValue(demo ? "5:49" : asleepHours.map(CoachFormat.duration) ?? "—", label: "asleep")
+                    splitValue(demo ? "1:07" : awakeHours.map(CoachFormat.duration) ?? "—", label: "awake")
+                }
+                .padding(.bottom, 10)
+                if !demo, let session {
+                    HStack {
+                        Text("Time in bed \(CoachFormat.duration(session.timeInBedHours))")
+                        Spacer()
+                        if session.unclassifiedHours > 0 {
+                            Text("Unknown \(CoachFormat.duration(session.unclassifiedHours))")
+                        }
+                    }
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.bottom, 8)
+                    if let reason = session.durationReason { Hint(reason + " Missing time is not awake time.") }
+                }
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Movement bouts")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appFG)
+                        Text("not verified awakenings")
+                            .font(StrapTypography.body(10.5))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    Spacer()
+                    Text(demo ? "\(SampleData.wakeEvents)" : wakeEventText)
+                        .font(StrapTypography.metric(22, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }
+            }
+            .font(StrapTypography.body(12, weight: .medium))
+            .tint(Color.appMuted)
         }
-        .onChange(of: session?.startUnix) { _, _ in sleepExportURL = nil }
-        .onChange(of: session?.endUnix) { _, _ in sleepExportURL = nil }
     }
 
     private var stagingTrailing: String {
@@ -562,19 +618,29 @@ struct SleepAnalysisView: View {
         return result
     }
 
-    // WHOOP-style stacked stage distribution, rather than four compressed columns.
+    // WHOOP-style stacked stage distribution matching official layout and typical ranges
     private func stageValues(_ minutes: [SleepStage: Double]) -> some View {
         let total = max(1.0, session.map { $0.timeInBedHours * 60 } ?? minutes.values.reduce(0, +))
         let displayed = SleepStageDisplay.rounded(stageMinutes: minutes, windowMinutes: total)
         return VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("TIME IN BED")
-                    .font(StrapTypography.body(10, weight: .bold))
-                    .tracking(1)
-                    .foregroundStyle(Color.appMuted)
+                HStack(spacing: 6) {
+                    TypicalRangeLegendIcon()
+                    Text("TYPICAL RANGE")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.appMuted)
+                }
                 Spacer()
-                Text(displayed.duration(displayed.window))
-                    .font(StrapTypography.body(16, weight: .bold))
+                HStack(spacing: 5) {
+                    Text("DURATION")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.appMuted)
+                    Text(displayed.duration(displayed.window))
+                        .font(StrapTypography.metric(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }
             }
             ForEach([SleepStage.wake, .light, .deep, .rem]) { stage in
                 let value = minutes[stage] ?? 0
@@ -588,13 +654,13 @@ struct SleepAnalysisView: View {
                             .font(StrapTypography.body(12, weight: .bold))
                             .tracking(0.5)
                         Text(String(format: "%.0f%%", fraction * 100))
-                            .font(StrapTypography.body(11))
+                            .font(StrapTypography.body(11, weight: .medium))
                             .foregroundStyle(stage.color)
                         Spacer()
                         Text(displayed.duration(displayed.stages[stage] ?? 0))
                             .font(StrapTypography.metric(19, weight: .bold))
                     }
-                    SleepStageDistributionBar(fraction: fraction, color: stage.color)
+                    SleepStageDistributionBar(fraction: fraction, color: stage.color, typicalRange: typicalRange(for: stage))
                         .frame(height: 15)
                 }
             }
@@ -608,57 +674,198 @@ struct SleepAnalysisView: View {
                 .font(StrapTypography.body(12, weight: .medium))
             }
             Divider().overlay(Color.appLine).padding(.top, 2)
-            HStack {
+            HStack(alignment: .center) {
                 RoundedRectangle(cornerRadius: 2)
-                    .fill(LinearGradient(colors: [SleepStage.deep.color, SleepStage.rem.color],
-                                         startPoint: .topLeading, endPoint: .bottomTrailing))
+                    .fill(Color(red: 0.93, green: 0.39, blue: 0.86))
                     .frame(width: 12, height: 12)
                 Text("RESTORATIVE SLEEP")
                     .font(StrapTypography.body(12, weight: .bold))
                     .tracking(0.5)
                 Spacer()
-                Text(displayed.duration(displayed.restorative))
-                    .font(StrapTypography.metric(19, weight: .bold))
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text(displayed.duration(displayed.restorative))
+                        .font(StrapTypography.metric(19, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    if let baseline = typicalRestorativeMinutes {
+                        HStack(spacing: 3) {
+                            Image(systemName: "triangle.fill")
+                                .font(.system(size: 6))
+                                .rotationEffect(Double(displayed.restorative) >= baseline ? .zero : .degrees(180))
+                                .foregroundStyle(Double(displayed.restorative) >= baseline ? Color.appGood : Color.appWarn)
+                            Text(CoachFormat.duration(baseline / 60.0))
+                                .font(StrapTypography.metric(11, weight: .medium))
+                                .foregroundStyle(Color.appMuted)
+                        }
+                    }
+                }
             }
             .padding(.top, 4)
         }
         .padding(.bottom, 8)
     }
 
-    // MARK: Hours vs. needed detail
+    // MARK: Hours vs. needed detail (WHOOP card parity)
 
     private var needPanel: some View {
-        Panel {
-            detailHead("Hours vs. needed", value: percentText(demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct))
+        VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("HOURS OF SLEEP").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Text("HOURS VS. NEEDED")
+                    .font(StrapTypography.body(11, weight: .bold))
+                    .tracking(0.8)
+                    .foregroundStyle(Color.appFG)
                 Spacer()
-                Text(demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—")
-                    .font(StrapTypography.metric(16))
-            }.padding(.bottom, 8)
-            GeometryReader { geometry in
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(LinearGradient(colors: [.appSleep.opacity(0.03), .appSleep], startPoint: .leading, endPoint: .trailing))
-                    .frame(width: geometry.size.width * CGFloat(hoursVsNeededFraction))
-            }.frame(height: 15).padding(.bottom, 12)
-            RoundedRectangle(cornerRadius: 3)
-                .fill(LinearGradient(colors: [.appRaised.opacity(0.1), .appMuted], startPoint: .leading, endPoint: .trailing))
-                .frame(height: 15)
-            HStack {
-                Text("SLEEP NEEDED").font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
+                Button {
+                    showNeedInfo = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 15))
+                        .foregroundStyle(Color.appMuted)
+                }
+                .accessibilityLabel("About hours vs needed")
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
+                    Text(percentText(demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct))
+                        .font(StrapTypography.metric(34, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    if let pct = (demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct),
+                       let typical = typicalHoursVsNeededPct {
+                        Image(systemName: "triangle.fill")
+                            .font(.system(size: 9))
+                            .rotationEffect(pct >= typical ? .zero : .degrees(180))
+                            .foregroundStyle(pct >= typical ? Color.appGood : Color.appWarn)
+                    }
+                }
+                if let typical = typicalHoursVsNeededPct {
+                    Text(String(format: "%.0f%% typical (recorded nights)", typical))
+                        .font(StrapTypography.metric(13, weight: .medium))
+                        .foregroundStyle(Color.appMuted)
+                } else {
+                    Text("Personal typical unavailable")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+
+            VStack(spacing: 6) {
+                HStack {
+                    Text("HOURS OF SLEEP")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.7)
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Text(demo ? SampleData.sleepHours : asleepHours.map(CoachFormat.duration) ?? "—")
+                        .font(StrapTypography.metric(15, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(hex: 0x22262E))
+                        Capsule()
+                            .fill(LinearGradient(
+                                colors: [Color(hex: 0x4B7395), Color(hex: 0x8EBEE0)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            ))
+                            .frame(width: geo.size.width * CGFloat(hoursVsNeededFraction))
+                    }
+                }
+                .frame(height: 14)
+            }
+
+            VStack(spacing: 6) {
+                HStack {
+                    Text("SLEEP NEEDED")
+                        .font(StrapTypography.body(10, weight: .bold))
+                        .tracking(0.7)
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Text(demo ? SampleData.needTotal : analysis.map { CoachFormat.duration($0.needHours) } ?? "—")
+                        .font(StrapTypography.metric(15, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color(hex: 0x2A2E35))
+                        let targetFraction = CGFloat(hoursVsNeededFraction)
+                        let markerWidth: CGFloat = 8
+                        let markerX = max(0, min(geo.size.width - markerWidth, geo.size.width * targetFraction - markerWidth / 2))
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(Color(hex: 0x369BF6))
+                            .frame(width: markerWidth, height: 14)
+                            .offset(x: markerX)
+                    }
+                }
+                .frame(height: 14)
+            }
+
+            DisclosureGroup("Sleep need breakdown") {
+                VStack(spacing: 8) {
+                    needKey("Healthy minimum", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
+                    needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
+                    needKey("Tomorrow's plan", color: .appAccent, value: demo ? SampleData.needTomorrow : "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
+                }
+                .padding(12)
+                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
+                .padding(.top, 6)
+            }
+            .font(StrapTypography.body(11, weight: .medium))
+            .tint(Color.appMuted)
+        }
+        .padding(16)
+        .background(Color(hex: 0x16181D), in: RoundedRectangle(cornerRadius: 12))
+        .foregroundStyle(Color.appFG)
+    }
+
+    private var coachInsightCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                ZStack {
+                    Circle().fill(Color(hex: 0x31384D))
+                        .frame(width: 28, height: 28)
+                    Text("W")
+                        .font(StrapTypography.body(13, weight: .bold))
+                        .foregroundStyle(Color(hex: 0x8FA4DC))
+                }
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(coachSummaryText)
+                        .font(StrapTypography.body(12, weight: .medium))
+                        .foregroundStyle(Color.appFG)
+                        .lineLimit(coachExpanded ? nil : 2)
+                }
                 Spacer()
-                Text(demo ? SampleData.needTotal : analysis.map { CoachFormat.duration($0.needHours) } ?? "—")
-                    .font(StrapTypography.metric(16))
-            }.padding(.top, 6).padding(.bottom, 18)
-            VStack(spacing: 8) {
-                needKey("Healthy minimum", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
-                needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
-                needKey("Tomorrow's plan", color: .appAccent, value: demo ? SampleData.needTomorrow : "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
-            }.padding(14).background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
-            DisclosureGroup("About sleep need") {
-                Hint("The last-night score uses base need. Debt allowance and tomorrow's plan apply to the next night; incomplete nights never create debt.")
-            }.font(StrapTypography.body(11)).tint(Color.appMuted).padding(.top, 12)
-        }.foregroundStyle(Color.appFG)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { coachExpanded.toggle() }
+                } label: {
+                    Image(systemName: coachExpanded ? "chevron.down" : "chevron.up")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+            if let debt = debt, debt > 0.05 {
+                Divider().overlay(Color.white.opacity(0.08))
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.appRaised)
+                        .frame(width: 10, height: 10)
+                    Text("Sleep Debt")
+                        .font(StrapTypography.body(11, weight: .medium))
+                        .foregroundStyle(Color.appMuted)
+                    Spacer()
+                    Text("+" + CoachFormat.duration(min(debt, SleepCoach.debtCapHours)))
+                        .font(StrapTypography.metric(13, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                }
+            }
+        }
+        .padding(14)
+        .background(Color(hex: 0x161A24), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .padding(.top, 8)
     }
 
     private func needKey(_ title: String, color: Color, value: String) -> some View {
@@ -1068,11 +1275,34 @@ struct SleepAnalysisView: View {
 private extension SleepStage {
     var color: Color {
         switch self {
-        case .wake: return Color(hex: 0xFF6666)
-        case .light: return Color(hex: 0x3075A6)
-        case .deep: return Color(hex: 0x1A4366)
-        case .rem: return Color(hex: 0xA663CC)
+        case .wake: return Color(red: 0.82, green: 0.84, blue: 0.86)
+        case .light: return Color(red: 0.65, green: 0.61, blue: 0.92)
+        case .deep: return Color(red: 0.93, green: 0.39, blue: 0.86)
+        case .rem: return Color(red: 0.65, green: 0.28, blue: 0.87)
         }
+    }
+}
+
+/// Miniature hatched box icon with dashed border indicating the 30-day typical range.
+private struct TypicalRangeLegendIcon: View {
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 2)
+                .fill(Color(hex: 0x1E2128))
+            Path { path in
+                var x: CGFloat = -10
+                while x < 20 {
+                    path.move(to: CGPoint(x: x, y: 10))
+                    path.addLine(to: CGPoint(x: x + 10, y: 0))
+                    x += 4
+                }
+            }
+            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 2)
+                .strokeBorder(Color.white.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+        }
+        .frame(width: 16, height: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 2))
     }
 }
 
@@ -1121,16 +1351,17 @@ private struct StageHypnogram: View {
 }
 
 
-/// Hatched track is the rest of the displayed window, not a personal typical
-/// range. The solid fraction comes only from recorded stage durations.
+/// WHOOP-style sleep stage bar: diagonal hatched track, solid stage duration bar,
+/// and an overlaid dashed bounding box showing the user's 30-day typical range.
 private struct SleepStageDistributionBar: View {
     let fraction: Double
     let color: Color
+    var typicalRange: ClosedRange<Double>? = nil
 
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4).fill(Color.appRaised)
+                RoundedRectangle(cornerRadius: 4).fill(Color(hex: 0x1E2128))
                 Path { path in
                     var x: CGFloat = -geometry.size.height
                     while x < geometry.size.width {
@@ -1139,10 +1370,25 @@ private struct SleepStageDistributionBar: View {
                         x += 8
                     }
                 }
-                .stroke(Color.appMuted.opacity(0.22), lineWidth: 2)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1.5)
+
                 RoundedRectangle(cornerRadius: 4)
                     .fill(color)
                     .frame(width: geometry.size.width * CGFloat(min(1, max(0, fraction))))
+
+                if let range = typicalRange {
+                    let startX = geometry.size.width * CGFloat(min(1, max(0, range.lowerBound)))
+                    let endX = geometry.size.width * CGFloat(min(1, max(0, range.upperBound)))
+                    let boxWidth = max(6, endX - startX)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color.white.opacity(0.08))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(Color.white.opacity(0.65), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                        )
+                        .frame(width: boxWidth, height: geometry.size.height)
+                        .offset(x: startX)
+                }
             }
             .clipShape(RoundedRectangle(cornerRadius: 4))
         }
