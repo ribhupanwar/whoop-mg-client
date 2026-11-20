@@ -56,7 +56,13 @@ struct BandIllustrationView: View {
     }
 
     private var isPairing: Bool {
-        status == .connecting || status == .authenticating
+        guard let status = status else { return false }
+        switch status {
+        case .connecting, .authenticating:
+            return true
+        default:
+            return false
+        }
     }
 
     private var ledColor: Color? {
