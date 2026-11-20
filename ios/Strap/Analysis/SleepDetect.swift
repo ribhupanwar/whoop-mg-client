@@ -255,8 +255,8 @@ enum SleepDetect {
                     && $0.unix < terminalStart - 10 * 60
                     && $0.wearing && (35...220).contains($0.heartRate)
             }
-            if Set(terminal.map(\\.unix)).count >= 270,
-               Set(reference.map(\\.unix)).count >= 600 {
+            if Set(terminal.map(\.unix)).count >= 270,
+               Set(reference.map(\.unix)).count >= 600 {
                 let restingHR = Stats.median(reference.map { Double($0.heartRate) })
                 let elevated = terminal.filter { Double($0.heartRate) >= restingHR + 10 }.count
                 let moving = terminal.filter { ($0.dynamicAccelG ?? 0) >= 0.015 }.count
