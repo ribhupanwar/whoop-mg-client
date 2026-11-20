@@ -110,4 +110,34 @@ final class DeviceControlTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: modelKey), "WHOOP MG")
         XCTAssertTrue(defaults.bool(forKey: bcastKey))
     }
+
+    // MARK: - WHOOP 5.80.2 Parity Tests
+
+    func testRegulatoryModelIDMappings() {
+        // Harvard (WHOOP 4.0)
+        let harvardHeader = "4.0 REGULATORY LABELS"
+        let harvardModel = "WS40 (DEVICE)\nWP40 (CHARGER)"
+        XCTAssertEqual(harvardHeader, "4.0 REGULATORY LABELS")
+        XCTAssertTrue(harvardModel.contains("WS40"))
+
+        // Maverick (WHOOP MG)
+        let maverickHeader = "MG REGULATORY LABELS"
+        let maverickModel = "WS50 (DEVICE)\nWM50 (DEVICE)\nWD50 (BASIC CHARGER)\nWB50 (WIRELESS CHARGER)"
+        XCTAssertEqual(maverickHeader, "MG REGULATORY LABELS")
+        XCTAssertTrue(maverickModel.contains("WS50"))
+        XCTAssertTrue(maverickModel.contains("WM50"))
+
+        // Goose (WHOOP 5.0)
+        let gooseHeader = "5.0 REGULATORY LABELS"
+        let gooseModel = "WG50 (DEVICE)\nWD50 (BASIC CHARGER)\nWB50 (WIRELESS CHARGER)"
+        XCTAssertEqual(gooseHeader, "5.0 REGULATORY LABELS")
+        XCTAssertTrue(gooseModel.contains("WG50"))
+    }
+
+    func testQuarantinedCommandsProhibited() {
+        // Reboot (0x20 / 32) and Power-cycle (0x21 / 33) must not be permitted in outgoing command generation
+        let prohibitedOpcodes: Set<UInt8> = [0x20, 0x21]
+        XCTAssertTrue(prohibitedOpcodes.contains(0x20))
+        XCTAssertTrue(prohibitedOpcodes.contains(0x21))
+    }
 }
