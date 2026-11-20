@@ -168,7 +168,7 @@ struct AppleHealthImportView: View {
             stepsAuth = "Unavailable"
             return
         }
-        authorizationStatusText = "Local HealthKit storage on iPhone"
+        authorizationStatusText = "Write permissions · Apple Health manages read access"
         workoutAuth = authLabel(for: HKObjectType.workoutType())
         if let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) {
             hrAuth = authLabel(for: hrType)
@@ -189,9 +189,9 @@ struct AppleHealthImportView: View {
 
     private func authLabel(for objectType: HKObjectType) -> String {
         switch healthStore.authorizationStatus(for: objectType) {
-        case .sharingAuthorized: return "Authorized"
-        case .sharingDenied: return "Denied"
-        case .notDetermined: return "Not Requested"
+        case .sharingAuthorized: return "Write allowed"
+        case .sharingDenied: return "Write denied"
+        case .notDetermined: return "Write access undecided"
         @unknown default: return "Unknown"
         }
     }
@@ -211,8 +211,8 @@ struct AppleHealthImportView: View {
 
     private func statusColor(_ status: String) -> Color {
         switch status {
-        case "Authorized": return Color.appGood
-        case "Denied": return Color.appWarn
+        case "Write allowed": return Color.appGood
+        case "Write denied": return Color.appWarn
         default: return Color.appMuted
         }
     }

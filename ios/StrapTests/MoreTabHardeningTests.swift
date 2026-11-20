@@ -35,7 +35,6 @@ final class MoreTabHardeningTests: XCTestCase {
             "strap.wake.alarm.enabled.v1",
             "strap.wake.alarm.minutes.v1",
             "strap.wake.alarm.schedule.v1",
-            "strap.wake.alarm.bandConfirmedEpoch.v1",
             "strap.preferences.useMetric",
             "strap.preferences.use24HourTime",
             "strap.notifications.bedtimeReminders",
@@ -57,6 +56,7 @@ final class MoreTabHardeningTests: XCTestCase {
     func testDisallowedKeysAreRejectedByPersistenceDiagnostics() {
         let rejected = [
             "strap.band.authKey",
+            "strap.wake.alarm.bandConfirmedEpoch.v1",
             "arbitrary.token",
             "strap.unknown.private"
         ]
@@ -69,7 +69,7 @@ final class MoreTabHardeningTests: XCTestCase {
 
     func testBaselineRollingWindowConfiguration() {
         XCTAssertEqual(DailyAnalysis.rollingBaselineDays, 28, "Rolling baseline must be 28 days")
-        XCTAssertEqual(Recovery.minBaselineDays, 4, "Minimum baseline for initial recovery calculation")
+        XCTAssertEqual(Recovery.minBaselineDays, 7, "Minimum baseline for initial recovery calculation")
     }
 
     func testSettingsViewInstantiatesWithBaselinePanel() {

@@ -187,7 +187,7 @@ struct ConnectionSyncView: View {
                         Divider().background(Color.appLine)
                         metricDiagnosticsRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
                         Divider().background(Color.appLine)
-                        metricDiagnosticsRow("Sync Stream Error", value: store.band.historySyncError ?? "None (Healthy)")
+                        metricDiagnosticsRow("Sync Stream Error", value: store.band.historySyncError ?? "No error recorded")
                     }
                     .padding(.vertical, 4)
                 }

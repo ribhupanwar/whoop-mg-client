@@ -472,28 +472,31 @@ struct SettingsView: View {
     // MARK: Baseline & Calibration Progress
 
     private var baselinePanel: some View {
-        Panel {
+        let eligibleNights = store.band.sleepBaseline?.days ?? 0
+        let requiredNights = Recovery.minBaselineDays
+        let rollingWindow = DailyAnalysis.rollingBaselineDays
+        return Panel {
             SectionTitle("Baseline & Calibration")
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("28-Day Rolling Baseline")
+                    Text("\(rollingWindow)-Day Rolling Baseline")
                         .font(StrapTypography.body(13, weight: .semibold))
                         .foregroundStyle(Color.appFG)
                     Spacer()
-                    Text("\(store.band.days.count)/28 days")
+                    Text("\(eligibleNights) qualifying nights")
                         .font(StrapTypography.metric(13, weight: .bold))
                         .foregroundStyle(Color.appAccent)
                 }
 
-                ProgressView(value: min(Double(store.band.days.count), 28.0), total: 28.0)
+                ProgressView(value: Double(min(eligibleNights, rollingWindow)), total: Double(rollingWindow))
                     .tint(Color.appAccent)
 
                 HStack {
-                    Text(store.band.days.count >= 7
-                        ? "Calibration Complete (\(store.band.days.count) scored days)"
-                        : "Initial Calibration: \(store.band.days.count)/7 days required")
+                    Text(eligibleNights >= requiredNights
+                        ? "Minimum night coverage met"
+                        : "Initial coverage: \(eligibleNights)/\(requiredNights) nights")
                         .font(StrapTypography.body(11, weight: .medium))
-                        .foregroundStyle(store.band.days.count >= 7 ? Color.appGood : Color.appWarn)
+                        .foregroundStyle(eligibleNights >= requiredNights ? Color.appGood : Color.appWarn)
                     Spacer()
                 }
 
@@ -506,7 +509,7 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     metricRequirementRow(
                         metric: "Recovery & Overnight HRV",
-                        requirement: "Requires nocturnal sleep with >= 300s slow wave sleep (SWS). Missing nights show blank rather than guessing."
+                        requirement: "Uses qualifying overnight heart-rate data and earlier baseline nights. Missing measurements appear as gaps."
                     )
                     metricRequirementRow(
                         metric: "Daytime Stress",
@@ -514,7 +517,7 @@ struct SettingsView: View {
                     )
                     metricRequirementRow(
                         metric: "Active Calorie Burn",
-                        requirement: "Uses Keytel formula with confirmed age, sex, weight, and height. Unconfirmed metrics remain uncalculated."
+                        requirement: "Estimates energy from eligible recorded activities and available profile inputs."
                     )
                 }
             }

@@ -91,7 +91,7 @@ enum PersistenceDiagnostics {
             "strap.detected.activities.deleted.v1", "strap.whoop.official.workouts.v1",
             WhoopCSVImport.bundleKey, "strap.appleHealth.import.samples.v1", "strap.gps.runs.v1",
             "strap.detected.activity.labels.v1", "strap.wake.alarm.enabled.v1",
-            "strap.wake.alarm.minutes.v1", "strap.wake.alarm.schedule.v1", "strap.wake.alarm.bandConfirmedEpoch.v1",
+            "strap.wake.alarm.minutes.v1", "strap.wake.alarm.schedule.v1",
             "strap.preferences.useMetric", "strap.preferences.use24HourTime",
             "strap.notifications.bedtimeReminders", "strap.notifications.targetAlerts",
             "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"
