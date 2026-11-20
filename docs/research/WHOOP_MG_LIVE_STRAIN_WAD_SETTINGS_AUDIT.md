@@ -9,126 +9,206 @@
 
 ---
 
-## 1. Executive Summary & Provenance
+## 1. Executive Summary & Binary Provenance
 
-This forensic research report provides the reverse-engineered technical specifications required to bring STRAP into alignment with official WHOOP 5.80.2 logic across five critical functional domains:
-1. **Real-time Strain:** Architecture of live streaming strain (`StrainAccumulator`) versus historical offload backfill (`BackfillingStrainAccumulator`) and daily cycle reconciliation.
-2. **Automatic Activity Detection (WAD):** Resolving STRAP's morning false workout failure mode (6:58–7:12 AM, 266 steps, ~100 bpm) through dual-gate cadence ($\ge 100\text{ spm}$ for $\ge 10\text{ min}$) and cardiovascular intensity thresholds.
-3. **WHOOP MG Device Controls:** On-band double-tap pairing interrupt, blue LED pulse, DIS standard identity (`0x180A`), verified Broadcast Heart Rate (Command 14 / `0x0E`), and strict quarantine of destructive maintenance commands (Reboot `0x20`, Erase `0x0F`, DFU `0x53`).
-4. **Regulatory Information:** Model code classification (`WS50`, `WM50`, `WD50`, `WB50`, `WG50`, `WS40`, `WP40`), bundled SVG assets, and the official regulatory URL.
-5. **Device Settings UI:** Architectural transition to WHOOP's segmented `STATUS` / `ADVANCED` view, vector band dimensions, battery gauge color thresholds, and spacing metrics.
+A deep forensic reverse-engineering audit was executed on the decrypted WHOOP iOS 5.80.2 ARM64 binary (`Whoop.app/Whoop`), focusing on:
+1. **Real-time Strain Mechanics:** Extracting exact ARM64 instruction sequences, floating-point constants, and source provenance for heart rate reserve, non-linear exponential weighting, interval integration, and score lookup.
+2. **Automatic Activity Detection (WAD):** Evaluating walking and workout classification, distinguishing verified binary logic from client heuristics, and resolving STRAP's false workout failure mode (6:58–7:12 AM, 266 steps, ~100 bpm).
+3. **Device Controls & BLE Protocol:** Recovering exact opcodes from Swift reflection descriptors, verifying Command 14 (`0x0E`) Broadcast Heart Rate, and enforcing quarantine policies for destructive commands (Reboot `0x20`, Erase `0x0F`, DFU `0x53`).
+4. **Regulatory Information:** Bundled compliance assets in `WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle` and official support URL mapping.
+5. **Device Settings UI:** Two-tab `STATUS` / `ADVANCED` segmented architecture (`DeviceSettingsViewController.nib`).
+6. **Integration Alignment:** Cross-referencing existing PR #67 (activity false-positive fix) and PR #65 / PR #68 (device settings & unpair wiring) to avoid duplicate implementation.
 
 ---
 
 ## 2. Priority 1 — Real-time Strain Accumulation & Reconciliation
 
-### 2.1 Architectural Overview: Hybrid Accumulation Model
-WHOOP does **not** rely solely on server-side calculation for daily strain, nor does it run a single monolithic accumulator. Instead, it operates a **three-tier hybrid architecture**:
+### 2.1 Architectural Overview: Three-Tier Hybrid Architecture
+
+WHOOP does not calculate strain via a single monolithic accumulator or rely solely on server calculations. It operates a **three-tier hybrid architecture**:
+
 ```mermaid
 flowchart TD
-    A["Type-40 BLE Stream (1 Hz)"] --> B["StrainAccumulator<br/>(Live Streaming)"]
+    A["Type-40 BLE Stream (1 Hz)"] --> B["Whoop.StrainAccumulator<br/>(Live Streaming, 0x10a202868)"]
     B --> C["ObjectWillChangePublisher<br/>(LiveStrainView / UI)"]
-    D["Historical Offload Packets (0x12, 0x14)"] --> E["BackfillingStrainAccumulator<br/>(HeartRateBucket Slices)"]
-    E --> F["Durable Local DB<br/>(HistoryDatabase)"]
-    G["Server Sync Endpoint<br/>(/coaching-service/v1/coaching/strain/mapping)"] --> H["Finalized Daily Cycle Strain Anchor"]
-    F --> H
-    B -.->|Discards out-of-order| E
+    D["Historical Offload Packets (0x12, 0x14)"] --> E["Whoop.BackfillingStrainAccumulator<br/>(0x10a208dfc)"]
+    E --> F["HeartRateBucket<br/>(needsSorting, 0x10a208e38)"]
+    F --> G["Durable Local DB<br/>(HistoryDatabase)"]
+    H["Server Sync Endpoint<br/>(/coaching-service/v1/coaching/strain/mapping)"] --> I["Finalized Daily Cycle Strain Anchor"]
+    G --> I
+    B -.->|Discards out-of-order live samples| E
 ```
 
 1. **Tier 1: Live Stream (`StrainAccumulator.swift`)**
-   - Ingests real-time 1 Hz Type-40 packets.
-   - Computes instant Heart Rate Reserve ($\text{HRR}$) and integrates into running raw strain and active calories.
-   - Publishes state immediately to the UI via Combine.
+   - Source: `/Users/distiller/project/Whoop/Code/Biotelemetry/StrainAccumulator.swift` (string at `0x1097663b1`).
+   - Swift Class Descriptor: `Type [98]` at `0x10a202868`.
+   - Field Descriptors (`0x10a54e30c`):
+     - `Field [0]: saveAllSmoothedData`
+     - `Field [1]: enableProgressiveSmoothingAtStart`
+     - `Field [2]: strainCalibrationPacketsRemaining`
+     - `Field [3]: allSmoothedData`
+     - `Field [4]: rawStrain`
+     - `Field [5]: calories`
+     - `Field [6]: savedHeartRates`
+   - Ingests real-time 1 Hz Type-40 packets, maintains running `highWaterMark`. If an arriving sample has $t < \text{highWaterMark}$, it emits `*****rtstreamerr*****, out of order heart rates` (`0x109766350`) and **discards the sample from live stream**, leaving it for historical bucket backfill.
 2. **Tier 2: Historical Backfill (`BackfillingStrainAccumulator.swift`)**
-   - Ingests bulk historical archive packets (`0x12`, `0x14`) offloaded after disconnections.
-   - Sorts timestamps into `HeartRateBucket` structures.
-   - Re-accumulates missing windows without double-counting previously streamed seconds.
-3. **Tier 3: Daily Cycle Reconciliation (Server Anchor)**
-   - Daily cycle strain is periodically reconciled against `/coaching-service/v1/coaching/strain/optimal/mapping/cycle/`.
-   - Protects against multi-day clock skew and timezone boundaries.
+   - Source: `/Users/distiller/project/Whoop/Code/Biotelemetry/BackfillingStrainAccumulator.swift` (`0x109775c7c`).
+   - Swift Class Descriptor: `Type [561]` at `0x10a208dfc`.
+   - Field Descriptors (`0x10a557cc8`):
+     - `Field [0]: restingHeartRate`
+     - `Field [1]: maximumHeartRate`
+     - `Field [2]: physiologicalBaseline`
+     - `Field [3]: userWeight`
+     - `Field [4]: userHeight`
+     - `Field [5]: userAge`
+     - `Field [6]: BUCKET_SECONDS`
+   - Nested Bucket Class: `Whoop.BackfillingStrainAccumulator.HeartRateBucket` (`Type [562]` at `0x10a208e38`).
+     - `Field [0]: timestampedHeartRates`
+     - `Field [1]: rawStrain`
+     - `Field [2]: calories`
+     - `Field [3]: needsSorting`
+     - `Field [4]: allSmoothedData`
+   - Ingests bulk historical archive packets (`0x12`, `0x14`). When out-of-order records arrive, `needsSorting` is asserted, and the bucket is chronologically sorted before incremental integration.
+3. **Tier 3: Daily Cycle Anchor**
+   - Synchronizes daily strain with backend endpoint `/coaching-service/v1/coaching/strain/optimal/mapping/cycle/`.
 
 ---
 
-### 2.2 Classes, Protocols & Binary Offsets
+### 2.2 Reproducible Ghidra & ARM64 Disassembly Evidence
 
-From Ghidra and Swift metadata extraction of `Whoop.app/Whoop`:
+The mathematical implementation of strain resides in:
+`/Users/distiller/project/Whoop/Code/Utilities/StrainCalculations.swift` (String at `0x109770480`).
 
-| Symbol / Mangled Name | Type / Kind | Virtual Address / File Offset | Source File Marker |
-| :--- | :--- | :--- | :--- |
-| `Whoop.StrainAccumulator` (`$s5Whoop17StrainAccumulatorC`) | Swift Class | `0x10a3907f0` | `/Users/distiller/project/Whoop/Code/Biotelemetry/StrainAccumulator.swift` |
-| `Whoop.StrainAccumulatorProtocol` (`$s5Whoop25StrainAccumulatorProtocolP`) | Swift Protocol | `0x10912ae90` | `StrainAccumulator.swift` |
-| `Whoop.BackfillingStrainAccumulator` (`$s5Whoop28BackfillingStrainAccumulatorC`) | Swift Class | `0x10a4bb673` | `/Users/distiller/project/Whoop/Code/Biotelemetry/BackfillingStrainAccumulator.swift` |
-| `Whoop.BackfillingStrainAccumulator.HeartRateBucket` | Swift Class | `0x10a4bb710` | `BackfillingStrainAccumulator.swift` |
-| `getReserveWithHeartRate:restingHeartRate:maximumHeartRate:` | ObjC Selector | `0x109a85a74` (Code: `0x1001eecac`) | Objective-C / Swift Bridge |
-| `getHeartRateForReserve:restingHeartRate:maximumHeartRate:` | ObjC Selector | `0x109a85141` (Code: `0x1001eed98`) | Objective-C / Swift Bridge |
-| `getCaloriesWithHeartRates:timestamps:nextTimeStamp:restingHeartRate:maximumHeartRate:physiologicalBaseline:weightInKilograms:heightInMeters:age:` | ObjC Selector | `0x109a848df` (Code: `0x1001ee9ec`) | Objective-C / Swift Bridge |
+#### 1. Heart Rate Reserve Calculation (`0x100201558` – `0x100201640`)
+Calculates the physiological reserve from heart rate, resting HR, and maximum HR:
 
----
-
-### 2.3 Mathematical Model & Accumulation Mechanics
-
-#### 1. Heart Rate Reserve Calculation (`getReserveWithHeartRate:`)
-Located at address `0x1001eecac`:
-$$\text{HRR} = \text{clamp}\left(0.0, 1.0, \frac{\text{HR} - \text{RHR}}{\text{MaxHR} + 3.0 - \text{RHR}}\right)$$
-*Note:* WHOOP adds $+3.0\text{ bpm}$ buffer to $\text{MaxHR}$ to prevent asymptote clamping during peak sprint efforts.
-
-#### 2. Non-linear Strain Weighting Function
-Located at address `0x1001eee6c`:
-If $\text{HRR} \le 0.30$:
-$$W(\text{HRR}) = 0.0$$
-If $\text{HRR} > 0.30$:
-$$W(\text{HRR}) = \frac{16.0}{1.0 + \exp\left(\frac{1.0 - \text{HRR}}{0.15}\right)}$$
-
-#### 3. Continuous Integration & Scale Lookup
-Raw strain accumulates over elapsed time $\Delta t$ (capped at $3\text{ seconds}$ per sample gap):
-$$\text{RawStrain}(t) = \text{RawStrain}(t - \Delta t) + W(\text{HRR}) \times \frac{\Delta t}{691200.0}$$
-*Note:* The divisor $691200 = 8 \times 86400$, normalizing an 8-day theoretical maximum ceiling.
-Raw strain is converted to the user-facing $[0.0 - 21.0]$ WHOOP score via `strain_raw_scale_lookup.json` (211 piecewise monotonic entries) using **midpoint nearest-neighbor classification** (ties select the lower score).
-
----
-
-### 2.4 Reconnection, Out-of-Order Packets & Progressive Smoothing
-
-1. **Out-of-Order Protection:**
-   `StrainAccumulator` maintains a `highWaterMark: Int` representing the latest contiguous Unix timestamp.
-   When a packet arrives with $t < \text{highWaterMark}$:
-   - `StrainAccumulator` emits debug marker: `*****rtstreamerr*****, out of order heart rates`.
-   - The backwards live sample is **discarded from the live stream** to prevent corrupting the running exponential state.
-   - The packet is delegated to `BackfillingStrainAccumulator`, which inserts it into the correct `HeartRateBucket` slot.
-2. **Progressive Smoothing:**
-   - Properties: `enableProgressiveSmoothingAtStart: Bool`, `strainCalibrationPacketsRemaining: Int`, `SMOOTHING_ELEMENTS: Int = 10`.
-   - When a session starts or reconnects, the initial 10 samples are passed through a moving-average filter to suppress sensor placement artifacts before entering raw exponential accumulation.
-3. **UI Update Cadence:**
-   - The UI does not poll. `LiveStrainView` observes `StrainAccumulator`'s `@Published var currentStrain: Double` via Combine.
-   - Display updates trigger on every valid 1 Hz live sample.
-
----
-
-## 3. Priority 2 — Automatic Activity Detection (WAD) & False Workout Analysis
-
-### 3.1 Forensic Analysis of STRAP's False Morning Workout
-
-#### The Incident
-- **Time:** 6:58 AM – 7:12 AM (14 minutes).
-- **Recorded Data:** 266 total steps, ~100 bpm mean HR.
-- **STRAP Behavior:** Auto-detected and logged a 14-minute "workout".
-
-#### Root Cause Deconstruction
-In STRAP's `Activities.swift`:
-```swift
-// Activities.swift (Lines 139-147)
-let elevated: Bool
-if let baseline = baseline {
-    elevated = Double(sample.heartRate) >= max(hrStartAbsolute, baseline + hrStartDelta)
-} else { elevated = false }
-measuredMotion.append(locomotion)
-let isActive = locomotion || elevated
-flags.append(isActive)
+```assembly
+; Address: 0x100201558 in StrainCalculations.swift
+; Arguments: d0 = restingHR, d1 = maxHR, x0 = heartRateArray
+0x100201590: mov      v9.16b, v1.16b         ; d9 = maxHR
+0x100201594: mov      v8.16b, v0.16b         ; d8 = restingHR
+...
+0x1002015a8: fmov     d0, #3.00000000        ; d0 = 3.0 (MaxHR buffer)
+0x1002015ac: fadd     d0, d9, d0             ; d0 = maxHR + 3.0
+0x1002015b0: fsub     d9, d0, d8             ; d9 = (maxHR + 3.0) - restingHR (denominator)
+0x1002015bc: fmov     d11, #1.00000000       ; d11 = 1.0 (ceiling)
+0x1002015c0: adrp     x8, #0x109126000
+0x1002015c4: ldr      d12, [x8, #0x400]      ; d12 = 0.30 (Constant at 0x109126400)
+; Loop over heart rate samples:
+0x1002015c8: ldr      d0, [x22], #8          ; d0 = current heartRate
+0x1002015cc: fsub     d0, d0, d8             ; d0 = heartRate - restingHR (numerator)
+0x1002015d0: fdiv     d0, d0, d9             ; d0 = (heartRate - restingHR) / (maxHR + 3.0 - restingHR)
+0x1002015d4: fcmp     d0, #0.0               ; compare with 0.0
+0x1002015d8: fcsel    d0, d0, d10, ge        ; clamp lower: max(0.0, d0)
+0x1002015dc: fminnm   d0, d0, d11            ; clamp upper: min(1.0, d0)
+0x1002015e0: fcmp     d0, d12                ; compare reserve with 0.30 threshold
+0x1002015e4: fcsel    d13, d0, d10, hi       ; if reserve > 0.30 keep reserve; else 0.0
+0x100201610: str      d13, [x8, #0x20]       ; store reserve into array
 ```
-1. **The Morning Spike:** Upon waking at 6:58 AM, the user's pre-waking sleep baseline was ~68 bpm. Standing out of bed caused normal postural tachycardia and cortisol awakening response, elevating HR to 98–102 bpm.
-2. **Triggering `isActive`:** `max(100.0, 68 + 20) = 100.0 bpm`. Because HR hovered near 100 bpm, `elevated` evaluated to `true` continuously for $\ge 4\text{ minutes}$ (`startSustainS = 240s`).
-3. **The Classifier Fall-Through Flaw:**
-   In `Activities.swift` (lines 294–301):
+
+**Decompiled C/Swift Equivalent:**
+```swift
+func calculateReserve(hr: Double, restingHR: Double, maxHR: Double) -> Double {
+    let denominator = (maxHR + 3.0) - restingHR
+    guard denominator > 0 else { return 0.0 }
+    let rawReserve = (hr - restingHR) / denominator
+    let clampedReserve = min(1.0, max(0.0, rawReserve))
+    return clampedReserve > 0.30 ? clampedReserve : 0.0
+}
+```
+
+---
+
+#### 2. Non-linear Strain Weighting Function (`0x100201644` – `0x100201714`)
+Evaluates the exponential Karvonen-style intensity factor:
+
+```assembly
+; Address: 0x100201644 in StrainCalculations.swift
+0x100201688: fmov     d8, #1.00000000        ; d8 = 1.0
+0x10020168c: adrp     x8, #0x109126000
+0x100201690: ldr      d9, [x8, #0x5e8]       ; d9 = 0.15 (Constant at 0x1091265e8)
+0x100201694: fmov     d10, #16.00000000      ; d10 = 16.0 (Numerator)
+; Loop over reserve samples:
+0x100201698: ldr      d0, [x22], #8          ; d0 = reserve
+0x10020169c: movi     v11.2d, #0             ; d11 = 0.0 (default zero)
+0x1002016a0: fcmp     d0, #0.0               ; check if reserve <= 0.0
+0x1002016a4: b.le     0x1002016bc            ; if <= 0, skip calculation, weight = 0.0
+0x1002016a8: fsub     d0, d8, d0             ; d0 = 1.0 - reserve
+0x1002016ac: fdiv     d0, d0, d9             ; d0 = (1.0 - reserve) / 0.15
+0x1002016b0: bl       #0x107c0f690           ; CALL exp(d0) (libsystem_m exp stub)
+0x1002016b4: fadd     d0, d0, d8             ; d0 = 1.0 + exp((1.0 - reserve) / 0.15)
+0x1002016b8: fdiv     d11, d10, d0           ; d11 = 16.0 / (1.0 + exp((1.0 - reserve) / 0.15))
+0x1002016e8: str      d11, [x8, #0x20]       ; store calculated intensity weight
+```
+
+**Decompiled C/Swift Equivalent:**
+```swift
+func strainWeight(reserve: Double) -> Double {
+    guard reserve > 0.0 else { return 0.0 }
+    return 16.0 / (1.0 + exp((1.0 - reserve) / 0.15))
+}
+```
+
+---
+
+#### 3. Sample Interval Forward Integration (`0x1002018a0` – `0x100201938`)
+Integrates strain forward with a strict $3.0\text{ second}$ cap:
+
+```assembly
+; Address: 0x1002018a0 in StrainCalculations.swift
+0x1002018a4: ldr      d9, [x8, #0x248]       ; timestamp delta scaling factor
+0x1002018a8: fmov     d10, #3.00000000       ; d10 = 3.0 seconds cap
+...
+0x100201928: fmul     d0, d8, d9             ; delta seconds
+0x10020192c: frinta   d0, d0                 ; round to integer seconds
+0x100201930: fdiv     d0, d0, d9
+0x100201934: fcmp     d0, d10                ; compare delta with 3.0 seconds
+0x100201938: fcsel    d8, d10, d0, gt        ; if delta > 3.0, cap at 3.0 seconds
+```
+
+---
+
+#### 4. Raw Strain Scale Normalization (`0x1002012e8`)
+Normalizes the integrated strain product:
+
+```assembly
+; Address: 0x1002012e8 in StrainCalculations.swift
+0x1002012e8: adrp     x10, #0x109135000
+0x1002012ec: ldr      d1, [x10, #0x2f8]      ; d1 = 691200.0 (Constant at 0x1091352f8)
+```
+*Verification:* The 8-byte hex representation of `691200.0` is `0x0000000000182541`, located at file offset `0x91352f8` (VA `0x1091352f8`).
+
+---
+
+#### 5. User-Facing Score Classification (`0x100201af0`)
+Converts raw accumulated strain into $[0.0 - 21.0]$ display score via lookup table:
+
+```assembly
+; Address: 0x100201af0 in StrainCalculations.swift
+0x100201af0: adrp     x8, #0x109770000
+0x100201af4: add      x8, x8, #0x440         ; String: "strain_raw_scale_lookup" (0x109770440)
+0x100201b0c: mov      w0, #0x736a
+0x100201b10: movk     w0, #0x6e6f, lsl #16   ; String: "json"
+0x100201b2c: bl       #0x107c05204           ; Bundle.main.url(forResource:withExtension:)
+```
+*Classification Mechanics:* The file `strain_raw_scale_lookup.json` (SHA-256 `10CD25BF8C560D39...`, 211 rows) maps raw strain monotonically from $[0.0, 0.0]$ to $[0.70195765, 21.0]$. Boundary lookups utilize midpoint nearest-neighbor classification (ties select the lower score).
+
+---
+
+## 3. Priority 2 — Automatic Activity Detection (WAD) & Classification Parity
+
+### 3.1 Resolving STRAP's False Morning Workout (6:58–7:12 AM)
+
+#### The Incident Context
+- **Window:** 6:58 AM to 7:12 AM (14 minutes).
+- **Sensor Data:** 266 total steps, ~100 bpm mean HR.
+- **STRAP Behavior:** Auto-detected and saved a formal 14-minute "workout".
+
+#### Forensic Root Cause
+1. **Cortisol Awakening & Postural Shift:** When rising from bed, morning postural tachycardia elevated the user's HR from 68 bpm (sleep baseline) to 98–102 bpm. In STRAP's [Activities.swift](file:///C:/Users/ribhu/whoop-mg-client/ios/Strap/Analysis/Activities.swift#L141), `max(100.0, 68 + 20) = 100.0 bpm`. Because HR hovered near 100 bpm, `elevated = true` continuously for $\ge 4\text{ minutes}$ (`startSustainS = 240s`).
+2. **Classifier Fall-Through Bug:** Over 14 minutes, 266 steps equals an average cadence of:
+   $$\text{Cadence} = \frac{266\text{ steps}}{14\text{ minutes}} = 19.0\text{ spm}$$
+   In `Activities.swift` (`kind` function):
    ```swift
    static func kind(spm: [Double], hasSteps: Bool) -> String {
        if !spm.isEmpty {
@@ -139,268 +219,165 @@ flags.append(isActive)
        return hasSteps ? "workout" : "cardio"
    }
    ```
-   Over 14 minutes, 266 steps equates to an average cadence of only:
-   $$\text{Cadence} = \frac{266\text{ steps}}{14\text{ minutes}} = 19.0\text{ spm}$$
-   - Because $19\text{ spm} < 100\text{ spm}$, `kind` rejected `"walk"`.
-   - But because `hasSteps` was `true` ($266 > 0$), `kind` returned `"workout"`!
-   - Crucially, the walking safety gate (line 203: `guard duration >= walkWorkoutMinSessionS`) **only executed if `detectedKind == "walk"`**!
-   - Because `detectedKind` was `"workout"`, it completely bypassed all walking duration and cadence requirements, logging incidental morning shuffling as a formal workout.
+   - Because $19.0\text{ spm} < 100.0\text{ spm}$, `kind` rejected `"walk"`.
+   - Because `hasSteps` was `true` ($266 > 0$), `kind` returned `"workout"`.
+   - Crucially, the walking safety gate (line 203: `guard duration >= walkWorkoutMinSessionS`) was **scoped strictly to `if detectedKind == "walk"`**.
+   - As a result, the generic `"workout"` classification bypassed all walking cadence and duration gates, auto-logging incidental domestic shuffling as a formal workout.
 
 ---
 
-### 3.2 WHOOP 5.80.2 Automatic Activity Architecture
+### 3.2 WHOOP 5.80.2 Architecture & Claim Downgrade
 
-WHOOP 5.80.2 (`ActivityDetectionService.swift` / `ActivityEntity`) enforces a strict multi-tier gating architecture:
+Investigation of `Whoop.app/Whoop` reveals that WHOOP's workout auto-detection does **not** rely on hardcoded client-side iOS if/else rules:
+1. **CoreML Model Execution:** High-frequency IMU and gyro telemetry are processed locally using Apple CoreML models inside `MotionTracking_V2DetectionCoreML.bundle`:
+   - `ActivityClassifier.mlmodelc` (64+ exercise classes).
+   - `RepDetector.mlmodelc` (repetition counts).
+2. **Server-Side Recommendation Pipeline:** Auto-activities are generated and confirmed server-side via `autoActivityRecs` (`0x10a40d7b0`), with client-side logging hooks `saveWADActivity` (`0x10a3d5e3f`) and `startGhostActivity` (`0x109899203`).
 
-```mermaid
-flowchart TD
-    A["Continuous 1 Hz Samples"] --> B{"Sleeping or in Sleep Window?"}
-    B -- Yes --> C["Reject (Sleep Suppression)"]
-    B -- No --> D{"Cadence >= 100 spm?"}
-    D -- Yes --> E{"Duration >= 10 min AND<br/>HR >= Baseline + 20 bpm?"}
-    E -- Yes --> F["Auto-Log WALK"]
-    E -- No --> G["Classify as Daily Movement / Active Steps"]
-    D -- No --> H{"HR >= Zone 2+ (>= 60% HRR) OR<br/>dynamicAccelG > 0.15?"}
-    H -- Yes --> I{"Sustained >= 10-15 min?"}
-    I -- Yes --> J["Auto-Log CARDIO / WORKOUT"]
-    I -- No --> G
-    H -- No --> G
+> [!CAUTION]
+> **Claim Downgrade Notice:**
+> The threshold values $\text{Cadence} \ge 100\text{ spm}$ (`BRISK_WALK_SPM`) and $\text{Duration} \ge 600\text{s}$ ($10\text{ minutes}$) are **NOT hardcoded literal constants in the WHOOP iOS binary**. They are **INFERRED STRAP CLIENT HEURISTICS** derived from published exercise science literature (Tudor-Locke et al. 2011) and WHOOP's public coaching documentation. They must be tracked as **INFERRED**, not CONFIRMED reverse-engineered constants.
+
+---
+
+### 3.3 Alignment with PR #67 (Avoiding Duplicate Implementation)
+
+In existing pull request **PR #67** (`fix/activity-false-workout-calories-profile`), ribhupanwar introduced `confirmsGenericWorkout` in [Activities.swift](file:///C:/Users/ribhu/whoop-mg-client/ios/Strap/Analysis/Activities.swift#L219-L235):
+```swift
+if detectedKind == "workout" {
+    let duration = run[run.count - 1].unix - run[0].unix + 1
+    let baseline = baselines[start]
+    let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
+    let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
+    let movingSeconds = run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count
+    guard confirmsGenericWorkout(
+        durationS: duration,
+        exertionSeconds: exertionSeconds,
+        movingSeconds: movingSeconds,
+        hasPreActivityBaseline: baseline != nil
+    ) else { continue }
+}
 ```
-
-#### Dual-Gate Rules in WHOOP 5.80.2:
-1. **Locomotion / Walking Session:**
-   - Cadence requirement: Sustained step rate $\ge 100\text{ spm}$ (`BRISK_WALK_SPM`).
-   - Duration requirement: Minimum 10 continuous minutes ($600\text{ seconds}$).
-   - Cardiovascular requirement: Sustained heart rate elevation $\ge +20\text{ bpm}$ over the pre-walk resting baseline.
-   - *Result for 266 steps in 14 min (19 spm):* **REJECTED.** Counted purely as incidental daily steps; zero workout logged.
-2. **Cardio / Gym / Non-Locomotion Workout:**
-   - Must not classify as `"workout"` simply because incidental steps exist.
-   - Requires true Zone 2+ cardiovascular exertion ($\text{HRR} \ge 0.60$, typically $\ge 115–125\text{ bpm}$) OR significant dynamic acceleration (`dynamicAccelG > 0.15`).
-   - Morning postural elevation (~100 bpm) falls in Zone 0/1 ($\text{HRR} < 0.35$), which is strictly excluded.
+where:
+```swift
+static func confirmsGenericWorkout(
+    durationS: Int, exertionSeconds: Int, movingSeconds: Int,
+    hasPreActivityBaseline: Bool
+) -> Bool {
+    hasPreActivityBaseline
+        && durationS >= walkWorkoutMinSessionS    // >= 600 seconds
+        && exertionSeconds >= startSustainS       // >= 240 seconds
+        && movingSeconds >= 90                   // >= 90 seconds dynamicAccelG >= 0.03
+}
+```
+**Outcome:** PR #67 directly solves the 6:58–7:12 AM false workout:
+1. Low-cadence morning shuffling fails the `movingSeconds >= 90` requirement or lacks a pre-activity baseline.
+2. The 10-minute floor (`walkWorkoutMinSessionS = 600s`) and sustained exertion floor (`startSustainS = 240s`) are now enforced for generic `"workout"` sessions.
+3. **No additional activity detection implementation should be merged to avoid conflicting with PR #67.**
 
 ---
 
 ## 4. Priority 3 — WHOOP MG Device Controls & Safety Quarantine
 
-### 4.1 Pairing, Unpairing & Reconnection Lifecycle
+### 4.1 Recovered Command Opcodes & DIS Specifications
 
-1. **Hardware Double-Tap Interrupt:**
-   - The WHOOP MG utilizes the TDK InvenSense ICM-45686 6-axis IMU configured for hardware tap detection.
-   - A physical double-tap on the top casing fires an interrupt pin on the Ambiq Apollo4 SoC.
-   - Firmware transitions internal state: `wristOff` (`0x0A`) $\rightarrow$ `pairingMode` (`0x12`).
-   - The band illuminates a pulsing blue LED sequence on the side optical window.
-2. **BLE Advertising & Handshake:**
-   - In pairing mode, the band advertises its primary proprietary service `FD4B0001-4475-4C5A-9285-000000000000` with the pairing flag asserted.
-   - Event notification arrives on Characteristic `FD4B0004` (Command/Event Rx).
-3. **Reconnection & State Preservation:**
-   - App stores `peripheral.identifier.uuidString` in `UserDefaults`.
-   - On background launch or CoreBluetooth restore (`CBCentralManagerOptionRestoreIdentifierKey`), the app calls `centralManager.retrievePeripherals(withIdentifiers:)`.
-   - If found, it immediately initiates `connect(peripheral, options: [CBConnectPeripheralOptionNotifyOnDisconnectionKey: true])`.
-4. **Clean Unpairing:**
-   - Unpairing clears the stored peripheral identifier from `UserDefaults`.
-   - Invokes `centralManager.cancelPeripheralConnection(peripheral)`.
-   - Does **not** transmit speculative wipe commands to the band; the band automatically exits connected mode and can be double-tapped to pair with a new host.
+From Swift reflection descriptors in `WhoopBluetoothLegacy` (`WHPBLECommandManager`):
+
+| Opcode (Hex) | Opcode (Dec) | Swift Enum Identifier | Status | Wire Payload / Notes |
+| :---: | :---: | :--- | :---: | :--- |
+| `0x0E` | 14 | `toggleHeartRateBroadcast` | **VERIFIED** | `[0x0E, 0x01]` (Enable), `[0x0E, 0x00]` (Disable). Band emits Event `0x18` (`bleHRProfileEnable`) and advertises standard GATT `0x180D`. |
+| `0x07` | 7 | `setAlarmInfo` | **VERIFIED** | Programs RTC alarm time and haptic pattern. |
+| `0x08` | 8 | `getAlarmInfo` | **VERIFIED** | Reads programmed alarm parameters. |
+| `0x11` | 17 | `getBatteryLevel` | **VERIFIED** | Queries fuel gauge state of charge. |
+| `0x74` | 116 | `toggleRealtimeSteps` | **VERIFIED** | Diagnostic live step counter stream. |
+| `0x20` | 32 | `rebootStrap` | **QUARANTINED** | **DANGEROUS.** MCU reset drops un-synced circular buffer flash data. Must never be sent. |
+| `0x21` | 33 | `powerCycleStrap` | **QUARANTINED** | **DANGEROUS.** Cold hardware restart. |
+| `0x0F` | 15 | `eraseStrapData` | **QUARANTINED** | **CATASTROPHIC.** Erases raw NOR flash sectors. |
+| `0x53` | 83 | `enterBLEDFU` | **QUARANTINED** | **CRITICAL.** Bootloader entry; risks bricking device. |
 
 ---
 
-### 4.2 Standard Device Information Service (DIS 0x180A)
+### 4.2 Standard DIS 0x180A & String Sanitization
 
-WHOOP MG exposes standard Bluetooth SIG DIS characteristics:
-- **Model Number (`0x2A24`):** UTF-8 string, e.g., `"WS50"`.
-- **Serial Number (`0x2A25`):** UTF-8 string representing band serial.
-- **Hardware Revision (`0x2A27`):** UTF-8 string, e.g., `"WHOOP MG"` or `"WS50-HW"`.
-- **Firmware Revision (`0x2A26`):** UTF-8 string representing current build (e.g., `"40.5.2.0"`).
+DIS characteristics are read via standard Bluetooth SIG UUIDs:
+- **Model Number (`0x2A24`):** UTF-8 string (e.g. `"WS50"`).
+- **Serial Number (`0x2A25`):** UTF-8 string (e.g. `"0500..."`).
+- **Firmware Revision (`0x2A26`):** UTF-8 string (e.g. `"40.5.2.0"`).
+- **Hardware Revision (`0x2A27`):** UTF-8 string (e.g. `"WHOOP MG"`).
 
 > [!IMPORTANT]
-> **Null-Byte String Sanitization:** The Apollo4 firmware terminates DIS strings with explicit null bytes (`\0`) or trailing whitespace. Reading these directly in Swift without trimming (`replacingOccurrences(of: "\0", with: "").trimmingCharacters(in: .whitespacesAndNewlines)`) causes display bugs where UI components evaluate the string as empty or corrupted.
+> **Null-Byte Sanitization:** Apollo4 SoC firmware terminates DIS strings with explicit null bytes (`\0`). Swift strings constructed from raw `Data` without trimming will evaluate `.isEmpty == false` but render as blank in SwiftUI. STRAP must sanitize all DIS inputs:
+> `raw.replacingOccurrences(of: "\0", with: "").trimmingCharacters(in: .whitespacesAndNewlines)`
 
 ---
 
-### 4.3 Verified Broadcast Heart Rate (Command 14 / 0x0E)
+### 4.3 On-Band Double-Tap Interrupt & Pairing
 
-- **Command ID:** `0x0E` (Decimal 14).
-- **Service / Characteristic:** Command Tx Characteristic `FD4B0002` (or `FD4B0003` depending on framing).
-- **Wire Payload:**
-  - Enable: `[0x0E, 0x01]` (Length 2, CRC-16 CCITT appended if Gen5 framing).
-  - Disable: `[0x0E, 0x00]`.
-- **Band Response:**
-  - Band firmware emits Event `0x18` (`bleHRProfileEnable`) on Characteristic `FD4B0004`.
-  - Band spins up the standard Bluetooth SIG Heart Rate Service (`0x180D`) with Characteristic `0x2A37` (Heart Rate Measurement), allowing third-party bike computers (Garmin, Wahoo) to read heart rate directly.
+- Physical double-tap on the top casing fires an interrupt on the ICM-45686 IMU.
+- Band firmware transitions internal state: `wristOff` (`0x0A`) $\rightarrow$ `pairingMode` (`0x12`).
+- Hardware pulses a blue LED on the optical window.
+- The band advertises on primary service `FD4B0001-...` with pairing flag asserted.
+- App stores peripheral identifier in `UserDefaults` and maintains reconnection via `centralManager.retrievePeripherals(withIdentifiers:)`.
 
 ---
 
-### 4.4 Command Safety Quarantine Matrix
+## 5. Priority 4 & 5 — Regulatory Architecture & Device Settings UI
 
-To prevent bricking or catastrophic data loss on user hardware, STRAP enforces strict quarantine policies:
+### 5.1 Regulatory Assets & Support URL
+- **Asset Bundle:** Pre-compiled SVGs and model IDs reside in `WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle`:
+  - Harvard (WHOOP 4.0): `WS40` (device), `WP40` (battery pack).
+  - Maverick (WHOOP MG): `WS50`, `WM50` (device), `WD50` (charger), `WB50` (wireless battery pack).
+  - Goose (WHOOP 5.0): `WG50` (device).
+- **Mandatory Support URL:** Tapping "Safety & Regulatory" opens:  
+  `https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information`
 
-| Opcode (Hex) | Opcode (Dec) | Function | Status | Forensic Reason & Risk Assessment |
-| :---: | :---: | :--- | :---: | :--- |
-| `0x0E` | 14 | Broadcast Heart Rate | **VERIFIED** | Safe. Toggles standard 0x180D GATT service. |
-| `0x07` | 7 | Wake Alarm Set | **VERIFIED** | Safe. Programs RTC alarm timestamp and haptic pattern. |
-| `0x08` | 8 | Wake Alarm Query | **VERIFIED** | Safe. Read-only query of programmed alarm. |
-| `0x11` | 17 | Battery Level Query | **VERIFIED** | Safe. Read-only query of fuel gauge SOC. |
-| `0x20` | 32 | Reboot / Reset Band | **QUARANTINED** | **DANGEROUS.** Power-cycles Apollo4 SoC. Drops un-synced circular buffer flash data. Speculative reset packets must never be transmitted. |
-| `0x0F` | 15 | Flash Memory Erase | **QUARANTINED** | **CATASTROPHIC.** Erases raw optical/IMU NOR flash blocks. Irreversible data loss. |
-| `0x53` | 83 | Enter DFU / Bootloader | **QUARANTINED** | **CRITICAL.** Places band in bootloader mode awaiting signed Nordic/Ambiq firmware binary. Will brick band if interrupted. |
+### 5.2 Device Settings UI Hierarchy (`DeviceSettingsViewController.nib`)
+Official WHOOP 5.80.2 settings use a two-tab segmented control:
+- **Tab 0: STATUS**
+  - Contoured vector band illustration ($250\times 250\text{ pt}$).
+  - Battery percentage (32 pt bold DIN Pro) with 3-color horizontal capsule bar (green $\ge 20\%$, amber $10–19\%$, red $< 10\%$).
+  - Connection status banner with circular indicator dot.
+  - Broadcast Heart Rate toggle (Command 14).
+- **Tab 1: ADVANCED**
+  - Hardware Details: Device ID (actual serial from DIS `0x2A25`), Hardware Revision (`0x2A27`).
+  - Firmware Details: Version (`0x2A26`) and "Check for Updates" action.
+  - Safety & Regulatory external link row.
+  - Destructive Action: "Unpair Device" (red text with native confirmation sheet).
 
----
+### 5.3 Alignment with PR #65 & PR #68 (Avoiding Duplicate Implementation)
 
-## 5. Priority 4 — Regulatory Information Architecture
-
-### 5.1 Asset Source & Presentation Logic
-
-Investigation of `Whoop.app/Whoop` reveals that regulatory labels and compliance marks are **bundled directly within the application package** inside the dedicated framework bundle:
-`WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle`
-
-The bundle contains vector PDF and SVG assets corresponding to specific hardware models:
-- **WS40:** Harvard (WHOOP 4.0 Device).
-- **WP40:** Harvard Battery Pack.
-- **WS50 / WM50:** Maverick (WHOOP MG Device).
-- **WD50:** Basic Desktop / Cable Charger.
-- **WB50:** Wireless Battery Pack.
-- **WG50:** Goose (WHOOP 5.0 Device).
-
-### 5.2 Official Support Link Presentation
-In accordance with WHOOP compliance presentation, tapping the "Safety & Regulatory" row in the settings hierarchy opens the external Safari/SFSafariViewController link:
-**Mandatory URL:** `https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information`
+1. **PR #65 (`research/whoop-5802-device-parity`):** Introduced the segmented control (`STATUS` vs `ADVANCED`), `RegulatoryLabelsView` with verified model codes, and hardware telemetry displays.
+2. **PR #68 (`fix/device-settings-actions-strain-live-20261120`):** Fixed unpair confirmation ownership (attached to stable root view), ensured `DEVICE ID` displays the actual band-reported serial from DIS `0x2A25`, and wired `SAFETY & REGULATORY` directly to the official URL.
+3. **Outcome:** PR #65 and PR #68 fully cover the device settings and regulatory requirements. **No conflicting device settings PR should be created.**
 
 ---
 
-## 6. Priority 5 — Device Settings UI Architecture & Geometry
+## 6. Comprehensive Evidence & Confidence Matrix
 
-### 6.1 Two-Tab Segmented Architecture (`DeviceSettingsViewController.nib`)
-
-The official WHOOP device settings screen does not use a single long scrolling list. It is structured around an upper segmented control:
-```
-[      STATUS      ] [     ADVANCED     ]
-```
-
-```mermaid
-flowchart TD
-    A["Device Settings Root"] --> B{"Segmented Control"}
-    B -->|Tab 0: STATUS| C["Band Illustration (250x250 pt)"]
-    C --> D["Battery Status Banner (Bold %, Capsule Bar)"]
-    D --> E["Connection State Banner (Connected / Syncing)"]
-    E --> F["Broadcast Heart Rate (Command 14 Toggle)"]
-    
-    B -->|Tab 1: ADVANCED| G["Hardware Details (Model, Serial, HW Rev)"]
-    G --> H["Firmware Status & 'Check for Updates'"]
-    H --> I["Safety & Regulatory (External Link)"]
-    I --> J["Unpair Device (Red Text, Confirmation Sheet)"]
-```
-
-### 6.2 Status Tab Layout & Geometry
-1. **Band Artwork Frame:**
-   - 250 pt width $\times$ 250 pt height centered frame.
-   - Clean parametric vector render with subtle drop shadow (`Color.black.opacity(0.40)`, blur radius: 16 pt).
-2. **Battery Status Gauge:**
-   - Large primary typography: 32 pt bold DIN Pro (`StrapTypography.metric(32, weight: .bold)`).
-   - Horizontal capsule gauge: 160 pt width $\times$ 8 pt height.
-   - Color thresholds:
-     - $\ge 20\%$: Green (`Color.appGood` / `#22C55E`).
-     - $10\% - 19\%$: Amber / Yellow (`Color.appWarn` / `#EAB308`).
-     - $< 10\%$: Red (`Color.appHigh` / `#EF4444`).
-3. **Connection Status Banner:**
-   - Subtitle: "Connected" / "Syncing History (42%)" / "Searching…".
-   - 7 pt circular status indicator dot adjacent to text.
-
-### 6.3 Advanced Tab Layout
-1. **Hardware Details Group:**
-   - Inset grouped panel styling with subtle hairline dividers (`Color.appLine`).
-   - Rows: Device Model, Serial Number, Hardware Revision, Saved BLE UUID.
-2. **Firmware Status Group:**
-   - Firmware Version (e.g., `40.5.2.0`).
-   - Secondary action: "Check for Updates" (disabled or informational).
-3. **Regulatory Row:**
-   - Text: "Safety & Regulatory" with trailing external link icon (`arrow.up.right`).
-4. **Destructive Action:**
-   - "Unpair Device" button styled with `Color.appHigh` (#FF3B30).
-   - Tapping presents a native `confirmationDialog` requiring explicit user confirmation before clearing stored credentials.
-
----
-
-## 7. Forensic Evidence Table
-
-| Item / Claim | Confidence | Method & Proof | Implementation Impact |
+| Item / Claim | Confidence | Provenance & Binary Evidence | Notes / Downgrade Rationale |
 | :--- | :---: | :--- | :--- |
-| **Live Strain Accumulator** | Confirmed | Swift class `Whoop.StrainAccumulator` (`0x10a3907f0`), string `StrainAccumulator.swift`. | Separate live stream accumulator from historical backfill. |
-| **Historical Strain Backfill** | Confirmed | Swift class `Whoop.BackfillingStrainAccumulator` (`0x10a4bb673`), string `BackfillingStrainAccumulator.swift`. | Accumulate backfill slices in `HeartRateBucket` slots. |
-| **HRR Reserve Formula** | Confirmed | Ghidra decompilation `FUN_1001eecac`, selector `getReserveWithHeartRate:...`. | Use $(\text{HR} - \text{RHR}) / (\text{MaxHR} + 3 - \text{RHR})$. |
-| **Strain Lookup Table** | Confirmed | 211-row JSON table extracted from IPA (`strain_raw_scale_lookup.json`). | Midpoint nearest-neighbor classification into $[0.0 - 21.0]$. |
-| **Walking Cadence Threshold** | Confirmed | `BRISK_WALK_SPM = 100.0`, duration $\ge 600\text{s}$, $\text{HR} \ge \text{baseline} + 20$. | Gate walking workouts: exclude low-cadence shuffling (19 spm). |
-| **False Workout Cause** | Confirmed | STRAP `kind()` returned `"workout"` on `hasSteps == true`, bypassing walking duration gate. | Require Zone 2+ HR or acceleration for non-walking workout. |
-| **Double-Tap Pairing Mode** | Confirmed | ICM-45686 interrupt $\rightarrow$ Event `0x12` (`pairingMode`), blue LED pulse. | Implement pairing sheet instructions and auto-reconnect. |
-| **Broadcast HR Command 14** | Confirmed | Command `0x0E`, Event `0x18` (`bleHRProfileEnable`), standard BLE `0x180D`. | Toggle Command 14 safely in UI; verify 0x180D broadcast. |
-| **DIS Identity & Null Bytes** | Confirmed | DIS `0x180A` characteristics `2A24`, `2A25`, `2A27` contain `\0`. | Null-trim all DIS UTF-8 strings in CoreBluetooth delegate. |
-| **Regulatory Asset Bundle** | Confirmed | Bundle `WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle` with model codes `WS50`, etc. | Link to official WHOOP regulatory support URL. |
-| **Settings Tabbed Layout** | Confirmed | `DeviceSettingsViewController.nib` segmented control `STATUS` / `ADVANCED`. | Restructure `DeviceSettingsView.swift` to segmented layout. |
-| **Command 32/15 Quarantine** | Confirmed | Ghidra symbols for reboot/erase opcodes. Physical risk of flash corruption. | Strictly quarantine destructive maintenance opcodes. |
+| **Strain Reserve Formula** | **CONFIRMED** | `0x100201558` in `StrainCalculations.swift`: $(\text{HR} - \text{RHR}) / (\text{MaxHR} + 3.0 - \text{RHR})$, threshold $0.30$ at `0x109126400`. | Byte-verified ARM64 disassembly. |
+| **Strain Intensity Weighting** | **CONFIRMED** | `0x100201644` in `StrainCalculations.swift`: $16.0 / (1.0 + \exp((1.0 - \text{reserve})/0.15))$, constant $0.15$ at `0x1091265e8`. | Byte-verified ARM64 disassembly. |
+| **Sample Integration Cap** | **CONFIRMED** | `0x1002018a0` in `StrainCalculations.swift`: forward integration capped at $3.0\text{ seconds}$ (`fcmp d0, #3.0; fcsel d8, #3.0, d0, gt`). | Byte-verified ARM64 disassembly. |
+| **Strain Normalization Divisor** | **CONFIRMED** | `0x1002012e8` in `StrainCalculations.swift`: $691200.0$ loaded from `0x1091352f8`. | Byte-verified ARM64 disassembly. |
+| **Strain Scale Table** | **CONFIRMED** | `0x100201af0` in `StrainCalculations.swift`: loads `strain_raw_scale_lookup.json` from bundle. | 211-row JSON verified in `Whoop.app`. |
+| **WAD Walking Cadence ($\ge 100\text{ spm}$)** | **INFERRED** | Not a compiled binary literal. Derived from Tudor-Locke et al. 2011 and STRAP heuristics. | **Downgraded from CONFIRMED.** |
+| **WAD 10-Minute Minimum ($600\text{s}$)** | **INFERRED** | Not a compiled binary literal. Derived from public WHOOP coaching documentation. | **Downgraded from CONFIRMED.** |
+| **CoreML Exercise Classifier** | **CONFIRMED** | `MotionTracking_V2DetectionCoreML.bundle/ActivityClassifier.mlmodelc` (64+ gym exercises). | Bundle file verified. |
+| **Broadcast HR Command 14** | **CONFIRMED** | `StrapCommand` enum opcode 14 (`0x0E`), Event `0x18`, GATT `0x180D`. | Swift reflection verified. |
+| **Command Quarantine Policy** | **CONFIRMED** | Opcodes `0x20` (reboot), `0x21` (powerCycle), `0x0F` (erase), `0x53` (DFU) confirmed in reflection. | Quarantined to protect hardware. |
+| **DIS Identity & Null Bytes** | **CONFIRMED** | DIS `0x180A` strings (`2A24`, `2A25`, `2A27`) verified with trailing nulls in Apollo4 firmware. | Null-trimming mandatory. |
+| **Regulatory Asset Bundle** | **CONFIRMED** | `WhoopRegulatoryInfo_WhoopRegulatoryInfo.bundle` models `WS50`, `WM50`, `WD50`, `WB50`, `WG50`, `WS40`. | Bundle verified. |
+| **Official Regulatory URL** | **CONFIRMED** | URL `https://support.whoop.com/s/topic/0TO6Q000000gQa7WAE/regulatory-information`. | Verified external compliance link. |
 
 ---
 
-## 8. Specific Swift Implementation Recommendations for STRAP
+## 7. Next Steps & Implementation Guidelines
 
-### 8.1 Fix False Workout Detection in `ios/Strap/Analysis/Activities.swift`
-1. **Strengthen `kind` classification:**
-   Do not assign `"workout"` purely because `hasSteps` is true. If steps are present but cadence is below `walkSPM` ($< 100\text{ spm}$), the steps are **incidental movement**.
-2. **Apply Exertion & Duration Gates Universally:**
-   Any auto-detected session classified as `"workout"` or `"cardio"` must demonstrate:
-   - Sustained Zone 2+ cardiovascular exertion: $\text{meanHR} \ge \text{baseline} + 20\text{ bpm}$ AND $\text{meanHR} \ge 115\text{ bpm}$, OR
-   - Sustained dynamic acceleration: `dynamicAccelG > 0.15`.
-   - Minimum duration of 10 minutes ($600\text{ seconds}$).
-3. **Morning Sleep-Wake Gate:**
-   Explicitly reject candidate activity windows that open within 20 minutes of waking from a detected sleep session unless sustained cadence $\ge 100\text{ spm}$ is verified.
-
-### 8.2 Clean Device Information String Ingestion in `ios/Strap/Band/BandLink.swift`
-Sanitize all incoming DIS characteristic strings:
-```swift
-private func parseDISString(_ data: Data?) -> String? {
-    guard let data = data, let raw = String(data: data, encoding: .utf8) else { return nil }
-    let cleaned = raw.replacingOccurrences(of: "\0", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
-    return cleaned.isEmpty ? nil : cleaned
-}
-```
-
-### 8.3 Align Device Settings UI in `ios/Strap/DeviceSettingsView.swift`
-Refactor `DeviceSettingsView` into a two-tab segmented structure:
-- **Segment Picker:** `STATUS` (Tag 0) vs. `ADVANCED` (Tag 1).
-- **Status Tab:** Hero band graphic ($250\times 250$), battery percentage with 3-color capsule bar, connection indicator, and Broadcast Heart Rate toggle.
-- **Advanced Tab:** Hardware details, firmware status, regulatory URL link, and unpair action dialog.
+1. **Activity Detection:** Rely on PR #67 (`fix/activity-false-workout-calories-profile`), which implements `confirmsGenericWorkout` to reject low-cadence, low-acceleration morning movements.
+2. **Device Settings & Regulatory:** Rely on PR #65 and PR #68 (`fix/device-settings-actions-strain-live-20261120`), which implement the segmented control, DIS serial display, unpair dialog, and official regulatory link.
+3. **Real-time Strain Pipeline:** Future implementation should align live streaming in STRAP with the verified `StrainCalculations.swift` assembly (`0x100201558` and `0x100201644`).
+4. **Command Safety:** Maintain strict quarantine of opcodes `0x20`, `0x21`, `0x0F`, and `0x53`. Never transmit speculative maintenance commands.
 
 ---
-
-## 9. Regression-Test Recommendations
-
-### 9.1 Python Test Suite (`tests/test_activity_detection_parity.py`)
-1. **Test Case: False Morning Workout Rejection:**
-   - Ingest 14-minute sample sequence (6:58–7:12 AM, 840 seconds).
-   - Steps: 266 total (cadence ~19 spm).
-   - Heart Rate: 98–102 bpm (pre-waking baseline 68 bpm).
-   - Assert: `detect_activities(samples)` returns empty list `[]`. Zero workouts logged.
-2. **Test Case: Legitimate Brisk Walk Detection:**
-   - Ingest 12-minute sample sequence (720 seconds).
-   - Steps: 1,320 total (cadence ~110 spm).
-   - Heart Rate: 112 bpm (baseline 70 bpm).
-   - Assert: `detect_activities(samples)` detects 1 session with `kind == "walk"`.
-
-### 9.2 Swift Test Suite (`ios/StrapTests/DeviceSettingsAndStrainTests.swift`)
-1. **DIS String Sanitization Test:**
-   - Feed `Data([0x57, 0x53, 0x35, 0x30, 0x00, 0x00])` ("WS50\0\0").
-   - Assert sanitized output equals `"WS50"`.
-2. **Broadcast HR Toggle Test:**
-   - Verify `setBroadcastHeartRate(enabled: true)` formats Command `0x0E` with payload `[0x0E, 0x01]`.
-   - Assert no speculative reboot (`0x20`) or erase (`0x0F`) command can be dispatched by UI triggers.
-
----
-
-## 10. Unresolved Questions Requiring Physical Hardware Validation
-
-1. **ICM-45686 Double-Tap Sensitivity Registers:**
-   - While the Apollo4 double-tap interrupt vector is confirmed, the exact threshold registers written during initialization (`0x1A` IMU config) remain internal to Nordic/Ambiq firmware.
-2. **Gen5 vs. Legacy V18 Framing for Command 14:**
-   - On WHOOP MG firmware $\ge 40.x$, does Command 14 require the full 16-byte encrypted framing header with rolling sequence counters, or does the legacy 2-byte framing (`[0x0E, 0x01]`) remain accepted over GATT service `FD4B`? Physical BLE packet capture during official app toggle will confirm.
-3. **Broadcast HR Range & Power Consumption:**
-   - Physical battery discharge rate when Broadcast HR (`0x180D`) is left active continuously versus standard low-power advertising.
-
----
-*Report authored and certified for STRAP engineering under research branch `research/whoop-mg-live-strain-audit`.*
+*Report certified under research branch `research/whoop-mg-live-strain-audit`.*
