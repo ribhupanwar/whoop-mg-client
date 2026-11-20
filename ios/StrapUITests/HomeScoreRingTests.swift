@@ -16,7 +16,16 @@ final class HomeScoreRingTests: XCTestCase {
         XCTAssertTrue(scrollingContent.exists)
         for _ in 0..<3 where !compactSleep.exists { scrollingContent.swipeUp() }
         XCTAssertTrue(compactSleep.waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Profile"].waitForNonExistence(timeout: 5))
+        // SwiftUI may retain off-screen buttons in the accessibility tree.
+        // What matters is that the scrolled-away Profile control cannot be
+        // tapped while compact scores are displayed.
+        let profile = app.buttons["Profile"]
+        let profileNotHittable = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "isHittable == false"),
+            object: profile
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [profileNotHittable], timeout: 5), .completed,
+                       "Profile control must be off-screen when compact scores are visible")
         capture("Home compact scores", in: app)
 
         for _ in 0..<4 where compactSleep.exists { scrollingContent.swipeDown() }
