@@ -37,6 +37,7 @@ struct ProfileView: View {
     static let nameKey = "strap.profile.displayName.v1"
     @AppStorage(ProfileView.nameKey) private var displayName = ""
     @AppStorage(ProfileAvatar.storageKey) private var avatar: ProfileAvatar = .person
+    @State private var hasLoadedDraft = false
     @State private var draftName = ""
     @State private var draftAvatar: ProfileAvatar = .person
     @Environment(\.dismiss) private var dismiss
@@ -74,8 +75,10 @@ struct ProfileView: View {
             }
         }
         .onAppear {
+            guard !hasLoadedDraft else { return }
             draftName = displayName
             draftAvatar = avatar
+            hasLoadedDraft = true
         }
     }
 }
