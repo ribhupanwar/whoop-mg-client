@@ -93,12 +93,12 @@ class WhoopUIParityTests(unittest.TestCase):
     def test_ring_geometry_constants(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")
         expected_geometry = {
-            "heroRingDiameter": "79.0",
+            "heroRingDiameter": "84.0",
             "detailRingDiameter": "104.0",
-            "ringStrokeWidth": "5.0",
+            "ringStrokeWidth": "6.0",
             "ringGap": "8.0",
-            "heroMetricFontSize": "23.0",
-            "percentSignScale": "0.72",
+            "heroMetricFontSize": "26.0",
+            "percentSignScale": "0.70",
         }
         for const, val in expected_geometry.items():
             pattern = rf"static\s+let\s+{const}:\s*CGFloat\s*=\s*{val}"
