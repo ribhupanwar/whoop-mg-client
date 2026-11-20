@@ -2,6 +2,11 @@
 
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
+## Issue #83 Healthspan
+
+- [ ] Verify the native Healthspan baseline progress bars against saved observations. The bars and the fitness-age model share a rolling seven-day window and eligibility filters for resting-HR nights and days with steps.
+- [ ] Biological age and a milestone countdown require a supported model and evidence. The available reference archive shows only the locked Healthspan card.
+
 ## Issue #83 BLE recovery
 
 - [x] Found the Gen5 GATT UUID regression in `fe78b2c`. The iOS UUIDs now agree with the earlier iOS transport and the hardware-backed Python Gen5 profile. Added a native regression test for the service, command write and four notification UUIDs.

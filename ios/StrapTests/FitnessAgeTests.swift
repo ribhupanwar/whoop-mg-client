@@ -67,6 +67,13 @@ final class FitnessAgeModelTests: XCTestCase {
                                meanHR: 150, walkTicks: 0, runTicks: 1800)
     }
 
+    func testBaselineCoverageUsesSameRollingWindowAsFitnessEstimate() {
+        let date = Calendar.current.date(byAdding: .day, value: 4, to: referenceDate())!
+        let coverage = FitnessAgeModel.baselineCoverage(days: recordedDays(), asOf: date)
+        XCTAssertEqual(coverage.restingNights, 3)
+        XCTAssertEqual(coverage.stepDays, 3)
+    }
+
     func testValidMeasuredWeekProducesFiniteFitnessAge() {
         let result = FitnessAgeModel.snapshot(
             age: 35, sex: .male, ageConfirmed: true,
