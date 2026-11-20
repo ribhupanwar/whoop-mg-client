@@ -627,34 +627,34 @@ struct HomeView: View {
 
             if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
-                HStack(spacing: 11) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "moon.fill").font(.system(size: 11))
+                HStack(spacing: 12) {
+                    HStack(spacing: 7) {
+                        Image(systemName: "moon.fill").font(.system(size: 17))
                         Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(StrapTypography.metric(14, weight: .bold))
+                            .font(StrapTypography.metric(18, weight: .bold))
                             .monospacedDigit()
                     }
                     .foregroundStyle(Color.appFG)
-                    .padding(.horizontal, 10)
-                    .frame(minWidth: 70, minHeight: 34)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color(hex: 0x48647A)))
+                    .frame(width: 92, height: 49)
+                    .background(RoundedRectangle(cornerRadius: 9).fill(Color(hex: 0x739AB7)))
 
                     Text("SLEEP")
-                        .font(StrapTypography.body(13, weight: .bold))
+                        .font(StrapTypography.body(15, weight: .bold))
                         .tracking(0.8)
                         .foregroundStyle(Color.appFG)
                     Spacer()
                     Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(StrapTypography.metric(11, weight: .medium))
+                        .font(StrapTypography.metric(12, weight: .medium))
                         .monospacedDigit()
                         .foregroundStyle(Color.appMuted)
                         .multilineTextAlignment(.trailing)
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color.appSleep)
-                        .frame(width: 3, height: 26)
+                        .frame(width: 3, height: 35)
                 }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .frame(minHeight: 66)
                 .background(RoundedRectangle(cornerRadius: 13).fill(Color.appRaised))
             }
             .buttonStyle(.plain)
@@ -859,18 +859,17 @@ struct HomeView: View {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .medium))
                 Text(activityScore(name, detail))
-                    .font(StrapTypography.metric(14, weight: .bold))
+                    .font(StrapTypography.metric(18, weight: .bold))
             }
             .foregroundStyle(Color.appFG)
-            .padding(.horizontal, 10)
-            .frame(minWidth: 70, minHeight: 34)
+            .frame(width: 92, height: 49)
             .background(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(LinearGradient(colors: [Color(hex: 0x0080E6), Color(hex: 0x005BB3)], startPoint: .top, endPoint: .bottom))
             )
 
             Text(cleanActivityName(name))
-                .font(StrapTypography.body(13, weight: .bold))
+                .font(StrapTypography.body(15, weight: .bold))
                 .tracking(0.6)
                 .foregroundStyle(Color.appFG)
             Spacer(minLength: 8)
@@ -884,6 +883,7 @@ struct HomeView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
+        .frame(minHeight: 66)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
