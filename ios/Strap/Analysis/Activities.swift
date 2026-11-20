@@ -243,8 +243,8 @@ enum ActivityDetect {
             let isDuplicate = (accepted + existing).contains { other in
                 let overlapStart = max(candidate.startUnix, other.startUnix)
                 let overlapEnd = min(candidate.endUnix, other.endUnix)
-                guard overlapEnd > overlapStart else { return false }
-                let overlap = overlapEnd - overlapStart
+                guard overlapEnd >= overlapStart else { return false }
+                let overlap = overlapEnd - overlapStart + 1
                 return Double(overlap) / Double(candidateDuration) >= 0.50
             }
             if !isDuplicate {
