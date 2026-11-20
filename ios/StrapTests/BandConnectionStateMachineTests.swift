@@ -199,4 +199,107 @@ final class BandConnectionStateMachineTests: XCTestCase {
             XCTAssertGreaterThanOrEqual(delay, 1.0)
         }
     }
+
+    // MARK: - Automated 100 Repeated Cycles
+
+    func test100ConnectDisconnectCycles() {
+        for cycle in 1...100 {
+            var status = BandStatus.connecting("WHOOP MG")
+            XCTAssertFalse(status.isConnected)
+            status = .authenticating
+            XCTAssertTrue(status.isConnected)
+            status = .connected("WHOOP MG")
+            XCTAssertTrue(status.isReady)
+            status = .streaming(bpm: 70 + (cycle % 20))
+            XCTAssertTrue(status.isReady)
+            status = .disconnected("Strap disconnected")
+            XCTAssertFalse(status.isConnected)
+            status = .reconnecting(attempt: min(cycle, 5))
+            XCTAssertFalse(status.isConnected)
+        }
+    }
+
+    // MARK: - Sleep Manual Edit Preservation vs Auto-Sync
+
+    func testSleepManualEditPreservedDuringFullNightSync() {
+        let nightKey = "2026-11-19"
+        let previous = DayMetrics(
+            dateKey: nightKey,
+            state: "sleep",
+            restingHR: 58.0,
+            lnRMSSD: 4.1,
+            hrvWindowSeconds: 300,
+            sleepHours: 8.5,
+            sleepStartUnix: 1795019290,
+            sleepEndUnix: 1795050550,
+            strain: 12.0,
+            steps: 4500,
+            sleepDurationReliable: true,
+            respiratoryRate: 15.2,
+            sleepPerformancePct: 88.0
+        )
+        let freshUneditedSync = DayMetrics(
+            dateKey: nightKey,
+            state: "sleep",
+            restingHR: 59.0,
+            lnRMSSD: 4.0,
+            hrvWindowSeconds: 300,
+            sleepHours: 8.26,
+            sleepStartUnix: 1795020250,
+            sleepEndUnix: 1795050550,
+            strain: 12.0,
+            steps: 4500,
+            sleepDurationReliable: true,
+            respiratoryRate: 15.2,
+            sleepPerformancePct: 85.0
+        )
+        let replaces = DailyAnalysis.replacesSleep(
+            previous: previous,
+            fresh: freshUneditedSync,
+            coverageStart: 1795018000,
+            coverageEnd: 1795052000,
+            isEdited: false,
+            previousIsEdited: true
+        )
+        XCTAssertFalse(replaces, "Automatic sync must NEVER overwrite a manually edited sleep session")
+
+        let replacesEdited = DailyAnalysis.replacesSleep(
+            previous: previous,
+            fresh: freshUneditedSync,
+            coverageStart: 1795018000,
+            coverageEnd: 1795052000,
+            isEdited: true,
+            previousIsEdited: true
+        )
+        XCTAssertTrue(replacesEdited, "A new user edit must be allowed to replace previous bounds")
+    }
+
+    // MARK: - Casual Walking Workout Prevention
+
+    func testCasualLowCadenceWalkingDoesNotAutoSaveAsWorkout() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795000000
+        var counter = 1000
+        for i in 0..<600 {
+            if i % 2 == 0 { counter += 1 } // ~30 spm casual shuffle
+            samples.append(
+                V18Sample(
+                    header: V18Header(version: 5, recordIndex: i, subsecQ15: 0),
+                    unix: baseUnix + i,
+                    heartRate: 75, // normal resting/standing HR
+                    rawHeartRate: 75,
+                    rrIntervalsMS: [800],
+                    dynamicAccelG: 0.05,
+                    gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                    wearing: true,
+                    sleepState: 0,
+                    activityClass: 0,
+                    stepCounter: counter,
+                    hrQualityFlags: 0
+                )
+            )
+        }
+        let detected = ActivityDetect.detect(samples, sleepPeriods: [])
+        XCTAssertTrue(detected.isEmpty, "Casual shuffle with steps < 100 spm must NOT auto-save as a workout")
+    }
 }
