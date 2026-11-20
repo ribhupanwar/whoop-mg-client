@@ -100,6 +100,10 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var status: BandStatus = .idle
     @Published private(set) var bandName: String?
     @Published private(set) var firmwareRevision: String?
+    @Published private(set) var hardwareRevision: String?
+    @Published private(set) var serialNumber: String?
+    @Published private(set) var modelNumber: String?
+    @Published private(set) var isBroadcastingHR: Bool = false
     @Published private(set) var lastHistoryRecordCount = 0
     @Published private(set) var lastHistorySyncAt: Date?
     @Published private(set) var batteryPercent: Int?
@@ -175,6 +179,11 @@ final class BandLink: NSObject, ObservableObject {
         static let preferredBandName = "strap.band.preferred.name.v1"
         static let liveRRArchive = "strap.live.rr.samples.v1"
         static let retainedHistoryCount = "strap.history.retained.count.v1"
+        static let cachedFirmware = "strap.band.cached_firmware_revision"
+        static let cachedHardware = "strap.band.cached_hardware_revision"
+        static let cachedSerial = "strap.band.cached_serial_number"
+        static let cachedModel = "strap.band.cached_model_number"
+        static let broadcastHREnabled = "strap.band.broadcast_hr_enabled"
     }
 
     private struct PendingCommand {
@@ -450,6 +459,11 @@ final class BandLink: NSObject, ObservableObject {
         lastHistorySyncAt = UserDefaults.standard.object(forKey: "strap.history.lastComplete.v1") as? Date
         preferredBandID = UserDefaults.standard.string(forKey: Keys.preferredBandID)
         preferredBandName = UserDefaults.standard.string(forKey: Keys.preferredBandName)
+        firmwareRevision = UserDefaults.standard.string(forKey: Keys.cachedFirmware)
+        hardwareRevision = UserDefaults.standard.string(forKey: Keys.cachedHardware)
+        serialNumber = UserDefaults.standard.string(forKey: Keys.cachedSerial)
+        modelNumber = UserDefaults.standard.string(forKey: Keys.cachedModel)
+        isBroadcastingHR = UserDefaults.standard.bool(forKey: Keys.broadcastHREnabled)
         if preferredBandID == nil {
             status = .unpaired
         }
@@ -960,8 +974,24 @@ final class BandLink: NSObject, ObservableObject {
     func forgetPreferredBand() {
         preferredBandID = nil
         preferredBandName = nil
+        firmwareRevision = nil
+        hardwareRevision = nil
+        serialNumber = nil
+        modelNumber = nil
         UserDefaults.standard.removeObject(forKey: Keys.preferredBandID)
         UserDefaults.standard.removeObject(forKey: Keys.preferredBandName)
+        UserDefaults.standard.removeObject(forKey: Keys.cachedFirmware)
+        UserDefaults.standard.removeObject(forKey: Keys.cachedHardware)
+        UserDefaults.standard.removeObject(forKey: Keys.cachedSerial)
+        UserDefaults.standard.removeObject(forKey: Keys.cachedModel)
+    }
+
+    /// Set verified Broadcast Heart Rate (Command 14 / 0x0E).
+    func setBroadcastHeartRate(enabled: Bool) {
+        isBroadcastingHR = enabled
+        UserDefaults.standard.set(enabled, forKey: Keys.broadcastHREnabled)
+        guard isConnected, commandCharacteristic != nil else { return }
+        enqueue(BandCommand.setGenericHRProfile.rawValue, body: [enabled ? 0x01 : 0x00])
     }
 
     /// Explicit unpair clears the saved association, terminates any active connection,
@@ -1434,9 +1464,9 @@ final class BandLink: NSObject, ObservableObject {
             peripheral.setNotifyValue(true, for: hrCharacteristic)
         }
         guard handshakeStarted, commandCharacteristic != nil,
-              !hrProfileEnabled, !hrEnableQueued else { return }
+              isBroadcastingHR, !hrProfileEnabled, !hrEnableQueued else { return }
         hrEnableQueued = true
-        enqueue(BandCommand.setGenericHRProfile.rawValue)
+        enqueue(BandCommand.setGenericHRProfile.rawValue, body: [0x01])
     }
 
     private func startHRWatchdog() {
@@ -1851,6 +1881,13 @@ final class BandLink: NSObject, ObservableObject {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
 
+        if uuid == BandUUID.events {
+            let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
+            if eventOpcode == BandHardwareEvent.bleHRProfileEnable.rawValue {
+                isBroadcastingHR = true
+            }
+        }
+
         if type == BandPacket.historicalData {
             historicalRecordFrames += 1
         }
@@ -2175,6 +2212,8 @@ extension BandLink: CBPeripheralDelegate {
                 peripheral.discoverCharacteristics([BandUUID.heartRateMeasurement], for: service)
             case BandUUID.batteryService:
                 peripheral.discoverCharacteristics([BandUUID.batteryLevel], for: service)
+            case BandUUID.deviceInfoService:
+                peripheral.discoverCharacteristics(BandUUID.disCharacteristics, for: service)
             default:
                 peripheral.discoverCharacteristics(nil, for: service)
             }
@@ -2205,7 +2244,7 @@ extension BandLink: CBPeripheralDelegate {
                 } else {
                     lastMessage = "The band did not expose HR notifications on 0x2A37."
                 }
-            case Self.firmwareRevisionUUID:
+            case BandUUID.firmwareRevision, BandUUID.hardwareRevision, BandUUID.serialNumber, BandUUID.modelNumber, BandUUID.softwareRevision, BandUUID.manufacturerName:
                 if characteristic.properties.contains(.read) {
                     peripheral.readValue(for: characteristic)
                 }
@@ -2270,6 +2309,13 @@ extension BandLink: CBPeripheralDelegate {
         }
     }
 
+    private func decodeDISString(_ data: Data?) -> String? {
+        guard let data, !data.isEmpty else { return nil }
+        let raw = String(decoding: data, as: UTF8.self)
+        let cleaned = raw.trimmingCharacters(in: CharacterSet(charactersIn: "\0").union(.whitespacesAndNewlines))
+        return cleaned.isEmpty ? nil : cleaned
+    }
+
     func peripheral(
         _ peripheral: CBPeripheral,
         didUpdateValueFor characteristic: CBCharacteristic,
@@ -2279,11 +2325,25 @@ extension BandLink: CBPeripheralDelegate {
         switch characteristic.uuid {
         case BandUUID.heartRateMeasurement:
             handleHeartRate(characteristic)
-        case Self.firmwareRevisionUUID:
-            if let data = characteristic.value,
-               let version = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !version.isEmpty {
+        case BandUUID.firmwareRevision:
+            if let version = decodeDISString(characteristic.value) {
                 firmwareRevision = version
+                UserDefaults.standard.set(version, forKey: Keys.cachedFirmware)
+            }
+        case BandUUID.hardwareRevision:
+            if let hw = decodeDISString(characteristic.value) {
+                hardwareRevision = hw
+                UserDefaults.standard.set(hw, forKey: Keys.cachedHardware)
+            }
+        case BandUUID.serialNumber:
+            if let serial = decodeDISString(characteristic.value) {
+                serialNumber = serial
+                UserDefaults.standard.set(serial, forKey: Keys.cachedSerial)
+            }
+        case BandUUID.modelNumber:
+            if let model = decodeDISString(characteristic.value) {
+                modelNumber = model
+                UserDefaults.standard.set(model, forKey: Keys.cachedModel)
             }
         case BandUUID.batteryLevel:
             if let value = characteristic.value, let level = value.first {
@@ -2339,7 +2399,9 @@ extension BandLink: CBPeripheralDelegate {
         commandQueue.first?.onWrite?()
         if finished == BandCommand.setGenericHRProfile.rawValue {
             hrEnableQueued = false
-            hrProfileEnabled = true
+            let bodyByte = commandQueue.first?.body.first ?? 0x01
+            hrProfileEnabled = (bodyByte == 0x01)
+            isBroadcastingHR = hrProfileEnabled
         }
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {

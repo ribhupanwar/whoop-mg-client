@@ -190,6 +190,10 @@ final class AppStore: ObservableObject {
         band.unpair()
     }
 
+    func setBroadcastHeartRate(enabled: Bool) {
+        band.setBroadcastHeartRate(enabled: enabled)
+    }
+
     // MARK: - Activities
 
     /// Karvonen zones for a live session: resting HR comes from the override or
