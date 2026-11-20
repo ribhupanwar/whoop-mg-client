@@ -1227,9 +1227,9 @@ struct HomeView: View {
     private func compactRing(_ title: String, route: Route, progress: Double?, color: Color) -> some View {
         NavigationLink(value: route) {
             HStack(spacing: 6) {
-                RingView(progress: progress, color: color, lineWidth: 2.2, size: 22, centerText: "")
+                RingView(progress: progress, color: color, lineWidth: 3.0, size: 25, centerText: "")
                 Text(title)
-                    .font(StrapTypography.body(10, weight: .bold))
+                    .font(StrapTypography.body(11, weight: .bold))
                     .tracking(0.6)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
