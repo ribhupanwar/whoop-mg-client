@@ -380,7 +380,7 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Export the exact retained samples and metrics for a specific workout window.
     /// Used for controlled dual-band gym trials against WHOOP reference devices.
-    func exportWorkoutDiagnostics(session: DetectedActivitySession) async throws -> URL {
+    func exportWorkoutDiagnostics(session: ActivitySession) async throws -> URL {
         let lookback = 60
         let lookahead = 60
         let (candidateStart, underflow) = session.startUnix.subtractingReportingOverflow(lookback)
@@ -403,7 +403,7 @@ final class BandLink: NSObject, ObservableObject {
             startUnix: session.startUnix,
             endUnix: session.endUnix,
             meanHR: session.meanHR,
-            maxHR: session.maxHR,
+            maxHR: session.maxHR.map { Double($0) },
             workoutStrain: session.strain,
             dayStrain: nil,
             activeKcal: nil,
