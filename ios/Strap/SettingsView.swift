@@ -27,6 +27,7 @@ struct SettingsView: View {
                 strapPanel
                 overridesPanel
                 sleepPanel
+                baselinePanel
                 healthPanel
                 spo2ResearchPanel
                 whoopImportPanel
@@ -466,6 +467,70 @@ struct SettingsView: View {
                 store.settings.wakeTimeMinutes = (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
             }
         )
+    }
+
+    // MARK: Baseline & Calibration Progress
+
+    private var baselinePanel: some View {
+        Panel {
+            SectionTitle("Baseline & Calibration")
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("28-Day Rolling Baseline")
+                        .font(StrapTypography.body(13, weight: .semibold))
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Text("\(store.band.days.count)/28 days")
+                        .font(StrapTypography.metric(13, weight: .bold))
+                        .foregroundStyle(Color.appAccent)
+                }
+
+                ProgressView(value: min(Double(store.band.days.count), 28.0), total: 28.0)
+                    .tint(Color.appAccent)
+
+                HStack {
+                    Text(store.band.days.count >= 7
+                        ? "Calibration Complete (\(store.band.days.count) scored days)"
+                        : "Initial Calibration: \(store.band.days.count)/7 days required")
+                        .font(StrapTypography.body(11, weight: .medium))
+                        .foregroundStyle(store.band.days.count >= 7 ? Color.appGood : Color.appWarn)
+                    Spacer()
+                }
+
+                Divider().background(Color.appLine).padding(.vertical, 2)
+
+                Text("METRIC REQUIREMENTS & GAPS")
+                    .font(StrapTypography.metric(10, weight: .bold))
+                    .foregroundStyle(Color.appMuted)
+
+                VStack(alignment: .leading, spacing: 6) {
+                    metricRequirementRow(
+                        metric: "Recovery & Overnight HRV",
+                        requirement: "Requires nocturnal sleep with >= 300s slow wave sleep (SWS). Missing nights show blank rather than guessing."
+                    )
+                    metricRequirementRow(
+                        metric: "Daytime Stress",
+                        requirement: "Derived from awake quiet R-R intervals. Pauses automatically during active motion or recorded workouts."
+                    )
+                    metricRequirementRow(
+                        metric: "Active Calorie Burn",
+                        requirement: "Uses Keytel formula with confirmed age, sex, weight, and height. Unconfirmed metrics remain uncalculated."
+                    )
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
+    private func metricRequirementRow(metric: String, requirement: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(metric)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+            Text(requirement)
+                .font(StrapTypography.body(10.5))
+                .foregroundStyle(Color.appMuted)
+        }
     }
 
     // MARK: Apple Health

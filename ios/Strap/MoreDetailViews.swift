@@ -46,16 +46,40 @@ struct ConnectionSyncView: View {
                             .foregroundStyle(Color.appFG)
                     }
 
-                    if let syncDate = store.band.lastHistorySyncAt {
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    HStack {
+                        Text("Last History Sync")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appMuted)
+                        Spacer()
+                        Text(store.band.lastHistorySyncAt?.formatted(date: .abbreviated, time: .shortened) ?? "No sync recorded yet")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(store.band.lastHistorySyncAt != nil ? Color.appFG : Color.appMuted)
+                    }
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    HStack {
+                        Text("Pending Historical Data")
+                            .font(StrapTypography.body(12, weight: .medium))
+                            .foregroundStyle(Color.appMuted)
+                        Spacer()
+                        Text(pendingDataDescription)
+                            .font(StrapTypography.body(12, weight: .semibold))
+                            .foregroundStyle(store.band.isAnalyzingHistory || store.band.status == .draining ? Color.appAccent : Color.appFG)
+                    }
+
+                    if case .reconnecting(let attempt) = store.band.status {
                         Divider().background(Color.appLine).padding(.vertical, 4)
                         HStack {
-                            Text("Last History Sync")
+                            Text("Reconnect Attempt")
                                 .font(StrapTypography.body(12, weight: .medium))
-                                .foregroundStyle(Color.appMuted)
+                                .foregroundStyle(Color.appWarn)
                             Spacer()
-                            Text(syncDate.formatted(date: .abbreviated, time: .shortened))
-                                .font(StrapTypography.body(12))
-                                .foregroundStyle(Color.appFG)
+                            Text("Attempt \(attempt) · Backoff \(Int(ReconnectBackoffPolicy.delay(forAttempt: attempt)))s")
+                                .font(StrapTypography.metric(11, weight: .semibold))
+                                .foregroundStyle(Color.appWarn)
                         }
                     }
                 }
@@ -149,11 +173,56 @@ struct ConnectionSyncView: View {
                         .padding(.vertical, 4)
                     }
                 }
+
+                Panel {
+                    SectionTitle("STREAM INTEGRITY & PACKET ERRORS")
+                    VStack(alignment: .leading, spacing: 6) {
+                        metricDiagnosticsRow("Packet Gap Drops", value: "\(store.band.packetGapCount)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Duplicate Packets", value: "\(store.band.duplicatePacketCount)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Undecodable Frames", value: "\(store.band.historyUndecodableFrames)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Live Packets Processed", value: "\(store.band.type40HRPackets + store.band.standardHRPackets)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("History Records Ingested", value: "\(store.band.historyRRRecords)")
+                        Divider().background(Color.appLine)
+                        metricDiagnosticsRow("Sync Stream Error", value: store.band.historySyncError ?? "None (Healthy)")
+                    }
+                    .padding(.vertical, 4)
+                }
             }
         }
         .navigationTitle("Connection & Sync")
         .navigationBarTitleDisplayMode(.inline)
     }
+
+    private var pendingDataDescription: String {
+        if store.band.isAnalyzingHistory || store.band.isSavingHistory {
+            if let p = store.band.historyProgress, p.total > 0 {
+                return "\(max(0, p.total - p.completed)) chunks pending"
+            }
+            return "Analyzing history…"
+        } else if store.band.status == .draining {
+            return "Draining flash frames…"
+        } else {
+            return "Up to date (0 pending)"
+        }
+    }
+
+    private func metricDiagnosticsRow(_ label: String, value: String) -> some View {
+        HStack {
+            Text(label)
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+            Spacer()
+            Text(value)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+        }
+        .padding(.vertical, 2)
+    }
+}
 }
 
 // MARK: - 2. Band Alarms View
@@ -410,6 +479,9 @@ struct DataManagementView: View {
     @State private var showWhoopImporter = false
     @State private var importingWhoop = false
     @State private var whoopImportStatus = "No WHOOP file imported"
+    @State private var rawExportURL: URL?
+    @State private var rawExportStatus: String?
+    @State private var exportingRaw = false
 
     private var backupUnavailable: Bool {
         preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory
@@ -582,6 +654,44 @@ struct DataManagementView: View {
                         .foregroundStyle(Color.appFG)
                         .padding(.vertical, 6)
                     }
+
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+
+                    Button {
+                        prepareRawTelemetryExport()
+                    } label: {
+                        HStack {
+                            Image(systemName: "waveform.path.ecg")
+                            Text("Export Raw Telemetry (14-Column CSV)")
+                                .font(StrapTypography.body(13.5, weight: .semibold))
+                            Spacer()
+                            if exportingRaw { ProgressView().controlSize(.small) }
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.vertical, 6)
+                    }
+                    .disabled(exportingRaw)
+
+                    if let rawExportURL {
+                        Divider().background(Color.appLine).padding(.vertical, 4)
+                        ShareLink(item: rawExportURL) {
+                            HStack {
+                                Image(systemName: "square.and.arrow.up.fill")
+                                Text("Save Raw Telemetry CSV")
+                                    .font(StrapTypography.body(13.5, weight: .bold))
+                                Spacer()
+                            }
+                            .foregroundStyle(Color.appGood)
+                            .padding(.vertical, 6)
+                        }
+                    }
+
+                    if let rawExportStatus {
+                        Text(rawExportStatus)
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(rawExportURL != nil ? Color.appGood : Color.appMuted)
+                            .padding(.top, 2)
+                    }
                 }
             }
         }
@@ -654,6 +764,29 @@ struct DataManagementView: View {
                 }.value
             } catch { exportError = error.localizedDescription }
             preparingExport = false
+        }
+    }
+
+    private func prepareRawTelemetryExport() {
+        rawExportURL = nil
+        rawExportStatus = nil
+        exportingRaw = true
+        Task {
+            let samples = store.lastCapture?.samples ?? []
+            guard !samples.isEmpty else {
+                rawExportStatus = "No active sensor samples in memory. Perform a history sync to export raw telemetry."
+                exportingRaw = false
+                return
+            }
+            do {
+                rawExportURL = try await Task.detached(priority: .userInitiated) {
+                    try RawTelemetryDiagnostics.write(samples: samples)
+                }.value
+                rawExportStatus = "Exported \(samples.count) raw V18 sensor frames."
+            } catch {
+                rawExportStatus = "Export failed: " + error.localizedDescription
+            }
+            exportingRaw = false
         }
     }
 }
