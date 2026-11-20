@@ -512,7 +512,7 @@ enum SleepStager {
     ) -> [SleepStage: Double] {
         [
             .deep: 1.2 * max(0, 1 - clock / 0.55),
-            .rem: clock - remGuard(minutesSinceOnset),
+            .rem: 0.60 * clock - remGuard(minutesSinceOnset),
             .light: 0,
             .wake: 0
         ]

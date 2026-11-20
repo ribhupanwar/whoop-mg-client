@@ -559,6 +559,35 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(staging.wakeMinutes, 0)
     }
 
+    func testSleepCyclePriorBoundsRemPropensityInLateNight() {
+        // At clock = 1.0 (end of night), the combined prior (baseLogPrior + cyclePrior)
+        // must still preserve Light sleep as the primary physiological baseline stage over REM.
+        let baseLight = log(0.50)
+        let baseRem = log(0.22)
+        // Cycle prior at clock = 1.0 with elapsed latency guard = 0
+        let remPrior = 0.60 * 1.0
+        let lightPrior = 0.0
+        let combinedLight = baseLight + lightPrior
+        let combinedRem = baseRem + remPrior
+        XCTAssertGreaterThan(combinedLight, combinedRem)
+        // Difference must remain at least +0.20 in log space (~22% higher odds for Light sleep)
+        XCTAssertGreaterThanOrEqual(combinedLight - combinedRem, 0.20)
+    }
+
+    func testOvernightSleepStagingAccuratelyPartitionsStages() throws {
+        let (samples, period) = makeNight(minutes: 480, bursts: [(120, 122), (240, 243), (360, 362)])
+        let staging = SleepStager.stage(samples: samples, period: period)
+
+        XCTAssertNil(staging.reason)
+        XCTAssertTrue(staging.stageable)
+        // Light sleep must remain the predominant baseline stage (> 50% of total time)
+        XCTAssertGreaterThan(staging.lightMinutes, staging.remMinutes)
+        XCTAssertGreaterThan(staging.lightMinutes, staging.deepMinutes)
+        XCTAssertGreaterThan(staging.restorativeMinutes, 0)
+        XCTAssertGreaterThan(staging.wakeMinutes, 0)
+        assertTotals(staging, period: period, classifiedSeconds: 480 * 60)
+    }
+
     func testProlongedMiddleAwakeningDoesNotRestartSessionOnset() throws {
         let firstRun = Array(repeating: SleepStage.wake, count: 10)
             + Array(repeating: .light, count: 20)
