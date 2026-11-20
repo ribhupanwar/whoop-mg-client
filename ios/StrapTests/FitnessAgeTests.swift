@@ -68,8 +68,8 @@ final class FitnessAgeModelTests: XCTestCase {
     }
 
     func testBaselineCoverageUsesSameRollingWindowAsFitnessEstimate() {
-        let coverage = FitnessAgeModel.baselineCoverage(days: recordedDays(),
-                                                       asOf: referenceDate().addingTimeInterval(4 * 86_400))
+        let date = Calendar.current.date(byAdding: .day, value: 4, to: referenceDate())!
+        let coverage = FitnessAgeModel.baselineCoverage(days: recordedDays(), asOf: date)
         XCTAssertEqual(coverage.restingNights, 3)
         XCTAssertEqual(coverage.stepDays, 3)
     }

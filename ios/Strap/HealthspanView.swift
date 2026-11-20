@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Use the same cool cyan accent as the Healthspan orb and Health Monitor.
 private let healthspanMint = Color(hex: 0x54D7E9)
@@ -13,9 +14,11 @@ struct HealthspanPoint: Identifiable, Sendable {
 /// calculation is Strap's independent, explicitly labelled fitness-age model.
 struct HealthspanView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.scenePhase) private var scenePhase
     @State private var points: [HealthspanPoint] = []
     @State private var window = 30
     @State private var snapshot: FitnessAgeSnapshot?
+    @State private var day = Calendar.current.startOfDay(for: Date())
     @State private var baselineCoverage = (restingNights: 0, stepDays: 0)
     private func makeSnapshot() -> FitnessAgeSnapshot? {
         guard !store.isPreview else {
@@ -26,8 +29,8 @@ struct HealthspanView: View {
         return store.fitnessSnapshot
     }
     private var refreshKey: String {
-        let days = store.band.days.map { "\($0.dateKey):\($0.restingHR ?? -1):\($0.steps ?? -1)" }.joined(separator: "|")
-        return "\(store.fitnessSnapshot?.years ?? -1):\(window):\(store.isPreview):\(store.settings.age):\(store.settings.sex):\(store.settings.ageConfirmed):\(store.liveActivities.count):\(store.detectedBandActivities.count):" + days
+        let days = store.band.days.map { "\($0.dateKey):\($0.state):\($0.restingHR ?? -1):\($0.steps ?? -1)" }.joined(separator: "|")
+        return "\(day.timeIntervalSince1970):\(store.fitnessSnapshot?.years ?? -1):\(window):\(store.isPreview):\(store.settings.age):\(store.settings.sex):\(store.settings.ageConfirmed):\(store.liveActivities.count):\(store.detectedBandActivities.count):" + days
     }
     var body: some View {
         Screen {
@@ -56,6 +59,12 @@ struct HealthspanView: View {
         }
         .navigationTitle("HEALTHSPAN").navigationBarTitleDisplayMode(.inline)
         .task(id: refreshKey) { await rebuildTrend() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
+            day = Calendar.current.startOfDay(for: Date())
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { day = Calendar.current.startOfDay(for: Date()) }
+        }
     }
     private var ageCard: some View {
         Panel {
@@ -163,7 +172,8 @@ struct HealthspanView: View {
     @MainActor private func rebuildTrend() async {
         snapshot = makeSnapshot()
         let days = store.band.days
-        baselineCoverage = FitnessAgeModel.baselineCoverage(days: days)
+        let endDate = day
+        baselineCoverage = FitnessAgeModel.baselineCoverage(days: days, asOf: endDate)
         let live = store.liveActivities
         let detected = store.detectedBandActivities
         let age = store.settings.age
@@ -173,9 +183,8 @@ struct HealthspanView: View {
         let count = window
         let result = await Task.detached(priority: .utility) {
             let calendar = Calendar.current
-            let end = calendar.startOfDay(for: Date())
             return (0..<count).compactMap { index -> HealthspanPoint? in
-                guard let date = calendar.date(byAdding: .day, value: index - count + 1, to: end) else { return nil }
+                guard let date = calendar.date(byAdding: .day, value: index - count + 1, to: endDate) else { return nil }
                 if demo {
                     return HealthspanPoint(date: date, years: index % 13 == 5 ? nil
                         : 27 - Double(index) / Double(count) * 2 + sin(Double(index) * 0.35) * 0.35)
