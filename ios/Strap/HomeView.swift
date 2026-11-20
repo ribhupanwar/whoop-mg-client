@@ -18,6 +18,7 @@ struct HomeView: View {
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var refreshingHome = false
+    @State private var refreshRotation = false
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
     @State private var hasObservedInitialSync = false
@@ -53,19 +54,23 @@ struct HomeView: View {
                         Spacer()
                         ZStack {
                             Circle()
-                                .stroke(Color.appMuted.opacity(0.25), lineWidth: 2)
+                                .stroke(Color.appMuted.opacity(0.30), lineWidth: 2)
                             Circle()
-                                .trim(from: 0, to: 0.72)
-                                .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                                .rotationEffect(.degrees(-90))
+                                .trim(from: 0, to: 0.78)
+                                .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                                .rotationEffect(.degrees(refreshRotation ? 270 : -90))
+                                .animation(reduceMotion ? nil : .linear(duration: 0.9).repeatForever(autoreverses: false), value: refreshRotation)
                             Text("W")
                                 .font(StrapTypography.body(13, weight: .bold))
                                 .foregroundStyle(Color.appFG)
                         }
-                        .frame(width: 35, height: 35)
+                        .frame(width: 36, height: 36)
                         .accessibilityLabel("Refreshing WHOOP history")
+                        Spacer()
                     }
                     .padding(.bottom, 8)
+                    .onAppear { refreshRotation = true }
+                    .onDisappear { refreshRotation = false }
                 }
                 if let completedAt = syncSuccessAt {
                     syncSuccessBanner(completedAt: completedAt)
@@ -143,7 +148,7 @@ struct HomeView: View {
             }
             // SwiftUI owns the native pull gesture; show a short W-mark
             // progress state without claiming the band finished syncing.
-            try? await Task.sleep(for: .milliseconds(700))
+            try? await Task.sleep(for: .milliseconds(1400))
             refreshingHome = false
         }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
@@ -363,6 +368,14 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
+            Text("WHOOP")
+                .font(StrapTypography.body(18, weight: .medium))
+                .tracking(3.2)
+                .foregroundStyle(Color.appFG)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .accessibilityLabel("WHOOP")
             let diameter: CGFloat = AppLayout.heroRingDiameter
             HStack(spacing: AppLayout.ringGap) {
                 NavigationLink(value: Route.sleepAnalysis) {
