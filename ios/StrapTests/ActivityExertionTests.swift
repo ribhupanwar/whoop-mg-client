@@ -12,7 +12,7 @@ final class ActivityExertionTests: XCTestCase {
                 unix: UInt32(unix), subsecQ15: 0
             ),
             heartRate: hr,
-            rrIntervalsMS: [UInt16(60000 / max(1, hr))],
+            rrIntervalsMS: [Int(60000 / max(1, hr))],
             dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: steps, stepCadence: nil, activityClass: gait,
@@ -133,6 +133,23 @@ final class ActivityExertionTests: XCTestCase {
         if let walk = walkDetected.first {
             XCTAssertEqual(walk.kind, "walk")
             XCTAssertNotNil(walk.strain)
+        }
+    }
+
+    func testSustainedWorkoutStartingWithoutRestingBaselinePrefix() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795000000
+
+        // Workout starts immediately at second 0 without prior resting baseline:
+        // 900s cardio: HR 140 BPM, dynamic acceleration 0.05
+        for i in 0..<900 {
+            samples.append(makeSample(unix: baseUnix + i, hr: 140, accel: 0.05))
+        }
+
+        let detected = ActivityDetect.detect(samples, sleepPeriods: [], restingHR: 60, maxHR: 190)
+        XCTAssertEqual(detected.count, 1, "Workout starting at sync boundary without baseline prefix must be detected when HR and motion are sustained")
+        if let workout = detected.first {
+            XCTAssertNotNil(workout.strain)
         }
     }
 }

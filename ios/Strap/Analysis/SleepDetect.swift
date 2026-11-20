@@ -324,7 +324,19 @@ enum SleepDetect {
                 )
             )
         }
-        return mergeNocturnalPeriods(periods, samples: ordered)
+        return mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
+    }
+
+    private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {
+        let startHour = Calendar.current.component(
+            .hour, from: Date(timeIntervalSince1970: TimeInterval(period.startUnix))
+        )
+        let endHour = Calendar.current.component(
+            .hour, from: Date(timeIntervalSince1970: TimeInterval(period.endUnix))
+        )
+        // Nocturnal sleep starts in the evening (>= 20) or overnight/early morning (< 8),
+        // or extends into the morning hours (<= 12).
+        return startHour >= 20 || startHour < 8 || endHour <= 12
     }
 
     /// Merges consecutive nocturnal sleep candidates separated by a brief
@@ -334,6 +346,7 @@ enum SleepDetect {
     static func mergeNocturnalPeriods(
         _ periods: [SleepPeriod],
         samples: [V18Sample],
+        quietAccelG: Double = SleepDetect.quietAccelG,
         maxAwakeningGapS: Int = 30 * 60,
         maxCombinedSleepS: Int = maxSleepS
     ) -> [SleepPeriod] {
@@ -346,10 +359,18 @@ enum SleepDetect {
             let combinedEnd = max(current.endUnix, next.endUnix)
             let combinedSpan = combinedEnd - current.startUnix + 1
 
-            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
-            let wornDuringGap = gapSamples.isEmpty || gapSamples.contains { $0.wearing }
+            let isNocturnal = isNocturnalPeriod(current) && isNocturnalPeriod(next)
 
-            if gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap {
+            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
+            let wornDuringGap: Bool
+            if gapSamples.isEmpty {
+                wornDuringGap = true
+            } else {
+                let wornCount = gapSamples.filter { $0.wearing }.count
+                wornDuringGap = Double(wornCount) / Double(gapSamples.count) >= 0.60
+            }
+
+            if isNocturnal && gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap {
                 let allIndices = samples.filter { current.startUnix <= $0.unix && $0.unix <= combinedEnd }
                 let quietCount = allIndices.filter { sample in
                     guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }

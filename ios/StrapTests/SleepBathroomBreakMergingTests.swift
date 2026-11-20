@@ -12,7 +12,7 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
                 unix: UInt32(unix), subsecQ15: 0
             ),
             heartRate: hr,
-            rrIntervalsMS: [UInt16(60000 / max(1, hr))],
+            rrIntervalsMS: [Int(60000 / max(1, hr))],
             dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: nil, stepCadence: nil, activityClass: nil,
@@ -125,5 +125,28 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
         let detected = SleepDetect.detect(samples)
         XCTAssertEqual(detected.count, 2, "An off-wrist band gap must not be merged as an in-bed bathroom break")
+    }
+
+    func testGapWithMostlyOffWristSamplesDoesNotMerge() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795000000
+
+        for i in 0..<3600 {
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: 85, accel: 0.15, state: 0))
+        }
+        for i in 3600..<14400 {
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: 55, accel: 0.01, state: 2))
+        }
+        // 15-minute gap with mostly off-wrist samples and an isolated worn sample
+        for i in 14400..<15300 {
+            let isGlitch = (i == 14500)
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: isGlitch ? 60 : 0, accel: 0, wearing: isGlitch, state: nil))
+        }
+        for i in 15300..<26100 {
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: 55, accel: 0.01, state: 2))
+        }
+
+        let detected = SleepDetect.detect(samples)
+        XCTAssertEqual(detected.count, 2, "A gap dominated by off-wrist records with an isolated worn sample must not merge as an in-bed break")
     }
 }
