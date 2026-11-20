@@ -112,5 +112,21 @@ class TestWHOOP5802AlgorithmParity(unittest.TestCase):
         self.assertEqual(suppressed[1].start_unix, 3000)
 
 
+    def test_duplicate_overlap_exact_half_inclusive(self):
+        def session(start, end):
+            return ActivitySession(start_unix=start, end_unix=end, kind="run",
+                                   steps=0, mean_hr=100.0, walk_ticks=0, run_ticks=0)
+        result = suppress_duplicates([session(1000, 1299), session(1150, 1449)])
+        self.assertEqual(len(result), 1)
+
+    def test_single_second_duplicate_and_disjoint(self):
+        def session(start, end):
+            return ActivitySession(start_unix=start, end_unix=end, kind="walk",
+                                   steps=0, mean_hr=100.0, walk_ticks=0, run_ticks=0)
+        self.assertEqual(len(suppress_duplicates([session(1000, 1100), session(1050, 1050)])), 1)
+        self.assertEqual(len(suppress_duplicates([session(1000, 1100), session(1101, 1200)])), 2)
+
+
+
 if __name__ == "__main__":
     unittest.main()
