@@ -1193,7 +1193,7 @@ final class BandLink: NSObject, ObservableObject {
             if let rhr = day.restingHR, rhr.isFinite, rhr > 0 { return rhr }
             if let awake = day.awakeRestingHR, awake.isFinite, awake > 0 { return awake }
         }
-        if let rhr = recovery.restingHR, rhr.isFinite, rhr > 0 {
+        if let rhr = summary?.restingHeartRate, rhr.isFinite, rhr > 0 {
             return rhr
         }
         return days.lazy.filter { $0.state == "sleep" && $0.restingHR != nil }.last?.restingHR
