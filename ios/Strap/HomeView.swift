@@ -48,6 +48,25 @@ struct HomeView: View {
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 5)
                 }
+                if refreshingHome {
+                    HStack {
+                        Spacer()
+                        ZStack {
+                            Circle()
+                                .stroke(Color.appMuted.opacity(0.25), lineWidth: 2)
+                            Circle()
+                                .trim(from: 0, to: 0.72)
+                                .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                                .rotationEffect(.degrees(-90))
+                            Text("W")
+                                .font(StrapTypography.body(13, weight: .bold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        .frame(width: 35, height: 35)
+                        .accessibilityLabel("Refreshing WHOOP history")
+                    }
+                    .padding(.bottom, 8)
+                }
                 if let completedAt = syncSuccessAt {
                     syncSuccessBanner(completedAt: completedAt)
                         .transition(.move(edge: .top).combined(with: .opacity))
