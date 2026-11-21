@@ -12,7 +12,7 @@ enum NightTemperature {
         })
         let values = unique.values.compactMap { row -> Double? in
             guard (35...220).contains(row.heartRate), let motion = row.dynamicAccelG,
-                  motion.isFinite, motion <= Hrv.restingQuietAccelG,
+                  motion.isFinite, motion >= 0, motion <= Hrv.restingQuietAccelG,
                   let temp = row.skinTempC, temp.isFinite, (20...43).contains(temp) else { return nil }
             return temp
         }

@@ -19,6 +19,9 @@ struct HealthHubView: View {
                 advancedLabsCard
                 healthMonitorCard
                 bloodPressureCard
+                if !demo, MGEcgPacket.isMG(model: store.band.currentBandModel) {
+                    passiveECGCard
+                }
                 stressMonitorCard
                 Text("Healthspan, Health Monitor, and Stress Monitor are wellness estimates, not medical devices. Blood pressure is not measured by STRAP. Consult a doctor for health concerns.")
                     .font(StrapTypography.body(11))
@@ -28,6 +31,36 @@ struct HealthHubView: View {
             }
         }
         .strapTabTypography("Health")
+    }
+
+    private var passiveECGCard: some View {
+        Panel {
+            SectionTitle("ECG waveform")
+            if let packet = store.band.passiveECG, packet.samples.count > 1 {
+                Canvas { context, size in
+                    let low = Double(packet.samples.min() ?? 0)
+                    let range = max(1, Double(packet.samples.max() ?? 0) - low)
+                    var trace = Path()
+                    for (index, sample) in packet.samples.enumerated() {
+                        let x = size.width * CGFloat(index) / CGFloat(packet.samples.count - 1)
+                        let y = size.height * (0.9 - 0.8 * CGFloat((Double(sample) - low) / range))
+                        let point = CGPoint(x: x, y: y)
+                        if index == 0 { trace.move(to: point) } else { trace.addLine(to: point) }
+                    }
+                    context.stroke(trace, with: .color(.appSleep), lineWidth: 1.5)
+                }
+                .frame(height: 90)
+                .accessibilityLabel("Received ECG waveform segment")
+                Text("Latest segment · sample index · uncalibrated amplitude")
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(Color.appMuted)
+            } else {
+                Text("Waiting for ECG waveform data from the connected band.")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+        }
+        .padding(.bottom, 14)
     }
 
     // MARK: Health tab hero, modelled on the supplied reference

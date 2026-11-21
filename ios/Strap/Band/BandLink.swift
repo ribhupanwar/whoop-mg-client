@@ -378,6 +378,10 @@ final class BandLink: NSObject, ObservableObject {
     private var automaticSyncTimer: Timer?
     private var continuationAttempts = 0
     private var continuationFrontier: Int?
+    private var newestInsertedThisPass: Int?
+    private var historyClock = HistoryClockGate()
+    @Published private(set) var passiveECG: MGEcgPacket?
+    @Published private(set) var currentBandModel: String?
     private var historySyncGeneration = 0
     private var capturedSamples: [V18Sample] = []
     private var retainedHistoricalSamples: [V18Sample] = []
@@ -488,19 +492,22 @@ final class BandLink: NSObject, ObservableObject {
     /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
     /// the latest archive so recovery and a live drain cannot overwrite each other.
     private func mergeHistoricalArchive(
-        _ incoming: [V18Sample], retriesRemaining: Int = 2, completion: @escaping () -> Void
+        _ incoming: [V18Sample], retriesRemaining: Int = 2, historyGeneration: Int? = nil, completion: @escaping () -> Void
     ) {
         pendingArchiveWrites += 1
         isSavingHistory = true
-        archiveWriter.merge(incoming) { [weak self] result in
+        archiveWriter.mergeReportingProgress(incoming) { [weak self] result in
             guard let self else { return }
             self.pendingArchiveWrites -= 1
             self.isSavingHistory = self.pendingArchiveWrites > 0
             switch result {
             case .success(let merged):
                 self.hasUnsavedArchiveRecords = false
-                self.retainedHistoricalSamples = merged
-                self.lastHistoryRecordCount = merged.count
+                self.retainedHistoricalSamples = merged.samples
+                self.lastHistoryRecordCount = merged.samples.count
+                if historyGeneration == self.historySyncGeneration {
+                    self.noteInsertedHistory(merged.progress)
+                }
                 completion()
             case .failure(let error):
                 self.hasUnsavedArchiveRecords = true
@@ -509,7 +516,7 @@ final class BandLink: NSObject, ObservableObject {
                 if retriesRemaining > 0 {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
                         self?.mergeHistoricalArchive([], retriesRemaining: retriesRemaining - 1,
-                                                     completion: completion)
+                                                     historyGeneration: historyGeneration, completion: completion)
                     }
                 }
             }
@@ -1632,6 +1639,8 @@ final class BandLink: NSObject, ObservableObject {
 
     private func resetLink() {
         linkGeneration = UUID()
+        passiveECG = nil
+        currentBandModel = nil
         commandDeadline?.cancel()
         commandDeadline = nil
         currentWriteID = nil
@@ -1810,7 +1819,11 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func startDraining(continuing: Bool = false) {
-        guard hrBondConfirmed, drainStartedAt == nil else { return }
+        guard hrBondConfirmed, drainStartedAt == nil, let peripheral else { return }
+        guard historyClock.permitsHistory(on: peripheral.identifier) else {
+            historySyncError = "The band reported that its clock is out of sync. Waiting for a clock synchronization event."
+            return
+        }
         analysisCancellation?.cancel()
         hasIncompleteHistory = true
         UserDefaults.standard.set(true, forKey: Keys.incompleteHistory)
@@ -1936,8 +1949,11 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func pump() {
-        guard !commandInFlight, let next = commandQueue.first,
-              let peripheral, peripheral.state == .connected,
+        guard !commandInFlight else { return }
+        if drainStartedAt == nil {
+            commandQueue.removeAll { $0.opcode == BandCommand.historicalDataResult.rawValue }
+        }
+        guard let next = commandQueue.first, let peripheral, peripheral.state == .connected,
               let characteristic = commandCharacteristic else { return }
         commandInFlight = true
         let writeID = UUID()
@@ -2024,6 +2040,7 @@ final class BandLink: NSObject, ObservableObject {
         pendingHistoryFlushes = 0
         historyPersistenceStalled = false
         lastChunkCount = 0
+        newestInsertedThisPass = nil
         lastCheckpointCount = 0
         lastCheckpointAt = Date()
         drainFrames = 0
@@ -2078,7 +2095,7 @@ final class BandLink: NSObject, ObservableObject {
             let incoming = Array(capturedSamples.dropFirst(lastCheckpointCount))
             lastCheckpointCount = capturedSamples.count
             lastCheckpointAt = now
-            mergeHistoricalArchive(incoming) {}
+            mergeHistoricalArchive(incoming, historyGeneration: historySyncGeneration) {}
         }
         if drainFrames > 0 && pendingHistoryFlushes == 0 && idle >= Self.drainIdleSeconds {
             finishDrain(reason: "idle timeout after \(Int(idle))s")
@@ -2097,6 +2114,7 @@ final class BandLink: NSObject, ObservableObject {
     private func finishDrain(reason: String = "interrupted", restoreConnectedState: Bool = true) {
         guard drainStartedAt != nil else { return }
         let generation = historySyncGeneration
+        let clockRevision = historyClock.revision
         historyCompletionReceived = false
         drainTimer?.invalidate()
         drainTimer = nil
@@ -2139,12 +2157,11 @@ final class BandLink: NSObject, ObservableObject {
         let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
         let completed = reason == "explicit completion" && !historyPersistenceStalled
             && historyUndecodableFrames == 0 && lastChunkCount == samples.count
-        let newest = uniqueSeconds.max()
-        let continueBacklog = !historyPersistenceStalled && HistorySyncPolicy.shouldContinue(
-            timedOut: reason.hasPrefix("idle timeout"), newest: newest,
-            previous: continuationFrontier, attempts: continuationAttempts, now: Date())
+        let timedOut = reason.hasPrefix("idle timeout")
+        let sealedAndAcknowledged = !historyPersistenceStalled && pendingHistoryFlushes == 0
+            && historyUndecodableFrames == 0 && lastChunkCount == samples.count && drainAcks > 0
         emptySyncStreak = samples.isEmpty ? min(10, emptySyncStreak + 1) : 0
-        if !completed && !continueBacklog {
+        if !completed {
             historySyncError = "History sync stopped (\(reason)). Saved data is safe; retry to fetch the remaining records."
         }
         if restoreConnectedState {
@@ -2179,19 +2196,45 @@ final class BandLink: NSObject, ObservableObject {
             }
             return
         }
-        mergeHistoricalArchive(samples) { [weak self] in
+        mergeHistoricalArchive(samples, historyGeneration: generation) { [weak self] in
             guard let self else { return }
             UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
             if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
             self.recalculateRetainedMetrics()
-            if continueBacklog, self.historySyncGeneration == generation,
-               self.status.isReady, self.isConnected, self.drainStartedAt == nil {
+            if timedOut, self.historySyncGeneration == generation, self.historyClock.revision == clockRevision,
+               self.status.isReady, self.isConnected, self.drainStartedAt == nil,
+               HistorySyncPolicy.shouldContinue(timedOut: timedOut, sealedAndAcknowledged: sealedAndAcknowledged,
+                   newestInserted: self.newestInsertedThisPass,
+                   previous: self.continuationFrontier, attempts: self.continuationAttempts, now: Date()) {
                 self.continuationAttempts += 1
-                self.continuationFrontier = newest
+                self.continuationFrontier = self.newestInsertedThisPass
                 self.startDraining(continuing: true)
             }
         }
         lastMessage = "History sync: \(reason). Captured \(samples.count) records, \(drainAcks) ACKs. \(historyQuality). \(reason == "explicit completion" ? "" : "History may be incomplete; retry sync.")"
+    }
+
+    private func noteInsertedHistory(_ progress: HistoryDatabase.CommitProgress) {
+        guard let newest = progress.newestInserted else { return }
+        newestInsertedThisPass = max(newestInsertedThisPass ?? newest, newest)
+    }
+
+    private func handleHistoryClockLoss() {
+        guard let peer = peripheral?.identifier else { return }
+        historyClock.noteLoss(on: peer)
+        // Preserve an ATT write already sent. Remove queued, unsent offload writes.
+        let firstUnsent = commandInFlight ? 1 : 0
+        if firstUnsent < commandQueue.count {
+            let keep = commandQueue[firstUnsent...].filter {
+                $0.opcode != BandCommand.historicalDataResult.rawValue
+                    && $0.opcode != BandCommand.sendHistoricalData.rawValue
+            }
+            commandQueue.replaceSubrange(firstUnsent..., with: keep)
+        }
+        if drainStartedAt != nil {
+            historyPersistenceStalled = true
+            finishDrain(reason: "band clock lost")
+        }
     }
 
     /// Freeze *all* later ACKs after a failed commit. Otherwise a later empty
@@ -2213,10 +2256,11 @@ final class BandLink: NSObject, ObservableObject {
                 self.finishCompletedDrainIfReady()
                 return
             }
-            self.archiveWriter.persistChunk(incoming, token: checkpoint) { [weak self] result in
+            self.archiveWriter.persistChunkReportingProgress(incoming, token: checkpoint) { [weak self] result in
                 guard let self, self.captureWriter === writer, self.drainStartedAt != nil else { return }
                 switch result {
-                case .success:
+                case .success(let progress):
+                    self.noteInsertedHistory(progress)
                     guard !self.historyPersistenceStalled else {
                         self.pendingHistoryFlushes -= 1
                         self.finishCompletedDrainIfReady()
@@ -2383,6 +2427,10 @@ final class BandLink: NSObject, ObservableObject {
         if uuid == BandUUID.events {
             let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
             switch eventOpcode {
+            case BandHardwareEvent.rtcLost.rawValue where type == 0x30:
+                handleHistoryClockLoss()
+            case BandHardwareEvent.setRTC.rawValue where type == 0x30:
+                if let peer = peripheral?.identifier { historyClock.noteSynchronization(on: peer) }
             case BandHardwareEvent.wristOn.rawValue:
                 isWearing = true
             case BandHardwareEvent.wristOff.rawValue:
@@ -2397,6 +2445,11 @@ final class BandLink: NSObject, ObservableObject {
             default:
                 break
             }
+        }
+
+        if uuid == BandUUID.data, type == 0x2B, MGEcgPacket.isMG(model: currentBandModel),
+           let packet = MGEcgPacket.decodeVerifiedInner(inner), !packet.samples.isEmpty {
+            passiveECG = packet
         }
 
         if type == BandPacket.historicalData {
@@ -2448,7 +2501,8 @@ final class BandLink: NSObject, ObservableObject {
             }
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
-            if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil { return }
+            if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil
+                || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
                 return
@@ -2899,6 +2953,7 @@ extension BandLink: CBPeripheralDelegate {
         case BandUUID.modelNumber:
             if let model = decodeDISString(characteristic.value) {
                 modelNumber = model
+                currentBandModel = model
                 UserDefaults.standard.set(model, forKey: Keys.cachedModel)
             }
         case BandUUID.batteryLevel:

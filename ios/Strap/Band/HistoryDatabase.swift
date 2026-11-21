@@ -38,10 +38,19 @@ final class HistoryDatabase {
     /// Decoded rows and their chunk token either commit together or roll back.
     @discardableResult
     func commit(_ rows: [V18Sample], token: String? = nil) throws -> Int {
+        try commitReportingProgress(rows, token: token).changed
+    }
+
+    struct CommitProgress {
+        var changed = 0
+        var newestInserted: Int?
+    }
+
+    func commitReportingProgress(_ rows: [V18Sample], token: String?) throws -> CommitProgress {
         try transaction {
-            let changed = try insert(rows)
+            let progress = try insert(rows)
             if let token { try setMetadata("last_history_chunk", value: token) }
-            return changed
+            return progress
         }
     }
 
@@ -142,7 +151,7 @@ final class HistoryDatabase {
         }
     }
 
-    private func insert(_ rows: [V18Sample]) throws -> Int {
+    private func insert(_ rows: [V18Sample]) throws -> CommitProgress {
         // Fast-path insert with conflict bypass: 99.9% of incoming sync records are new timestamps.
         // Inserting directly with ON CONFLICT DO NOTHING avoids redundant SELECT queries and
         // expensive JSON deserialization for every non-conflicting row.
@@ -152,7 +161,7 @@ final class HistoryDatabase {
         defer { sqlite3_finalize(lookup) }
         let update = try prepare("UPDATE history_sample SET payload = ? WHERE unix = ?")
         defer { sqlite3_finalize(update) }
-        var changed = 0
+        var progress = CommitProgress()
         for row in rows {
             let data = try encoder.encode(row)
             sqlite3_reset(tryInsert); sqlite3_clear_bindings(tryInsert)
@@ -160,7 +169,8 @@ final class HistoryDatabase {
             bind(data, to: tryInsert, column: 2)
             guard sqlite3_step(tryInsert) == SQLITE_DONE else { throw failure() }
             if sqlite3_changes(db) > 0 {
-                changed += 1
+                progress.changed += 1
+                progress.newestInserted = max(progress.newestInserted ?? row.unix, row.unix)
                 continue
             }
             // Conflict encountered: evaluate HistoricalRecordSelection preference
@@ -174,14 +184,14 @@ final class HistoryDatabase {
                         bind(data, to: update, column: 1)
                         sqlite3_bind_int64(update, 2, Int64(row.unix))
                         guard sqlite3_step(update) == SQLITE_DONE else { throw failure() }
-                        changed += 1
+                        progress.changed += 1
                     }
                 }
             } else if status != SQLITE_DONE {
                 throw failure()
             }
         }
-        return changed
+        return progress
     }
     func migrateLegacyLiveRR(_ samples: [LiveSample]) throws -> Int {
         try transaction {

@@ -28,6 +28,8 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertNil(NightTemperature.measure(Array(rows.dropLast()), session: session).celsius)
         let bad = (1000..<1300).map { historySample($0, temp: .nan, motion: nil) }
         XCTAssertNil(NightTemperature.measure(bad, session: session).celsius)
+        let negativeMotion = (1000..<1300).map { historySample($0, motion: -0.01) }
+        XCTAssertNil(NightTemperature.measure(negativeMotion, session: session).celsius)
         XCTAssertEqual(NightTemperature.measure(bad, session: session).seconds, 0)
     }
     private var directory: URL!
@@ -76,6 +78,19 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertEqual(try database.commit([richer], token: "b"), 1)
         XCTAssertEqual(try database.commit([original, richer], token: "b"), 0)
         XCTAssertEqual(try database.recentSamples(), [richer])
+    }
+
+    func testPersistedContinuationFrontierIgnoresDuplicatesAndRowUpgrades() throws {
+        let database = try HistoryDatabase(url: url)
+        let first = historySample(1_000)
+        XCTAssertEqual(try database.commitReportingProgress([first], token: "first").newestInserted, 1_000)
+        XCTAssertNil(try database.commitReportingProgress([first], token: "replay").newestInserted)
+        let upgrade = try database.commitReportingProgress([historySample(1_000, rr: [900, 920])], token: "upgrade")
+        XCTAssertEqual(upgrade.changed, 1)
+        XCTAssertNil(upgrade.newestInserted)
+        let tail = try database.commitReportingProgress([first, historySample(1_100)], token: "tail")
+        XCTAssertEqual(tail.newestInserted, 1_100)
+        XCTAssertEqual(try database.metadata("last_history_chunk"), "tail")
     }
 
     func testFailedChunkRollsBackRowsAndCursorTogether() throws {
