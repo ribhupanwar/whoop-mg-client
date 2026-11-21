@@ -1121,7 +1121,6 @@ struct DiagnosticsSupportView: View {
                         .foregroundStyle(Color.appAccent)
                         .padding(.vertical, 6)
                     }
-                    }
 
                     if let exportError {
                         Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn)
