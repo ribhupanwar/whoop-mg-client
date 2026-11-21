@@ -13,11 +13,13 @@ enum LiveHeartRateState {
     }
 
     static func recovery(now: Date, connectedAt: Date?, receivedAt: Date?,
-                         lastAttempt: Date?, attempts: Int, reconnects: Int) -> Recovery {
+                         lastAttempt: Date?, attempts: Int, reconnects: Int,
+                         protectsHistoryLink: Bool = false) -> Recovery {
         guard let origin = receivedAt ?? connectedAt else { return .wait }
         guard now.timeIntervalSince(origin) >= 30,
               lastAttempt.map({ now.timeIntervalSince($0) >= 45 }) ?? true else { return .wait }
         if attempts < 4 { return .rearm }
+        guard !protectsHistoryLink else { return .wait }
         return reconnects < 2 ? .reconnect : .unavailable
     }
 

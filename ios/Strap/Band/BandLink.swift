@@ -1269,7 +1269,7 @@ final class BandLink: NSObject, ObservableObject {
         reconnectWork?.cancel()
         reconnectWork = nil
         reconnectAttempt = 0
-        if status == .draining { finishDrain() }
+        if drainStartedAt != nil { finishDrain(restoreConnectedState: false) }
         scanTimeout?.cancel()
         scanTimeout = nil
         stopPicker()
@@ -1562,7 +1562,7 @@ final class BandLink: NSObject, ObservableObject {
         persistLiveRRArchive(force: true)
         // Status can already be .failed after a rejected BLE command.
         // The drain clock, not the presentation status, owns its lifecycle.
-        if drainStartedAt != nil { finishDrain(reason: "link reset") }
+        if drainStartedAt != nil { finishDrain(reason: "Bluetooth link interrupted", restoreConnectedState: false) }
         drainTimer?.invalidate()
         drainTimer = nil
         automaticSyncTimer?.invalidate()
@@ -1734,7 +1734,7 @@ final class BandLink: NSObject, ObservableObject {
         if let hrCharacteristic, !hrCharacteristic.isNotifying, !hrResubscribePending {
             peripheral.setNotifyValue(true, for: hrCharacteristic)
         }
-        guard handshakeStarted, commandCharacteristic != nil,
+        guard hrBondConfirmed, commandCharacteristic != nil,
               isBroadcastingHR, !hrProfileEnabled, !hrEnableQueued else { return }
         hrEnableQueued = true
         enqueue(BandCommand.setGenericHRProfile.rawValue, body: [0x01])
@@ -1759,7 +1759,8 @@ final class BandLink: NSObject, ObservableObject {
             // handshake/bond. Do not gate its recovery on CLIENT_HELLO.
             let action = LiveHeartRateState.recovery(now: now, connectedAt: self.hrConnectedAt,
                 receivedAt: self.lastLiveHRAt, lastAttempt: self.lastHRRecoveryAt,
-                attempts: self.hrRecoveryAttempts, reconnects: self.staleHRReconnects)
+                attempts: self.hrRecoveryAttempts, reconnects: self.staleHRReconnects,
+                protectsHistoryLink: self.drainStartedAt != nil || self.status == .authenticating)
             if action == .reconnect, let peripheral = self.peripheral {
                 self.staleHRReconnects += 1
                 self.lastMessage = "HR stream stayed silent after re-arming; reconnecting the strap."
@@ -1796,7 +1797,7 @@ final class BandLink: NSObject, ObservableObject {
             self.ensureHeartRateStream()
             // WHOOP Gen5's vendor Type-40 stream is controlled independently
             // of the standard 2A37 CCCD. Re-arm both paths on silence.
-            if self.commandCharacteristic != nil, self.handshakeStarted {
+            if self.commandCharacteristic != nil, self.hrBondConfirmed {
                 self.enqueue(BandCommand.realtimeHROn.rawValue, body: [0x01])
             }
             self.lastMessage = "No fresh HR packets · recovery attempt \(self.hrRecoveryAttempts). Check live packet count."
@@ -1812,7 +1813,8 @@ final class BandLink: NSObject, ObservableObject {
 
     private func pump() {
         guard !commandInFlight, let next = commandQueue.first,
-              let peripheral, let characteristic = commandCharacteristic else { return }
+              let peripheral, peripheral.state == .connected,
+              let characteristic = commandCharacteristic else { return }
         commandInFlight = true
         let writeID = UUID()
         currentWriteID = writeID
@@ -1825,7 +1827,11 @@ final class BandLink: NSObject, ObservableObject {
                       let peripheral = self.peripheral else { return }
                 self.commandWriteTimedOut = true
                 self.liveHeartRate = nil
-                self.lastMessage = "WHOOP command write timed out; reconnecting without discarding saved history."
+                let message = next.opcode == BandCommand.clientHello.rawValue
+                    ? "WHOOP pairing acknowledgement timed out. Reconnecting; saved history is safe."
+                    : "WHOOP command write timed out. Reconnecting; saved history is safe."
+                self.lastMessage = message
+                self.historySyncError = message
                 // Do not advance a timed-out ATT queue: a late write callback
                 // could otherwise acknowledge the wrong subsequent command.
                 self.central.cancelPeripheralConnection(peripheral)
@@ -1952,7 +1958,7 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
-    private func finishDrain(reason: String = "interrupted") {
+    private func finishDrain(reason: String = "interrupted", restoreConnectedState: Bool = true) {
         guard drainStartedAt != nil else { return }
         let generation = historySyncGeneration
         drainTimer?.invalidate()
@@ -2004,13 +2010,15 @@ final class BandLink: NSObject, ObservableObject {
         if !completed && !continueBacklog {
             historySyncError = "History sync stopped (\(reason)). Saved data is safe; retry to fetch the remaining records."
         }
-        if let bpm = liveHeartRate {
-            status = .streaming(bpm: bpm)
-        } else {
-            status = .ready
+        if restoreConnectedState {
+            if let bpm = liveHeartRate {
+                status = .streaming(bpm: bpm)
+            } else {
+                status = .ready
+            }
+            ensureHeartRateStream()
+            armAutomaticSync()
         }
-        ensureHeartRateStream()
-        armAutomaticSync()
 
         guard !samples.isEmpty else {
             // The strap may already have trimmed ACKed raw records. An empty
@@ -2724,17 +2732,18 @@ extension BandLink: CBPeripheralDelegate {
         error: Error?
     ) {
         guard peripheral === self.peripheral, characteristic == commandCharacteristic,
-              !commandWriteTimedOut else { return }
+              commandInFlight, !commandWriteTimedOut else { return }
         commandDeadline?.cancel()
         commandDeadline = nil
         if let error {
             commandInFlight = false
             if isAuthenticationError(error), helloAttempts < 2 {
                 helloAttempts += 1
-                commandInFlight = false
                 lastMessage = "Waiting for the pairing prompt — accept it to authenticate the strap."
+                let generation = linkGeneration
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.pump()
+                    guard let self, self.linkGeneration == generation else { return }
+                    self.pump()
                 }
                 return
             }
@@ -2745,15 +2754,16 @@ extension BandLink: CBPeripheralDelegate {
                 pump()
                 return
             }
-            drainTimer?.invalidate()
-            drainTimer = nil
-            // Drop the failed command so later retries cannot deadlock behind it.
-            if !commandQueue.isEmpty {
-                if commandQueue[0].opcode == BandCommand.setGenericHRProfile.rawValue { hrEnableQueued = false }
-                commandQueue.removeFirst()
-            }
-            status = .failed("The strap rejected a command: \(error.localizedDescription)")
-            if !isAuthenticationError(error) { scheduleReconnect() }
+            let failure = "The strap rejected a command: \(error.localizedDescription)"
+            if drainStartedAt != nil { finishDrain(reason: failure, restoreConnectedState: false) }
+            historySyncError = failure
+            status = .failed(failure)
+            // Repeated authentication rejection needs a new user-initiated
+            // pairing attempt, rather than an endless background reconnect.
+            if isAuthenticationError(error) { wantsConnection = false }
+            // End the failed ATT link before retrying. A reconnect attempt
+            // against an already-connected peripheral cannot restart bonding.
+            central.cancelPeripheralConnection(peripheral)
             return
         }
         let finished = commandQueue.first?.opcode
