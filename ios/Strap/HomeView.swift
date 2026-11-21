@@ -10,7 +10,8 @@ struct HomeView: View {
     @ScaledMetric(relativeTo: .body) private var activityTitleSize = 15.0
     @ScaledMetric(relativeTo: .caption) private var activityDetailSize = 12.0
     @ScaledMetric(relativeTo: .body) private var activityValueSize = 17.0
-    @ScaledMetric(relativeTo: .body) private var activityTileWidth = 84.0
+    @ScaledMetric(relativeTo: .body) private var activityTileWidth = 88.0
+    @ScaledMetric(relativeTo: .body) private var activityTileHeight = 38.0
     @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
     let openInsights: () -> Void
@@ -791,7 +792,8 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 if !demo {
                     ForEach(todayNaps, id: \.sourceStartUnix) { session in
-                        activityRow(icon: ActivityIconRegistry.nap, name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
+                        activityRow(icon: ActivityIconRegistry.nap, name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))",
+                                    tint: .appSleep)
                     }
                 }
                 if demo {
@@ -967,10 +969,12 @@ struct HomeView: View {
         }
     }
 
-    private func activityRow(icon: String, name: String, detail: String, strain: Double? = nil) -> some View {
+    private func activityRow(
+        icon: String, name: String, detail: String, strain: Double? = nil, tint: Color = .appAccent
+    ) -> some View {
         activityTile(icon: icon, name: name,
                      value: strain.map { String(format: "%.1f", $0) } ?? "—",
-                     detail: detail, tint: Color.appAccent)
+                     detail: detail, tint: tint)
     }
 
     private func activityTile(icon: String, name: String, value: String, detail: String, tint: Color) -> some View {
@@ -987,12 +991,14 @@ struct HomeView: View {
             Text(value).font(StrapTypography.metric(activityValueSize, weight: .bold)).monospacedDigit()
         }
         .foregroundStyle(Color.appFG)
-        .padding(.horizontal, 8)
-        .frame(minWidth: activityTileWidth, minHeight: 36)
+        .lineLimit(1)
+        .minimumScaleFactor(0.75)
+        .padding(.horizontal, 7)
+        .frame(width: activityTileWidth, height: activityTileHeight)
         .background {
             RoundedRectangle(cornerRadius: 8)
                 .fill(LinearGradient(
-                    colors: [tint, tint.opacity(0.82)],
+                    colors: [tint, tint.opacity(0.68)],
                     startPoint: .topLeading, endPoint: .bottomTrailing
                 ))
         }
@@ -1023,7 +1029,7 @@ struct HomeView: View {
         .frame(minHeight: 52)
         .background {
             RoundedRectangle(cornerRadius: 11)
-                .fill(Color.appRaised)
+                .fill(Color.appFG.opacity(0.085))
                 .overlay {
                     RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appCardBorder, lineWidth: 1)
                 }

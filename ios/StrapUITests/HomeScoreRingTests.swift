@@ -78,13 +78,20 @@ final class HomeScoreRingTests: XCTestCase {
         capture("Device settings status", in: app)
     }
 
-    func testRefreshIndicatorIsHiddenOnHomeAtRest() {
+    func testRefreshIndicatorIsHiddenAtRestAndAfterPullRelease() {
         let app = XCUIApplication()
         app.launchArguments = ["--design-preview"]
         app.launch()
 
         XCTAssertTrue(app.staticTexts["home.today"].waitForExistence(timeout: 15))
-        XCTAssertFalse(app.descendants(matching: .any)["home.history.refresh"].firstMatch.exists)
+        let indicator = app.descendants(matching: .any)["home.history.refresh"].firstMatch
+        XCTAssertFalse(indicator.exists)
+
+        let scroll = app.scrollViews.firstMatch
+        let start = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.25))
+        let end = scroll.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.68))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        XCTAssertFalse(indicator.exists)
     }
 
     func testRefreshStaysBelowTodayAndCompactScoreHeader() {
