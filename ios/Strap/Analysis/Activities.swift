@@ -246,41 +246,19 @@ enum ActivityDetect {
                 }
             }
 
-            if detectedKind == "workout" {
-                // A low-cadence step-counter trace is not proof of exercise.
-                // Require a longer session with independent, sustained HR
-                // elevation and measured acceleration. HR-only exercise is
-                // classified separately as cardio, not as a step workout.
+            if detectedKind == "workout" || detectedKind == "cardio" {
                 let baseline = baselines[start]
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
                 let concurrentSeconds = (start..<motionEnd).filter { sampleIndex in
                     supported[sampleIndex] && Double(ordered[sampleIndex].heartRate) >= hrFloor &&
                         hasMeasuredAcceleration(ordered[sampleIndex])
                 }.count
-                guard confirmsGenericWorkout(
-                    durationS: duration,
-                    exertionSeconds: concurrentSeconds,
-                    movingSeconds: concurrentSeconds,
-                    hasPreActivityBaseline: baseline != nil
-                ) else {
-                    decision("Workout lacks sustained concurrent HR and motion")
-                    continue
-                }
-            }
-
-            if detectedKind == "cardio" {
-                // Cardio requires genuine cardiovascular exertion with physical motion.
-                // Resting tachycardia or sedentary psychological stress must not be
-                // auto-saved as a workout.
-                let baseline = baselines[start]
-                let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
-                let concurrentSeconds = (start..<motionEnd).filter { sampleIndex in
-                    supported[sampleIndex] && Double(ordered[sampleIndex].heartRate) >= hrFloor &&
-                        hasMeasuredAcceleration(ordered[sampleIndex])
-                }.count
-                guard exertionSeconds >= startSustainS,
-                      movingSeconds >= startSustainS else {
-                    decision("Cardio lacks sustained concurrent HR and motion")
+                let confirmed = detectedKind == "workout"
+                    ? confirmsGenericWorkout(durationS: duration, concurrentSeconds: concurrentSeconds,
+                                             hasPreActivityBaseline: baseline != nil)
+                    : concurrentSeconds >= startSustainS
+                guard confirmed else {
+                    decision("Candidate lacks sustained concurrent HR and motion")
                     continue
                 }
             }
@@ -399,15 +377,10 @@ enum ActivityDetect {
     }
 
     static func confirmsGenericWorkout(
-        durationS: Int, exertionSeconds: Int, movingSeconds: Int,
-        hasPreActivityBaseline: Bool
+        durationS: Int, concurrentSeconds: Int, hasPreActivityBaseline: Bool
     ) -> Bool {
-        guard durationS >= walkWorkoutMinSessionS else { return false }
-        if hasPreActivityBaseline {
-            return exertionSeconds >= startSustainS && movingSeconds >= startSustainS
-        } else {
-            return exertionSeconds >= startSustainS * 2 && movingSeconds >= startSustainS
-        }
+        let requiredEvidence = hasPreActivityBaseline ? startSustainS : startSustainS * 2
+        return durationS >= walkWorkoutMinSessionS && concurrentSeconds >= requiredEvidence
     }
 
     static func kind(spm: [Double], hasSteps: Bool) -> String {

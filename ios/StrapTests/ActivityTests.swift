@@ -4,29 +4,25 @@ import XCTest
 final class GenericWorkoutConfirmationTests: XCTestCase {
     func testMorningStepsAndMildHeartRateDoNotBecomeWorkout() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 120,
-            movingSeconds: 45, hasPreActivityBaseline: true
+            durationS: 14 * 60, concurrentSeconds: 45, hasPreActivityBaseline: true
         ))
     }
 
     func testMissingBaselineDoesNotInventExertion() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 400,
-            movingSeconds: 250, hasPreActivityBaseline: false
+            durationS: 14 * 60, concurrentSeconds: 250, hasPreActivityBaseline: false
         ))
     }
 
     func testSustainedExerciseWithIndependentEvidenceRemainsEligible() {
         XCTAssertTrue(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 400,
-            movingSeconds: 250, hasPreActivityBaseline: true
+            durationS: 14 * 60, concurrentSeconds: 250, hasPreActivityBaseline: true
         ))
     }
 
     func testShortIncidentalMovementIsNotExercise() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 8 * 60, exertionSeconds: 300,
-            movingSeconds: 150, hasPreActivityBaseline: true
+            durationS: 8 * 60, concurrentSeconds: 150, hasPreActivityBaseline: true
         ))
     }
 }
