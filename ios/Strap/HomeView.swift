@@ -21,6 +21,9 @@ struct HomeView: View {
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
+    private let refreshPullDistance: CGFloat = 64
+
+    @State private var isPulling = false
     @State private var pullProgress: CGFloat = 0
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
@@ -56,7 +59,7 @@ struct HomeView: View {
             let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
             ZStack {
                 Circle().fill(Color.appRaised)
-                Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
+                Circle().strokeBorder(Color.appMuted.opacity(0.45), lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: previewsActiveRefresh ? 0.72 : pullProgress)
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
@@ -75,11 +78,29 @@ struct HomeView: View {
                 .accessibilityHidden(true)
             }
             .frame(width: 34, height: 34)
-            .opacity(previewsActiveRefresh ? 1 : pullProgress)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(previewsActiveRefresh ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
+    }
+
+    private func refreshProgress(_ geometry: ScrollGeometry) -> CGFloat {
+        let overscroll = -(geometry.contentOffset.y + geometry.contentInsets.top)
+        return min(1, max(0, overscroll / refreshPullDistance))
+    }
+
+    private func requestHistoryRefresh() {
+        guard !demo,
+              HomeHistoryRefresh.canRequest(
+                status: store.band.status,
+                saving: store.band.isSavingHistory,
+                analyzing: store.band.isAnalyzingHistory
+              ) else { return }
+        if store.band.isConnected {
+            store.band.readHistory()
+        } else {
+            store.connectBand()
+        }
     }
 
     var body: some View {
@@ -148,7 +169,7 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if previewsActiveRefresh || pullProgress > 0.15 {
+                if previewsActiveRefresh || (isPulling && pullProgress > 0.15) {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
@@ -165,24 +186,22 @@ struct HomeView: View {
                 }
             }
         }
-        .onScrollGeometryChange(for: CGFloat.self) { geometry in
-            let overscroll = -(geometry.contentOffset.y + geometry.contentInsets.top)
-            return min(1, max(0, overscroll / 64))
-        } action: { _, progress in
-            pullProgress = progress
+        .onScrollGeometryChange(for: CGFloat.self, of: refreshProgress) { _, progress in
+            if isPulling { pullProgress = progress }
         }
-        .refreshable {
-            guard !demo,
-                  HomeHistoryRefresh.canRequest(
-                    status: store.band.status,
-                    saving: store.band.isSavingHistory,
-                    analyzing: store.band.isAnalyzingHistory
-                  ) else { return }
-            if store.band.isConnected {
-                store.band.readHistory()
-            } else {
-                store.connectBand()
+        .onScrollPhaseChange { previous, phase, context in
+            if phase == .interacting {
+                pullProgress = refreshProgress(context.geometry)
+                isPulling = true
+            } else if previous == .interacting {
+                let shouldRefresh = max(pullProgress, refreshProgress(context.geometry)) >= 1
+                isPulling = false
+                pullProgress = 0
+                if shouldRefresh { requestHistoryRefresh() }
             }
+        }
+        .accessibilityAction(named: Text("Refresh band history")) {
+            requestHistoryRefresh()
         }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
             guard hasObservedInitialSync, let completedAt,
