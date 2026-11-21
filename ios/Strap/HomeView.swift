@@ -17,8 +17,7 @@ struct HomeView: View {
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
-    @State private var refreshingHome = false
-    @State private var refreshRotation = false
+    @State private var pullProgress: CGFloat = 0
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
     @State private var hasObservedInitialSync = false
@@ -40,6 +39,36 @@ struct HomeView: View {
 
     private var demo: Bool { store.isPreview }
 
+    private var syncIsActive: Bool {
+        !demo && HomeHistoryRefresh.isActive(
+            status: store.band.status,
+            saving: store.band.isSavingHistory,
+            analyzing: store.band.isAnalyzingHistory,
+            failed: store.band.historySyncError != nil
+        )
+    }
+
+    private var refreshIndicator: some View {
+        TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
+            let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+            ZStack {
+                Circle().fill(Color.appRaised)
+                Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: syncIsActive ? 0.72 : pullProgress)
+                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : -90))
+                Image(systemName: "arrow.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color.appFG)
+            }
+            .frame(width: 34, height: 34)
+            .opacity(syncIsActive ? 1 : pullProgress)
+        }
+        .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
+        .accessibilityIdentifier("home.history.refresh")
+    }
+
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
@@ -48,29 +77,6 @@ struct HomeView: View {
                         .font(StrapTypography.body(9))
                         .foregroundStyle(Color.appMuted)
                         .padding(.bottom, 5)
-                }
-                if refreshingHome {
-                    HStack {
-                        Spacer()
-                        ZStack {
-                            Circle()
-                                .stroke(Color.appMuted.opacity(0.30), lineWidth: 2)
-                            Circle()
-                                .trim(from: 0, to: 0.78)
-                                .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                                .rotationEffect(.degrees(refreshRotation ? 270 : -90))
-                                .animation(reduceMotion ? nil : .linear(duration: 0.9).repeatForever(autoreverses: false), value: refreshRotation)
-                            Text("W")
-                                .font(StrapTypography.body(13, weight: .bold))
-                                .foregroundStyle(Color.appFG)
-                        }
-                        .frame(width: 36, height: 36)
-                        .accessibilityLabel("Refreshing WHOOP history")
-                        Spacer()
-                    }
-                    .padding(.bottom, 8)
-                    .onAppear { refreshRotation = true }
-                    .onDisappear { refreshRotation = false }
                 }
                 if let completedAt = syncSuccessAt {
                     syncSuccessBanner(completedAt: completedAt)
@@ -139,17 +145,31 @@ struct HomeView: View {
                 }
             }
         }
+        .onScrollGeometryChange(for: CGFloat.self) { geometry in
+            let overscroll = -(geometry.contentOffset.y + geometry.contentInsets.top)
+            return min(1, max(0, overscroll / 64))
+        } action: { _, progress in
+            pullProgress = progress
+        }
+        .overlay(alignment: .top) {
+            if syncIsActive || pullProgress > 0.15 {
+                refreshIndicator
+                    .padding(.top, 5)
+                    .allowsHitTesting(false)
+            }
+        }
         .refreshable {
-            refreshingHome = true
+            guard !demo,
+                  HomeHistoryRefresh.canRequest(
+                    status: store.band.status,
+                    saving: store.band.isSavingHistory,
+                    analyzing: store.band.isAnalyzingHistory
+                  ) else { return }
             if store.band.isConnected {
                 store.band.readHistory()
             } else {
                 store.connectBand()
             }
-            // SwiftUI owns the native pull gesture; show a short W-mark
-            // progress state without claiming the band finished syncing.
-            try? await Task.sleep(for: .milliseconds(1400))
-            refreshingHome = false
         }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
             guard hasObservedInitialSync, let completedAt,
@@ -368,14 +388,14 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
-            Text("WHOOP")
+            Text("STRAP")
                 .font(StrapTypography.body(18, weight: .medium))
                 .tracking(3.2)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 8)
                 .padding(.bottom, 12)
-                .accessibilityLabel("WHOOP")
+                .accessibilityLabel("STRAP")
             let diameter: CGFloat = AppLayout.heroRingDiameter
             HStack(spacing: AppLayout.ringGap) {
                 NavigationLink(value: Route.sleepAnalysis) {
@@ -774,7 +794,7 @@ struct HomeView: View {
                 } else {
                     ForEach(timedRows, id: \.id) { row in
                         HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail)
+                            activityRow(icon: row.icon, name: row.name, detail: row.detail, strain: row.strain)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
@@ -860,6 +880,7 @@ struct HomeView: View {
         let name: String
         let detail: String
         let startUnix: Int?
+        var strain: Double? = nil
     }
 
     private var timedRows: [ActivityRowModel] {
@@ -893,7 +914,8 @@ struct HomeView: View {
                 icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
                 detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
-                startUnix: session.startUnix
+                startUnix: session.startUnix,
+                strain: session.strain
             )
         }
     }
@@ -948,12 +970,12 @@ struct HomeView: View {
         }
     }
 
-    private func activityRow(icon: String, name: String, detail: String) -> some View {
+    private func activityRow(icon: String, name: String, detail: String, strain: Double? = nil) -> some View {
         HStack(spacing: 11) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
                     .font(.system(size: 13, weight: .medium))
-                Text(activityScore(name, detail))
+                Text(strain.map { String(format: "%.1f", $0) } ?? "—")
                     .font(StrapTypography.metric(18, weight: .bold))
             }
             .foregroundStyle(Color.appFG)
@@ -987,13 +1009,6 @@ struct HomeView: View {
             .replacingOccurrences(of: " · logged", with: "")
             .replacingOccurrences(of: " · measured", with: "")
             .uppercased()
-    }
-
-    private func activityScore(_ name: String, _ detail: String) -> String {
-        if store.band.recovery.score != nil {
-            return String(format: "%.1f", SampleData.strain)
-        }
-        return "—"
     }
 
     private func activityButton(_ title: String, action: @escaping () -> Void) -> some View {
@@ -1754,11 +1769,18 @@ private struct HomeBandDeviceSettingsView: View {
                     .font(.system(size: 20))
                     .frame(width: 26)
                     .foregroundStyle(muted)
-                Text(title)
-                    .font(StrapTypography.body(13, weight: .bold))
-                    .tracking(0.8)
-                    .foregroundStyle(Color.appFG)
-                Spacer()
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(StrapTypography.body(13, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.appFG)
+                    if isToggle {
+                        Text(subtitle)
+                            .font(StrapTypography.body(10))
+                            .foregroundStyle(muted)
+                    }
+                }
+                Spacer(minLength: 8)
                 if isToggle {
                     Toggle(title, isOn: Binding(
                         get: { toggleValue },
@@ -1770,20 +1792,41 @@ private struct HomeBandDeviceSettingsView: View {
                 }
             }
             .padding(.horizontal, 18)
-            .frame(height: 58)
+            .padding(.vertical, 12)
+            .frame(minHeight: 58)
             .background(panel, in: RoundedRectangle(cornerRadius: 8))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.appCardBorder.opacity(0.5), lineWidth: 0.5)
             )
 
-            Text(subtitle)
-                .font(StrapTypography.body(11))
-                .foregroundStyle(muted)
-                .padding(.horizontal, 10)
-                .fixedSize(horizontal: false, vertical: true)
+            if !isToggle {
+                Text(subtitle)
+                    .font(StrapTypography.body(11))
+                    .foregroundStyle(muted)
+                    .padding(.horizontal, 10)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .accessibilityElement(children: .combine)
         .padding(.bottom, 22)
+    }
+}
+
+
+enum HomeHistoryRefresh {
+    static func isActive(status: BandStatus, saving: Bool, analyzing: Bool, failed: Bool) -> Bool {
+        guard !failed else { return false }
+        return status == .authenticating || status == .draining || saving || analyzing
+    }
+
+    static func canRequest(status: BandStatus, saving: Bool, analyzing: Bool) -> Bool {
+        guard !saving, !analyzing else { return false }
+        switch status {
+        case .authenticating, .draining, .scanning, .connecting, .reconnecting:
+            return false
+        default:
+            return true
+        }
     }
 }
