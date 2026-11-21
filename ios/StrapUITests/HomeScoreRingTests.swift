@@ -43,9 +43,13 @@ final class HomeScoreRingTests: XCTestCase {
         let scroll = app.scrollViews.firstMatch
         for _ in 0..<3 where !editAlarm.isHittable { scroll.swipeUp() }
         XCTAssertTrue(editAlarm.isHittable)
+        let homeBedtime = app.staticTexts["home.bedtime"]
+        XCTAssertTrue(homeBedtime.exists)
+        let bedtime = homeBedtime.label
         editAlarm.tap()
         XCTAssertTrue(app.navigationBars["Sleep Planner"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["alarm.wakeTime"].exists)
+        XCTAssertEqual(app.staticTexts["planner.bedtime"].label, bedtime)
     }
 
     func testActivitiesCanScrollClearOfFloatingNavigation() {

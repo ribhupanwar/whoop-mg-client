@@ -1081,7 +1081,8 @@ struct HomeView: View {
                         Image(systemName: "sunrise")
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
-                        Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
+                        Text(CoachFormat.localClock(bedtimeRecommendation.bedtimeMinutes))
+                            .accessibilityIdentifier("home.bedtime")
                             .font(StrapTypography.metric(24, weight: .bold))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -1154,13 +1155,7 @@ struct HomeView: View {
     }
 
     private var bedtimeRecommendation: SleepRecommendation {
-        let wakeMinutes = nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
-        return SleepCoach.recommendation(
-            baseNeedHours: store.settings.sleepNeedHours,
-            intent: store.settings.sleepIntent,
-            debtHours: SleepCoach.sleepDebt(nights: store.recordedNights),
-            wakeMinutes: wakeMinutes
-        )
+        store.sleepPlan(nextWake: nextWake)
     }
 
     private var lastNightText: String {

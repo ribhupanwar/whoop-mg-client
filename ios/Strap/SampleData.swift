@@ -105,8 +105,9 @@ enum SampleData {
     static let highStressToday = "0:00"
 
     // Sleep coach demo: two nights at 7.5 h against an 8 h need → 1.0 h debt.
-    // With wake 06:30 and easy intent: need 9.0, in bed 10:15, bedtime 20:15.
+    // With wake 06:30 and easy intent: need 9.0, in bed 9:00, bedtime 21:30.
     static let nights: [RecordedNight] = [
+        RecordedNight(dateKey: "2026-11-06", neededHours: 8.0, actualHours: 8.0),
         RecordedNight(dateKey: "2026-11-07", neededHours: 8.0, actualHours: 7.5),
         RecordedNight(dateKey: "2026-11-08", neededHours: 8.0, actualHours: 7.5)
     ]

@@ -170,17 +170,40 @@ final class AppStore: ObservableObject {
     }
 
     var recordedNights: [RecordedNight] {
+        let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
+            as? [String: [Int]] ?? [:]
+        let sessions = band.summary?.sleepSessions ?? []
         var result: [String: RecordedNight] = [:]
         for day in band.days {
-            guard let hours = day.reliableSleepHours else { continue }
-            result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: settings.sleepNeedHours, actualHours: hours)
+            guard let hours = day.reliableSleepHours, let start = day.sleepStartUnix,
+                  let end = day.sleepEndUnix,
+                  SleepCoach.matchesSavedCorrection(start: start, end: end, corrections: corrections) else { continue }
+            let session = sessions.first { $0.startUnix == start && $0.endUnix - 1 == end }
+            result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: settings.sleepNeedHours,
+                actualHours: hours, efficiency: session.flatMap(\.efficiencyPct).map { $0 / 100 })
         }
-        let protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
+        var protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
+        for session in sessions {
+            let wake = Date(timeIntervalSince1970: Double(session.endUnix - 1))
+            protected.insert(JournalStore.dayKey(for: wake, calendar: .current))
+        }
         for (key, day) in whoopImportedDays where result[key] == nil && !protected.contains(key) {
-            guard let hours = day.sleepHours else { continue }
-            // Imported WHOOP sleep need may already include historical debt and strain.\n            // Using it again as the debt baseline compounds those adjustments\n            // into subsequent STRAP recommendations. Compare recorded sleep to\n            // the user's configured base target instead.\n            result[key] = RecordedNight(dateKey: key, neededHours: settings.sleepNeedHours, actualHours: hours)
+            guard let hours = day.sleepHours, let minutes = day.timeInBedMinutes,
+                  hours > 0, minutes >= hours * 60, minutes <= 1440 else { continue }
+            // Imported targets may include adjustments. Only use the observed durations.
+            result[key] = RecordedNight(dateKey: key, neededHours: settings.sleepNeedHours,
+                actualHours: hours, efficiency: hours * 60 / minutes)
         }
         return result.values.sorted { $0.dateKey < $1.dateKey }
+    }
+
+    func sleepPlan(nextWake: Date?) -> SleepRecommendation {
+        let nights = isPreview ? SampleData.nights : SleepCoach.recentNights(recordedNights, ending: Date())
+        let wake = isPreview ? SampleData.demoWakeMinutes
+            : nextWake.map(CoachFormat.minutesSinceMidnight) ?? settings.wakeTimeMinutes
+        return SleepCoach.recommendation(baseNeedHours: settings.sleepNeedHours, intent: settings.sleepIntent,
+            debtHours: SleepCoach.sleepDebt(nights: nights), wakeMinutes: wake,
+            measuredEfficiency: SleepCoach.efficiency(nights: nights))
     }
 
     func connectBand() {
