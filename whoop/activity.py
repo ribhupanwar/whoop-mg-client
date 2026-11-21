@@ -279,7 +279,7 @@ def detect_activities(
             )
             if elevated_seconds < START_SUSTAIN_S:
                 continue
-        else:
+        elif detected_kind in ("workout", "cardio"):
             concurrent_seconds = sum(
                 1
                 for idx in range(start, motion_end)

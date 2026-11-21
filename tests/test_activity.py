@@ -132,6 +132,12 @@ class TestDetectActivities(unittest.TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].kind, "cardio")
 
+    def test_measured_run_survives_missing_acceleration(self):
+        rows = stream(0, 720, 75, accel=None, spm=180, gait=None)
+        sessions = detect_activities(rows)
+        self.assertEqual([session.kind for session in sessions], ["run"])
+        self.assertEqual(sessions[0].end_unix, 719)
+
     def test_sparse_concurrent_evidence_cannot_chain_into_workout(self):
         rows = rest()
         for start in range(900, 2700, 60):
