@@ -35,7 +35,7 @@ struct SleepAnalysisView: View {
     }
 
     private var debt: Double? {
-        demo ? nil : SleepCoach.sleepDebt(nights: nights)
+        demo ? nil : SleepCoach.sleepDebt(nights: SleepCoach.recentNights(nights, ending: Date()))
     }
 
     // RecordedNight contains daily sleep duration and need, not historical staging.
@@ -833,9 +833,8 @@ struct SleepAnalysisView: View {
 
             DisclosureGroup("Sleep need breakdown") {
                 VStack(spacing: 8) {
-                    needKey("Healthy minimum", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
+                    needKey("Baseline sleep target", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
                     needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
-                    needKey("Tomorrow's plan", color: .appAccent, value: demo ? SampleData.needTomorrow : "+" + CoachFormat.duration(store.settings.sleepIntent.extraHours))
                 }
                 .padding(12)
                 .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
@@ -1236,7 +1235,7 @@ struct SleepAnalysisView: View {
     private var weekDebt: [Double?] {
         if demo { return SampleData.weeklyDebtMinutes.map(Optional.some) }
         return weekDates.map { date in
-            let recorded = nights.filter { $0.dateKey <= dayKey(date) }
+            let recorded = SleepCoach.recentNights(nights, ending: date)
             guard recorded.contains(where: { $0.dateKey == dayKey(date) }) else { return nil }
             return SleepCoach.sleepDebt(nights: recorded).map { $0 * 60 }
         }
