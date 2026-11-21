@@ -69,14 +69,24 @@ struct HomeView: View {
 
     private var refreshIndicator: some View {
         TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
-            let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.0) / 1.0
+            let turn: Double = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.0) / 1.0
+            let angle: Double = syncIsActive
+                ? (reduceMotion ? -90.0 : turn * 360.0 - 90.0)
+                : Double(pullProgress) * 90.0 - 90.0
+            let trimEnd: Double = syncIsActive
+                ? 0.72
+                : min(0.72, max(0.05, Double(pullProgress) * 0.72))
+            let indicatorOpacity: Double = syncIsActive
+                ? 1.0
+                : min(1.0, max(0.0, Double(pullProgress - 0.10) / 0.50))
+
             ZStack {
                 Circle().fill(Color.appRaised)
                 Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: syncIsActive ? 0.72 : min(0.72, max(0.05, pullProgress * 0.72)))
+                    .trim(from: 0, to: trimEnd)
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : (syncIsActive ? -90 : pullProgress * 90 - 90)))
+                    .rotationEffect(.degrees(angle))
                 Path { path in
                     path.addLines([
                         CGPoint(x: 1, y: 2),
@@ -91,7 +101,7 @@ struct HomeView: View {
                 .accessibilityHidden(true)
             }
             .frame(width: 34, height: 34)
-            .opacity(syncIsActive ? 1.0 : min(1.0, max(0.0, (pullProgress - 0.10) / 0.50)))
+            .opacity(indicatorOpacity)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
