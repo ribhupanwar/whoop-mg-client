@@ -115,6 +115,41 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(reassembler.pending, 0)
     }
 
+    func testUnsupportedFormatWithValidChecksumsIsRejected() {
+        let inner: [UInt8] = [0x2F, 18, 0, 1]
+        let valid = Gen5Frame.build(inner)
+        var unsupported = valid
+        unsupported[1] = 2
+        let checksum = BandChecksums.crc16Modbus(unsupported[0..<6])
+        unsupported[6] = UInt8(truncatingIfNeeded: checksum)
+        unsupported[7] = UInt8(checksum >> 8)
+
+        XCTAssertNil(Gen5Frame.parse(unsupported))
+        let reassembler = FrameReassembler()
+        XCTAssertTrue(reassembler.feed(Array(unsupported.prefix(7))).isEmpty)
+        XCTAssertEqual(reassembler.feed(Array(unsupported.dropFirst(7)) + valid), [inner])
+        XCTAssertEqual(reassembler.pending, 0)
+    }
+
+    func testUnalignedLengthWithValidHeaderCRCDoesNotStallReassembly() {
+        let inner: [UInt8] = [0x2F, 18, 0, 1]
+        let valid = Gen5Frame.build(inner)
+        var header = Array(valid.prefix(8))
+        header[2] = 0x01
+        header[3] = 0x10
+        let checksum = BandChecksums.crc16Modbus(header[0..<6])
+        header[6] = UInt8(truncatingIfNeeded: checksum)
+        header[7] = UInt8(checksum >> 8)
+
+        XCTAssertEqual(FrameReassembler().feed(header + valid), [inner])
+    }
+
+    func testDirectParseRequiresExactlyOneNonemptyFrame() {
+        let valid = Gen5Frame.build([0x28, 0, 1])
+        XCTAssertNil(Gen5Frame.parse(valid + valid))
+        XCTAssertNil(Gen5Frame.parse(Gen5Frame.build([])))
+    }
+
     func testDroppedPayloadDoesNotConsumeFollowingFrame() {
         let first = Gen5Frame.build([UInt8](repeating: 42, count: 112))
         let inner: [UInt8] = [0x2F, 18, 0, 1]

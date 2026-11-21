@@ -9,6 +9,7 @@ import Foundation
 enum Gen5Frame {
     static let headerLength = 8
     static let startOfFrame: UInt8 = 0xAA
+    static let format: UInt8 = 0x01
 
     static func padded(_ inner: [UInt8]) -> [UInt8] {
         let remainder = inner.count % 4
@@ -32,7 +33,7 @@ enum Gen5Frame {
         let declared = payload.count + 4
         var frame = [UInt8](repeating: 0, count: headerLength)
         frame[0] = startOfFrame
-        frame[1] = 0x01
+        frame[1] = format
         frame[2] = UInt8(declared & 0xFF)
         frame[3] = UInt8((declared >> 8) & 0xFF)
         frame[4] = 0x00
@@ -49,6 +50,10 @@ enum Gen5Frame {
         return frame
     }
 
+    static func isValidDeclaredLength(_ length: Int) -> Bool {
+        length >= 8 && length % 4 == 0 && length + headerLength <= 65_535
+    }
+
     /// Returns the padded inner, or nil when either checksum fails.
     static func parse(_ frame: [UInt8]) -> [UInt8]? {
         parse(frame[...])
@@ -57,12 +62,12 @@ enum Gen5Frame {
     static func parse(_ frame: ArraySlice<UInt8>) -> [UInt8]? {
         guard frame.count >= headerLength else { return nil }
         let start = frame.startIndex
-        guard frame[start] == startOfFrame else { return nil }
+        guard frame[start] == startOfFrame, frame[start + 1] == format else { return nil }
         let storedHeaderCRC = UInt16(frame[start + 6]) | (UInt16(frame[start + 7]) << 8)
         guard BandChecksums.crc16Modbus(frame[start..<(start + 6)]) == storedHeaderCRC else { return nil }
-        guard let declared = declaredLength(frame), declared >= 4 else { return nil }
+        guard let declared = declaredLength(frame), isValidDeclaredLength(declared) else { return nil }
         let total = headerLength + declared
-        guard frame.count >= total else { return nil }
+        guard frame.count == total else { return nil }
         let body = frame[(start + headerLength)..<(start + total)]
         guard body.count >= 4 else { return nil }
         let payload = Array(body[body.startIndex..<(body.endIndex - 4)])
@@ -94,6 +99,12 @@ final class FrameReassembler {
                 droppedBytes += 1
                 continue
             }
+            guard buffer[start + 1] == Gen5Frame.format else {
+                cursor += 1
+                droppedBytes += 1
+                badFrames += 1
+                continue
+            }
             let headerCRC = UInt16(buffer[start + 6]) | (UInt16(buffer[start + 7]) << 8)
             guard BandChecksums.crc16Modbus(buffer[start..<(start + 6)]) == headerCRC else {
                 cursor += 1
@@ -103,7 +114,7 @@ final class FrameReassembler {
             }
             guard let declared = Gen5Frame.declaredLength(buffer[start..<(start + 4)]) else { break }
             let total = Gen5Frame.headerLength + declared
-            if declared < 4 || total > 65_535 {
+            if !Gen5Frame.isValidDeclaredLength(declared) {
                 cursor += 1
                 droppedBytes += 1
                 continue
