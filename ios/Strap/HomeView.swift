@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var pullProgress: CGFloat = 0
+    @State private var isPullRefreshing = false
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
     @State private var hasObservedInitialSync = false
@@ -51,34 +52,49 @@ struct HomeView: View {
         #endif
     }
 
+    private var syncIsActive: Bool {
+        if previewsActiveRefresh { return true }
+        guard !demo else { return false }
+        return isPullRefreshing || HomeHistoryRefresh.isActive(
+            status: store.band.status,
+            saving: store.band.isSavingHistory,
+            analyzing: store.band.isAnalyzingHistory,
+            failed: store.band.historySyncError != nil
+        )
+    }
+
+    private var isRefreshingVisible: Bool {
+        previewsActiveRefresh || syncIsActive || pullProgress > 0.10
+    }
+
     private var refreshIndicator: some View {
-        TimelineView(.animation(paused: reduceMotion || !previewsActiveRefresh)) { clock in
-            let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+        TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
+            let turn: Double = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.0) / 1.0
+            let angle: Double = syncIsActive
+                ? (reduceMotion ? HomeRefreshConstants.arcGapStartAngleDegrees : turn * 360.0 + HomeRefreshConstants.arcGapStartAngleDegrees)
+                : Double(pullProgress) * 90.0 + HomeRefreshConstants.arcGapStartAngleDegrees
+            let trimEnd: Double = syncIsActive
+                ? HomeRefreshConstants.arcTrimFraction
+                : min(HomeRefreshConstants.arcTrimFraction, max(0.05, Double(pullProgress) * HomeRefreshConstants.arcTrimFraction))
+            let indicatorOpacity: Double = syncIsActive
+                ? 1.0
+                : min(1.0, max(0.0, Double(pullProgress - 0.10) / 0.50))
+            let indicatorColor = Color.appMuted.opacity(0.85)
+
             ZStack {
-                Circle().fill(Color.appRaised)
-                Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: previewsActiveRefresh ? 0.72 : pullProgress)
-                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(previewsActiveRefresh && !reduceMotion ? turn * 360 - 90 : -90))
-                Path { path in
-                    path.addLines([
-                        CGPoint(x: 1, y: 2),
-                        CGPoint(x: 4, y: 11),
-                        CGPoint(x: 8, y: 5),
-                        CGPoint(x: 12, y: 11),
-                        CGPoint(x: 15, y: 2)
-                    ])
-                }
-                .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
-                .frame(width: 16, height: 13)
-                .accessibilityHidden(true)
+                    .trim(from: 0, to: trimEnd)
+                    .stroke(indicatorColor, style: StrokeStyle(lineWidth: HomeRefreshConstants.arcStrokeWidth, lineCap: .round))
+                    .rotationEffect(.degrees(angle))
+
+                WhoopWGlyph(color: indicatorColor)
+                    .accessibilityHidden(true)
             }
-            .frame(width: 34, height: 34)
-            .opacity(previewsActiveRefresh ? 1 : pullProgress)
+            .frame(width: HomeRefreshConstants.diameter, height: HomeRefreshConstants.diameter)
+            .opacity(indicatorOpacity)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(previewsActiveRefresh ? "Syncing band history" : "Pull to sync")
+        .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
 
@@ -114,6 +130,7 @@ struct HomeView: View {
             }
         }
         .onAppear {
+            UIRefreshControl.appearance().tintColor = .clear
             // An existing persisted completion is not a new sync success.
             hasObservedInitialSync = true
             AppOpenDayTracker.recordOpen()
@@ -148,10 +165,11 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if previewsActiveRefresh || pullProgress > 0.15 {
+                if isRefreshingVisible && compactScores {
                     refreshIndicator
-                        .offset(y: 39)
+                        .offset(y: 38)
                         .allowsHitTesting(false)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.88)))
                 }
             }
             .background {
@@ -178,10 +196,37 @@ struct HomeView: View {
                     saving: store.band.isSavingHistory,
                     analyzing: store.band.isAnalyzingHistory
                   ) else { return }
+            isPullRefreshing = true
+            defer { isPullRefreshing = false }
+
             if store.band.isConnected {
                 store.band.readHistory()
             } else {
                 store.connectBand()
+            }
+
+            let startTime = Date()
+            var observedActive = false
+            while Date().timeIntervalSince(startTime) < 35 {
+                if store.band.historySyncError != nil {
+                    break
+                }
+                let active = HomeHistoryRefresh.isActive(
+                    status: store.band.status,
+                    saving: store.band.isSavingHistory,
+                    analyzing: store.band.isAnalyzingHistory,
+                    failed: false
+                )
+                if active {
+                    observedActive = true
+                } else if observedActive || Date().timeIntervalSince(startTime) > 1.2 {
+                    break
+                }
+                do {
+                    try await Task.sleep(for: .milliseconds(120))
+                } catch {
+                    break
+                }
             }
         }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
@@ -402,13 +447,18 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
+            if isRefreshingVisible && !compactScores {
+                refreshIndicator
+                    .padding(.bottom, HomeRefreshConstants.indicatorToTitleGap)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.88)))
+            }
             Text("STRAP")
                 .font(StrapTypography.body(18, weight: .medium))
                 .tracking(3.2)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .padding(.top, (isRefreshingVisible && !compactScores) ? 0 : 8)
+                .padding(.bottom, HomeRefreshConstants.titleToRingsGap)
                 .accessibilityLabel("STRAP")
             let diameter: CGFloat = AppLayout.heroRingDiameter
             HStack(spacing: AppLayout.ringGap) {
@@ -1820,6 +1870,38 @@ private struct HomeBandDeviceSettingsView: View {
     }
 }
 
+
+enum HomeRefreshConstants {
+    static let diameter: CGFloat = 30.0
+    static let arcStrokeWidth: CGFloat = 1.6
+    static let arcTrimFraction: CGFloat = 0.84
+    static let arcGapStartAngleDegrees: Double = -150.0
+    static let glyphStrokeWidth: CGFloat = 1.6
+    static let glyphSize: CGFloat = 14.0
+    static let indicatorToTitleGap: CGFloat = 14.0
+    static let titleToRingsGap: CGFloat = 14.0
+}
+
+struct WhoopWGlyph: View {
+    var color: Color = Color.appMuted.opacity(0.85)
+
+    static let pathPoints: [(start: CGPoint, end: CGPoint)] = [
+        (start: CGPoint(x: 1.2, y: 0.4), end: CGPoint(x: 3.4, y: 8.2)),
+        (start: CGPoint(x: 9.4, y: 0.4), end: CGPoint(x: 5.1, y: 13.8)),
+        (start: CGPoint(x: 10.8, y: 5.6), end: CGPoint(x: 13.6, y: 11.2))
+    ]
+
+    var body: some View {
+        Path { path in
+            for stroke in Self.pathPoints {
+                path.move(to: stroke.start)
+                path.addLine(to: stroke.end)
+            }
+        }
+        .stroke(color, style: StrokeStyle(lineWidth: HomeRefreshConstants.glyphStrokeWidth, lineCap: .round, lineJoin: .round))
+        .frame(width: HomeRefreshConstants.glyphSize, height: HomeRefreshConstants.glyphSize)
+    }
+}
 
 enum HomeHistoryRefresh {
     static func isActive(status: BandStatus, saving: Bool, analyzing: Bool, failed: Bool) -> Bool {

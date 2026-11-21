@@ -139,6 +139,33 @@ class WhoopUIParityTests(unittest.TestCase):
             self.assertTrue(p.is_file(), f"Licensed font {f} must exist in ios/Strap/Fonts")
             self.assertGreater(p.stat().st_size, 1000, f"Font {f} must be non-empty")
 
+    def test_home_refresh_w_indicator_geometry_and_lifecycle(self):
+        home_src = (IOS_DIR / "HomeView.swift").read_text(encoding="utf-8")
+        components_src = (IOS_DIR / "Components.swift").read_text(encoding="utf-8")
+        # Custom W indicator presence and accessibility ID
+        self.assertIn('"home.history.refresh"', home_src)
+        self.assertIn("WhoopWGlyph", home_src)
+        self.assertIn("HomeRefreshConstants", home_src)
+        # Verify removal of solid background fill and sleep color on refresh
+        self.assertNotIn("Circle().fill(Color.appRaised)", home_src)
+        self.assertNotIn(".stroke(Color.appSleep", home_src)
+        # Verify exact stylized WHOOP 3-stroke geometry
+        self.assertIn("CGPoint(x: 1.2, y: 0.4)", home_src)
+        self.assertIn("CGPoint(x: 3.4, y: 8.2)", home_src)
+        self.assertIn("CGPoint(x: 9.4, y: 0.4)", home_src)
+        self.assertIn("CGPoint(x: 5.1, y: 13.8)", home_src)
+        self.assertIn("CGPoint(x: 10.8, y: 5.6)", home_src)
+        self.assertIn("CGPoint(x: 13.6, y: 11.2)", home_src)
+        # Verify indicator proportions and placement constants
+        self.assertIn("static let diameter: CGFloat = 30.0", home_src)
+        self.assertIn("static let arcStrokeWidth: CGFloat = 1.6", home_src)
+        self.assertIn("static let arcTrimFraction: CGFloat = 0.84", home_src)
+        self.assertIn("static let indicatorToTitleGap: CGFloat = 14.0", home_src)
+        self.assertIn("static let titleToRingsGap: CGFloat = 14.0", home_src)
+        self.assertIn("HomeHistoryRefresh.isActive", home_src)
+        self.assertIn("UIRefreshControl.appearance().tintColor = .clear", home_src)
+        self.assertIn("UIRefreshControl.appearance().tintColor = .clear", components_src)
+
 
 if __name__ == "__main__":
     unittest.main()

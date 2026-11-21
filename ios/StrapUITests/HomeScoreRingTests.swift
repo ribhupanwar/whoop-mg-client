@@ -105,6 +105,16 @@ final class HomeScoreRingTests: XCTestCase {
         capture("Home compact header with refresh below scores", in: app)
     }
 
+    func testRefreshIndicatorAccessibilityAndBranding() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--design-preview", "--preview-home-refresh"]
+        app.launch()
+
+        let refresh = app.descendants(matching: .any)["home.history.refresh"].firstMatch
+        XCTAssertTrue(refresh.waitForExistence(timeout: 15))
+        XCTAssertEqual(refresh.label, "Syncing band history")
+    }
+
     private func capture(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
