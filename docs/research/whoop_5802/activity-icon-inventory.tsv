@@ -1,10 +1,10 @@
 WHOOP legacy ID	Display name	Original CDN or asset identifier	Evidence	Availability	Reuse status	Native raster	STRAP integration
 -1	Activity	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-0	Running	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	run
-1	Cycling	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	cycling
-16	Baseball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	baseball
-17	Basketball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	basketball
-18	Rowing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	rowing
+0	Running	running.png; running.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	run
+1	Cycling	cycling.png; cycling.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	cycling
+16	Baseball	baseball.png; baseball.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	baseball
+17	Basketball	basketball.png; basketball.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	basketball
+18	Rowing	crew.png; crew.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	rowing
 19	Fencing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	fencing
 20	Field Hockey	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	hockey
 21	Football	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	football
@@ -27,7 +27,7 @@ WHOOP legacy ID	Display name	Original CDN or asset identifier	Evidence	Availabil
 42	Dance	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	dance
 43	Pilates	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	pilates
 44	Yoga	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	yoga
-45	Weightlifting	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	weightlifting
+45	Weightlifting	weightlifting.png; weightlifting.svg	Whoop-Data-Access API guide; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	weightlifting
 47	Cross Country Skiing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
 48	Functional Fitness	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	functionalFitness
 49	Duathlon	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
@@ -122,4 +122,4 @@ WHOOP legacy ID	Display name	Original CDN or asset identifier	Evidence	Availabil
 270	Cleaning	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
 272	Public Speaking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
 	Sleep	Unverified	Phase 17 Home screenshots and STRAP source	No verified asset recovered	Redistribution unverified	Unknown	Existing sleep glyph
-	Nap	nap.png	domain_strings_all.json and direct CDN response	Publicly served	Redistribution unverified	60 × 60 px gray + alpha	Existing nap glyph
+	Nap	nap.png	STRAP domain_strings_all.json; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG	Existing nap glyph
