@@ -21,6 +21,7 @@ struct HomeView: View {
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var pullProgress: CGFloat = 0
+    @State private var pullTriggeredRefresh = false
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
     @State private var hasObservedInitialSync = false
@@ -64,12 +65,12 @@ struct HomeView: View {
                     .trim(from: 0, to: syncIsActive ? 0.72 : pullProgress)
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
                     .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : -90))
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
+                Text("W")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                     .foregroundStyle(Color.appFG)
             }
             .frame(width: 34, height: 34)
-            .opacity(syncIsActive ? 1 : pullProgress)
+            .opacity(pullTriggeredRefresh && syncIsActive ? 1 : pullProgress)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
@@ -142,7 +143,7 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if syncIsActive || pullProgress > 0.15 {
+                if (pullTriggeredRefresh && syncIsActive) || pullProgress > 0.15 {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
@@ -172,15 +173,20 @@ struct HomeView: View {
                     saving: store.band.isSavingHistory,
                     analyzing: store.band.isAnalyzingHistory
                   ) else { return }
+            pullTriggeredRefresh = true
             if store.band.isConnected {
                 store.band.readHistory()
             } else {
                 store.connectBand()
             }
         }
+        .onChange(of: store.band.historySyncError) { _, error in
+            if error != nil { pullTriggeredRefresh = false }
+        }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
             guard hasObservedInitialSync, let completedAt,
                   store.band.historySyncError == nil else { return }
+            pullTriggeredRefresh = false
             syncSuccessDismissal?.cancel()
             withAnimation(.easeInOut(duration: 0.25)) { syncSuccessAt = completedAt }
             syncSuccessDismissal = Task { @MainActor in
@@ -193,6 +199,7 @@ struct HomeView: View {
             syncSuccessDismissal?.cancel()
             syncSuccessDismissal = nil
             syncSuccessAt = nil
+            pullTriggeredRefresh = false
         }
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showLogger) {
@@ -964,10 +971,10 @@ struct HomeView: View {
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
-        .frame(minWidth: 86, minHeight: 44)
-        .background(tint.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+        .frame(width: 104, height: 52)
+        .background(tint.opacity(0.72), in: RoundedRectangle(cornerRadius: 11))
 
-        return HStack(spacing: 10) {
+        return HStack(spacing: 8) {
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     tile
@@ -988,9 +995,9 @@ struct HomeView: View {
             Capsule().fill(tint).frame(width: 3, height: 30)
                 .accessibilityHidden(true)
         }
-        .padding(8)
-        .frame(minHeight: 60)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+        .padding(7)
+        .frame(minHeight: 68)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised.opacity(0.82)))
     }
 
     private func cleanActivityName(_ name: String) -> String {
