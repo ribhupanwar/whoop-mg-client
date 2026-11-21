@@ -176,9 +176,14 @@ struct HealthView: View {
                                            style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                             let blue = Color(hex: 0x159EF0)
                             let bottom = height * 0.80
-                            for segment in segments where segment.count >= 2 {
+                            for segment in segments {
                                 let points = segment.map(position)
                                 guard let first = points.first, let last = points.last else { continue }
+                                if points.count == 1 {
+                                    let dot = CGRect(x: first.x - 2, y: first.y - 2, width: 4, height: 4)
+                                    context.fill(Path(ellipseIn: dot), with: .color(blue))
+                                    continue
+                                }
                                 var trace = Path()
                                 trace.move(to: first)
                                 for point in points.dropFirst() { trace.addLine(to: point) }
