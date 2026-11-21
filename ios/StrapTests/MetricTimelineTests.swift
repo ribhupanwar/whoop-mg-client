@@ -214,6 +214,9 @@ extension MetricTimelineTests {
         let history = Array(samples.reversed()) + [day(39), day(40), day(41)]
         let result = DatedRecovery.evaluate(day: day(40), priorDays: history, date: target,
                                              sleepNeedHours: 8, calendar: calendar)
+        let legacy = DatedRecovery.replayLegacyHome(day: day(40), priorDays: samples,
+            dateKey: day(40).dateKey, sleepNeedHours: 8)
+        XCTAssertLessThan(legacy.baselineDays.count, result.baselineDays.count)
         let expected = samples.filter { $0.restingHR != nil }.suffix(28).map(\.dateKey)
         XCTAssertEqual(result.baselineDays.map(\.dateKey), expected)
         let timeline = MetricTimeline.make(days: history, live: [], manual: [], caloriesByDay: [:],

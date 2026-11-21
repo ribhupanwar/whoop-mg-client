@@ -860,6 +860,12 @@ final class BandLink: NSObject, ObservableObject {
         guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
         let calendar = Calendar.current
         let assessment = recoveryAssessment(for: session, calendar: calendar)
+        let oldDay = days.first {
+            $0.dateKey == assessment.dateKey && $0.sleepStartUnix == session.startUnix
+                && $0.sleepEndUnix == session.endUnix - 1
+        }
+        let legacy = DatedRecovery.replayLegacyHome(day: oldDay, priorDays: days,
+            dateKey: assessment.dateKey, sleepNeedHours: needHours)
         let sync = lastHistorySyncAt
         let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
         let archived = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
@@ -877,7 +883,8 @@ final class BandLink: NSObject, ObservableObject {
             let report = RecoveryDiagnostics.Report(
                 buildRevision: revision, timezone: calendar.timeZone.identifier,
                 lastCompletedHistorySync: sync, assessment: assessment,
-                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), session: session,
+                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), legacyHomeReplay: legacy,
+                legacyHomeBreakdown: RecoveryDiagnostics.Breakdown(assessment: legacy), session: session,
                 archiveFirstUnix: samples.first?.unix, archiveLastUnix: samples.last?.unix,
                 archiveFirstRecordIndex: samples.first?.header.recordIndex,
                 archiveLastRecordIndex: samples.last?.header.recordIndex,

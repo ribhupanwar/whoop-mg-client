@@ -23,12 +23,24 @@ struct DatedRecovery: Encodable {
         let pairs = Array(unique.values.filter {
             $0.lnRMSSD?.isFinite == true && $0.restingHR.map { $0.isFinite && $0 > 0 } == true
         }.sorted { $0.dateKey < $1.dateKey }.suffix(DailyAnalysis.rollingBaselineDays))
-        let baseline = DailyAnalysis.baseline(from: pairs)
+        return assessment(day: day, dateKey: dateKey, baselineCandidates: pairs, sleepNeedHours: sleepNeedHours)
+    }
+
+    /// Replay the former Home row selection for the diagnostic export only.
+    static func replayLegacyHome(day: DayMetrics?, priorDays: [DayMetrics], dateKey: String,
+                                 sleepNeedHours: Double) -> DatedRecovery {
+        let candidates = Array(priorDays.filter { $0.dateKey < dateKey }.suffix(DailyAnalysis.rollingBaselineDays))
+        return assessment(day: day, dateKey: dateKey, baselineCandidates: candidates, sleepNeedHours: sleepNeedHours)
+    }
+
+    private static func assessment(day: DayMetrics?, dateKey: String, baselineCandidates: [DayMetrics],
+                                   sleepNeedHours: Double) -> DatedRecovery {
+        let baseline = DailyAnalysis.baseline(from: baselineCandidates)
         let matchedDay = day.flatMap { $0.dateKey == dateKey ? $0 : nil }
         let result = Recovery.score(lnRMSSD: matchedDay?.lnRMSSD, rhr: matchedDay?.restingHR,
                                     sleepHours: matchedDay?.reliableSleepHours,
                                     sleepNeedHours: sleepNeedHours, baseline: baseline)
-        let inputs = pairs.compactMap { day -> BaselineDay? in
+        let inputs = baselineCandidates.compactMap { day -> BaselineDay? in
             guard let lnRMSSD = day.lnRMSSD, let rhr = day.restingHR else { return nil }
             return BaselineDay(dateKey: day.dateKey, lnRMSSD: lnRMSSD, restingHR: rhr)
         }
@@ -72,6 +84,8 @@ enum RecoveryDiagnostics {
         let lastCompletedHistorySync: Date?
         let assessment: DatedRecovery
         let breakdown: Breakdown?
+        let legacyHomeReplay: DatedRecovery
+        let legacyHomeBreakdown: Breakdown?
         let session: SleepSession
         let archiveFirstUnix: Int?
         let archiveLastUnix: Int?
@@ -86,6 +100,7 @@ enum RecoveryDiagnostics {
         let recomputedRHR: Double?
         let notes = [
             "Assessment uses persisted daily measurements. Window diagnostics are independently recomputed from the current archive.",
+            "Legacy Home replay uses the earlier day-row selection with today's retained history. It cannot recover deleted or subsequently changed inputs.",
             "Recovery uses paired prior-night log RMSSD and RHR, plus reliable sleep duration relative to the configured need when available.",
             "Respiratory rate, sleep performance, stage totals, SpO₂, temperature and strain are not direct inputs to this score.",
             "A zero baseline standard deviation contributes a neutral z-score. Missing reliable sleep removes its weight."
