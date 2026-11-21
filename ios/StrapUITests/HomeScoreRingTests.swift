@@ -48,6 +48,36 @@ final class HomeScoreRingTests: XCTestCase {
         XCTAssertTrue(app.buttons["alarm.wakeTime"].exists)
     }
 
+    func testActivitiesCanScrollClearOfFloatingNavigation() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--design-preview"]
+        app.launch()
+
+        let home = app.buttons["tab.home"]
+        XCTAssertTrue(home.waitForExistence(timeout: 15))
+        let run = app.staticTexts["RUN"].firstMatch
+        let scroll = app.scrollViews.firstMatch
+        for _ in 0..<6 where !run.isHittable || run.frame.maxY >= home.frame.minY {
+            scroll.swipeUp()
+        }
+        XCTAssertTrue(run.isHittable)
+        XCTAssertLessThan(run.frame.maxY, home.frame.minY)
+        capture("Home activities above floating navigation", in: app)
+    }
+
+    func testDeviceSettingsShowsStatusAndBroadcastControl() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--design-preview"]
+        app.launch()
+
+        let device = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "device settings")).firstMatch
+        XCTAssertTrue(device.waitForExistence(timeout: 15))
+        device.tap()
+        XCTAssertTrue(app.staticTexts["DEVICE SETTINGS"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["STATUS"].exists)
+        capture("Device settings status", in: app)
+    }
+
     private func capture(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name
