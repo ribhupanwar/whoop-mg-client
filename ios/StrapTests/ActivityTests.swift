@@ -577,6 +577,67 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertTrue(ActivityDetect.detect(baseline + driving).isEmpty)
     }
 
+    func testSyntheticTwoHourSedentaryHRRiseDoesNotCreateWorkout() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let seated = (900..<8100).map { sample($0, hr: 118, steps: 0, gait: 2, accel: nil) }
+        XCTAssertTrue(ActivityDetect.detect(baseline + seated).isEmpty)
+    }
+
+    func testSyntheticWalkEndsAtDrivingTransition() throws {
+        let walking = walk()
+        let driving = (660..<4260).map { second in
+            sample(second, hr: 82, steps: 1318 + (second - 660) / 15, gait: 2, accel: 0.22)
+        }
+        let sessions = ActivityDetect.detect(walking + driving)
+        XCTAssertEqual(sessions.count, 1)
+        let session = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(session.kind, "walk")
+        XCTAssertEqual(session.endUnix, 659)
+    }
+
+    func testSyntheticSustainedRunsWithOutdoorOrTreadmillMotion() throws {
+        for motion in [0.05, 0.25] {
+            let running = (0..<720).map { sample($0, hr: 155, steps: $0 * 3, gait: nil, accel: motion) }
+            let sessions = ActivityDetect.detect(running)
+            XCTAssertEqual(sessions.count, 1)
+            let session = try XCTUnwrap(sessions.first)
+            XCTAssertEqual(session.kind, "run")
+            XCTAssertEqual(session.endUnix, 719)
+        }
+    }
+
+    func testDailyStrainSurvivesActivityDeletionAndReplay() throws {
+        let suite = "ActivityStrainDeletionTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivityStore(defaults: defaults)
+        let epoch = 1_800_000_000
+        let baseline = (0..<900).map { sample(epoch + $0, hr: 72, steps: 0, accel: 0.01) }
+        let exercise = (900..<1620).map {
+            sample(epoch + $0, hr: 145, steps: ($0 - 899) * 3, gait: nil, accel: 0.22)
+        }
+        let samples = baseline + exercise
+        let candidates = ActivityDetect.detect(samples)
+        let workout = try XCTUnwrap(candidates.first)
+        let now = Date(timeIntervalSince1970: Double(epoch + 1621))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+
+        func dayStrain() -> Double? {
+            DailyAnalysis.metrics(from: samples, sex: .male, maxHR: 190, calendar: calendar,
+                                  analyzedSleepSessions: []).first?.strain
+        }
+
+        store.mergeDetected(candidates, now: now)
+        XCTAssertEqual(store.detectedActivities(), [workout])
+        let before = try XCTUnwrap(dayStrain())
+        XCTAssertGreaterThan(before, 0)
+        store.deleteDetected(workout, now: now)
+        store.mergeDetected(candidates, now: now)
+        XCTAssertTrue(ActivityStore(defaults: defaults).detectedActivities().isEmpty)
+        XCTAssertEqual(dayStrain(), before)
+    }
+
     func testSynthetic189MinuteSparseEvidenceDoesNotChainIntoWorkout() throws {
         let baseline = (0..<900).map { sample($0, hr: 75, steps: 0, accel: 0.01) }
         let sparse = (900..<(900 + 189 * 60)).map { second in
