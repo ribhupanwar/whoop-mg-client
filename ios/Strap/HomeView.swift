@@ -7,6 +7,9 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @ScaledMetric(relativeTo: .body) private var activityTitleSize = 15.0
+    @ScaledMetric(relativeTo: .caption) private var activityDetailSize = 12.0
+    @ScaledMetric(relativeTo: .body) private var activityValueSize = 18.0
     @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
     let openInsights: () -> Void
@@ -40,7 +43,10 @@ struct HomeView: View {
     private var demo: Bool { store.isPreview }
 
     private var syncIsActive: Bool {
-        !demo && HomeHistoryRefresh.isActive(
+        #if DEBUG
+        if demo, ProcessInfo.processInfo.arguments.contains("--preview-home-refresh") { return true }
+        #endif
+        return !demo && HomeHistoryRefresh.isActive(
             status: store.band.status,
             saving: store.band.isSavingHistory,
             analyzing: store.band.isAnalyzingHistory,
@@ -65,6 +71,7 @@ struct HomeView: View {
             .frame(width: 34, height: 34)
             .opacity(syncIsActive ? 1 : pullProgress)
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
@@ -334,6 +341,7 @@ struct HomeView: View {
                     .tracking(0.9)
                     .foregroundStyle(Color.appFG)
                     .frame(minWidth: 62)
+                    .accessibilityIdentifier("home.today")
 
                 Button {
                     if dayOffset < 0 { dayOffset += 1 }
@@ -953,16 +961,16 @@ struct HomeView: View {
 
     private func activityTile(icon: String, name: String, value: String, detail: String, tint: Color) -> some View {
         let title = Text(cleanActivityName(name))
-            .font(StrapTypography.body(15, weight: .bold))
+            .font(StrapTypography.body(activityTitleSize, weight: .bold))
             .tracking(0.6)
             .foregroundStyle(Color.appFG)
         let subtitle = Text(detail)
-            .font(StrapTypography.metric(12, weight: .medium))
+            .font(StrapTypography.metric(activityDetailSize, weight: .medium))
             .foregroundStyle(Color.appMuted)
             .monospacedDigit()
         let tile = HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 14, weight: .medium))
-            Text(value).font(StrapTypography.metric(18, weight: .bold)).monospacedDigit()
+            Text(value).font(StrapTypography.metric(activityValueSize, weight: .bold)).monospacedDigit()
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
