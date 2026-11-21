@@ -717,4 +717,113 @@ extension ActivityStoreTests {
         store.deleteLive(id: record.id)
         XCTAssertEqual(defaults.string(forKey: key), "legacy unreadable data")
     }
+
+    func testConcurrentActivityMergeAndPreferencesSnapshotsDoNotDeadlock() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let writer = BackgroundPreferencesWriter(defaults: defaults)
+
+        let mergeExp = expectation(description: "Concurrent merges")
+        mergeExp.expectedFulfillmentCount = 20
+
+        let prefExp = expectation(description: "Concurrent preferences writes")
+        prefExp.expectedFulfillmentCount = 20
+
+        // 1. Concurrent activity merges on background queue
+        for i in 0..<20 {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let s = self.session(start: epoch + i * 100, end: epoch + i * 100 + 50)
+                self.store.mergeDetected([s], now: now)
+                mergeExp.fulfill()
+            }
+        }
+
+        // 2. Concurrent preferences snapshot writes on background queue
+        for i in 0..<20 {
+            let dummy = ["key": "val_\(i)"]
+            writer.write(dummy, forKey: "strap.test.pref.\(i)") { _ in
+                prefExp.fulfill()
+            }
+        }
+
+        // 3. Main thread queries isDetectedDeleted and detectedActivities
+        let probe = session(start: epoch, end: epoch + 60)
+        for _ in 0..<50 {
+            _ = store.isDetectedDeleted(probe)
+            _ = store.detectedActivities()
+        }
+
+        wait(for: [mergeExp, prefExp], timeout: 15.0)
+        let saved = expectation(description: "Latest merge snapshot saved")
+        DispatchQueue.main.async {
+            XCTAssertEqual(ActivityStore(defaults: self.defaults).detectedActivities().count, 20)
+            saved.fulfill()
+        }
+        wait(for: [saved], timeout: 5)
+    }
+
+    func testNotificationCenterReentrancyDoesNotDeadlock() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let probe = session(start: epoch, end: epoch + 600)
+
+        var notificationCount = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: nil
+        ) { _ in
+            notificationCount += 1
+            // Reentrant query from inside NotificationCenter observer callback:
+            // Must not deadlock against the detected activity state lock.
+            _ = self.store.isDetectedDeleted(probe)
+            _ = self.store.detectedActivities()
+        }
+
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        // Perform merge and delete; both trigger UserDefaults.didChangeNotification
+        store.mergeDetected([probe], now: now)
+        XCTAssertFalse(store.detectedActivities().isEmpty)
+        XCTAssertFalse(store.isDetectedDeleted(probe))
+
+        store.deleteDetected(probe, now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+        XCTAssertTrue(store.isDetectedDeleted(probe))
+        XCTAssertGreaterThan(notificationCount, 0)
+    }
+
+    func testSimultaneousDetectedActivitiesQueriesDuringActiveBackgroundMerge() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let candidate = session(start: epoch, end: epoch + 900)
+        store.mergeDetected([candidate], now: now)
+
+        let exp = expectation(description: "Background merge loop")
+        let queryExp = expectation(description: "UI queries")
+
+        let mergeQueue = DispatchQueue(label: "strap.test.merge", qos: .userInitiated)
+        let readQueue = DispatchQueue(label: "strap.test.read", qos: .userInitiated)
+
+        // Active background merge queue simulating BandLink history drain
+        mergeQueue.async {
+            for i in 0..<10 {
+                let s = self.session(start: epoch + (i + 1) * 1000, end: epoch + (i + 1) * 1000 + 600)
+                self.store.mergeDetected([s], now: now)
+            }
+            exp.fulfill()
+        }
+
+        // Concurrent reader simulating SwiftUI scene update and AttributeGraph evaluations
+        readQueue.async {
+            for _ in 0..<50 {
+                _ = self.store.detectedActivities()
+                _ = self.store.isDetectedDeleted(candidate)
+                _ = self.store.deletedDetectedStartTimes()
+            }
+            queryExp.fulfill()
+        }
+
+        wait(for: [exp, queryExp], timeout: 15.0)
+    }
 }
