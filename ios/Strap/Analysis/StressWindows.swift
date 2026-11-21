@@ -7,6 +7,14 @@ import Foundation
 enum StressWindows {
     static let windowSeconds = 300
 
+    static func outsideWorkouts(
+        samples: [V18Sample], baseline: Baseline?, sleep: [(start: Int, end: Int)],
+        activities: [ActivitySession], isDeleted: (ActivitySession) -> Bool
+    ) -> StressSplit {
+        let workouts = activities.filter { !isDeleted($0) }.map { (start: $0.startUnix, end: $0.endUnix) }
+        return share(samples: samples, baseline: baseline, excluded: sleep + workouts)
+    }
+
     /// Share of awake windows in each stress band. `excluded` drops windows
     /// inside sleep periods (for the awake split) and detected workouts (for
     /// the outside-workouts split).

@@ -9,7 +9,8 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .body) private var activityTitleSize = 15.0
     @ScaledMetric(relativeTo: .caption) private var activityDetailSize = 12.0
-    @ScaledMetric(relativeTo: .body) private var activityValueSize = 18.0
+    @ScaledMetric(relativeTo: .body) private var activityValueSize = 17.0
+    @ScaledMetric(relativeTo: .body) private var activityTileWidth = 84.0
     @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
     let openInsights: () -> Void
@@ -42,37 +43,42 @@ struct HomeView: View {
 
     private var demo: Bool { store.isPreview }
 
-    private var syncIsActive: Bool {
+    private var previewsActiveRefresh: Bool {
         #if DEBUG
-        if demo, ProcessInfo.processInfo.arguments.contains("--preview-home-refresh") { return true }
+        return demo && ProcessInfo.processInfo.arguments.contains("--preview-home-refresh")
+        #else
+        return false
         #endif
-        return !demo && HomeHistoryRefresh.isActive(
-            status: store.band.status,
-            saving: store.band.isSavingHistory,
-            analyzing: store.band.isAnalyzingHistory,
-            failed: store.band.historySyncError != nil
-        )
     }
 
     private var refreshIndicator: some View {
-        TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
+        TimelineView(.animation(paused: reduceMotion || !previewsActiveRefresh)) { clock in
             let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
             ZStack {
                 Circle().fill(Color.appRaised)
                 Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: syncIsActive ? 0.72 : pullProgress)
+                    .trim(from: 0, to: previewsActiveRefresh ? 0.72 : pullProgress)
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : -90))
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.appFG)
+                    .rotationEffect(.degrees(previewsActiveRefresh && !reduceMotion ? turn * 360 - 90 : -90))
+                Path { path in
+                    path.addLines([
+                        CGPoint(x: 1, y: 2),
+                        CGPoint(x: 4, y: 11),
+                        CGPoint(x: 8, y: 5),
+                        CGPoint(x: 12, y: 11),
+                        CGPoint(x: 15, y: 2)
+                    ])
+                }
+                .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+                .frame(width: 16, height: 13)
+                .accessibilityHidden(true)
             }
             .frame(width: 34, height: 34)
-            .opacity(syncIsActive ? 1 : pullProgress)
+            .opacity(previewsActiveRefresh ? 1 : pullProgress)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
+        .accessibilityLabel(previewsActiveRefresh ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
 
@@ -142,7 +148,7 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if syncIsActive || pullProgress > 0.15 {
+                if previewsActiveRefresh || pullProgress > 0.15 {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
@@ -776,24 +782,20 @@ struct HomeView: View {
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
-                        HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail, strain: row.strain)
+                        activityRow(icon: row.icon, name: row.name, detail: row.times ?? row.detail, strain: row.strain)
+                        .accessibilityHint(row.detail)
+                        .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            Text(row.detail)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
                                     correctedKind = ActivityKind(rawValue: correctedLabels[row.id] ?? "") ?? .other
                                 } label: {
-                                    Image(systemName: "pencil.circle")
-                                        .font(StrapTypography.body(19))
-                                        .foregroundStyle(Color.appAccent)
+                                    Label("Edit activity", systemImage: "pencil")
                                 }
-                                .accessibilityLabel("Edit activity")
-                                .buttonStyle(.plain)
                             }
-                        }
-                        .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
-                        .contentShape(Rectangle())
-                        .contextMenu {
                             Button(role: .destructive) {
                                 deleteActivityRow(row)
                             } label: {
@@ -828,20 +830,20 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 Button { showLogger = true } label: {
                     Label("ADD ACTIVITY", systemImage: "plus")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 Button { showLiveSession = true } label: {
                     Label("START ACTIVITY", systemImage: "stopwatch")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
             .font(StrapTypography.body(10, weight: .bold))
             .tracking(0.7)
             .buttonStyle(.plain)
             .foregroundStyle(Color.appFG)
-            .background(Color.clear)
-            .padding(.vertical, 4)
-            .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -864,6 +866,7 @@ struct HomeView: View {
         let detail: String
         let startUnix: Int?
         var strain: Double? = nil
+        var times: String? = nil
     }
 
     private var timedRows: [ActivityRowModel] {
@@ -876,7 +879,7 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
-        return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))–\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
+        return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))\n\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
     }
 
     private var selectedDayKey: String {
@@ -896,9 +899,10 @@ struct HomeView: View {
                 id: key,
                 icon: corrected?.icon ?? ActivityIconRegistry.detectedIcon(session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
+                detail: "\(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix,
-                strain: session.strain
+                strain: session.strain,
+                times: Self.clockRange(session.startUnix, session.endUnix)
             )
         }
     }
@@ -912,8 +916,9 @@ struct HomeView: View {
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
-                startUnix: record.startedUnix
+                detail: "\(minutes) min\(heart)\(kcal)",
+                startUnix: record.startedUnix,
+                times: Self.clockRange(record.startedUnix, record.endedUnix)
             )
         }
     }
@@ -964,8 +969,14 @@ struct HomeView: View {
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
-        .frame(minWidth: 86, minHeight: 44)
-        .background(tint.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+        .frame(minWidth: activityTileWidth, minHeight: 36)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(LinearGradient(
+                    colors: [tint, tint.opacity(0.82)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ))
+        }
 
         return HStack(spacing: 10) {
             ViewThatFits(in: .horizontal) {
@@ -985,12 +996,19 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            Capsule().fill(tint).frame(width: 3, height: 30)
+            Capsule().fill(tint).frame(width: 2, height: 26)
                 .accessibilityHidden(true)
         }
-        .padding(8)
-        .frame(minHeight: 60)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 7)
+        .frame(minHeight: 52)
+        .background {
+            RoundedRectangle(cornerRadius: 11)
+                .fill(Color.appRaised)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appCardBorder, lineWidth: 1)
+                }
+        }
     }
 
     private func cleanActivityName(_ name: String) -> String {

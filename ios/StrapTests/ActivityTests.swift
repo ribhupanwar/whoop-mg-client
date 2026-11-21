@@ -4,29 +4,25 @@ import XCTest
 final class GenericWorkoutConfirmationTests: XCTestCase {
     func testMorningStepsAndMildHeartRateDoNotBecomeWorkout() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 120,
-            movingSeconds: 45, hasPreActivityBaseline: true
+            durationS: 14 * 60, concurrentSeconds: 45, hasPreActivityBaseline: true
         ))
     }
 
     func testMissingBaselineDoesNotInventExertion() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 400,
-            movingSeconds: 250, hasPreActivityBaseline: false
+            durationS: 14 * 60, concurrentSeconds: 250, hasPreActivityBaseline: false
         ))
     }
 
     func testSustainedExerciseWithIndependentEvidenceRemainsEligible() {
         XCTAssertTrue(ActivityDetect.confirmsGenericWorkout(
-            durationS: 14 * 60, exertionSeconds: 400,
-            movingSeconds: 250, hasPreActivityBaseline: true
+            durationS: 14 * 60, concurrentSeconds: 250, hasPreActivityBaseline: true
         ))
     }
 
     func testShortIncidentalMovementIsNotExercise() {
         XCTAssertFalse(ActivityDetect.confirmsGenericWorkout(
-            durationS: 8 * 60, exertionSeconds: 300,
-            movingSeconds: 150, hasPreActivityBaseline: true
+            durationS: 8 * 60, concurrentSeconds: 150, hasPreActivityBaseline: true
         ))
     }
 }
@@ -293,7 +289,7 @@ final class ActivityStoreTests: XCTestCase {
 }
 
 final class StepDrivenDetectTests: XCTestCase {
-    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0, accel: Double? = 0.05) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(
                 version: 18, flags: 0x80, recordIndex: UInt32(unix),
@@ -301,7 +297,7 @@ final class StepDrivenDetectTests: XCTestCase {
             ),
             heartRate: hr,
             rrIntervalsMS: [],
-            dynamicAccelG: 0.05,
+            dynamicAccelG: accel,
             gravityXG: nil,
             gravityYG: nil,
             gravityZG: nil,
@@ -555,6 +551,118 @@ final class StepDrivenDetectTests: XCTestCase {
         // Endpoint sampling omits a couple of boundary steps from this synthetic
         // fixture; 898 is the validated observable counter delta, not 900.
         XCTAssertGreaterThanOrEqual(StepCounter.total(samples) ?? 0, 898)
+    }
+
+    func testSyntheticHouseholdMovementAndElevatedHRMustCoincide() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let chores = (900..<2700).map { second in
+            let moving = second % 60 < 15
+            return sample(second, hr: moving ? 82 : 115, steps: (second - 900) / 7,
+                          gait: moving ? 1 : 2, accel: moving ? 0.24 : 0.01)
+        }
+        XCTAssertTrue(ActivityDetect.detect(baseline + chores).isEmpty)
+        XCTAssertGreaterThan(StepCounter.total(chores) ?? 0, 0)
+    }
+
+    func testSyntheticDrivingVibrationWithoutHRRiseDoesNotCreateWorkout() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let driving = (900..<4500).map { second in
+            sample(second, hr: 82, steps: (second - 900) / 15, gait: 2,
+                   accel: second.isMultiple(of: 2) ? 0.35 : 0.08)
+        }
+        XCTAssertTrue(ActivityDetect.detect(baseline + driving).isEmpty)
+    }
+
+    func testSyntheticTwoHourSedentaryHRRiseDoesNotCreateWorkout() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let seated = (900..<8100).map { sample($0, hr: 118, steps: 0, gait: 2, accel: nil) }
+        XCTAssertTrue(ActivityDetect.detect(baseline + seated).isEmpty)
+    }
+
+    func testSyntheticWalkEndsAtDrivingTransition() throws {
+        let walking = walk()
+        let driving = (660..<4260).map { second in
+            sample(second, hr: 82, steps: 1318 + (second - 660) / 15, gait: 2, accel: 0.22)
+        }
+        let sessions = ActivityDetect.detect(walking + driving)
+        XCTAssertEqual(sessions.count, 1)
+        let session = try XCTUnwrap(sessions.first)
+        XCTAssertEqual(session.kind, "walk")
+        XCTAssertEqual(session.endUnix, 659)
+    }
+
+    func testSyntheticSustainedRunsWithOutdoorOrTreadmillMotion() throws {
+        for motion in [0.05, 0.25] {
+            let running = (0..<720).map { sample($0, hr: 155, steps: $0 * 3, gait: nil, accel: motion) }
+            let sessions = ActivityDetect.detect(running)
+            XCTAssertEqual(sessions.count, 1)
+            let session = try XCTUnwrap(sessions.first)
+            XCTAssertEqual(session.kind, "run")
+            XCTAssertEqual(session.endUnix, 719)
+        }
+    }
+
+    func testDailyStrainSurvivesActivityDeletionAndReplay() throws {
+        let suite = "ActivityStrainDeletionTests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = ActivityStore(defaults: defaults)
+        let epoch = 1_800_000_000
+        let baseline = (0..<900).map { sample(epoch + $0, hr: 72, steps: 0, accel: 0.01) }
+        let exercise = (900..<1620).map {
+            sample(epoch + $0, hr: 145, steps: ($0 - 899) * 3, gait: nil, accel: 0.22)
+        }
+        let samples = baseline + exercise
+        let candidates = ActivityDetect.detect(samples)
+        let workout = try XCTUnwrap(candidates.first)
+        let now = Date(timeIntervalSince1970: Double(epoch + 1621))
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+
+        func dayStrain() -> Double? {
+            DailyAnalysis.metrics(from: samples, sex: .male, maxHR: 190, calendar: calendar,
+                                  analyzedSleepSessions: []).first?.strain
+        }
+
+        store.mergeDetected(candidates, now: now)
+        XCTAssertEqual(store.detectedActivities(), [workout])
+        let before = try XCTUnwrap(dayStrain())
+        XCTAssertGreaterThan(before, 0)
+        store.deleteDetected(workout, now: now)
+        store.mergeDetected(candidates, now: now)
+        let relaunched = ActivityStore(defaults: defaults)
+        XCTAssertTrue(relaunched.detectedActivities().isEmpty)
+        XCTAssertEqual(relaunched.deletedDetectedStartTimes(), [workout.startUnix])
+        XCTAssertEqual(dayStrain(), before)
+    }
+
+    func testSynthetic189MinuteSparseEvidenceDoesNotChainIntoWorkout() throws {
+        let baseline = (0..<900).map { sample($0, hr: 75, steps: 0, accel: 0.01) }
+        let sparse = (900..<(900 + 189 * 60)).map { second in
+            sample(second, hr: 110, steps: (second - 900) / 10, gait: 2,
+                   accel: second % 60 < 12 ? 0.30 : 0.01)
+        }
+        var decisions: [ActivityDecision] = []
+        XCTAssertTrue(ActivityDetect.detect(baseline + sparse, onDecision: { decisions.append($0) }).isEmpty)
+        let rejection = try XCTUnwrap(decisions.first { $0.reason.contains("Sparse evidence") })
+        XCTAssertEqual(rejection.supportedSeconds, 0)
+        XCTAssertGreaterThan(rejection.movementSeconds, 0)
+    }
+
+    func testWorkoutStopsBeforeStationaryElevatedHRAndIntermittentMotion() throws {
+        let baseline = (0..<900).map { sample($0, hr: 72, steps: 50, accel: 0.01) }
+        let workout = (900..<1800).map { sample($0, hr: 135, steps: 50, accel: 0.23) }
+        let sitting = (1800..<9000).map { second in
+            sample(second, hr: 117, steps: 50,
+                   accel: second % 60 < 6 ? 0.15 : nil)
+        }
+        let result = ActivityDetect.detect(baseline + workout + sitting)
+        XCTAssertEqual(result.count, 1)
+        let session = try XCTUnwrap(result.first)
+        XCTAssertEqual(session.kind, "workout")
+        // The 80%-dense confirmation window can absorb a short initial
+        // transition but cannot keep an office-length tail open.
+        XCTAssertLessThan(session.endUnix, 1800 + ActivityDetect.minSessionS)
     }
 
     func testCandidateClassificationDiagnosesDailyMovement() {

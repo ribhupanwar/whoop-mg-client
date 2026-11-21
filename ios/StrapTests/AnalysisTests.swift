@@ -1306,6 +1306,23 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(VO2MaxSource.allCases.count, 4)
     }
 
+    func testDeletedWorkoutReturnsItsSamplesToOutsideWorkoutStress() {
+        let samples = (0..<600).map { second in
+            makeSample(second, hr: 75, rr: [790, 810, 795, 806])
+        }
+        let workout = ActivitySession(startUnix: 300, endUnix: 599, kind: "workout", steps: 0,
+                                      meanHR: 75, walkTicks: 0, runTicks: 0)
+        let baseline = steadyBaseline()
+        let before = StressWindows.outsideWorkouts(
+            samples: samples, baseline: baseline, sleep: [], activities: [workout], isDeleted: { _ in false }
+        )
+        let after = StressWindows.outsideWorkouts(
+            samples: samples, baseline: baseline, sleep: [], activities: [workout], isDeleted: { $0 == workout }
+        )
+        XCTAssertEqual(before.windows, 1)
+        XCTAssertEqual(after.windows, 2)
+    }
+
     func testStressIndexCountsDeviationsBelowTheNorm() {
         let baseline = steadyBaseline()
         XCTAssertEqual(Recovery.stressIndex(lnRMSSD: 4.0, baseline: baseline).index, 0.0)
@@ -1424,6 +1441,13 @@ final class RespirationTests: XCTestCase {
 }
 
 final class DailyMetricQualityTests: XCTestCase {
+    func testIndexedArchiveSliceKeepsBothBoundariesAndReplayRows() {
+        let archive = [1, 3, 3, 4, 7].map { makeSample($0, hr: 60) }
+        XCTAssertEqual(DailyAnalysis.rows(in: archive, from: 3, through: 4).map(\.unix), [3, 3, 4])
+        XCTAssertTrue(DailyAnalysis.rows(in: archive, from: 5, through: 6).isEmpty)
+        XCTAssertTrue(DailyAnalysis.rows(in: archive, from: 8, through: 7).isEmpty)
+    }
+
     func testNightlyHRVDoesNotDependOnCompleteSleepStages() throws {
         let day = DayMetrics(dateKey: "2026-11-13", state: "sleep", restingHR: 67,
                              lnRMSSD: log(44), hrvWindowSeconds: 300, sleepHours: 0,

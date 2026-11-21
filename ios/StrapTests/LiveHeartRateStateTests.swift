@@ -2,6 +2,23 @@ import XCTest
 @testable import Strap
 
 final class LiveHeartRateStateTests: XCTestCase {
+    func testSilentPulseDoesNotRearmOrReconnectAnActiveHistoryOrHandshakeLink() {
+        let now = Date(timeIntervalSince1970: 1_000)
+        let connected = now.addingTimeInterval(-240)
+        XCTAssertEqual(LiveHeartRateState.recovery(
+            now: now, connectedAt: connected, receivedAt: nil, lastAttempt: nil,
+            attempts: 0, reconnects: 0, protectsHistoryLink: true
+        ), .wait)
+        XCTAssertEqual(LiveHeartRateState.recovery(
+            now: now, connectedAt: connected, receivedAt: nil, lastAttempt: nil,
+            attempts: 4, reconnects: 0, protectsHistoryLink: true
+        ), .wait)
+        XCTAssertEqual(LiveHeartRateState.recovery(
+            now: now, connectedAt: connected, receivedAt: nil, lastAttempt: nil,
+            attempts: 4, reconnects: 0
+        ), .reconnect)
+    }
+
     func testFreshnessNeverPromotesOldDisconnectedInvalidOrFutureReadings() {
         let now = Date(timeIntervalSince1970: 1000)
         XCTAssertEqual(LiveHeartRateState.fresh(82, receivedAt: now, connected: true, now: now), 82)

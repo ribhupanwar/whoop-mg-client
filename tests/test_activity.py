@@ -126,11 +126,31 @@ class TestDetectActivities(unittest.TestCase):
         self.assertEqual(len(sessions), 1)
         self.assertEqual(sessions[0].kind, "cardio")
 
-    def test_gait_labels_run_even_without_step_data(self):
+    def test_unverified_gait_cannot_label_run_without_step_data(self):
         rows = stream(0, 1200, 150, accel=0.4, with_steps=False, gait=2)
         sessions = detect_activities(rows)
         self.assertEqual(len(sessions), 1)
-        self.assertEqual(sessions[0].kind, "run")
+        self.assertEqual(sessions[0].kind, "cardio")
+
+    def test_measured_run_survives_missing_acceleration(self):
+        rows = stream(0, 720, 75, accel=None, spm=180, gait=None)
+        sessions = detect_activities(rows)
+        self.assertEqual([session.kind for session in sessions], ["run"])
+        self.assertEqual(sessions[0].end_unix, 719)
+
+    def test_sparse_concurrent_evidence_cannot_chain_into_workout(self):
+        rows = rest()
+        for start in range(900, 2700, 60):
+            rows += stream(start, 12, 115, accel=0.30, gait=2)
+            rows += stream(start + 12, 48, 115, accel=0.01, gait=2)
+        self.assertEqual(detect_activities(rows), [])
+
+    def test_disjoint_hr_and_motion_are_not_workout_evidence(self):
+        rows = rest()
+        for start in range(900, 2700, 60):
+            rows += stream(start, 15, 82, accel=0.30, gait=1)
+            rows += stream(start + 15, 45, 115, accel=0.01, gait=2)
+        self.assertEqual(detect_activities(rows), [])
 
     def test_arm_motion_while_still_is_not_a_session(self):
         rows = stream(0, 1800, 70, accel=0.5, gait=0)

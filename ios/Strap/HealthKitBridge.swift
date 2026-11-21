@@ -35,6 +35,9 @@ final class HealthKitBridge: ObservableObject {
     /// Marks the records this app created, so the user can tell them apart.
     static let sourceKey = "com.ribhupanwar.strap.source"
 
+    static let detectedSource = "strap-band"
+    var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
+
     private let store = HKHealthStore()
 
     /// Permissions for supported Health categories. Authorization does not
@@ -110,14 +113,16 @@ final class HealthKitBridge: ObservableObject {
 
     @MainActor
     func export(_ session: ActivitySession) async {
-        guard state == .ready, session.endUnix > session.startUnix else { return }
+        guard state == .ready, session.endUnix > session.startUnix,
+              !isDetectedActivityDeleted(session) else { return }
         let id = Self.externalID(startUnix: session.startUnix)
-        guard let alreadySaved = await exists(id), !alreadySaved else { return }
+        guard let alreadySaved = await exists(id), !alreadySaved,
+              !isDetectedActivityDeleted(session) else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(session.startUnix))
         let end = Date(timeIntervalSince1970: TimeInterval(session.endUnix + 1))
         var metadata: [String: Any] = [
             HKMetadataKeyExternalUUID: id,
-            Self.sourceKey: "strap-band"
+            Self.sourceKey: Self.detectedSource
         ]
         if session.steps > 0 {
             metadata["com.ribhupanwar.strap.steps"] = session.steps
@@ -126,6 +131,32 @@ final class HealthKitBridge: ObservableObject {
             metadata["com.ribhupanwar.strap.meanHR"] = Int(meanHR.rounded())
         }
         await save(start: start, end: end, type: Self.activityType(for: session.kind), metadata: metadata)
+        if isDetectedActivityDeleted(session) {
+            await deleteDetectedWorkouts(startTimes: [session.startUnix])
+        }
+    }
+
+    static func detectedWorkoutDeletionPredicate(startTimes: [Int], sourcePredicate: NSPredicate) -> NSPredicate {
+        NSCompoundPredicate(andPredicateWithSubpredicates: [
+            sourcePredicate,
+            HKQuery.predicateForObjects(withMetadataKey: sourceKey, operatorType: .equalTo,
+                                        value: detectedSource),
+            HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID,
+                                        allowedValues: startTimes.map { externalID(startUnix: $0) })
+        ])
+    }
+
+    @MainActor
+    func deleteDetectedWorkouts(startTimes: [Int]) async {
+        guard state == .ready, !startTimes.isEmpty, Bundle.main.bundleIdentifier != nil else { return }
+        let sourcePredicate = HKQuery.predicateForObjects(from: HKSource.default())
+        let predicate = Self.detectedWorkoutDeletionPredicate(startTimes: startTimes, sourcePredicate: sourcePredicate)
+        let error = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
+            store.deleteObjects(of: HKObjectType.workoutType(), predicate: predicate) { success, _, error in
+                continuation.resume(returning: success ? nil : (error?.localizedDescription ?? "Workout could not be removed from Apple Health."))
+            }
+        }
+        if let error, state == .ready { state = .failed(error) }
     }
 
     @MainActor
