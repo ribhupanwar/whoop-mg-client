@@ -51,8 +51,6 @@ enum SampleData {
     // Activities / tonight / plan
     static let lastNightSleep = "6:24"
     static let lastNightTimes = "00:26 – 07:33"
-    static let bedtime = "22:28"
-    static let latestAlarm = "07:45"
     static let planActualSleep = "7:22"
 
     // Sleep analysis

@@ -1059,7 +1059,8 @@ struct HomeView: View {
     // MARK: Tonight's sleep
 
     private var tonightCard: some View {
-        Panel {
+        let plan = store.sleepPlan(nextWake: nextWake)
+        return Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
                     .font(StrapTypography.body(11, weight: .bold))
@@ -1081,7 +1082,7 @@ struct HomeView: View {
                         Image(systemName: "sunrise")
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
-                        Text(CoachFormat.localClock(bedtimeRecommendation.bedtimeMinutes))
+                        Text(CoachFormat.localClock(plan.bedtimeMinutes))
                             .accessibilityIdentifier("home.bedtime")
                             .font(StrapTypography.metric(24, weight: .bold))
                             .monospacedDigit()
@@ -1111,7 +1112,7 @@ struct HomeView: View {
                         Image(systemName: "applewatch")
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
-                        Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
+                        Text(demo || nextWake != nil ? CoachFormat.localClock(plan.wakeMinutes) : "—")
                             .font(StrapTypography.metric(24, weight: .bold))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -1152,10 +1153,6 @@ struct HomeView: View {
             .accessibilityIdentifier("home.sleepPlanner")
         }
         .padding(.bottom, 14)
-    }
-
-    private var bedtimeRecommendation: SleepRecommendation {
-        store.sleepPlan(nextWake: nextWake)
     }
 
     private var lastNightText: String {

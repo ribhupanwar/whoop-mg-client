@@ -42,6 +42,16 @@ final class SleepCoachTests: XCTestCase {
         XCTAssertEqual(rec.bedtimeMinutes, 30)
     }
 
+    func testScheduledWakeUsesElapsedHoursAcrossDaylightSaving() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York")!
+        let wake = calendar.date(from: DateComponents(year: 2026, month: 3, day: 8, hour: 7))!
+        let rec = SleepCoach.recommendation(baseNeedHours: 8, intent: .easy, debtHours: nil,
+                                            wakeMinutes: 420, scheduledWake: wake, calendar: calendar)
+        XCTAssertEqual(rec.wakeMinutes, 420)
+        XCTAssertEqual(rec.bedtimeMinutes, 22 * 60)
+    }
+
     func testEfficiencyNeedsThreeDistinctNights() {
         let nights = (1...3).map { day in
             RecordedNight(dateKey: "2026-11-0\(day)", neededHours: 8, actualHours: 7,

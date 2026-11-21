@@ -200,10 +200,10 @@ final class AppStore: ObservableObject {
     func sleepPlan(nextWake: Date?) -> SleepRecommendation {
         let nights = isPreview ? SampleData.nights : SleepCoach.recentNights(recordedNights, ending: Date())
         let wake = isPreview ? SampleData.demoWakeMinutes
-            : nextWake.map(CoachFormat.minutesSinceMidnight) ?? settings.wakeTimeMinutes
+            : nextWake.map { CoachFormat.minutesSinceMidnight($0) } ?? settings.wakeTimeMinutes
         return SleepCoach.recommendation(baseNeedHours: settings.sleepNeedHours, intent: settings.sleepIntent,
             debtHours: SleepCoach.sleepDebt(nights: nights), wakeMinutes: wake,
-            measuredEfficiency: SleepCoach.efficiency(nights: nights))
+            measuredEfficiency: SleepCoach.efficiency(nights: nights), scheduledWake: isPreview ? nil : nextWake)
     }
 
     func connectBand() {

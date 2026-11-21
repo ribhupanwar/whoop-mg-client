@@ -95,7 +95,9 @@ enum SleepCoach {
         intent: SleepIntent,
         debtHours: Double?,
         wakeMinutes: Int,
-        measuredEfficiency: Double? = nil
+        measuredEfficiency: Double? = nil,
+        scheduledWake: Date? = nil,
+        calendar: Calendar = .current
     ) -> SleepRecommendation {
         let baseline = (5...12).contains(baseNeedHours) ? baseNeedHours : defaultBaselineHours
         let debt = debtHours.flatMap { $0.isFinite && $0 >= 0 ? $0 : nil }
@@ -127,8 +129,8 @@ enum SleepCoach {
 // MARK: - Formatting helpers
 
 enum CoachFormat {
-    static func minutesSinceMidnight(_ date: Date) -> Int {
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+    static func minutesSinceMidnight(_ date: Date, calendar: Calendar = .current) -> Int {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
         return (parts.hour ?? 0) * 60 + (parts.minute ?? 0)
     }
 
