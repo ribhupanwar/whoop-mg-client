@@ -51,34 +51,34 @@ struct HomeView: View {
         #endif
     }
 
-    private var syncIsActive: Bool {
-        previewsActiveRefresh || (!demo && HomeHistoryRefresh.isActive(
-            status: store.band.status,
-            saving: store.band.isSavingHistory,
-            analyzing: store.band.isAnalyzingHistory,
-            failed: store.band.historySyncError != nil
-        ))
-    }
-
     private var refreshIndicator: some View {
-        TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
+        TimelineView(.animation(paused: reduceMotion || !previewsActiveRefresh)) { clock in
             let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
             ZStack {
                 Circle().fill(Color.appRaised)
                 Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: syncIsActive ? 0.72 : pullProgress)
+                    .trim(from: 0, to: previewsActiveRefresh ? 0.72 : pullProgress)
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : -90))
-                Image(systemName: "arrow.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Color.appFG)
+                    .rotationEffect(.degrees(previewsActiveRefresh && !reduceMotion ? turn * 360 - 90 : -90))
+                Path { path in
+                    path.addLines([
+                        CGPoint(x: 1, y: 2),
+                        CGPoint(x: 4, y: 11),
+                        CGPoint(x: 8, y: 5),
+                        CGPoint(x: 12, y: 11),
+                        CGPoint(x: 15, y: 2)
+                    ])
+                }
+                .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
+                .frame(width: 16, height: 13)
+                .accessibilityHidden(true)
             }
             .frame(width: 34, height: 34)
-            .opacity(syncIsActive ? 1 : pullProgress)
+            .opacity(previewsActiveRefresh ? 1 : pullProgress)
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
+        .accessibilityLabel(previewsActiveRefresh ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
 

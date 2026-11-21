@@ -78,6 +78,15 @@ final class HomeScoreRingTests: XCTestCase {
         capture("Device settings status", in: app)
     }
 
+    func testRefreshIndicatorIsHiddenOnHomeAtRest() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--design-preview"]
+        app.launch()
+
+        XCTAssertTrue(app.staticTexts["home.today"].waitForExistence(timeout: 15))
+        XCTAssertFalse(app.descendants(matching: .any)["home.history.refresh"].firstMatch.exists)
+    }
+
     func testRefreshStaysBelowTodayAndCompactScoreHeader() {
         let app = XCUIApplication()
         app.launchArguments = ["--design-preview", "--preview-home-refresh"]
