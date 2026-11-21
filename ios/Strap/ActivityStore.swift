@@ -653,8 +653,21 @@ final class ActivityStore {
 
     private static func matches(_ session: ActivitySession, deletion: DeletedDetectedActivity) -> Bool {
         let shared = min(session.endUnix, deletion.endUnix) - max(session.startUnix, deletion.startUnix) + 1
-        let shorter = min(session.durationS, deletion.endUnix - deletion.startUnix + 1)
-        return shared > 0 && shorter > 0 && Double(shared) >= Double(shorter) * 0.5
+        let deletionDuration = deletion.endUnix - deletion.startUnix + 1
+        return hasMeaningfulOverlap(
+            shared, firstDuration: session.durationS, secondDuration: deletionDuration
+        )
+    }
+
+    private static func hasMeaningfulOverlap(
+        _ shared: Int, firstDuration: Int, secondDuration: Int
+    ) -> Bool {
+        let shorter = min(firstDuration, secondDuration)
+        let longer = max(firstDuration, secondDuration)
+        // A much longer enclosing interval may be a stale merged session, not a boundary-shifted replay.
+        return shared > 0 && shorter > 0
+            && Double(shared) >= Double(shorter) * 0.5
+            && Double(longer) <= Double(shorter) * 2
     }
 
     /// Keeps one row per real session. The band replays overlapping history,
@@ -710,8 +723,6 @@ final class ActivityStore {
 
     static func overlaps(_ a: ActivitySession, _ b: ActivitySession) -> Bool {
         let shared = min(a.endUnix, b.endUnix) - max(a.startUnix, b.startUnix) + 1
-        guard shared > 0 else { return false }
-        let shorter = min(a.durationS, b.durationS)
-        return Double(shared) >= Double(shorter) * 0.5
+        return hasMeaningfulOverlap(shared, firstDuration: a.durationS, secondDuration: b.durationS)
     }
 }
