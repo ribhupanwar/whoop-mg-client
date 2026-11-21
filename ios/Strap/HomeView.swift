@@ -134,6 +134,13 @@ struct HomeView: View {
             .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
+            .overlay(alignment: .bottom) {
+                if syncIsActive || pullProgress > 0.15 {
+                    refreshIndicator
+                        .offset(y: 39)
+                        .allowsHitTesting(false)
+                }
+            }
             .background {
                 if #available(iOS 26.0, *) {
                     Rectangle()
@@ -150,13 +157,6 @@ struct HomeView: View {
             return min(1, max(0, overscroll / 64))
         } action: { _, progress in
             pullProgress = progress
-        }
-        .overlay(alignment: .top) {
-            if syncIsActive || pullProgress > 0.15 {
-                refreshIndicator
-                    .padding(.top, 5)
-                    .allowsHitTesting(false)
-            }
         }
         .refreshable {
             guard !demo,
@@ -742,35 +742,10 @@ struct HomeView: View {
 
             if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
-                HStack(spacing: 12) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "moon.fill").font(.system(size: 17))
-                        Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(StrapTypography.metric(18, weight: .bold))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(Color.appFG)
-                    .frame(width: 92, height: 49)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(Color(hex: 0x739AB7)))
-
-                    Text("SLEEP")
-                        .font(StrapTypography.body(15, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(StrapTypography.metric(12, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.appMuted)
-                        .multilineTextAlignment(.trailing)
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.appSleep)
-                        .frame(width: 3, height: 35)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(minHeight: 66)
-                .background(RoundedRectangle(cornerRadius: 13).fill(Color.appRaised))
+                activityTile(icon: "moon.fill", name: "Sleep",
+                             value: demo ? SampleData.lastNightSleep : lastNightText,
+                             detail: demo ? "00:26\n07:33" : sleepTimesText,
+                             tint: Color.appSleep)
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -971,36 +946,52 @@ struct HomeView: View {
     }
 
     private func activityRow(icon: String, name: String, detail: String, strain: Double? = nil) -> some View {
-        HStack(spacing: 11) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium))
-                Text(strain.map { String(format: "%.1f", $0) } ?? "—")
-                    .font(StrapTypography.metric(18, weight: .bold))
-            }
-            .foregroundStyle(Color.appFG)
-            .frame(width: 92, height: 49)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(LinearGradient(colors: [Color(hex: 0x0080E6), Color(hex: 0x005BB3)], startPoint: .top, endPoint: .bottom))
-            )
+        activityTile(icon: icon, name: name,
+                     value: strain.map { String(format: "%.1f", $0) } ?? "—",
+                     detail: detail, tint: Color.appAccent)
+    }
 
-            Text(cleanActivityName(name))
-                .font(StrapTypography.body(15, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Color.appFG)
-            Spacer(minLength: 8)
-            Text(detail)
-                .font(StrapTypography.metric(11, weight: .medium))
-                .foregroundStyle(Color.appMuted)
-                .multilineTextAlignment(.trailing)
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color.appAccent)
-                .frame(width: 3, height: 26)
+    private func activityTile(icon: String, name: String, value: String, detail: String, tint: Color) -> some View {
+        let title = Text(cleanActivityName(name))
+            .font(StrapTypography.body(15, weight: .bold))
+            .tracking(0.6)
+            .foregroundStyle(Color.appFG)
+        let subtitle = Text(detail)
+            .font(StrapTypography.metric(12, weight: .medium))
+            .foregroundStyle(Color.appMuted)
+            .monospacedDigit()
+        let tile = HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 14, weight: .medium))
+            Text(value).font(StrapTypography.metric(18, weight: .bold)).monospacedDigit()
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(minHeight: 66)
+        .foregroundStyle(Color.appFG)
+        .padding(.horizontal, 8)
+        .frame(minWidth: 86, minHeight: 44)
+        .background(tint.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+
+        return HStack(spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    tile
+                    title.fixedSize()
+                    Spacer(minLength: 4)
+                    subtitle.multilineTextAlignment(.trailing).fixedSize()
+                }
+                HStack(alignment: .top, spacing: 10) {
+                    tile
+                    VStack(alignment: .leading, spacing: 4) {
+                        title
+                        subtitle
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            Capsule().fill(tint).frame(width: 3, height: 30)
+                .accessibilityHidden(true)
+        }
+        .padding(8)
+        .frame(minHeight: 60)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 
