@@ -208,6 +208,37 @@ final class HistoryDatabaseTests: XCTestCase {
         wait(for: [done], timeout: 10)
     }
 
+    func testInterruptedOffloadResumesWithReplayAndFillsMissingSecond() throws {
+        let url = directory.appendingPathComponent("old.json")
+
+        func persist(_ rows: [V18Sample], token: String, using writer: HistoricalArchiveWriter) throws -> Int {
+            let done = expectation(description: "History chunk \(token) committed")
+            var outcome: Result<Int, Error>?
+            writer.persistChunk(rows, token: token) { result in
+                outcome = result
+                done.fulfill()
+            }
+            wait(for: [done], timeout: 10)
+            return try XCTUnwrap(outcome).get()
+        }
+
+        let first = historySample(1000)
+        let missing = historySample(1001)
+        let later = historySample(1002)
+        do {
+            let writer = HistoricalArchiveWriter(url: url)
+            XCTAssertEqual(try persist([first, later], token: "before-disconnect", using: writer), 2)
+        }
+
+        // A reconnect can replay already committed rows along with missing data.
+        let resumed = HistoricalArchiveWriter(url: url)
+        let database = try HistoryDatabase(url: resumed.databaseURL)
+        XCTAssertEqual(try database.metadata("last_history_chunk"), "before-disconnect")
+        XCTAssertEqual(try persist([first, missing, later, later], token: "after-reconnect", using: resumed), 1)
+        XCTAssertEqual(try database.recentSamples(), [first, missing, later])
+        XCTAssertEqual(try database.metadata("last_history_chunk"), "after-reconnect")
+    }
+
     func testFailedWriterRetainsPendingRowsForRetry() throws {
         let writer = HistoricalArchiveWriter(url: directory.appendingPathComponent("old.json"))
         // A directory at the database path makes sqlite_open fail without
