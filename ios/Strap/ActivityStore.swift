@@ -408,7 +408,7 @@ private struct DeletedDetectedActivity: Codable, Equatable {
 
 final class ActivityStore {
     private let detectedLock = NSRecursiveLock()
-    private let persistLock = NSRecursiveLock()
+    private var detectedRevision: UInt64 = 0
     private var cachedDetected: [ActivitySession]?
     private var cachedDeletions: [DeletedDetectedActivity]?
     private let defaults: UserDefaults
@@ -648,12 +648,51 @@ final class ActivityStore {
         return Array(Set(loadedDeletedSessionsLocked().map(\.startUnix))).sorted()
     }
 
+    private struct DetectedSnapshot {
+        let revision: UInt64
+        let activities: [ActivitySession]
+        let deletions: [DeletedDetectedActivity]
+    }
+
+    private func stageDetectedLocked(_ activities: [ActivitySession], deletions: [DeletedDetectedActivity]) -> DetectedSnapshot {
+        cachedDetected = activities
+        cachedDeletions = deletions
+        detectedRevision &+= 1
+        return DetectedSnapshot(revision: detectedRevision, activities: activities, deletions: deletions)
+    }
+
+    private func isLatestDetectedSnapshot(_ snapshot: DetectedSnapshot) -> Bool {
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
+        return detectedRevision == snapshot.revision
+    }
+
+    private func persistDetected(_ snapshot: DetectedSnapshot) {
+        guard let activities = try? JSONEncoder().encode(snapshot.activities),
+              let deletions = try? JSONEncoder().encode(snapshot.deletions) else { return }
+        let write = {
+            // UserDefaults can synchronously notify observers. Run delivery on
+            // main without holding a lock that a reader or another writer needs.
+            guard self.isLatestDetectedSnapshot(snapshot) else { return }
+            if !snapshot.deletions.isEmpty {
+                self.defaults.set(deletions, forKey: self.deletedDetectedKey)
+            }
+            // A reentrant observer may have staged and saved a newer snapshot.
+            guard self.isLatestDetectedSnapshot(snapshot) else { return }
+            self.defaults.set(activities, forKey: self.detectedKey)
+        }
+        if Thread.isMainThread {
+            write()
+        } else {
+            DispatchQueue.main.async(execute: write)
+        }
+    }
+
     func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
-        let update: (deletionsData: Data, remainingData: Data)? = {
+        let snapshot: DetectedSnapshot? = {
             detectedLock.lock()
             defer { detectedLock.unlock() }
-            // Never overwrite unreadable activity or deletion history. A corrupt
-            // tombstone archive must not be replaced with a partial new list.
+            // Preserve unreadable saved activity or deletion records.
             if let original = defaults.data(forKey: detectedKey),
                (try? JSONDecoder().decode([ActivitySession].self, from: original)) == nil { return nil }
             if let original = defaults.data(forKey: deletedDetectedKey),
@@ -666,24 +705,11 @@ final class ActivityStore {
                     deletedAtUnix: Int(now.timeIntervalSince1970)
                 ))
             }
-            cachedDeletions = deletions
-
-            let remaining = loadedDetectedSessionsLocked(deletions: deletions).filter { !Self.matches($0, deletion: DeletedDetectedActivity(
-                startUnix: session.startUnix, endUnix: session.endUnix,
-                deletedAtUnix: Int(now.timeIntervalSince1970)
-            )) }
-            cachedDetected = remaining
-
-            guard let dData = try? JSONEncoder().encode(deletions),
-                  let rData = try? JSONEncoder().encode(remaining) else { return nil }
-            return (dData, rData)
+            let remaining = loadedDetectedSessionsLocked(deletions: deletions)
+            return stageDetectedLocked(remaining, deletions: deletions)
         }()
 
-        guard let update else { return }
-        persistLock.lock()
-        defaults.set(update.deletionsData, forKey: deletedDetectedKey)
-        defaults.set(update.remainingData, forKey: detectedKey)
-        persistLock.unlock()
+        if let snapshot { persistDetected(snapshot) }
     }
 
     private static func matches(_ session: ActivitySession, deletion: DeletedDetectedActivity) -> Bool {
@@ -697,7 +723,7 @@ final class ActivityStore {
     /// appended, and the longer measurement wins.
     func mergeDetected(_ sessions: [ActivitySession], now: Date = Date()) {
         guard !sessions.isEmpty else { return }
-        let payload: Data? = {
+        let snapshot: DetectedSnapshot? = {
             detectedLock.lock()
             defer { detectedLock.unlock() }
             // A corrupt existing archive must not be silently replaced by the
@@ -734,15 +760,10 @@ final class ActivityStore {
                 }
             }
             items = items.sorted { $0.startUnix < $1.startUnix }
-            cachedDetected = items
-            return try? JSONEncoder().encode(items)
+            return stageDetectedLocked(items, deletions: deletions)
         }()
 
-        if let payload {
-            persistLock.lock()
-            defaults.set(payload, forKey: detectedKey)
-            persistLock.unlock()
-        }
+        if let snapshot { persistDetected(snapshot) }
     }
 
     static func overlaps(_ a: ActivitySession, _ b: ActivitySession) -> Bool {

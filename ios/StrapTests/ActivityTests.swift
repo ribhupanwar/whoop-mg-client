@@ -754,6 +754,12 @@ extension ActivityStoreTests {
         }
 
         wait(for: [mergeExp, prefExp], timeout: 15.0)
+        let saved = expectation(description: "Latest merge snapshot saved")
+        DispatchQueue.main.async {
+            XCTAssertEqual(ActivityStore(defaults: self.defaults).detectedActivities().count, 20)
+            saved.fulfill()
+        }
+        wait(for: [saved], timeout: 5)
     }
 
     func testNotificationCenterReentrancyDoesNotDeadlock() {
@@ -769,7 +775,7 @@ extension ActivityStoreTests {
         ) { _ in
             notificationCount += 1
             // Reentrant query from inside NotificationCenter observer callback:
-            // Must not deadlock against detectedLock or persistLock.
+            // Must not deadlock against the detected activity state lock.
             _ = self.store.isDetectedDeleted(probe)
             _ = self.store.detectedActivities()
         }
