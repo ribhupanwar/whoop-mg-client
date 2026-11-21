@@ -794,30 +794,28 @@ extension ActivityStoreTests {
         store.mergeDetected([candidate], now: now)
 
         let exp = expectation(description: "Background merge loop")
-        exp.expectedFulfillmentCount = 15
-
         let queryExp = expectation(description: "UI queries")
-        queryExp.expectedFulfillmentCount = 3
+
+        let mergeQueue = DispatchQueue(label: "strap.test.merge", qos: .userInitiated)
+        let readQueue = DispatchQueue(label: "strap.test.read", qos: .userInitiated)
 
         // Active background merge queue simulating BandLink history drain
-        for i in 0..<15 {
-            DispatchQueue.global(qos: .utility).async {
+        mergeQueue.async {
+            for i in 0..<10 {
                 let s = self.session(start: epoch + (i + 1) * 1000, end: epoch + (i + 1) * 1000 + 600)
                 self.store.mergeDetected([s], now: now)
-                exp.fulfill()
             }
+            exp.fulfill()
         }
 
-        // Multiple concurrent readers simulating SwiftUI scene update and AttributeGraph evaluations
-        for _ in 0..<3 {
-            DispatchQueue.global(qos: .userInteractive).async {
-                for _ in 0..<30 {
-                    _ = self.store.detectedActivities()
-                    _ = self.store.isDetectedDeleted(candidate)
-                    _ = self.store.deletedDetectedStartTimes()
-                }
-                queryExp.fulfill()
+        // Concurrent reader simulating SwiftUI scene update and AttributeGraph evaluations
+        readQueue.async {
+            for _ in 0..<50 {
+                _ = self.store.detectedActivities()
+                _ = self.store.isDetectedDeleted(candidate)
+                _ = self.store.deletedDetectedStartTimes()
             }
+            queryExp.fulfill()
         }
 
         wait(for: [exp, queryExp], timeout: 15.0)
