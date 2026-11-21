@@ -1757,10 +1757,11 @@ final class BandLink: NSObject, ObservableObject {
             // existing packet timestamp alone can leave the UI stuck forever.
             // NOOP confirms standard 0x2A37 can stream before the vendor
             // handshake/bond. Do not gate its recovery on CLIENT_HELLO.
+            let historyInProgress = self.drainStartedAt != nil || self.isSavingHistory || self.isAnalyzingHistory
             let action = LiveHeartRateState.recovery(now: now, connectedAt: self.hrConnectedAt,
                 receivedAt: self.lastLiveHRAt, lastAttempt: self.lastHRRecoveryAt,
                 attempts: self.hrRecoveryAttempts, reconnects: self.staleHRReconnects,
-                protectsHistoryLink: self.drainStartedAt != nil || self.status == .authenticating)
+                protectsHistoryLink: historyInProgress || self.status == .authenticating)
             if action == .reconnect, let peripheral = self.peripheral {
                 self.staleHRReconnects += 1
                 self.lastMessage = "HR stream stayed silent after re-arming; reconnecting the strap."
