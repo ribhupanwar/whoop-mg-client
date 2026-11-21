@@ -434,7 +434,7 @@ final class BandLink: NSObject, ObservableObject {
     private var hrSubscribedBeforeBond = false
     @Published private(set) var hrBondConfirmed = false
     private var hrSubscriptionConfirmedAt: Date?
-    private var hrConnectedAt: Date?
+    private(set) var hrConnectedAt: Date?
     private var reconnectWork: DispatchWorkItem?
     private var reconnectAttempt = 0
     private static let restoreIdentifier = "com.strap.band.central.v1"
@@ -1480,6 +1480,7 @@ final class BandLink: NSObject, ObservableObject {
         hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
+        recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
         hrCharacteristic = nil

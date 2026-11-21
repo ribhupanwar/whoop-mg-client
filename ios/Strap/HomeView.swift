@@ -7,6 +7,9 @@ struct HomeView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.scenePhase) private var scenePhase
+    @ScaledMetric(relativeTo: .body) private var activityTitleSize = 15.0
+    @ScaledMetric(relativeTo: .caption) private var activityDetailSize = 12.0
+    @ScaledMetric(relativeTo: .body) private var activityValueSize = 18.0
     @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
     let openInsights: () -> Void
@@ -40,7 +43,10 @@ struct HomeView: View {
     private var demo: Bool { store.isPreview }
 
     private var syncIsActive: Bool {
-        !demo && HomeHistoryRefresh.isActive(
+        #if DEBUG
+        if demo, ProcessInfo.processInfo.arguments.contains("--preview-home-refresh") { return true }
+        #endif
+        return !demo && HomeHistoryRefresh.isActive(
             status: store.band.status,
             saving: store.band.isSavingHistory,
             analyzing: store.band.isAnalyzingHistory,
@@ -65,6 +71,7 @@ struct HomeView: View {
             .frame(width: 34, height: 34)
             .opacity(syncIsActive ? 1 : pullProgress)
         }
+        .accessibilityElement(children: .ignore)
         .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
@@ -134,6 +141,13 @@ struct HomeView: View {
             .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
+            .overlay(alignment: .bottom) {
+                if syncIsActive || pullProgress > 0.15 {
+                    refreshIndicator
+                        .offset(y: 39)
+                        .allowsHitTesting(false)
+                }
+            }
             .background {
                 if #available(iOS 26.0, *) {
                     Rectangle()
@@ -150,13 +164,6 @@ struct HomeView: View {
             return min(1, max(0, overscroll / 64))
         } action: { _, progress in
             pullProgress = progress
-        }
-        .overlay(alignment: .top) {
-            if syncIsActive || pullProgress > 0.15 {
-                refreshIndicator
-                    .padding(.top, 5)
-                    .allowsHitTesting(false)
-            }
         }
         .refreshable {
             guard !demo,
@@ -334,6 +341,7 @@ struct HomeView: View {
                     .tracking(0.9)
                     .foregroundStyle(Color.appFG)
                     .frame(minWidth: 62)
+                    .accessibilityIdentifier("home.today")
 
                 Button {
                     if dayOffset < 0 { dayOffset += 1 }
@@ -742,35 +750,10 @@ struct HomeView: View {
 
             if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
-                HStack(spacing: 12) {
-                    HStack(spacing: 7) {
-                        Image(systemName: "moon.fill").font(.system(size: 17))
-                        Text(demo ? SampleData.lastNightSleep : lastNightText)
-                            .font(StrapTypography.metric(18, weight: .bold))
-                            .monospacedDigit()
-                    }
-                    .foregroundStyle(Color.appFG)
-                    .frame(width: 92, height: 49)
-                    .background(RoundedRectangle(cornerRadius: 9).fill(Color(hex: 0x739AB7)))
-
-                    Text("SLEEP")
-                        .font(StrapTypography.body(15, weight: .bold))
-                        .tracking(0.8)
-                        .foregroundStyle(Color.appFG)
-                    Spacer()
-                    Text(demo ? "00:26\n07:33" : sleepTimesText)
-                        .font(StrapTypography.metric(12, weight: .medium))
-                        .monospacedDigit()
-                        .foregroundStyle(Color.appMuted)
-                        .multilineTextAlignment(.trailing)
-                    RoundedRectangle(cornerRadius: 1.5)
-                        .fill(Color.appSleep)
-                        .frame(width: 3, height: 35)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .frame(minHeight: 66)
-                .background(RoundedRectangle(cornerRadius: 13).fill(Color.appRaised))
+                activityTile(icon: ActivityIconRegistry.sleep, name: "Sleep",
+                             value: demo ? SampleData.lastNightSleep : lastNightText,
+                             detail: demo ? "00:26\n07:33" : sleepTimesText,
+                             tint: Color.appSleep)
             }
             .buttonStyle(.plain)
             .contextMenu {
@@ -783,13 +766,13 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 if !demo {
                     ForEach(todayNaps, id: \.sourceStartUnix) { session in
-                        activityRow(icon: "moon.zzz.fill", name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
+                        activityRow(icon: ActivityIconRegistry.nap, name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
                     }
                 }
                 if demo {
-                    activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
-                    activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands")
-                    activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push")
+                    activityRow(icon: ActivityKind.run.icon, name: "Run", detail: "42 min · Z2")
+                    activityRow(icon: ActivityKind.walk.icon, name: "Walk", detail: "28 min · errands")
+                    activityRow(icon: ActivityKind.lift.icon, name: "Gym workout", detail: "55 min · push")
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
@@ -911,7 +894,7 @@ struct HomeView: View {
             let corrected = correctedLabels[key].flatMap(ActivityKind.init(rawValue:))
             return ActivityRowModel(
                 id: key,
-                icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
+                icon: corrected?.icon ?? ActivityIconRegistry.detectedIcon(session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
                 detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix,
@@ -960,47 +943,53 @@ struct HomeView: View {
         }
     }
 
-    private static func icon(forDetected kind: String) -> String {
-        switch kind {
-        case "run": return "figure.run"
-        case "walk": return "figure.walk"
-        case "workout": return "dumbbell.fill"
-        case "cardio": return "heart.fill"
-        default: return "figure.mixed.cardio"
-        }
+    private func activityRow(icon: String, name: String, detail: String, strain: Double? = nil) -> some View {
+        activityTile(icon: icon, name: name,
+                     value: strain.map { String(format: "%.1f", $0) } ?? "—",
+                     detail: detail, tint: Color.appAccent)
     }
 
-    private func activityRow(icon: String, name: String, detail: String, strain: Double? = nil) -> some View {
-        HStack(spacing: 11) {
-            HStack(spacing: 5) {
-                Image(systemName: icon)
-                    .font(.system(size: 13, weight: .medium))
-                Text(strain.map { String(format: "%.1f", $0) } ?? "—")
-                    .font(StrapTypography.metric(18, weight: .bold))
-            }
+    private func activityTile(icon: String, name: String, value: String, detail: String, tint: Color) -> some View {
+        let title = Text(cleanActivityName(name))
+            .font(StrapTypography.body(activityTitleSize, weight: .bold))
+            .tracking(0.6)
             .foregroundStyle(Color.appFG)
-            .frame(width: 92, height: 49)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(LinearGradient(colors: [Color(hex: 0x0080E6), Color(hex: 0x005BB3)], startPoint: .top, endPoint: .bottom))
-            )
-
-            Text(cleanActivityName(name))
-                .font(StrapTypography.body(15, weight: .bold))
-                .tracking(0.6)
-                .foregroundStyle(Color.appFG)
-            Spacer(minLength: 8)
-            Text(detail)
-                .font(StrapTypography.metric(11, weight: .medium))
-                .foregroundStyle(Color.appMuted)
-                .multilineTextAlignment(.trailing)
-            RoundedRectangle(cornerRadius: 1.5)
-                .fill(Color.appAccent)
-                .frame(width: 3, height: 26)
+        let subtitle = Text(detail)
+            .font(StrapTypography.metric(activityDetailSize, weight: .medium))
+            .foregroundStyle(Color.appMuted)
+            .monospacedDigit()
+        let tile = HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 14, weight: .medium))
+            Text(value).font(StrapTypography.metric(activityValueSize, weight: .bold)).monospacedDigit()
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(minHeight: 66)
+        .foregroundStyle(Color.appFG)
+        .padding(.horizontal, 8)
+        .frame(minWidth: 86, minHeight: 44)
+        .background(tint.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+
+        return HStack(spacing: 10) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 10) {
+                    tile
+                    title.fixedSize()
+                    Spacer(minLength: 4)
+                    subtitle.multilineTextAlignment(.trailing).fixedSize()
+                }
+                HStack(alignment: .top, spacing: 10) {
+                    tile
+                    VStack(alignment: .leading, spacing: 4) {
+                        title
+                        subtitle
+                    }
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            Capsule().fill(tint).frame(width: 3, height: 30)
+                .accessibilityHidden(true)
+        }
+        .padding(8)
+        .frame(minHeight: 60)
         .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
     }
 

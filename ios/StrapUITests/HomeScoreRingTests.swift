@@ -78,6 +78,24 @@ final class HomeScoreRingTests: XCTestCase {
         capture("Device settings status", in: app)
     }
 
+    func testRefreshStaysBelowTodayAndCompactScoreHeader() {
+        let app = XCUIApplication()
+        app.launchArguments = ["--design-preview", "--preview-home-refresh"]
+        app.launch()
+
+        let today = app.staticTexts["home.today"]
+        let refresh = app.descendants(matching: .any)["home.history.refresh"].firstMatch
+        XCTAssertTrue(today.waitForExistence(timeout: 15))
+        XCTAssertTrue(refresh.exists)
+        XCTAssertGreaterThan(refresh.frame.minY, today.frame.maxY)
+
+        let compact = app.descendants(matching: .any)["home.compact.sleep"].firstMatch
+        for _ in 0..<3 where !compact.exists { app.scrollViews.firstMatch.swipeUp() }
+        XCTAssertTrue(compact.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(refresh.frame.minY, compact.frame.maxY)
+        capture("Home compact header with refresh below scores", in: app)
+    }
+
     private func capture(_ name: String, in app: XCUIApplication) {
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name

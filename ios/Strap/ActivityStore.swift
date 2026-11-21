@@ -98,17 +98,25 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
         case .other: return "figure.mixed.cardio"
         case .cycling, .spin: return "bicycle"
         case .swimming, .surfing, .paddleboarding, .kayaking, .canoeing: return "figure.pool.swim"
-        case .yoga, .pilates, .stretching, .mobility, .meditation, .barre: return "figure.cooldown"
+        case .yoga: return "figure.yoga"
+        case .pilates: return "figure.pilates"
+        case .meditation: return "figure.mind.and.body"
+        case .stretching, .mobility, .barre: return "figure.cooldown"
         case .dance, .aerobics, .gymnastics: return "figure.dance"
         case .hiking, .climbing: return "figure.hiking"
         case .rowing: return "figure.rower"
-        case .elliptical, .stairClimber, .hiit, .functionalFitness, .crossTraining, .jumpRope: return "figure.highintensity.intervaltraining"
+        case .elliptical: return "figure.elliptical"
+        case .functionalFitness: return "figure.strengthtraining.functional"
+        case .stairClimber, .hiit, .crossTraining, .jumpRope: return "figure.highintensity.intervaltraining"
         case .treadmill, .outdoorRun, .trailRun, .intervalRun: return "figure.run"
         case .indoorWalk, .golf, .gardening: return "figure.walk"
-        case .strengthTraining, .weightlifting: return "dumbbell.fill"
+        case .strengthTraining: return "figure.strengthtraining.traditional"
+        case .weightlifting: return "dumbbell.fill"
         case .boxing, .martialArts, .wrestling, .fencing: return "figure.boxing"
         case .tennis, .badminton, .tableTennis, .pickleball, .squash, .racquetball: return "figure.tennis"
-        case .basketball, .football, .cricket, .volleyball, .rugby, .soccer, .handball, .baseball, .softball, .hockey, .lacrosse: return "sportscourt"
+        case .basketball: return "basketball.fill"
+        case .football: return "football.fill"
+        case .cricket, .volleyball, .rugby, .soccer, .handball, .baseball, .softball, .hockey, .lacrosse: return "sportscourt"
         case .skiing, .skating: return "figure.skiing.downhill"
         case .horsebackRiding: return "figure.equestrian.sports"
         }
@@ -116,6 +124,100 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
 
     /// Lifting is entered as sets; everything else by minutes.
     var usesSets: Bool { self == .lift || self == .strengthTraining || self == .weightlifting }
+}
+
+/// Presentation mapping based on WHOOP's public legacy sport table. The
+/// names and IDs are input metadata. Existing identifiers and spelling in saved
+/// records is preserved by the importer.
+enum ActivityIconRegistry {
+    static let sleep = "moon.fill"
+    static let nap = "moon.zzz.fill"
+
+    // https://developer.whoop.com/docs/developing/user-data/workout/#whoop-sports
+    private static let importedSports: [(id: Int, name: String, kind: ActivityKind)] = [
+        (0, "Running", .run),
+        (1, "Cycling", .cycling),
+        (16, "Baseball", .baseball),
+        (17, "Basketball", .basketball),
+        (18, "Rowing", .rowing),
+        (19, "Fencing", .fencing),
+        (20, "Field Hockey", .hockey),
+        (21, "Football", .football),
+        (22, "Golf", .golf),
+        (24, "Ice Hockey", .hockey),
+        (25, "Lacrosse", .lacrosse),
+        (27, "Rugby", .rugby),
+        (29, "Skiing", .skiing),
+        (30, "Soccer", .soccer),
+        (31, "Softball", .softball),
+        (32, "Squash", .squash),
+        (33, "Swimming", .swimming),
+        (34, "Tennis", .tennis),
+        (36, "Volleyball", .volleyball),
+        (38, "Wrestling", .wrestling),
+        (39, "Boxing", .boxing),
+        (42, "Dance", .dance),
+        (43, "Pilates", .pilates),
+        (44, "Yoga", .yoga),
+        (45, "Weightlifting", .weightlifting),
+        (48, "Functional Fitness", .functionalFitness),
+        (51, "Gymnastics", .gymnastics),
+        (52, "Hiking/Rucking", .hiking),
+        (53, "Horseback Riding", .horsebackRiding),
+        (55, "Kayaking", .kayaking),
+        (56, "Martial Arts", .martialArts),
+        (60, "Rock Climbing", .climbing),
+        (61, "Paddleboarding", .paddleboarding),
+        (63, "Walking", .walk),
+        (64, "Surfing", .surfing),
+        (65, "Elliptical", .elliptical),
+        (66, "Stairmaster", .stairClimber),
+        (70, "Meditation", .meditation),
+        (71, "Other", .other),
+        (84, "Jumping Rope", .jumpRope),
+        (96, "HIIT", .hiit),
+        (97, "Spin", .spin),
+        (100, "Cricket", .cricket),
+        (101, "Pickleball", .pickleball),
+        (102, "Inline Skating", .skating),
+        (107, "Barre", .barre),
+        (123, "Strength Trainer", .strengthTraining),
+        (128, "Stretching", .stretching),
+        (230, "Table Tennis", .tableTennis),
+        (231, "Badminton", .badminton),
+        (235, "Yard Work", .gardening),
+        (239, "Ice Skating", .skating),
+        (240, "Handball", .handball),
+    ]
+
+    static func importedKind(sportID: Int?, sportName: String) -> ActivityKind {
+        let name = normalized(sportName)
+        let nameKind = importedSports.first { normalized($0.name) == name }?.kind
+            ?? ActivityKind.allCases.first { normalized($0.label) == name }
+        if let sportID {
+            guard let legacyKind = importedSports.first(where: { $0.id == sportID })?.kind else {
+                return .other
+            }
+            return nameKind ?? legacyKind
+        }
+        return nameKind ?? .other
+    }
+
+    static func detectedIcon(_ kind: String) -> String {
+        switch kind {
+        case "run": return ActivityKind.run.icon
+        case "walk": return ActivityKind.walk.icon
+        case "workout": return ActivityKind.lift.icon
+        case "cardio": return ActivityKind.cardio.icon
+        default: return ActivityKind.other.icon
+        }
+    }
+
+    private static func normalized(_ name: String) -> String {
+        name.replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
 }
 
 /// One set of a lift: reps at a load. The band sends no load, so this is
@@ -238,6 +340,11 @@ struct WhoopWorkout: Codable, Equatable, Identifiable {
     let endUnix: Int
     let strain: Double?
     let averageHeartRate: Int?
+    var sportID: Int? = nil
+
+    var activityIcon: String {
+        ActivityIconRegistry.importedKind(sportID: sportID, sportName: sportName).icon
+    }
 }
 
 enum WhoopWorkoutImport {
@@ -248,6 +355,7 @@ enum WhoopWorkoutImport {
     private struct Record: Decodable {
         let id: String
         let sport_name: String
+        let sport_id: Int?
         let start: Date
         let end: Date
         let score: Score?
@@ -280,7 +388,7 @@ enum WhoopWorkoutImport {
                 startUnix: Int(item.start.timeIntervalSince1970),
                 endUnix: Int(item.end.timeIntervalSince1970),
                 strain: item.score?.strain,
-                averageHeartRate: item.score?.average_heart_rate
+                averageHeartRate: item.score?.average_heart_rate, sportID: item.sport_id
             )
         }
         return (workouts, page.next_token)
@@ -479,7 +587,10 @@ final class ActivityStore {
 
     func mergeWhoopWorkouts(_ incoming: [WhoopWorkout]) {
         var byID = Dictionary(uniqueKeysWithValues: whoopWorkouts().map { ($0.id, $0) })
-        for item in incoming { byID[item.id] = item }
+        for var item in incoming {
+            item.sportID = item.sportID ?? byID[item.id]?.sportID
+            byID[item.id] = item
+        }
         if let data = try? JSONEncoder().encode(Array(byID.values)) {
             defaults.set(data, forKey: whoopKey)
         }
