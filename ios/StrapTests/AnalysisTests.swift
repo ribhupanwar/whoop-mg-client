@@ -1306,6 +1306,23 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(VO2MaxSource.allCases.count, 4)
     }
 
+    func testDeletedWorkoutReturnsItsSamplesToOutsideWorkoutStress() {
+        let samples = (0..<600).map { second in
+            makeSample(second, hr: 75, rr: [790, 810, 795, 806])
+        }
+        let workout = ActivitySession(startUnix: 300, endUnix: 599, kind: "workout", steps: 0,
+                                      meanHR: 75, walkTicks: 0, runTicks: 0)
+        let baseline = steadyBaseline()
+        let before = StressWindows.outsideWorkouts(
+            samples: samples, baseline: baseline, sleep: [], activities: [workout], isDeleted: { _ in false }
+        )
+        let after = StressWindows.outsideWorkouts(
+            samples: samples, baseline: baseline, sleep: [], activities: [workout], isDeleted: { $0 == workout }
+        )
+        XCTAssertEqual(before.windows, 1)
+        XCTAssertEqual(after.windows, 2)
+    }
+
     func testStressIndexCountsDeviationsBelowTheNorm() {
         let baseline = steadyBaseline()
         XCTAssertEqual(Recovery.stressIndex(lnRMSSD: 4.0, baseline: baseline).index, 0.0)

@@ -380,6 +380,58 @@ final class BandLink: NSObject, ObservableObject {
         }.value
     }
 
+    func exportActivityDecisions() async throws -> URL {
+        guard let end = retainedHistoricalSamples.last?.unix else {
+            throw CocoaError(.fileReadNoSuchFile, userInfo: [
+                NSLocalizedDescriptionKey: "No retained band samples are available to evaluate."
+            ])
+        }
+        let start = end - 24 * 3600 + 1
+        let contextStart = start - ActivityDetect.baselineMaxAgeS
+        let restingHR = summary?.restingHeartRate
+        let maxHR = self.maxHR
+        let sleep = (summary?.sleepSessions ?? []).map {
+            SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                        quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+        }
+        let rows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
+            archiveWriter.samples(from: contextStart, through: end) { continuation.resume(with: $0) }
+        }
+        let zone = TimeZone.current.identifier
+        let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
+        return try await Task.detached(priority: .utility) {
+            struct Report: Encodable {
+                let source = "Replay of the last 24 hours of retained V18 history with up to 15 minutes of baseline context"
+                let algorithm = "concurrent-evidence-v1"
+                let build: String?
+                let timezone: String
+                let windowStartUnix: Int
+                let firstUnix: Int?
+                let lastUnix: Int?
+                let inputSamples: Int
+                let decisions: [ActivityDecision]
+                let detected: [ActivitySession]
+                let note = "Detector replay only. Existing stored activities, edits, and deletions are not modified."
+            }
+            var decisions: [ActivityDecision] = []
+            let detected = ActivityDetect.detect(rows, sleepPeriods: sleep, restingHR: restingHR, maxHR: maxHR) {
+                if $0.endUnix >= start { decisions.append($0) }
+            }
+            let report = Report(build: revision, timezone: zone, windowStartUnix: start,
+                                firstUnix: rows.first?.unix, lastUnix: rows.last?.unix,
+                                inputSamples: rows.count, decisions: decisions,
+                                detected: detected.filter { $0.endUnix >= start })
+            let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("activity-diagnostics", isDirectory: true)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let url = directory.appendingPathComponent("activity-decisions-\(UUID().uuidString).json")
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            try encoder.encode(report).write(to: url, options: [.atomic, .completeFileProtection])
+            return url
+        }.value
+    }
+
     private var historicalArchiveURL: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("strap-history-v18.json")
@@ -569,6 +621,8 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
+    var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
+
     func recalculateRetainedMetrics() {
         // Repeated settings, recovery and drain callbacks request one follow-up,
         // rather than queueing multiple full-night analyses behind stale work.
@@ -593,6 +647,7 @@ final class BandLink: NSObject, ObservableObject {
         let maxSnapshot = maxHR
         let needSnapshot = needHours
         let baselineSnapshot = awakeBaseline
+        let isActivityDeleted = isDetectedActivityDeleted
         let daysSnapshot = days
         let sessionsSnapshot = summary?.sleepSessions ?? []
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
@@ -668,9 +723,11 @@ final class BandLink: NSObject, ObservableObject {
             let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
             let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(DailyAnalysis.rollingBaselineDays)))
             let sleepWindows = (fresh.sleepSessions ?? []).map { (start: $0.startUnix, end: $0.endUnix - 1) }
-            let excluded = sleepWindows + fresh.activities.map { (start: $0.startUnix, end: $0.endUnix) }
             fresh.awakeStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
-            fresh.outsideWorkoutStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: excluded)
+            fresh.outsideWorkoutStress = StressWindows.outsideWorkouts(
+                samples: samples, baseline: awakeNorm, sleep: sleepWindows,
+                activities: fresh.activities, isDeleted: isActivityDeleted
+            )
             let stressPoints = StressWindows.series(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
             fresh.stressSeries = stressPoints.isEmpty ? nil : stressPoints
             // Use the newly analyzed nights for sleep consistency. The

@@ -990,6 +990,7 @@ struct AppInfoView: View {
 struct DiagnosticsSupportView: View {
     @EnvironmentObject private var store: AppStore
     @State private var exportURL: URL?
+    @State private var activityDecisionURL: URL?
     @State private var exportError: String?
     @State private var preparingExport = false
     @State private var anonymizeDiagnostics = true
@@ -1092,6 +1093,21 @@ struct DiagnosticsSupportView: View {
                             .foregroundStyle(Color.appGood)
                             .padding(.vertical, 6)
                         }
+                    }
+
+                    Button("Generate Activity Decision Report") {
+                        preparingExport = true
+                        exportError = nil
+                        activityDecisionURL = nil
+                        Task {
+                            defer { preparingExport = false }
+                            do { activityDecisionURL = try await store.band.exportActivityDecisions() }
+                            catch { exportError = error.localizedDescription }
+                        }
+                    }
+                    .disabled(preparingExport)
+                    if let activityDecisionURL {
+                        ShareLink("Share Activity Decision JSON", item: activityDecisionURL)
                     }
 
                     if let exportError {
