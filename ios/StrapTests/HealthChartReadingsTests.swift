@@ -62,7 +62,7 @@ final class HomeHistoryRefreshTests: XCTestCase {
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .draining, saving: false, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .authenticating, saving: false, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .scanning, saving: false, analyzing: false))
-        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .connecting, saving: false, analyzing: false))
+        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .connecting("WHOOP"), saving: false, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .ready, saving: true, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .ready, saving: false, analyzing: true))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .reconnecting(attempt: 1), saving: false, analyzing: false))
