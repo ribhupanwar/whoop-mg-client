@@ -142,7 +142,7 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if syncIsActive || pullProgress > 0.15 {
+                if pullProgress > 0.15 {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
@@ -776,24 +776,20 @@ struct HomeView: View {
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
-                        HStack(spacing: 6) {
-                            activityRow(icon: row.icon, name: row.name, detail: row.detail, strain: row.strain)
+                        activityRow(icon: row.icon, name: row.name, detail: row.times ?? row.detail, strain: row.strain)
+                        .accessibilityHint(row.detail)
+                        .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
+                        .contentShape(Rectangle())
+                        .contextMenu {
+                            Text(row.detail)
                             if row.id.hasPrefix("band-") {
                                 Button {
                                     editingDetectedID = row.id
                                     correctedKind = ActivityKind(rawValue: correctedLabels[row.id] ?? "") ?? .other
                                 } label: {
-                                    Image(systemName: "pencil.circle")
-                                        .font(StrapTypography.body(19))
-                                        .foregroundStyle(Color.appAccent)
+                                    Label("Edit activity", systemImage: "pencil")
                                 }
-                                .accessibilityLabel("Edit activity")
-                                .buttonStyle(.plain)
                             }
-                        }
-                        .modifier(ActivityDeleteReveal(delete: { deleteActivityRow(row) }))
-                        .contentShape(Rectangle())
-                        .contextMenu {
                             Button(role: .destructive) {
                                 deleteActivityRow(row)
                             } label: {
@@ -828,20 +824,20 @@ struct HomeView: View {
             HStack(spacing: 10) {
                 Button { showLogger = true } label: {
                     Label("ADD ACTIVITY", systemImage: "plus")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
                 Button { showLiveSession = true } label: {
                     Label("START ACTIVITY", systemImage: "stopwatch")
-                        .frame(maxWidth: .infinity, minHeight: 36)
+                        .frame(maxWidth: .infinity, minHeight: 44)
                 }
             }
             .font(StrapTypography.body(10, weight: .bold))
             .tracking(0.7)
             .buttonStyle(.plain)
             .foregroundStyle(Color.appFG)
-            .background(Color.clear)
-            .padding(.vertical, 4)
-            .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 12))
         }
     }
 
@@ -864,6 +860,7 @@ struct HomeView: View {
         let detail: String
         let startUnix: Int?
         var strain: Double? = nil
+        var times: String? = nil
     }
 
     private var timedRows: [ActivityRowModel] {
@@ -876,7 +873,7 @@ struct HomeView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .none
         formatter.timeStyle = .short
-        return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))–\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
+        return "\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(start))))\n\(formatter.string(from: Date(timeIntervalSince1970: TimeInterval(end))))"
     }
 
     private var selectedDayKey: String {
@@ -896,9 +893,10 @@ struct HomeView: View {
                 id: key,
                 icon: corrected?.icon ?? ActivityIconRegistry.detectedIcon(session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
-                detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
+                detail: "\(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix,
-                strain: session.strain
+                strain: session.strain,
+                times: Self.clockRange(session.startUnix, session.endUnix)
             )
         }
     }
@@ -912,8 +910,9 @@ struct HomeView: View {
                 id: "live-\(record.id)",
                 icon: "waveform.path.ecg",
                 name: "Live session · measured",
-                detail: "\(Self.clockRange(record.startedUnix, record.endedUnix)) · \(minutes) min\(heart)\(kcal)",
-                startUnix: record.startedUnix
+                detail: "\(minutes) min\(heart)\(kcal)",
+                startUnix: record.startedUnix,
+                times: Self.clockRange(record.startedUnix, record.endedUnix)
             )
         }
     }
@@ -964,8 +963,8 @@ struct HomeView: View {
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
-        .frame(minWidth: 86, minHeight: 44)
-        .background(tint.opacity(0.48), in: RoundedRectangle(cornerRadius: 10))
+        .frame(minWidth: 82, minHeight: 40)
+        .background(tint.opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
 
         return HStack(spacing: 10) {
             ViewThatFits(in: .horizontal) {
