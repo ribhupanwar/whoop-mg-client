@@ -144,7 +144,18 @@ struct HealthView: View {
             GeometryReader { geometry in
                 let width = geometry.size.width
                 let height = geometry.size.height
-                let markerX = width - 30
+                let markerX = width - 24
+                let segments = liveChartSegments
+                let samples = segments.flatMap { $0 }
+                let low = max(25, (samples.map(\.heartRate).min() ?? 60) - 8)
+                let high = min(230, (samples.map(\.heartRate).max() ?? 100) + 8)
+                let latestUnix = samples.last?.unix ?? 0
+                let position: (LiveSample) -> CGPoint = { sample in
+                    let xFraction = 1 - CGFloat(latestUnix - sample.unix) / CGFloat(HealthChartReadings.windowSeconds)
+                    let yFraction = CGFloat(high - sample.heartRate) / CGFloat(max(1, high - low))
+                    return CGPoint(x: markerX - max(1, markerX - width * 0.47) * (1 - xFraction),
+                                   y: height * (0.32 + 0.38 * yFraction))
+                }
                 ZStack(alignment: .topLeading) {
                     Canvas { context, size in
                         var grid = Path()
@@ -157,33 +168,35 @@ struct HealthView: View {
                             grid.addLine(to: CGPoint(x: size.width, y: y))
                         }
                         context.stroke(grid, with: .color(Color(hex: 0x667D88).opacity(0.17)), lineWidth: 0.7)
-                        if lastHR != nil {
+                        if let latest = segments.last?.last {
                             var guide = Path()
                             guide.move(to: CGPoint(x: markerX, y: 12))
                             guide.addLine(to: CGPoint(x: markerX, y: size.height - 12))
                             context.stroke(guide, with: .color(.white.opacity(0.5)),
                                            style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                            // Draw actual recorded HR variation, not a fabricated flat history.
-                            // Keep the trace in the right-hand plot area, clear of BPM text.
-                            let readings = HealthChartReadings.valid(Array(liveChartSeries.suffix(90)))
-                            if readings.count >= 2 {
-                                let low = max(35.0, (readings.min() ?? 60) - 8)
-                                let high = min(220.0, (readings.max() ?? 100) + 8)
-                                let range = max(1, high - low)
-                                let left = width * 0.48
-                                let plotWidth = max(1, markerX - left)
-                                let plotTop = height * 0.35
-                                let plotHeight = height * 0.36
+                            let blue = Color(hex: 0x159EF0)
+                            let bottom = height * 0.80
+                            for segment in segments where segment.count >= 2 {
+                                let points = segment.map(position)
+                                guard let first = points.first, let last = points.last else { continue }
                                 var trace = Path()
-                                for (index, bpm) in readings.enumerated() {
-                                    let x = left + plotWidth * CGFloat(index) / CGFloat(readings.count - 1)
-                                    let y = plotTop + plotHeight * CGFloat((high - bpm) / range)
-                                    if index == 0 { trace.move(to: CGPoint(x: x, y: y)) }
-                                    else { trace.addLine(to: CGPoint(x: x, y: y)) }
-                                }
-                                context.stroke(trace, with: .color(Color(hex: 0x159EF0).opacity(0.22)), lineWidth: 10)
-                                context.stroke(trace, with: .color(Color(hex: 0x159EF0)), lineWidth: 2.5)
+                                trace.move(to: first)
+                                for point in points.dropFirst() { trace.addLine(to: point) }
+                                var fill = trace
+                                fill.addLine(to: CGPoint(x: last.x, y: bottom))
+                                fill.addLine(to: CGPoint(x: first.x, y: bottom))
+                                fill.closeSubpath()
+                                context.fill(fill, with: .linearGradient(
+                                    Gradient(colors: [blue.opacity(0.28), blue.opacity(0)]),
+                                    startPoint: CGPoint(x: 0, y: height * 0.32),
+                                    endPoint: CGPoint(x: 0, y: bottom)
+                                ))
+                                context.stroke(trace, with: .color(blue),
+                                               style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
                             }
+                            let marker = position(latest)
+                            let dot = CGRect(x: marker.x - 4, y: marker.y - 4, width: 8, height: 8)
+                            context.fill(Path(ellipseIn: dot), with: .color(.white))
                         }
                     }
                     VStack(alignment: .leading, spacing: 0) {
@@ -223,22 +236,6 @@ struct HealthView: View {
                     .padding(.leading, 18)
                     .padding(.top, 18)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    if lastHR != nil {
-                        // A marker is meaningful only when the plotted series
-                        // contains at least two actual, valid observations.
-                        let plotted = HealthChartReadings.valid(Array(liveChartSeries.suffix(90)))
-                        if plotted.count >= 2, let latest = plotted.last {
-                            let low = max(35.0, (plotted.min() ?? 60) - 8)
-                            let high = min(220.0, (plotted.max() ?? 100) + 8)
-                            let markerY = height * 0.35 + height * 0.36
-                                * CGFloat((high - latest) / max(1, high - low))
-                            Circle()
-                                .fill(.white)
-                                .frame(width: 12, height: 12)
-                                .shadow(color: .black.opacity(0.7), radius: 7)
-                                .position(x: markerX, y: markerY)
-                        }
-                    }
                 }
             }
             .frame(height: 258)
@@ -431,9 +428,9 @@ struct HealthView: View {
 
     // The LIVE monitor must never plot historical offload values as though
     // they were current heart-rate observations.
-    private var liveChartSeries: [Double] {
-        guard lastHR != nil, usingLiveSeries else { return [] }
-        return store.band.recentLiveHR.map { Double($0.heartRate) }
+    private var liveChartSegments: [[LiveSample]] {
+        guard !demo, lastHR != nil else { return [] }
+        return HealthChartReadings.segments(store.band.recentLiveHR)
     }
 
     private var series: [Double] {
@@ -573,6 +570,28 @@ struct HealthView: View {
 /// Pure chart-input validation. The live chart only renders actual plausible
 /// sensor observations; unavailable or malformed points never become a line.
 enum HealthChartReadings {
+    static let windowSeconds = 90
+    static let maximumGapSeconds = 3
+
+    static func segments(_ samples: [LiveSample]) -> [[LiveSample]] {
+        guard let latest = samples.last else { return [] }
+        var runs: [[LiveSample]] = []
+        var current: [LiveSample] = []
+        for sample in samples.suffix(windowSeconds + 1) {
+            guard sample.unix >= latest.unix - windowSeconds else { continue }
+            let previous = current.last
+            if let previous, sample.unix <= previous.unix { continue }
+            if !(35...220).contains(sample.heartRate) ||
+                previous.map({ sample.unix - $0.unix > maximumGapSeconds }) == true {
+                if !current.isEmpty { runs.append(current) }
+                current = []
+            }
+            if (35...220).contains(sample.heartRate) { current.append(sample) }
+        }
+        if !current.isEmpty { runs.append(current) }
+        return runs
+    }
+
     static func valid(_ values: [Double]) -> [Double] {
         values.filter { $0.isFinite && (35...220).contains($0) }
     }
