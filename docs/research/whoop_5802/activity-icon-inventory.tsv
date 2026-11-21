@@ -1,125 +1,125 @@
 WHOOP legacy ID	Display name	Original CDN or asset identifier	Evidence	Availability	Reuse status	Native raster	STRAP integration
--1	Activity	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-0	Running	running.png; running.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	run
-1	Cycling	cycling.png; cycling.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	cycling
-16	Baseball	baseball.png; baseball.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	baseball
-17	Basketball	basketball.png; basketball.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	basketball
-18	Rowing	crew.png; crew.svg	WhoopAPI-Wrapper README; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	rowing
-19	Fencing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	fencing
-20	Field Hockey	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	hockey
-21	Football	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	football
-22	Golf	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	golf
-24	Ice Hockey	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	hockey
-25	Lacrosse	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	lacrosse
-27	Rugby	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	rugby
-28	Sailing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-29	Skiing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	skiing
-30	Soccer	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	soccer
-31	Softball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	softball
-32	Squash	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	squash
-33	Swimming	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	swimming
-34	Tennis	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	tennis
-35	Track & Field	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-36	Volleyball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	volleyball
-37	Water Polo	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-38	Wrestling	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	wrestling
-39	Boxing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	boxing
-42	Dance	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	dance
-43	Pilates	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	pilates
-44	Yoga	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	yoga
-45	Weightlifting	weightlifting.png; weightlifting.svg	Whoop-Data-Access API guide; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG and 32 × 32 SVG	weightlifting
-47	Cross Country Skiing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-48	Functional Fitness	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	functionalFitness
-49	Duathlon	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-51	Gymnastics	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	gymnastics
-52	Hiking/Rucking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	hiking
-53	Horseback Riding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	horsebackRiding
-55	Kayaking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	kayaking
-56	Martial Arts	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	martialArts
-57	Mountain Biking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-59	Powerlifting	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-60	Rock Climbing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	climbing
-61	Paddleboarding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	paddleboarding
-62	Triathlon	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-63	Walking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	walk
-64	Surfing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	surfing
-65	Elliptical	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	elliptical
-66	Stairmaster	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	stairClimber
-70	Meditation	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	meditation
-71	Other	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	other
-73	Diving	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-74	Operations - Tactical	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-75	Operations - Medical	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-76	Operations - Flying	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-77	Operations - Water	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-82	Ultimate	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-83	Climber	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-84	Jumping Rope	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	jumpRope
-85	Australian Football	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-86	Skateboarding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-87	Coaching	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-88	Ice Bath	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-89	Commuting	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-90	Gaming	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-91	Snowboarding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-92	Motocross	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-93	Caddying	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-94	Obstacle Course Racing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-95	Motor Racing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-96	HIIT	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	hiit
-97	Spin	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	spin
-98	Jiu Jitsu	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-99	Manual Labor	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-100	Cricket	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	cricket
-101	Pickleball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	pickleball
-102	Inline Skating	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	skating
-103	Box Fitness	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-104	Spikeball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-105	Wheelchair Pushing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-106	Paddle Tennis	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-107	Barre	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	barre
-108	Stage Performance	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-109	High Stress Work	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-110	Parkour	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-111	Gaelic Football	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-112	Hurling/Camogie	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-113	Circus Arts	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-121	Massage Therapy	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-123	Strength Trainer	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	strengthTraining
-125	Watching Sports	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-126	Assault Bike	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-127	Kickboxing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-128	Stretching	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	stretching
-230	Table Tennis	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	tableTennis
-231	Badminton	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	badminton
-232	Netball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-233	Sauna	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-234	Disc Golf	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-235	Yard Work	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	gardening
-236	Air Compression	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-237	Percussive Massage	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-238	Paintball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-239	Ice Skating	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	skating
-240	Handball	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	handball
-248	F45 Training	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-249	Padel	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-250	Barry's	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-251	Dedicated Parenting	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-252	Stroller Walking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-253	Stroller Jogging	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-254	Toddlerwearing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-255	Babywearing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-258	Barre3	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-259	Hot Yoga	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-261	Stadium Steps	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-262	Polo	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-263	Musical Performance	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-264	Kite Boarding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-266	Dog Walking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-267	Water Skiing	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-268	Wakeboarding	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-269	Cooking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-270	Cleaning	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-272	Public Speaking	Unverified	WHOOP developer workout sport table	No verified asset recovered	Redistribution unverified	Unknown	No dedicated ID mapping
-	Sleep	Unverified	Phase 17 Home screenshots and STRAP source	No verified asset recovered	Redistribution unverified	Unknown	Existing sleep glyph
-	Nap	nap.png	STRAP domain_strings_all.json; CDN file verified; see public-activity-icon-files.tsv	Public CDN file verified	Redistribution unverified	60 × 60 px PNG	Existing nap glyph
+-1	Activity	unknown.png	Unique matching display name to pinned Totem fixture (Activity); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+0	Running	running.png; running.svg	Unique matching display name to pinned Totem fixture (Running); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	run
+1	Cycling	cycling.png; cycling.svg	Unique matching display name to pinned Totem fixture (Cycling); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	cycling
+16	Baseball	baseball.png; baseball.svg	Unique matching display name to pinned Totem fixture (Baseball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	baseball
+17	Basketball	basketball.png; basketball.svg	Unique matching display name to pinned Totem fixture (Basketball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	basketball
+18	Rowing	crew.png; crew.svg	Unique matching display name to pinned Totem fixture (Rowing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	rowing
+19	Fencing	fencing.png	Unique matching display name to pinned Totem fixture (Fencing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	fencing
+20	Field Hockey	field_hockey.png	Unique matching display name to pinned Totem fixture (Field Hockey); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	hockey
+21	Football	football.png	Reviewed name change to pinned Totem fixture (American Football); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	football
+22	Golf	golf.png	Unique matching display name to pinned Totem fixture (Golf); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	golf
+24	Ice Hockey	ice_hockey.png	Unique matching display name to pinned Totem fixture (Ice Hockey); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	hockey
+25	Lacrosse	lacrosse.png	Unique matching display name to pinned Totem fixture (Lacrosse); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	lacrosse
+27	Rugby	rugby.png	Unique matching display name to pinned Totem fixture (Rugby); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	rugby
+28	Sailing	sailing.png	Unique matching display name to pinned Totem fixture (Sailing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+29	Skiing	skiing.png	Unique matching display name to pinned Totem fixture (Skiing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	skiing
+30	Soccer	soccer.png	Unique matching display name to pinned Totem fixture (Soccer); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	soccer
+31	Softball	softball.png	Unique matching display name to pinned Totem fixture (Softball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	softball
+32	Squash	squash.png	Unique matching display name to pinned Totem fixture (Squash); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	squash
+33	Swimming	swimming_diving.png	Unique matching display name to pinned Totem fixture (Swimming); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	swimming
+34	Tennis	tennis.png	Unique matching display name to pinned Totem fixture (Tennis); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	tennis
+35	Track & Field	track_and_field.png	Unique matching display name to pinned Totem fixture (Track & Field); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+36	Volleyball	volleyball.png	Unique matching display name to pinned Totem fixture (Volleyball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	volleyball
+37	Water Polo	water_polo.png	Unique matching display name to pinned Totem fixture (Water Polo); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+38	Wrestling	wrestling.png	Unique matching display name to pinned Totem fixture (Wrestling); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	wrestling
+39	Boxing	boxing.png	Unique matching display name to pinned Totem fixture (Boxing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	boxing
+42	Dance	dance.png	Unique matching display name to pinned Totem fixture (Dance); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	dance
+43	Pilates	pilates.png	Unique matching display name to pinned Totem fixture (Pilates); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	pilates
+44	Yoga	yoga.png	Unique matching display name to pinned Totem fixture (Yoga); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	yoga
+45	Weightlifting	weightlifting.png; weightlifting.svg	Unique matching display name to pinned Totem fixture (Weightlifting); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	weightlifting
+47	Cross Country Skiing	cross_country_skiing.png	Unique matching display name to pinned Totem fixture (Cross Country Skiing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+48	Functional Fitness	functional_fitness.png	Unique matching display name to pinned Totem fixture (Functional Fitness); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	functionalFitness
+49	Duathlon	duathlon.png	Unique matching display name to pinned Totem fixture (Duathlon); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+51	Gymnastics	gymnastics.png	Unique matching display name to pinned Totem fixture (Gymnastics); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	gymnastics
+52	Hiking/Rucking	hiking.png	Reviewed name change to pinned Totem fixture (Hiking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	hiking
+53	Horseback Riding	horseback_riding.png	Unique matching display name to pinned Totem fixture (Horseback Riding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	horsebackRiding
+55	Kayaking	kayaking.png	Unique matching display name to pinned Totem fixture (Kayaking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	kayaking
+56	Martial Arts	martial_arts.png	Unique matching display name to pinned Totem fixture (Martial Arts); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	martialArts
+57	Mountain Biking	mountain_biking.png	Unique matching display name to pinned Totem fixture (Mountain Biking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+59	Powerlifting	powerlifting.png	Unique matching display name to pinned Totem fixture (Powerlifting); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+60	Rock Climbing	rock_climbing.png	Unique matching display name to pinned Totem fixture (Rock Climbing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	climbing
+61	Paddleboarding	SUP.png	Unique matching display name to pinned Totem fixture (Paddleboarding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	paddleboarding
+62	Triathlon	triathlon.png	Unique matching display name to pinned Totem fixture (Triathlon); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+63	Walking	walking.png	Unique matching display name to pinned Totem fixture (Walking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	walk
+64	Surfing	surfing.png	Unique matching display name to pinned Totem fixture (Surfing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	surfing
+65	Elliptical	elliptical.png	Unique matching display name to pinned Totem fixture (Elliptical); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	elliptical
+66	Stairmaster	stairmaster.png	Unique matching display name to pinned Totem fixture (Stairmaster); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	stairClimber
+70	Meditation	meditation.png	Unique matching display name to pinned Totem fixture (Meditation); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG P	meditation
+71	Other	other.png	Unique matching display name to pinned Totem fixture (Other); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	other
+73	Diving	diving.png	Unique matching display name to pinned Totem fixture (Diving); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+74	Operations - Tactical	tactical_ops.png	Unique matching display name to pinned Totem fixture (Operations - Tactical); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+75	Operations - Medical	medical_ops.png	Unique matching display name to pinned Totem fixture (Operations - Medical); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+76	Operations - Flying	flying_ops.png	Unique matching display name to pinned Totem fixture (Operations - Flying); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+77	Operations - Water	water_ops.png	Unique matching display name to pinned Totem fixture (Operations - Water); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+82	Ultimate	ultimate_frisbee.png	Reviewed name change to pinned Totem fixture (Ultimate Frisbee); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+83	Climber	climber.png	Reviewed name change to pinned Totem fixture (Vertical Climber); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+84	Jumping Rope	jumping_rope.png	Unique matching display name to pinned Totem fixture (Jumping Rope); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	jumpRope
+85	Australian Football	australian_football.png	Reviewed name change to pinned Totem fixture (Australian Rules Football); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+86	Skateboarding	skateboarding.png	Unique matching display name to pinned Totem fixture (Skateboarding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+87	Coaching	coaching.png	Unique matching display name to pinned Totem fixture (Coaching); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+88	Ice Bath	ice_bath.png	Unique matching display name to pinned Totem fixture (Ice Bath); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+89	Commuting	commuting.png	Unique matching display name to pinned Totem fixture (Commuting); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+90	Gaming	gaming.png	Unique matching display name to pinned Totem fixture (Gaming); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+91	Snowboarding	snowboarding.png	Unique matching display name to pinned Totem fixture (Snowboarding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+92	Motocross	motocross.png	Unique matching display name to pinned Totem fixture (Motocross); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+93	Caddying	caddying.png	Unique matching display name to pinned Totem fixture (Caddying); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+94	Obstacle Course Racing	obstacle-course-racing.png	Unique matching display name to pinned Totem fixture (Obstacle Course Racing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+95	Motor Racing	motor-racing.png	Unique matching display name to pinned Totem fixture (Motor Racing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+96	HIIT	hiit.png	Unique matching display name to pinned Totem fixture (HIIT); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	58 × 58 px PNG RGBA	hiit
+97	Spin	spin.png	Unique matching display name to pinned Totem fixture (Spin); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	87 × 90 px PNG RGBA	spin
+98	Jiu Jitsu	jiu-jitsu.png	Unique matching display name to pinned Totem fixture (Jiu Jitsu); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+99	Manual Labor	manual-labor.png	Unique matching display name to pinned Totem fixture (Manual Labor); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	42 × 60 px PNG RGBA	No dedicated ID mapping
+100	Cricket	cricket.png	Unique matching display name to pinned Totem fixture (Cricket); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	70 × 62 px PNG RGBA	cricket
+101	Pickleball	pickleball.png	Unique matching display name to pinned Totem fixture (Pickleball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	pickleball
+102	Inline Skating	rollerblading.png	Unique matching display name to pinned Totem fixture (Inline Skating); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	skating
+103	Box Fitness	crossfit.png	Unique matching display name to pinned Totem fixture (Box Fitness); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+104	Spikeball	spikeball.png	Unique matching display name to pinned Totem fixture (Spikeball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+105	Wheelchair Pushing	wheelchair_pushing.png	Unique matching display name to pinned Totem fixture (Wheelchair Pushing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+106	Paddle Tennis	paddle_tennis.png	Unique matching display name to pinned Totem fixture (Paddle Tennis); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+107	Barre	barre.png	Unique matching display name to pinned Totem fixture (Barre); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	barre
+108	Stage Performance	stage-performance.png	Unique matching display name to pinned Totem fixture (Stage Performance); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+109	High Stress Work	high-stress-work.png	Unique matching display name to pinned Totem fixture (High Stress Work); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+110	Parkour	parkour.png	Unique matching display name to pinned Totem fixture (Parkour); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+111	Gaelic Football	gaelic-football.png	Unique matching display name to pinned Totem fixture (Gaelic Football); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+112	Hurling/Camogie	hurling-camogie.png	Unique matching display name to pinned Totem fixture (Hurling/Camogie); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+113	Circus Arts	circus-arts.png	Unique matching display name to pinned Totem fixture (Circus Arts); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	No dedicated ID mapping
+121	Massage Therapy	massage_therapy.png	Unique matching display name to pinned Totem fixture (Massage Therapy); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	68 × 68 px PNG RGBA	No dedicated ID mapping
+123	Strength Trainer	weightlifting.png; weightlifting.svg	Unique matching display name to pinned Totem fixture (Strength Trainer); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	strengthTraining
+125	Watching Sports	spectating.png	Unique matching display name to pinned Totem fixture (Watching Sports); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+126	Assault Bike	assault_bike.png	Unique matching display name to pinned Totem fixture (Assault Bike); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+127	Kickboxing	kickboxing.png	Unique matching display name to pinned Totem fixture (Kickboxing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+128	Stretching	stretching.png	Unique matching display name to pinned Totem fixture (Stretching); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	stretching
+230	Table Tennis	ping_pong.png	Reviewed name change to pinned Totem fixture (Table Tennis/Ping Pong); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	512 × 512 px PNG RGBA	tableTennis
+231	Badminton	badminton.png	Unique matching display name to pinned Totem fixture (Badminton); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	badminton
+232	Netball	netball.png	Unique matching display name to pinned Totem fixture (Netball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+233	Sauna	sauna.png	Reviewed name change to pinned Totem fixture (Dry Sauna); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+234	Disc Golf	disc_golf.png	Unique matching display name to pinned Totem fixture (Disc Golf); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+235	Yard Work	yard_work.png	Reviewed name change to pinned Totem fixture (Yard Work/Gardening); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	gardening
+236	Air Compression	air_compression.png	Unique matching display name to pinned Totem fixture (Air Compression); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+237	Percussive Massage	percussive_massage.png	Unique matching display name to pinned Totem fixture (Percussive Massage); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+238	Paintball	paintball.png	Unique matching display name to pinned Totem fixture (Paintball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+239	Ice Skating	ice_skating.png	Unique matching display name to pinned Totem fixture (Ice Skating); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 65 px PNG RGBA	skating
+240	Handball	handball.png	Unique matching display name to pinned Totem fixture (Handball); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	handball
+248	F45 Training	F45.png	Unique matching display name to pinned Totem fixture (F45 Training); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+249	Padel	padel.png	Unique matching display name to pinned Totem fixture (Padel); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+250	Barry's	barrys.png	Unique matching display name to pinned Totem fixture (Barry's); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+251	Dedicated Parenting	dedicated_parenting.png	Unique matching display name to pinned Totem fixture (Dedicated Parenting); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+252	Stroller Walking	stroller_walking.png	Unique matching display name to pinned Totem fixture (Stroller Walking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+253	Stroller Jogging	stroller_jogging.png	Unique matching display name to pinned Totem fixture (Stroller Jogging); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+254	Toddlerwearing	toddler_wearing.png	Unique matching display name to pinned Totem fixture (Toddlerwearing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+255	Babywearing	baby_wearing.png	Unique matching display name to pinned Totem fixture (Babywearing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+258	Barre3	barre3.png	Unique matching display name to pinned Totem fixture (Barre3); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+259	Hot Yoga	hot_yoga.png	Unique matching display name to pinned Totem fixture (Hot Yoga); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+261	Stadium Steps	stadium-steps.png	Unique matching display name to pinned Totem fixture (Stadium Steps); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	64 × 64 px PNG RGBA	No dedicated ID mapping
+262	Polo	polo.png	Unique matching display name to pinned Totem fixture (Polo); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	128 × 128 px PNG RGBA	No dedicated ID mapping
+263	Musical Performance	musical-performance.png	Unique matching display name to pinned Totem fixture (Musical Performance); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+264	Kite Boarding	kiteboarding.png	Unique matching display name to pinned Totem fixture (Kite Boarding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+266	Dog Walking	dog-walking.png	Unique matching display name to pinned Totem fixture (Dog Walking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+267	Water Skiing	water-skiing.png	Unique matching display name to pinned Totem fixture (Water Skiing); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+268	Wakeboarding	wakeboarding.png	Unique matching display name to pinned Totem fixture (Wakeboarding); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+269	Cooking	cooking.png	Unique matching display name to pinned Totem fixture (Cooking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+270	Cleaning	cleaning.png	Unique matching display name to pinned Totem fixture (Cleaning); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+272	Public Speaking	public-speaking.png	Unique matching display name to pinned Totem fixture (Public Speaking); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	96 × 96 px PNG RGBA	No dedicated ID mapping
+	Sleep	sleep.png	Unique matching display name to pinned Totem fixture (Sleep); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG RGBA	Existing sleep glyph
+	Nap	nap.png	Unique matching display name to pinned Totem fixture (Nap); direct canonical CDN file	HTTP 200 and verified format	Redistribution unverified	60 × 60 px PNG LA	Existing nap glyph
