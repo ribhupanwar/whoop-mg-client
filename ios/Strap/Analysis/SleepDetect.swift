@@ -154,6 +154,28 @@ enum SleepDetect {
                 if verifiedStart - cursor >= 5 * 60 && transitionObserved {
                     verifiedStart = cursor
                 }
+            } else {
+                // For overnight candidates, if the run begins with sustained band-up (state 3)
+                // (e.g. awake in bed reading, moving, or talking before settling), trim that awake prefix.
+                // Overnight sleep onset must not include a >= 5 minute (300s) sustained up(3) lead.
+                var leadingUpSeconds = 0
+                var leadingAwakeEnd: Int? = nil
+                for sample in run {
+                    guard sample.wearing, (35...220).contains(sample.heartRate) else { break }
+                    if sample.sleepState == 3 {
+                        leadingUpSeconds += 1
+                        leadingAwakeEnd = sample.unix
+                    } else if leadingUpSeconds >= 300 {
+                        break
+                    } else {
+                        leadingUpSeconds = 0
+                        leadingAwakeEnd = nil
+                        break
+                    }
+                }
+                if leadingUpSeconds >= 300, let leadingAwakeEnd {
+                    verifiedStart = max(verifiedStart, leadingAwakeEnd + 1)
+                }
             }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes
@@ -273,8 +295,10 @@ enum SleepDetect {
                     verifiedEnd = min(verifiedEnd, terminalStart - 1)
                 }
             }
+            // Genuine sleep can exceed 12 hours during illness or deep recovery (Issue #126).
+            // Do not drop genuine >12h sleep; protect only against multi-day corrupt RTC jumps.
             guard verifiedEnd - verifiedStart + 1 >= minSleepS,
-                  verifiedEnd - verifiedStart + 1 <= maxSleepS else { continue }
+                  verifiedEnd - verifiedStart + 1 <= 24 * 3600 else { continue }
 
             // Metrics must describe the verified interval, not the discarded
             // awake tail or a trimmed pre-bed onset.
@@ -348,7 +372,7 @@ enum SleepDetect {
         samples: [V18Sample],
         quietAccelG: Double = SleepDetect.quietAccelG,
         maxAwakeningGapS: Int = 30 * 60,
-        maxCombinedSleepS: Int = maxSleepS
+        maxCombinedSleepS: Int = 18 * 3600
     ) -> [SleepPeriod] {
         guard periods.count > 1 else { return periods }
         var merged: [SleepPeriod] = []

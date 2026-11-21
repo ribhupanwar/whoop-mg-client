@@ -144,6 +144,8 @@ class V18Sample:
     # stage names to these values until an overnight capture pins them down.
     sleep_state: int | None = None
     cardiac_flags: int | None = None
+    # Diagnostic HR flags (inner[28]). In real physical WHOOP captures, bit 7 is unset (0)
+    # for 100% of samples while valid RR is present. Never gate RR decoding on bit 7.
     hr_quality_flags: int | None = None
     spo2_candidate_raw: int | None = None
     # 70-100 = the band's own candidate percentage. Candidate only: cross-device

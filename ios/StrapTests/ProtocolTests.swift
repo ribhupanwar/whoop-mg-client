@@ -362,6 +362,45 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample?.spo2CandidatePct, 96)
         XCTAssertEqual(sample?.spo2CandidateKind, Spo2CandidateKind.pct)
     }
+
+    func testValidRRSurvivesWhenByte28Bit7IsUnset() {
+        // Issue #126: In real physical WHOOP captures (32,663 records), byte 28 bit 7 is unset
+        // for 100% of samples while 30,082 records contain valid RR data.
+        // Valid RR intervals must NEVER be gated or discarded when inner[28] bit 7 is 0.
+        var inner = bytes(realV18Hex)
+        inner[28] = 0x0E // bit 7 unset (0x0E = 14, common historical capture value)
+        inner[15] = 2
+        let val1 = 818
+        let val2 = 780
+        inner[16] = UInt8(val1 & 0xFF)
+        inner[17] = UInt8((val1 >> 8) & 0xFF)
+        inner[18] = UInt8(val2 & 0xFF)
+        inner[19] = UInt8((val2 >> 8) & 0xFF)
+        inner[20] = 0; inner[21] = 0; inner[22] = 0; inner[23] = 0 // valid padding
+
+        let sample = V18Decoder.decode(inner)
+        XCTAssertNotNil(sample)
+        XCTAssertEqual(sample?.hrQualityFlags, 14)
+        XCTAssertEqual(sample?.rrIntervalsMS, [818, 780], "Valid RR intervals must survive when byte 28 bit 7 is unset")
+    }
+
+    func testPSNRUnavailableSentinelDoesNotRejectSampleOrRR() {
+        // Issue #126: psnrB / psnrA of -128 is an unavailable sentinel, not optical saturation.
+        // It must be decoded as -128 without causing the sample or its RR intervals to be dropped.
+        var inner = bytes(realV18Hex)
+        inner[100] = 0x80 // -128
+        inner[101] = 0x80 // -128
+        inner[15] = 1
+        inner[16] = 0x20; inner[17] = 0x03 // 800 ms
+        inner[18] = 0; inner[19] = 0; inner[20] = 0; inner[21] = 0; inner[22] = 0; inner[23] = 0
+
+        let sample = V18Decoder.decode(inner)
+        XCTAssertNotNil(sample)
+        XCTAssertEqual(sample?.psnrB, -128)
+        XCTAssertEqual(sample?.psnrA, -128)
+        XCTAssertEqual(sample?.rrIntervalsMS, [800])
+        XCTAssertEqual(sample?.heartRate, 94)
+    }
 }
 
 // MARK: - Standard heart-rate profile (0x2A37)
