@@ -750,7 +750,7 @@ struct HomeView: View {
 
             if demo || store.band.latestSleepSession != nil {
             NavigationLink(value: Route.sleepAnalysis) {
-                activityTile(icon: "moon.fill", name: "Sleep",
+                activityTile(icon: ActivityIconRegistry.sleep, name: "Sleep",
                              value: demo ? SampleData.lastNightSleep : lastNightText,
                              detail: demo ? "00:26\n07:33" : sleepTimesText,
                              tint: Color.appSleep)
@@ -766,13 +766,13 @@ struct HomeView: View {
             VStack(spacing: 8) {
                 if !demo {
                     ForEach(todayNaps, id: \.sourceStartUnix) { session in
-                        activityRow(icon: "moon.zzz.fill", name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
+                        activityRow(icon: ActivityIconRegistry.nap, name: "Nap", detail: "\(Self.sleepClock(session.startUnix, includeDay: false))–\(Self.sleepClock(session.endUnix, includeDay: false))")
                     }
                 }
                 if demo {
-                    activityRow(icon: "figure.run", name: "Run", detail: "42 min · Z2")
-                    activityRow(icon: "figure.walk", name: "Walk", detail: "28 min · errands")
-                    activityRow(icon: "dumbbell.fill", name: "Gym workout", detail: "55 min · push")
+                    activityRow(icon: ActivityKind.run.icon, name: "Run", detail: "42 min · Z2")
+                    activityRow(icon: ActivityKind.walk.icon, name: "Walk", detail: "28 min · errands")
+                    activityRow(icon: ActivityKind.lift.icon, name: "Gym workout", detail: "55 min · push")
                     activityRow(icon: "clock", name: "Rest session", detail: "15 min · measured")
                 } else {
                     ForEach(timedRows, id: \.id) { row in
@@ -894,7 +894,7 @@ struct HomeView: View {
             let corrected = correctedLabels[key].flatMap(ActivityKind.init(rawValue:))
             return ActivityRowModel(
                 id: key,
-                icon: corrected?.icon ?? Self.icon(forDetected: session.kind),
+                icon: corrected?.icon ?? ActivityIconRegistry.detectedIcon(session.kind),
                 name: "\(corrected?.label ?? session.kind.capitalized) · band",
                 detail: "\(Self.clockRange(session.startUnix, session.endUnix)) · \(minutes) min\(strainText)\(steps)\(heart)\(kcal)",
                 startUnix: session.startUnix,
@@ -940,16 +940,6 @@ struct HomeView: View {
         } else if row.id.hasPrefix("manual-"),
                   let id = UUID(uuidString: String(row.id.dropFirst("manual-".count))) {
             store.deleteActivity(id: id)
-        }
-    }
-
-    private static func icon(forDetected kind: String) -> String {
-        switch kind {
-        case "run": return "figure.run"
-        case "walk": return "figure.walk"
-        case "workout": return "dumbbell.fill"
-        case "cardio": return "heart.fill"
-        default: return "figure.mixed.cardio"
         }
     }
 
