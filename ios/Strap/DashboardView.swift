@@ -261,18 +261,9 @@ struct DashboardView: View {
             guard let date = calendar.date(byAdding: .day, value: offset - trendWindow + 1, to: end) else { return nil }
             let key = formatter.string(from: date)
             guard daysByKey[key] != nil else { return (date: date, score: nil) }
-            let earlier = store.band.days
-                .filter { $0.dateKey < key && $0.lnRMSSD != nil && $0.restingHR != nil }
-                .sorted { $0.dateKey < $1.dateKey }
-            let baseline = DailyAnalysis.baseline(from: Array(earlier.suffix(DailyAnalysis.rollingBaselineDays)))
-            let local = store.band.days.first { $0.dateKey == key }
-            let result = Recovery.score(
-                lnRMSSD: local?.lnRMSSD,
-                rhr: local?.restingHR,
-                sleepHours: local?.reliableSleepHours,
-                sleepNeedHours: store.settings.sleepNeedHours,
-                baseline: baseline
-            )
+            let result = DatedRecovery.evaluate(day: store.band.days.last { $0.dateKey == key },
+                priorDays: store.band.days, date: date, sleepNeedHours: store.settings.sleepNeedHours,
+                calendar: calendar).result
             return (date: date, score: result.score ?? store.whoopImportedDays[key]?.recovery)
         }
     }

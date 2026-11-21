@@ -284,18 +284,15 @@ private struct HumansView: View {
     // Use the same dated recovery calculation as Metric History. DayMetrics
     // retains measured inputs, not a stored `recovery` field.
     private var peakRecoveryText: String {
-        let days = store.band.days.sorted { $0.dateKey < $1.dateKey }
-        let values = days.enumerated().compactMap { index, day -> Double? in
-            let baseline = DailyAnalysis.baseline(
-                from: Array(days.prefix(index).suffix(DailyAnalysis.rollingBaselineDays))
-            )
-            return Recovery.score(
-                lnRMSSD: day.lnRMSSD,
-                rhr: day.restingHR,
-                sleepHours: day.reliableSleepHours,
-                sleepNeedHours: store.settings.sleepNeedHours,
-                baseline: baseline
-            ).score
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let values = store.band.days.compactMap { day -> Double? in
+            guard let date = formatter.date(from: day.dateKey) else { return nil }
+            return DatedRecovery.evaluate(day: day, priorDays: store.band.days, date: date,
+                sleepNeedHours: store.settings.sleepNeedHours, calendar: calendar).result.score
         }
         guard let peak = values.max() else { return "—" }
         return "\(Int(peak.rounded()))%"

@@ -64,20 +64,16 @@ enum MetricTimeline {
                      sleepNeedHours: Double, maxHR: Double? = nil,
                      imported: [String: WhoopImportedDay] = [:], calendar: Calendar = .current) -> [MetricDay] {
         let byKey = Dictionary(days.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
-        let ordered = byKey.values.sorted { $0.dateKey < $1.dateKey }
         let liveByDay = Dictionary(grouping: live, by: \.dateKey)
         let manualByDay = Dictionary(grouping: manual, by: \.dateKey)
-        var priorEnd = 0
         let end = calendar.startOfDay(for: ending)
         guard count > 0 else { return [] }
         return (0..<count).compactMap { offset in
             guard let date = calendar.date(byAdding: .day, value: offset - count + 1, to: end) else { return nil }
             let key = JournalStore.dayKey(for: date, calendar: calendar)
             let day = byKey[key]
-            while priorEnd < ordered.count && ordered[priorEnd].dateKey < key { priorEnd += 1 }
-            let baseline = DailyAnalysis.baseline(from: Array(ordered[max(0, priorEnd - DailyAnalysis.rollingBaselineDays)..<priorEnd]))
-            let recovery = Recovery.score(lnRMSSD: day?.lnRMSSD, rhr: day?.restingHR,
-                sleepHours: day?.reliableSleepHours, sleepNeedHours: sleepNeedHours, baseline: baseline).score
+            let recovery = DatedRecovery.evaluate(day: day, priorDays: days, date: date,
+                sleepNeedHours: sleepNeedHours, calendar: calendar).result.score
             let sessions = liveByDay[key] ?? []
             var zones: [Double]?
             if let raw = day?.zoneSeconds, raw.count == 5, raw.allSatisfy({ $0 >= 0 }) {
