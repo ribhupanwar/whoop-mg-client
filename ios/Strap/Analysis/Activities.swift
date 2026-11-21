@@ -253,14 +253,14 @@ enum ActivityDetect {
                 // classified separately as cardio, not as a step workout.
                 let baseline = baselines[start]
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
-                let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
-                let movingSeconds = run.filter {
-                    Double($0.heartRate) >= hrFloor && hasMeasuredAcceleration($0)
+                let concurrentSeconds = (start..<motionEnd).filter { sampleIndex in
+                    supported[sampleIndex] && Double(ordered[sampleIndex].heartRate) >= hrFloor &&
+                        hasMeasuredAcceleration(ordered[sampleIndex])
                 }.count
                 guard confirmsGenericWorkout(
                     durationS: duration,
-                    exertionSeconds: exertionSeconds,
-                    movingSeconds: movingSeconds,
+                    exertionSeconds: concurrentSeconds,
+                    movingSeconds: concurrentSeconds,
                     hasPreActivityBaseline: baseline != nil
                 ) else {
                     decision("Workout lacks sustained concurrent HR and motion")
@@ -274,9 +274,9 @@ enum ActivityDetect {
                 // auto-saved as a workout.
                 let baseline = baselines[start]
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
-                let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
-                let movingSeconds = run.filter {
-                    Double($0.heartRate) >= hrFloor && hasMeasuredAcceleration($0)
+                let concurrentSeconds = (start..<motionEnd).filter { sampleIndex in
+                    supported[sampleIndex] && Double(ordered[sampleIndex].heartRate) >= hrFloor &&
+                        hasMeasuredAcceleration(ordered[sampleIndex])
                 }.count
                 guard exertionSeconds >= startSustainS,
                       movingSeconds >= startSustainS else {

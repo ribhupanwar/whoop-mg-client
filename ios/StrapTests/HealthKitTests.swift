@@ -23,6 +23,20 @@ final class HealthKitMappingTests: XCTestCase {
         )
     }
 
+    func testDetectedDeletionRequiresAppSourceAndBandWorkoutIdentifiers() {
+        let source = HKSource.default()
+        let predicate = HealthKitBridge.detectedWorkoutDeletionPredicate(startTimes: [1_700_000_000], source: source)
+        let parts = (predicate as? NSCompoundPredicate)?.subpredicates
+        XCTAssertEqual(parts?.count, 3)
+        XCTAssertEqual(parts?.first, HKQuery.predicateForObjects(from: source))
+        XCTAssertEqual(parts?[1], HKQuery.predicateForObjects(
+            withMetadataKey: HealthKitBridge.sourceKey, operatorType: .equalTo, value: "strap-band"
+        ))
+        XCTAssertEqual(parts?.last, HKQuery.predicateForObjects(
+            withMetadataKey: HKMetadataKeyExternalUUID, allowedValues: ["strap-session-1700000000"]
+        ))
+    }
+
     func testHealthKitDefaultsOff() throws {
         XCTAssertFalse(AppSettings().healthKitEnabled)
         let roundTrip = try JSONDecoder().decode(

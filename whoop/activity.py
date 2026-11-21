@@ -21,6 +21,7 @@ Provenance:
     domestic strolls from becoming workouts.
 """
 
+import math
 import statistics
 from dataclasses import dataclass
 
@@ -38,8 +39,7 @@ COMPARISON_MIN_SESSION_S = 600
 WALK_WORKOUT_MIN_SESSION_S = 600
 GAP_TOLERANCE_S = 180
 STEP_WINDOW_S = 60
-WALK_SPM = 60.0
-BRISK_WALK_SPM = 100.0
+WALK_SPM = 100.0
 RUN_SPM = 140.0
 
 GAIT_STILL = 0
@@ -79,7 +79,7 @@ def _step_rate(samples: list[V18Sample], i: int) -> float | None:
     Leaps above the sprint ceiling are dropped rather than smeared across the
     window as a fake minute of walking; see `whoop/steps.py`.
     """
-    return step_rate(samples, i, window_s=STEP_WINDOW_S)
+    return step_rate(samples, i, window_s=STEP_WINDOW_S, continuous_only=True)
 
 
 def _baseline_hrs(samples: list[V18Sample]) -> list[float | None]:
@@ -118,9 +118,29 @@ def _close_gaps(flags: list[bool], samples: list[V18Sample]) -> list[bool]:
     return filled
 
 
-def _kind(run_ticks: int, walk_ticks: int, spm: list[float], has_steps: bool) -> str:
-    if run_ticks or walk_ticks:
-        return "run" if run_ticks > walk_ticks else "walk"
+def _has_measured_acceleration(sample: V18Sample) -> bool:
+    acceleration = sample.dynamic_accel_g
+    return acceleration is not None and math.isfinite(acceleration) and acceleration >= 0.03
+
+
+def _sustained_evidence(flags: list[bool], samples: list[V18Sample]) -> list[bool]:
+    """Mirror STRAP's dense, wall-clock confirmation before closing pauses."""
+    supported = [False] * len(flags)
+    left = count = 0
+    covered_through = -1
+    for right, flag in enumerate(flags):
+        count += flag
+        while samples[right].unix - samples[left].unix >= MIN_SESSION_S:
+            count -= flags[left]
+            left += 1
+        if count >= START_SUSTAIN_S:
+            for index in range(max(left, covered_through + 1), right + 1):
+                supported[index] = flags[index]
+            covered_through = right
+    return supported
+
+
+def _kind(spm: list[float], has_steps: bool) -> str:
     if spm:
         median = statistics.median(spm)
         if median >= RUN_SPM:
@@ -149,10 +169,12 @@ def detect_activities(
             old_quality = (
                 (0 if old.step_motion_counter is None else 2)
                 + (0 if old.dynamic_accel_g is None else 1)
+                + len(old.rr_intervals_ms)
             )
             new_quality = (
                 (0 if sample.step_motion_counter is None else 2)
                 + (0 if sample.dynamic_accel_g is None else 1)
+                + len(sample.rr_intervals_ms)
             )
             if new_quality <= old_quality:
                 continue
@@ -168,57 +190,49 @@ def detect_activities(
     flags = []
     measured_motion = []
     latched_baseline = None
-    inactive_count = 0
+    baseline_frozen = False
+    last_evidence_unix = None
 
     for i, sample in enumerate(ordered):
-        gait = sample.activity_class
+        if last_evidence_unix is not None and sample.unix - last_evidence_unix > GAP_TOLERANCE_S:
+            latched_baseline = None
+            baseline_frozen = False
         computed_baseline = baselines[i]
-        baseline = latched_baseline or computed_baseline
+        baseline = latched_baseline if baseline_frozen else computed_baseline
 
-        # Prefer recent counter delta so trailing 60s window doesn't smear into cooldown
-        if (
-            i > 0
-            and sample.step_motion_counter is not None
-            and ordered[i - 1].step_motion_counter is not None
-        ):
-            elapsed = sample.unix - ordered[i - 1].unix
-            delta = step_delta(ordered[i - 1].step_motion_counter, sample.step_motion_counter) if elapsed > 0 else 0
-            recent_steps = (
-                elapsed > 0
-                and elapsed <= 5
-                and delta > 0
-                and (delta * 60.0 / elapsed) >= WALK_SPM
-                and delta <= MAX_STEPS_PER_SECOND * elapsed
-            )
-        else:
-            recent_steps = (rates[i] or 0) >= WALK_SPM
+        rate = rates[i] or 0
+        recent_steps = rate >= WALK_SPM
+        if i > 0 and sample.step_motion_counter is not None:
+            previous = ordered[i - 1]
+            if previous.step_motion_counter is not None:
+                elapsed = sample.unix - previous.unix
+                delta = step_delta(previous.step_motion_counter, sample.step_motion_counter,
+                                   count_after_reset=False)
+                recent_steps = (
+                    0 < elapsed <= 5 and 0 < delta <= MAX_STEPS_PER_SECOND * elapsed
+                    and rate >= WALK_SPM
+                )
 
-        # Never classify running from an unverified gait byte alone:
-        # running gait requires either measured steps or elevated heart rate.
-        if gait == GAIT_RUN and (sample.heart_rate >= HR_START_ABS or recent_steps):
-            locomotion = True
-        else:
-            locomotion = recent_steps
-
+        moving = _has_measured_acceleration(sample)
         elevated = (
-            (baseline is not None and sample.heart_rate >= max(HR_START_ABS, baseline + HR_START_DELTA))
-            or (baseline is None and sample.heart_rate >= 115.0)
+            sample.heart_rate >= max(HR_START_ABS, baseline + HR_START_DELTA)
+            if baseline is not None
+            else sample.step_motion_counter is None and sample.heart_rate >= HR_START_ABS
         )
-        measured_motion.append(locomotion)
-        is_active = locomotion or elevated
+        measured_motion.append(recent_steps)
+        is_active = recent_steps or (elevated and moving)
         flags.append(is_active)
 
         if is_active:
-            if latched_baseline is None:
-                prev_index = max(0, i - 1)
-                latched_baseline = baselines[prev_index] or computed_baseline
-            inactive_count = 0
-        else:
-            inactive_count += 1
-            if inactive_count > GAP_TOLERANCE_S:
-                latched_baseline = None
+            if not baseline_frozen:
+                latched_baseline = baselines[max(0, i - 1)]
+                if latched_baseline is None:
+                    latched_baseline = computed_baseline
+                baseline_frozen = True
+            last_evidence_unix = sample.unix
 
-    closed = _close_gaps(flags, ordered)
+    supported = _sustained_evidence(flags, ordered)
+    closed = _close_gaps(supported, ordered)
 
     sessions: list[ActivitySession] = []
     i = 0
@@ -235,23 +249,25 @@ def detect_activities(
         end = i
 
         # HR remains elevated after a measured walk/run stops. Exclude trailing HR-only cooldown.
-        motion_indices = [idx for idx in range(start, end) if measured_motion[idx]]
+        motion_indices = [idx for idx in range(start, end) if supported[idx] and measured_motion[idx]]
         motion_end = (motion_indices[-1] + 1) if len(motion_indices) >= START_SUSTAIN_S else end
         run = ordered[start:motion_end]
 
         duration = run[-1].unix - run[0].unix + 1
         if duration < minimum_duration_s:
             continue
-        if sum(flags[start:motion_end]) < START_SUSTAIN_S:
+        if sum(supported[start:motion_end]) < START_SUSTAIN_S:
             continue
 
         walk_ticks = sum(1 for s in run if s.activity_class == GAIT_WALK)
         run_ticks = sum(1 for s in run if s.activity_class == GAIT_RUN)
         spm = [r for r in rates[start:motion_end] if r is not None and r > 0]
-        steps = step_total(run) or 0
+        steps = step_total(run, continuous_only=True) or 0
         has_steps = any(s.step_motion_counter is not None for s in run)
 
-        detected_kind = _kind(run_ticks, walk_ticks, spm, has_steps)
+        detected_kind = _kind(spm, has_steps)
+        baseline = baselines[start]
+        hr_floor = max(HR_START_ABS, baseline + HR_START_DELTA) if baseline is not None else HR_START_ABS
         if detected_kind == "walk":
             # Walking safeguard: require at least 10 minutes and sustained cardiovascular evidence
             if duration < max(minimum_duration_s, WALK_WORKOUT_MIN_SESSION_S):
@@ -259,10 +275,24 @@ def detect_activities(
             elevated_seconds = sum(
                 1
                 for idx in range(start, motion_end)
-                if measured_motion[idx]
-                and ordered[idx].heart_rate >= max(HR_START_ABS, (latched_baseline or baselines[idx] or 70.0) + HR_START_DELTA)
+                if supported[idx] and measured_motion[idx] and ordered[idx].heart_rate >= hr_floor
             )
             if elevated_seconds < START_SUSTAIN_S:
+                continue
+        else:
+            concurrent_seconds = sum(
+                1
+                for idx in range(start, motion_end)
+                if supported[idx] and ordered[idx].heart_rate >= hr_floor
+                and _has_measured_acceleration(ordered[idx])
+            )
+            required_seconds = START_SUSTAIN_S
+            if detected_kind == "workout":
+                if duration < WALK_WORKOUT_MIN_SESSION_S:
+                    continue
+                if baseline is None:
+                    required_seconds *= 2
+            if concurrent_seconds < required_seconds:
                 continue
 
         sessions.append(

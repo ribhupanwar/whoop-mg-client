@@ -65,6 +65,8 @@ final class AppStore: ObservableObject {
         self.manualActivities = activities.manualActivities()
         self.liveActivities = activities.liveActivities()
         self.detectedBandActivities = activities.detectedActivities()
+        band.isDetectedActivityDeleted = activities.isDetectedDeleted
+        health.isDetectedActivityDeleted = activities.isDetectedDeleted
         refreshWhoopImportedHistory()
         #if DEBUG
         if ProcessInfo.processInfo.arguments.contains("--design-preview") {
@@ -265,8 +267,13 @@ final class AppStore: ObservableObject {
             activityStore.deleteDetected(session)
             let remaining = activityStore.detectedActivities()
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.detectedGeneration == generation else { return }
-                self.detectedBandActivities = remaining
+                guard let self else { return }
+                if self.detectedGeneration == generation { self.detectedBandActivities = remaining }
+                guard activityStore.isDetectedDeleted(session) else { return }
+                self.band.recalculateRetainedMetrics()
+                if self.settings.healthKitEnabled, self.health.state.isOn {
+                    Task { [weak self] in await self?.health.deleteDetectedWorkouts(startTimes: [session.startUnix]) }
+                }
             }
         }
     }
@@ -336,6 +343,7 @@ final class AppStore: ObservableObject {
     private func activateHealthKit(exportBacklog: Bool) async {
         await health.activate()
         guard health.state.isOn, exportBacklog else { return }
+        await health.deleteDetectedWorkouts(startTimes: activities.deletedDetectedStartTimes())
         await health.export(detectedBandActivities)
         for record in liveActivities {
             await health.export(live: record)

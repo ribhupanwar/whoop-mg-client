@@ -634,7 +634,9 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertGreaterThan(before, 0)
         store.deleteDetected(workout, now: now)
         store.mergeDetected(candidates, now: now)
-        XCTAssertTrue(ActivityStore(defaults: defaults).detectedActivities().isEmpty)
+        let relaunched = ActivityStore(defaults: defaults)
+        XCTAssertTrue(relaunched.detectedActivities().isEmpty)
+        XCTAssertEqual(relaunched.deletedDetectedStartTimes(), [workout.startUnix])
         XCTAssertEqual(dayStrain(), before)
     }
 

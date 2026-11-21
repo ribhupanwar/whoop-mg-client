@@ -621,6 +621,8 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
+    var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
+
     func recalculateRetainedMetrics() {
         // Repeated settings, recovery and drain callbacks request one follow-up,
         // rather than queueing multiple full-night analyses behind stale work.
@@ -645,6 +647,7 @@ final class BandLink: NSObject, ObservableObject {
         let maxSnapshot = maxHR
         let needSnapshot = needHours
         let baselineSnapshot = awakeBaseline
+        let isActivityDeleted = isDetectedActivityDeleted
         let daysSnapshot = days
         let sessionsSnapshot = summary?.sleepSessions ?? []
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
@@ -720,9 +723,11 @@ final class BandLink: NSObject, ObservableObject {
             let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
             let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(DailyAnalysis.rollingBaselineDays)))
             let sleepWindows = (fresh.sleepSessions ?? []).map { (start: $0.startUnix, end: $0.endUnix - 1) }
-            let excluded = sleepWindows + fresh.activities.map { (start: $0.startUnix, end: $0.endUnix) }
             fresh.awakeStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
-            fresh.outsideWorkoutStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: excluded)
+            fresh.outsideWorkoutStress = StressWindows.outsideWorkouts(
+                samples: samples, baseline: awakeNorm, sleep: sleepWindows,
+                activities: fresh.activities, isDeleted: isActivityDeleted
+            )
             let stressPoints = StressWindows.series(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
             fresh.stressSeries = stressPoints.isEmpty ? nil : stressPoints
             // Use the newly analyzed nights for sleep consistency. The

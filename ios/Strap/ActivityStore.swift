@@ -612,7 +612,15 @@ final class ActivityStore {
 
     /// Hides a deleted band session across replays whose boundaries shift slightly.
     func isDetectedDeleted(_ session: ActivitySession) -> Bool {
-        deletedDetectedSessions().contains { Self.matches(session, deletion: $0) }
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
+        return deletedDetectedSessions().contains { Self.matches(session, deletion: $0) }
+    }
+
+    func deletedDetectedStartTimes() -> [Int] {
+        detectedLock.lock()
+        defer { detectedLock.unlock() }
+        return Array(Set(deletedDetectedSessions().map(\.startUnix))).sorted()
     }
 
     func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
