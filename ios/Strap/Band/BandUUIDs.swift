@@ -57,6 +57,7 @@ enum BandCommand: UInt8 {
 
 /// Hardware event notification codes notified asynchronously on fd4b0004.
 enum BandHardwareEvent: UInt8 {
+    case wristOn = 0x09               // 9: Optical PPG / capacitive on-wrist (green LEDs on)
     case wristOff = 0x0A              // 10: Optical PPG off-wrist (green LEDs off)
     case bleConnectionUp = 0x0B       // 11: BLE connected
     case bleConnectionDown = 0x0C     // 12: BLE disconnected

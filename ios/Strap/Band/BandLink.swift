@@ -104,6 +104,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var serialNumber: String?
     @Published private(set) var modelNumber: String?
     @Published private(set) var isBroadcastingHR: Bool = false
+    @Published private(set) var isWearing: Bool = false
+    @Published private(set) var isCharging: Bool = false
     @Published private(set) var isRebooting = false
     @Published private(set) var rebootMessage: String?
     private var rebootExpectedDisconnect = false
@@ -1528,6 +1530,8 @@ final class BandLink: NSObject, ObservableObject {
         hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
+        isWearing = false
+        isCharging = false
         recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
@@ -2137,8 +2141,20 @@ final class BandLink: NSObject, ObservableObject {
 
         if uuid == BandUUID.events {
             let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
-            if eventOpcode == BandHardwareEvent.bleHRProfileEnable.rawValue {
+            switch eventOpcode {
+            case BandHardwareEvent.wristOn.rawValue:
+                isWearing = true
+            case BandHardwareEvent.wristOff.rawValue:
+                isWearing = false
+                liveHeartRate = nil
+            case BandHardwareEvent.batteryPackConnected.rawValue:
+                isCharging = true
+            case BandHardwareEvent.batteryPackRemoved.rawValue:
+                isCharging = false
+            case BandHardwareEvent.bleHRProfileEnable.rawValue:
                 isBroadcastingHR = true
+            default:
+                break
             }
         }
 

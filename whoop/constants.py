@@ -59,6 +59,7 @@ class CommandResult(IntEnum):
 
 class HardwareEvent(IntEnum):
     """Event opcodes emitted asynchronously on characteristic fd4b0004."""
+    WRIST_ON = 0x09               # Optical/capacitive sensor on-wrist
     WRIST_OFF = 0x0A              # Optical sensor off-wrist
     BLE_CONNECTION_UP = 0x0B      # Link connected
     BLE_CONNECTION_DOWN = 0x0C    # Link dropped

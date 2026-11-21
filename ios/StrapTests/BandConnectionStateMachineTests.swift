@@ -443,4 +443,45 @@ final class BandConnectionStateMachineTests: XCTestCase {
             XCTAssertEqual(first.kind, "workout")
         }
     }
+
+    // MARK: - Hardware Event and Wear State Tests
+
+    func testHardwareEventConstants() {
+        XCTAssertEqual(BandHardwareEvent.wristOn.rawValue, 0x09)
+        XCTAssertEqual(BandHardwareEvent.wristOff.rawValue, 0x0A)
+        XCTAssertEqual(BandHardwareEvent.bleConnectionUp.rawValue, 0x0B)
+        XCTAssertEqual(BandHardwareEvent.bleConnectionDown.rawValue, 0x0C)
+        XCTAssertEqual(BandHardwareEvent.rtcLost.rawValue, 0x0D)
+        XCTAssertEqual(BandHardwareEvent.doubleTap.rawValue, 0x0E)
+        XCTAssertEqual(BandHardwareEvent.boot.rawValue, 0x0F)
+        XCTAssertEqual(BandHardwareEvent.setRTC.rawValue, 0x10)
+        XCTAssertEqual(BandHardwareEvent.temperatureLevel.rawValue, 0x11)
+        XCTAssertEqual(BandHardwareEvent.pairingMode.rawValue, 0x12)
+        XCTAssertEqual(BandHardwareEvent.batteryPackConnected.rawValue, 0x15)
+        XCTAssertEqual(BandHardwareEvent.batteryPackRemoved.rawValue, 0x16)
+        XCTAssertEqual(BandHardwareEvent.bleBonded.rawValue, 0x17)
+        XCTAssertEqual(BandHardwareEvent.bleHRProfileEnable.rawValue, 0x18)
+    }
+
+    func testHardwareEventOpcodeExtraction() {
+        // Direct opcode frame
+        let wristOnFrame: [UInt8] = [0x09]
+        let opcode1 = (wristOnFrame.count >= 3 && wristOnFrame[0] == 0x30) ? wristOnFrame[2] : (wristOnFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode1), .wristOn)
+
+        // Envelope prefixed frame (0x30 prefix with 3+ bytes)
+        let wristOffFrame: [UInt8] = [0x30, 0x01, 0x0A]
+        let opcode2 = (wristOffFrame.count >= 3 && wristOffFrame[0] == 0x30) ? wristOffFrame[2] : (wristOffFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode2), .wristOff)
+
+        // Charger connected frame
+        let chargerConnectedFrame: [UInt8] = [0x15]
+        let opcode3 = (chargerConnectedFrame.count >= 3 && chargerConnectedFrame[0] == 0x30) ? chargerConnectedFrame[2] : (chargerConnectedFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode3), .batteryPackConnected)
+
+        // Charger detached frame
+        let chargerRemovedFrame: [UInt8] = [0x16]
+        let opcode4 = (chargerRemovedFrame.count >= 3 && chargerRemovedFrame[0] == 0x30) ? chargerRemovedFrame[2] : (chargerRemovedFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode4), .batteryPackRemoved)
+    }
 }

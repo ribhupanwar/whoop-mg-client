@@ -41,9 +41,12 @@ class TestDeviceControlCommands(unittest.TestCase):
                     build_command(opcode)
 
     def test_hardware_events_constants(self):
+        self.assertEqual(HardwareEvent.WRIST_ON, 9)
         self.assertEqual(HardwareEvent.WRIST_OFF, 10)
         self.assertEqual(HardwareEvent.DOUBLE_TAP, 14)
         self.assertEqual(HardwareEvent.PAIRING_MODE, 18)
+        self.assertEqual(HardwareEvent.BATTERY_PACK_CONNECTED, 21)
+        self.assertEqual(HardwareEvent.BATTERY_PACK_REMOVED, 22)
         self.assertEqual(HardwareEvent.BLE_BONDED, 23)
         self.assertEqual(HardwareEvent.BLE_HR_PROFILE_ENABLE, 24)
 
