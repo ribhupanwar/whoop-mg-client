@@ -1749,14 +1749,9 @@ final class BandLink: NSObject, ObservableObject {
             if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
             // Never present an old sample as today's live pulse.
             self.liveHeartRate = nil
-            // An off-wrist band can legitimately pause streaming. Renew
-            // only once after a sustained 90s silent stretch; don't hammer
-            // its CCCD every 15 seconds. A pre-bond subscription is renewed
-            // immediately after hello acknowledgement below.
-            // An absent first packet needs recovery too: waiting for an
-            // existing packet timestamp alone can leave the UI stuck forever.
-            // NOOP confirms standard 0x2A37 can stream before the vendor
-            // handshake/bond. Do not gate its recovery on CLIENT_HELLO.
+            // Defer watchdog rearm writes as well as reconnects while
+            // history or the pairing handshake owns the link. A rejected
+            // vendor HR write could otherwise abort a healthy history drain.
             let historyInProgress = self.drainStartedAt != nil || self.isSavingHistory || self.isAnalyzingHistory
             let action = LiveHeartRateState.recovery(now: now, connectedAt: self.hrConnectedAt,
                 receivedAt: self.lastLiveHRAt, lastAttempt: self.lastHRRecoveryAt,
