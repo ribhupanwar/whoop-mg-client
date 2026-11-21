@@ -717,4 +717,114 @@ extension ActivityStoreTests {
         store.deleteLive(id: record.id)
         XCTAssertEqual(defaults.string(forKey: key), "legacy unreadable data")
     }
+
+    func testConcurrentActivityMergeAndPreferencesSnapshotsDoNotDeadlock() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let writer = BackgroundPreferencesWriter(defaults: defaults)
+        let group = DispatchGroup()
+
+        // 1. Concurrent activity merges on background queue
+        for i in 0..<50 {
+            group.enter()
+            DispatchQueue.global(qos: .userInitiated).async {
+                let s = self.session(start: epoch + i * 100, end: epoch + i * 100 + 50)
+                self.store.mergeDetected([s], now: now)
+                group.leave()
+            }
+        }
+
+        // 2. Concurrent preferences snapshot writes on background queue
+        for i in 0..<50 {
+            group.enter()
+            let dummy = ["key": "val_\(i)"]
+            writer.write(dummy, forKey: "strap.test.pref.\(i)") { _ in
+                group.leave()
+            }
+        }
+
+        // 3. UI thread repeatedly queries isDetectedDeleted and detectedActivities
+        let deadline = Date().addingTimeInterval(5.0)
+        var uiQueries = 0
+        let probe = session(start: epoch, end: epoch + 60)
+        while Date() < deadline && uiQueries < 200 {
+            _ = store.isDetectedDeleted(probe)
+            _ = store.detectedActivities()
+            uiQueries += 1
+            Thread.sleep(forTimeInterval: 0.001)
+        }
+
+        let result = group.wait(timeout: .now() + 5.0)
+        XCTAssertEqual(result, .success, "Concurrent merge and preferences writes must complete without deadlock")
+        XCTAssertGreaterThan(uiQueries, 50, "UI thread queries must not be starved")
+    }
+
+    func testNotificationCenterReentrancyDoesNotDeadlock() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let probe = session(start: epoch, end: epoch + 600)
+
+        var notificationCount = 0
+        let observer = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification,
+            object: defaults,
+            queue: nil
+        ) { _ in
+            notificationCount += 1
+            // Reentrant query from inside NotificationCenter observer callback:
+            // Must not deadlock against detectedLock or persistLock.
+            _ = self.store.isDetectedDeleted(probe)
+            _ = self.store.detectedActivities()
+        }
+
+        defer { NotificationCenter.default.removeObserver(observer) }
+
+        // Perform merge and delete; both trigger UserDefaults.didChangeNotification
+        store.mergeDetected([probe], now: now)
+        XCTAssertFalse(store.detectedActivities().isEmpty)
+        XCTAssertFalse(store.isDetectedDeleted(probe))
+
+        store.deleteDetected(probe, now: now)
+        XCTAssertTrue(store.detectedActivities().isEmpty)
+        XCTAssertTrue(store.isDetectedDeleted(probe))
+        XCTAssertGreaterThan(notificationCount, 0)
+    }
+
+    func testSimultaneousDetectedActivitiesQueriesDuringActiveBackgroundMerge() {
+        let epoch = 1_800_000_000
+        let now = Date(timeIntervalSince1970: TimeInterval(epoch))
+        let candidate = session(start: epoch, end: epoch + 900)
+        store.mergeDetected([candidate], now: now)
+
+        let exp = expectation(description: "Background merge loop")
+        exp.expectedFulfillmentCount = 20
+
+        let queryGroup = DispatchGroup()
+
+        // Active background merge queue simulating BandLink history drain
+        for i in 0..<20 {
+            DispatchQueue.global(qos: .utility).async {
+                let s = self.session(start: epoch + (i + 1) * 1000, end: epoch + (i + 1) * 1000 + 600)
+                self.store.mergeDetected([s], now: now)
+                exp.fulfill()
+            }
+        }
+
+        // Multiple concurrent readers simulating SwiftUI scene update and AttributeGraph evaluations
+        for _ in 0..<5 {
+            queryGroup.enter()
+            DispatchQueue.global(qos: .userInteractive).async {
+                for _ in 0..<100 {
+                    _ = self.store.detectedActivities()
+                    _ = self.store.isDetectedDeleted(candidate)
+                    _ = self.store.deletedDetectedStartTimes()
+                }
+                queryGroup.leave()
+            }
+        }
+
+        wait(for: [exp], timeout: 5.0)
+        let queryResult = queryGroup.wait(timeout: .now() + 5.0)
+        XCTAssertEqual(queryResult, .success, "Simultaneous UI queries must complete without timeout or contention")
+    }
 }
