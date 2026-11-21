@@ -1110,6 +1110,19 @@ struct DiagnosticsSupportView: View {
                         ShareLink("Share Activity Decision JSON", item: activityDecisionURL)
                     }
 
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+                    ShareLink(item: BLEDiagnosticLog.shared.exportURL()) {
+                        HStack {
+                            Image(systemName: "waveform.path.ecg")
+                            Text("Export BLE Logs")
+                                .font(StrapTypography.body(13.5, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.vertical, 6)
+                    }
+                    }
+
                     if let exportError {
                         Text(exportError).font(StrapTypography.body(11)).foregroundStyle(Color.appWarn)
                     }
