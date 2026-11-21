@@ -1441,6 +1441,13 @@ final class RespirationTests: XCTestCase {
 }
 
 final class DailyMetricQualityTests: XCTestCase {
+    func testIndexedArchiveSliceKeepsBothBoundariesAndReplayRows() {
+        let archive = [1, 3, 3, 4, 7].map { makeSample($0, hr: 60) }
+        XCTAssertEqual(DailyAnalysis.rows(in: archive, from: 3, through: 4).map(\.unix), [3, 3, 4])
+        XCTAssertTrue(DailyAnalysis.rows(in: archive, from: 5, through: 6).isEmpty)
+        XCTAssertTrue(DailyAnalysis.rows(in: archive, from: 8, through: 7).isEmpty)
+    }
+
     func testNightlyHRVDoesNotDependOnCompleteSleepStages() throws {
         let day = DayMetrics(dateKey: "2026-11-13", state: "sleep", restingHR: 67,
                              lnRMSSD: log(44), hrvWindowSeconds: 300, sleepHours: 0,

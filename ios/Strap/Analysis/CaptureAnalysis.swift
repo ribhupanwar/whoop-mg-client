@@ -169,6 +169,24 @@ enum DailyAnalysis {
     /// Canonical rolling baseline window discovered from WHOOP `GetRestingHeartRateBaselineRequest` (`0x1099623a0`).
     /// WHOOP evaluates baseline statistics over a rolling buffer of 28 eligible days.
     static let rollingBaselineDays = 28
+    /// Inclusive range in the chronologically sorted archive. Preserve all
+    /// records at either boundary, including replayed seconds.
+    static func rows(in ordered: [V18Sample], from start: Int, through end: Int) -> ArraySlice<V18Sample> {
+        guard start <= end else { return ordered.prefix(0) }
+        func partition(where precedes: (Int) -> Bool) -> Int {
+            var lower = 0
+            var upper = ordered.count
+            while lower < upper {
+                let middle = lower + (upper - lower) / 2
+                if precedes(ordered[middle].unix) { lower = middle + 1 } else { upper = middle }
+            }
+            return lower
+        }
+        let first = partition { $0 < start }
+        let last = partition { $0 <= end }
+        return ordered[first..<last]
+    }
+
     static func metrics(
         from samples: [V18Sample],
         sex: Sex,
@@ -244,14 +262,18 @@ enum DailyAnalysis {
                 (session.startUnix <= last && first < session.endUnix)
                     || dayPeriods.contains { $0.startUnix == session.startUnix && $0.endUnix == session.endUnix - 1 }
             }
-            let inputs = ordered.filter { row in
-                (first <= row.unix && row.unix <= last)
-                    || dayPeriods.contains { $0.startUnix <= row.unix && row.unix <= $0.endUnix }
+            let ticket = analysisCache.flatMap { cache in
+                let lower = min(first, dayPeriods.map(\.startUnix).min() ?? first)
+                let upper = max(last, dayPeriods.map(\.endUnix).max() ?? last)
+                let inputs = rows(in: ordered, from: lower, through: upper).filter { row in
+                    (first <= row.unix && row.unix <= last)
+                        || dayPeriods.contains { $0.startUnix <= row.unix && row.unix <= $0.endUnix }
+                }
+                let context = DayContext(key: key, sex: sex, maxHR: maxHR,
+                                         calendar: String(describing: calendar.identifier),
+                                         zone: calendar.timeZone.identifier, sessions: related)
+                return cache.ticket(key: HistoryAnalysisCache.dailyKey(key), samples: inputs, context: context)
             }
-            let context = DayContext(key: key, sex: sex, maxHR: maxHR,
-                                     calendar: String(describing: calendar.identifier),
-                                     zone: calendar.timeZone.identifier, sessions: related)
-            let ticket = analysisCache?.ticket(key: HistoryAnalysisCache.dailyKey(key), samples: inputs, context: context)
             if let saved = analysisCache?.load(DayMetrics.self, ticket: ticket) {
                 result.append(saved)
                 progress?(result.count, byDay.count, true)
@@ -262,9 +284,7 @@ enum DailyAnalysis {
             // Never join R-R beats across gaps or unrelated sleep sessions.
             let sessions: [(period: SleepPeriod, hrv: HrvResult, window: Int, rhr: Double?)] =
                 dayPeriods.compactMap { period in
-                    let segment = ordered.filter {
-                        $0.unix >= period.startUnix && $0.unix <= period.endUnix
-                    }
+                    let segment = Array(rows(in: ordered, from: period.startUnix, through: period.endUnix))
                     let validSeconds = Set(segment.filter {
                         $0.wearing && (35...220).contains($0.heartRate)
                     }.map(\.unix)).count
@@ -308,12 +328,15 @@ enum DailyAnalysis {
             let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
             let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
             let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
-            let temperature = NightTemperature.measure(ordered, session: longest)
-            let primaryRows = longest.map { night in ordered.filter { night.startUnix <= $0.unix && $0.unix < night.endUnix } } ?? []
+            let primaryRows = longest.map {
+                Array(rows(in: ordered, from: $0.startUnix, through: $0.endUnix - 1))
+            } ?? []
+            let temperature = NightTemperature.measure(primaryRows, session: longest)
             // Training load needs a measured resting reference, not sleep stages
             // or R-R intervals. A verified five-minute daytime rest can supply it.
+            let overlappingPeriods = periods.filter { $0.startUnix <= last && $0.endUnix >= first }
             let awakeDaySamples = daySamples.filter { sample in
-                !periods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
+                !overlappingPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
             }
             let awakeWindow = Hrv.restingHRV(awakeDaySamples, minWindowS: 300)
             let awakeResting = Hrv.restingHeartRate(awakeDaySamples, windowS: 300)
