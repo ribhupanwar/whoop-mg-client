@@ -9,7 +9,8 @@ struct HomeView: View {
     @Environment(\.scenePhase) private var scenePhase
     @ScaledMetric(relativeTo: .body) private var activityTitleSize = 15.0
     @ScaledMetric(relativeTo: .caption) private var activityDetailSize = 12.0
-    @ScaledMetric(relativeTo: .body) private var activityValueSize = 18.0
+    @ScaledMetric(relativeTo: .body) private var activityValueSize = 17.0
+    @ScaledMetric(relativeTo: .body) private var activityTileWidth = 84.0
     @AppStorage(ProfileView.nameKey) private var profileName = ""
     let openPlan: () -> Void
     let openInsights: () -> Void
@@ -963,8 +964,14 @@ struct HomeView: View {
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
-        .frame(minWidth: 82, minHeight: 40)
-        .background(tint.opacity(0.65), in: RoundedRectangle(cornerRadius: 9))
+        .frame(minWidth: activityTileWidth, minHeight: 36)
+        .background {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(LinearGradient(
+                    colors: [tint, tint.opacity(0.82)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                ))
+        }
 
         return HStack(spacing: 10) {
             ViewThatFits(in: .horizontal) {
@@ -984,12 +991,19 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            Capsule().fill(tint).frame(width: 3, height: 30)
+            Capsule().fill(tint).frame(width: 2, height: 26)
                 .accessibilityHidden(true)
         }
-        .padding(8)
-        .frame(minHeight: 60)
-        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 7)
+        .frame(minHeight: 52)
+        .background {
+            RoundedRectangle(cornerRadius: 11)
+                .fill(Color.appRaised)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appCardBorder, lineWidth: 1)
+                }
+        }
     }
 
     private func cleanActivityName(_ name: String) -> String {
