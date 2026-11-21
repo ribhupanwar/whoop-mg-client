@@ -61,6 +61,8 @@ struct BandHelloExchange {
     var writeCompleted = false
     private(set) var responseReceived = false
 
+    init(sequence: UInt8) { self.sequence = sequence }
+
     var isConfirmed: Bool { writeCompleted && responseReceived }
 
     mutating func receive(_ frame: [UInt8]) {
@@ -70,6 +72,12 @@ struct BandHelloExchange {
               frame[3] == sequence, frame[4] == 1 else { return }
         responseReceived = true
     }
+}
+
+private struct SavedBandMetrics: Codable {
+    let days: [DayMetrics]
+    let summary: CaptureSummary?
+    let sleepAnalysis: SleepAnalysis?
 }
 
 struct DrainStats: Equatable {
@@ -201,6 +209,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private enum Keys {
         static let days = "strap.days.v1"
+        static let metricsSnapshot = "strap.band.metrics.snapshot.v1"
         static let incompleteHistory = "strap.history.incomplete.v1"
         static let summary = "strap.capture.summary.v1"
         static let sleepAnalysis = "strap.sleep.analysis.v1"
@@ -308,6 +317,8 @@ final class BandLink: NSObject, ObservableObject {
     private var reassemblers: [CBUUID: FrameReassembler] = [:]
     private var subscribed: Set<CBUUID> = []
     private var helloExchange: BandHelloExchange?
+    private var helloBondProbe = false
+    private var helloBondProbeAttempted = false
     private var handshakeDeadline: DispatchWorkItem?
     private var handshakeFailures = 0
 
@@ -523,17 +534,24 @@ final class BandLink: NSObject, ObservableObject {
 
     override init() {
         super.init()
-        if let data = UserDefaults.standard.data(forKey: Keys.days),
-           let saved = try? JSONDecoder().decode([DayMetrics].self, from: data) {
-            days = saved
-        }
-        if let data = UserDefaults.standard.data(forKey: Keys.summary),
-           let saved = try? JSONDecoder().decode(CaptureSummary.self, from: data) {
-            summary = saved
-        }
-        if let data = UserDefaults.standard.data(forKey: Keys.sleepAnalysis),
-           let saved = try? JSONDecoder().decode(SleepAnalysis.self, from: data) {
-            lastSleepAnalysis = saved
+        if let data = UserDefaults.standard.data(forKey: Keys.metricsSnapshot),
+           let saved = try? JSONDecoder().decode(SavedBandMetrics.self, from: data) {
+            days = saved.days
+            summary = saved.summary
+            lastSleepAnalysis = saved.sleepAnalysis
+        } else {
+            if let data = UserDefaults.standard.data(forKey: Keys.days),
+               let saved = try? JSONDecoder().decode([DayMetrics].self, from: data) {
+                days = saved
+            }
+            if let data = UserDefaults.standard.data(forKey: Keys.summary),
+               let saved = try? JSONDecoder().decode(CaptureSummary.self, from: data) {
+                summary = saved
+            }
+            if let data = UserDefaults.standard.data(forKey: Keys.sleepAnalysis),
+               let saved = try? JSONDecoder().decode(SleepAnalysis.self, from: data) {
+                lastSleepAnalysis = saved
+            }
         }
         if let data = UserDefaults.standard.data(forKey: Keys.liveRRArchive),
            let saved = try? JSONDecoder().decode([LiveSample].self, from: data) {
@@ -811,14 +829,11 @@ final class BandLink: NSObject, ObservableObject {
                     return
                 }
                 self.historicalRestQualityReason = restReason
-                self.summary = finalFresh
                 self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
                            editedDays: editedDays)
+                self.summary = finalFresh
                 self.lastSleepAnalysis = report
-                self.persist(finalFresh)
-                if let report { self.preferencesWriter.write(report, forKey: Keys.sleepAnalysis) } else {
-                    self.preferencesWriter.remove(forKey: Keys.sleepAnalysis)
-                }
+                self.persistMetricsSnapshot()
                 self.isAnalyzingHistory = false
                 self.historyProgress = nil
                 if let checkpointError {
@@ -896,8 +911,7 @@ final class BandLink: NSObject, ObservableObject {
         saved.sleepStaging = saved.latestSleepSession?.staging
         summary = saved
         lastSleepAnalysis = nil
-        preferencesWriter.remove(forKey: Keys.sleepAnalysis)
-        persist(saved)
+        persistMetricsSnapshot()
     }
 
     /// Returning from the lock screen must use the data already received,
@@ -1026,7 +1040,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         if inserted > 0 {
             days = byDate.values.sorted { $0.dateKey < $1.dateKey }
-            preferencesWriter.write(days, forKey: Keys.days)
+            persistMetricsSnapshot()
         }
         return inserted
     }
@@ -1631,6 +1645,8 @@ final class BandLink: NSObject, ObservableObject {
         reassemblers = [:]
         subscribed = []
         helloExchange = nil
+        helloBondProbe = false
+        helloBondProbeAttempted = false
         handshakeDeadline?.cancel()
         handshakeDeadline = nil
         handshakeStarted = false
@@ -1651,13 +1667,19 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Handshake
 
-    private func maybeBeginHandshake() {
+    private func maybeBeginHandshake(bondProbe: Bool = false) {
         guard !handshakeStarted, commandCharacteristic != nil,
-              subscribed.contains(BandUUID.commandFrom),
               peripheral?.state == .connected else { return }
+        if bondProbe {
+            guard !helloBondProbeAttempted else { return }
+            helloBondProbeAttempted = true
+        } else {
+            guard subscribed.contains(BandUUID.commandFrom) else { return }
+        }
+        helloBondProbe = bondProbe
         handshakeStarted = true
         status = .authenticating
-        BLEDiagnosticLog.shared.log("CLIENT_HELLO enqueue gen=\(linkGeneration)")
+        BLEDiagnosticLog.shared.log("CLIENT_HELLO enqueue gen=\(linkGeneration) bondProbe=\(bondProbe)")
         enqueue(BandCommand.clientHello.rawValue, body: [0x01])
     }
 
@@ -1679,7 +1701,8 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func confirmHelloIfReady() {
-        guard !hrBondConfirmed, helloExchange?.isConfirmed == true,
+        guard !helloBondProbe, !hrBondConfirmed, helloExchange?.isConfirmed == true,
+              subscribed.contains(BandUUID.commandFrom),
               subscribed.contains(BandUUID.data), let peripheral,
               peripheral.state == .connected else { return }
         handshakeDeadline?.cancel()
@@ -2216,13 +2239,25 @@ final class BandLink: NSObject, ObservableObject {
         lastSleepAnalysis = nil
         isAnalyzingHistory = false
         historyProgress = nil
-        persist(updated)
-        preferencesWriter.remove(forKey: Keys.sleepAnalysis)
+        persistMetricsSnapshot()
         // Recalculation is separate: recovery does not invent HRV or Recovery.
     }
 
-    private func persist(_ summary: CaptureSummary) {
-        preferencesWriter.write(summary, forKey: Keys.summary)
+    private func persistMetricsSnapshot() {
+        // This single value is the authoritative app snapshot. Keep the legacy
+        // keys for backup compatibility and the existing sleep recovery vault.
+        let snapshot = SavedBandMetrics(days: days, summary: summary, sleepAnalysis: lastSleepAnalysis)
+        preferencesWriter.write(snapshot, forKey: Keys.metricsSnapshot) { [weak self] saved in
+            guard !saved else { return }
+            self?.historySyncError = "Daily metrics snapshot could not be saved."
+        }
+        preferencesWriter.write(snapshot.days, forKey: Keys.days)
+        if let summary = snapshot.summary { preferencesWriter.write(summary, forKey: Keys.summary) }
+        if let report = snapshot.sleepAnalysis {
+            preferencesWriter.write(report, forKey: Keys.sleepAnalysis)
+        } else {
+            preferencesWriter.remove(forKey: Keys.sleepAnalysis)
+        }
     }
 
     private func merge(
@@ -2253,7 +2288,6 @@ final class BandLink: NSObject, ObservableObject {
             map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
-        preferencesWriter.write(days, forKey: Keys.days)
         let today = JournalStore.dayKey(for: Date())
         if let batch = days.first(where: { $0.dateKey == today })?.strain {
             if let currentLive = liveDayStrain {
@@ -2745,6 +2779,9 @@ extension BandLink: CBPeripheralDelegate {
             }
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
+                if characteristic.uuid == BandUUID.commandFrom || characteristic.uuid == BandUUID.data {
+                    maybeBeginHandshake(bondProbe: true)
+                }
             } else {
                 lastMessage = "Subscribe failed: \(error.localizedDescription)"
             }
@@ -2878,9 +2915,20 @@ extension BandLink: CBPeripheralDelegate {
         completeCommandSent()
         onWrite?()
         if finished == BandCommand.clientHello.rawValue {
-            helloExchange?.writeCompleted = true
             armHandshakeDeadline(seconds: 10)
-            confirmHelloIfReady()
+            resubscribeNotifyCharacteristics()
+            if helloBondProbe {
+                // An authenticated CCCD can require an initial hello write to
+                // trigger pairing. Send a fresh hello after enabling command
+                // notifications so the real reply can be correlated.
+                helloExchange = nil
+                helloBondProbe = false
+                handshakeStarted = false
+                maybeBeginHandshake()
+            } else {
+                helloExchange?.writeCompleted = true
+                confirmHelloIfReady()
+            }
         }
     }
 }
