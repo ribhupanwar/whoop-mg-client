@@ -86,7 +86,7 @@ struct AppSettings: Codable, Equatable {
     var heightCM: Double? = nil
     var restingHROverride: Double? = nil
     var maxHROverride: Double? = nil
-    var sleepNeedHours: Double = 8.0
+    var sleepNeedHours: Double = SleepCoach.defaultBaselineHours
     var wakeTimeMinutes: Int = 7 * 60
     var sleepIntent: SleepIntent = .easy
     var designPreview: Bool = false
@@ -119,7 +119,7 @@ struct AppSettings: Codable, Equatable {
         heightCM = try container.decodeIfPresent(Double.self, forKey: .heightCM)
         restingHROverride = try container.decodeIfPresent(Double.self, forKey: .restingHROverride)
         maxHROverride = try container.decodeIfPresent(Double.self, forKey: .maxHROverride)
-        sleepNeedHours = try container.decodeIfPresent(Double.self, forKey: .sleepNeedHours) ?? 8.0
+        sleepNeedHours = try container.decodeIfPresent(Double.self, forKey: .sleepNeedHours) ?? SleepCoach.defaultBaselineHours
         wakeTimeMinutes = try container.decodeIfPresent(Int.self, forKey: .wakeTimeMinutes) ?? 7 * 60
         sleepIntent = try container.decodeIfPresent(SleepIntent.self, forKey: .sleepIntent) ?? .easy
         designPreview = try container.decodeIfPresent(Bool.self, forKey: .designPreview) ?? false
