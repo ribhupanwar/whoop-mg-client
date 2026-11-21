@@ -47,6 +47,7 @@ final class HealthChartReadingsTests: XCTestCase {
 
 final class HomeHistoryRefreshTests: XCTestCase {
     func testRefreshFollowsTransferThroughSavingAndAnalysis() {
+        XCTAssertTrue(HomeHistoryRefresh.isActive(status: .authenticating, saving: false, analyzing: false, failed: false))
         XCTAssertTrue(HomeHistoryRefresh.isActive(status: .draining, saving: false, analyzing: false, failed: false))
         XCTAssertTrue(HomeHistoryRefresh.isActive(status: .ready, saving: true, analyzing: false, failed: false))
         XCTAssertTrue(HomeHistoryRefresh.isActive(status: .ready, saving: false, analyzing: true, failed: false))
@@ -56,9 +57,14 @@ final class HomeHistoryRefreshTests: XCTestCase {
     func testFailureStopsLoadingAndAllowsRetryWhenLinkIsReady() {
         XCTAssertFalse(HomeHistoryRefresh.isActive(status: .disconnected("Out of range"),
                                                    saving: true, analyzing: false, failed: true))
+        XCTAssertFalse(HomeHistoryRefresh.isActive(status: .draining, saving: true, analyzing: true, failed: true))
         XCTAssertTrue(HomeHistoryRefresh.canRequest(status: .ready, saving: false, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .draining, saving: false, analyzing: false))
+        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .authenticating, saving: false, analyzing: false))
+        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .scanning, saving: false, analyzing: false))
+        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .connecting, saving: false, analyzing: false))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .ready, saving: true, analyzing: false))
+        XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .ready, saving: false, analyzing: true))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .reconnecting(attempt: 1), saving: false, analyzing: false))
     }
 }

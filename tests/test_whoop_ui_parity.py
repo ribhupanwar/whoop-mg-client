@@ -139,6 +139,23 @@ class WhoopUIParityTests(unittest.TestCase):
             self.assertTrue(p.is_file(), f"Licensed font {f} must exist in ios/Strap/Fonts")
             self.assertGreater(p.stat().st_size, 1000, f"Font {f} must be non-empty")
 
+    def test_home_refresh_w_indicator_geometry_and_lifecycle(self):
+        home_src = (IOS_DIR / "HomeView.swift").read_text(encoding="utf-8")
+        components_src = (IOS_DIR / "Components.swift").read_text(encoding="utf-8")
+        # Custom W indicator presence and accessibility ID
+        self.assertIn('"home.history.refresh"', home_src)
+        self.assertIn("Circle().fill(Color.appRaised)", home_src)
+        self.assertIn("Color.appSleep", home_src)
+        self.assertIn("CGPoint(x: 1, y: 2)", home_src)
+        self.assertIn("CGPoint(x: 4, y: 11)", home_src)
+        self.assertIn("CGPoint(x: 8, y: 5)", home_src)
+        self.assertIn("CGPoint(x: 12, y: 11)", home_src)
+        self.assertIn("CGPoint(x: 15, y: 2)", home_src)
+        self.assertIn(".frame(width: 34, height: 34)", home_src)
+        self.assertIn("HomeHistoryRefresh.isActive", home_src)
+        self.assertIn("UIRefreshControl.appearance().tintColor = .clear", home_src)
+        self.assertIn("UIRefreshControl.appearance().tintColor = .clear", components_src)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -73,6 +73,7 @@ enum StrapTypography {
         UIBarButtonItem.appearance().setTitleTextAttributes([.font: regular], for: .normal)
         UISegmentedControl.appearance().setTitleTextAttributes([.font: regular], for: .normal)
         UISegmentedControl.appearance().setTitleTextAttributes([.font: bold], for: .selected)
+        UIRefreshControl.appearance().tintColor = .clear
     }
     private static func bodyFile(_ weight: Font.Weight) -> String {
         if weight == .bold || weight == .heavy || weight == .black { return "ProximaNova-Bold" }

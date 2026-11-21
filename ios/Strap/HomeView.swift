@@ -22,6 +22,7 @@ struct HomeView: View {
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
     @State private var pullProgress: CGFloat = 0
+    @State private var isPullRefreshing = false
     @State private var syncSuccessAt: Date?
     @State private var syncSuccessDismissal: Task<Void, Never>?
     @State private var hasObservedInitialSync = false
@@ -51,16 +52,31 @@ struct HomeView: View {
         #endif
     }
 
+    private var syncIsActive: Bool {
+        if previewsActiveRefresh { return true }
+        guard !demo else { return false }
+        return isPullRefreshing || HomeHistoryRefresh.isActive(
+            status: store.band.status,
+            saving: store.band.isSavingHistory,
+            analyzing: store.band.isAnalyzingHistory,
+            failed: store.band.historySyncError != nil
+        )
+    }
+
+    private var isRefreshingVisible: Bool {
+        previewsActiveRefresh || syncIsActive || pullProgress > 0.10
+    }
+
     private var refreshIndicator: some View {
-        TimelineView(.animation(paused: reduceMotion || !previewsActiveRefresh)) { clock in
-            let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.1) / 1.1
+        TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
+            let turn = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.0) / 1.0
             ZStack {
                 Circle().fill(Color.appRaised)
                 Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
-                    .trim(from: 0, to: previewsActiveRefresh ? 0.72 : pullProgress)
+                    .trim(from: 0, to: syncIsActive ? 0.72 : min(0.72, max(0.05, pullProgress * 0.72)))
                     .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                    .rotationEffect(.degrees(previewsActiveRefresh && !reduceMotion ? turn * 360 - 90 : -90))
+                    .rotationEffect(.degrees(syncIsActive && !reduceMotion ? turn * 360 - 90 : (syncIsActive ? -90 : pullProgress * 90 - 90)))
                 Path { path in
                     path.addLines([
                         CGPoint(x: 1, y: 2),
@@ -75,10 +91,10 @@ struct HomeView: View {
                 .accessibilityHidden(true)
             }
             .frame(width: 34, height: 34)
-            .opacity(previewsActiveRefresh ? 1 : pullProgress)
+            .opacity(syncIsActive ? 1.0 : min(1.0, max(0.0, (pullProgress - 0.10) / 0.50)))
         }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(previewsActiveRefresh ? "Syncing band history" : "Pull to sync")
+        .accessibilityLabel(syncIsActive ? "Syncing band history" : "Pull to sync")
         .accessibilityIdentifier("home.history.refresh")
     }
 
@@ -114,6 +130,7 @@ struct HomeView: View {
             }
         }
         .onAppear {
+            UIRefreshControl.appearance().tintColor = .clear
             // An existing persisted completion is not a new sync success.
             hasObservedInitialSync = true
             AppOpenDayTracker.recordOpen()
@@ -148,10 +165,11 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if previewsActiveRefresh || pullProgress > 0.15 {
+                if isRefreshingVisible {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
+                        .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.88)))
                 }
             }
             .background {
@@ -178,10 +196,37 @@ struct HomeView: View {
                     saving: store.band.isSavingHistory,
                     analyzing: store.band.isAnalyzingHistory
                   ) else { return }
+            isPullRefreshing = true
+            defer { isPullRefreshing = false }
+
             if store.band.isConnected {
                 store.band.readHistory()
             } else {
                 store.connectBand()
+            }
+
+            let startTime = Date()
+            var observedActive = false
+            while Date().timeIntervalSince(startTime) < 35 {
+                if store.band.historySyncError != nil {
+                    break
+                }
+                let active = HomeHistoryRefresh.isActive(
+                    status: store.band.status,
+                    saving: store.band.isSavingHistory,
+                    analyzing: store.band.isAnalyzingHistory,
+                    failed: false
+                )
+                if active {
+                    observedActive = true
+                } else if observedActive || Date().timeIntervalSince(startTime) > 1.2 {
+                    break
+                }
+                do {
+                    try await Task.sleep(for: .milliseconds(120))
+                } catch {
+                    break
+                }
             }
         }
         .onChange(of: store.band.lastHistorySyncAt) { _, completedAt in
