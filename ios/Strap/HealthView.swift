@@ -186,7 +186,12 @@ struct HealthView: View {
                                 }
                                 var trace = Path()
                                 trace.move(to: first)
-                                for point in points.dropFirst() { trace.addLine(to: point) }
+                                for (previous, point) in zip(points, points.dropFirst()) {
+                                    let midpoint = (previous.x + point.x) / 2
+                                    trace.addCurve(to: point,
+                                                   control1: CGPoint(x: midpoint, y: previous.y),
+                                                   control2: CGPoint(x: midpoint, y: point.y))
+                                }
                                 var fill = trace
                                 fill.addLine(to: CGPoint(x: last.x, y: bottom))
                                 fill.addLine(to: CGPoint(x: first.x, y: bottom))
@@ -254,6 +259,19 @@ struct HealthView: View {
                     .accessibilityLabel("Heart rate indicator")
                     .accessibilityValue(lastHR == nil ? "unavailable" : "live")
                     .accessibilityIdentifier("health.live.indicator")
+            }
+            let segments = liveChartSegments
+            if let first = segments.first?.first, let last = segments.last?.last {
+                HStack {
+                    Text(Self.clock(first.unix))
+                    Spacer()
+                    Text(Self.clock(last.unix))
+                }
+                .font(StrapTypography.metric(10, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+                .padding(.leading, 18)
+                .padding(.trailing, 24)
+                .accessibilityIdentifier("health.live.timeline")
             }
             if !demo {
                 Text(liveHRDiagnostic)
@@ -403,7 +421,7 @@ struct HealthView: View {
     }
 
     private var lastHR: Int? {
-        guard demo else { return freshLiveHR }
+        guard demo else { return liveChartSegments.last?.last?.heartRate }
         #if DEBUG
         let args = ProcessInfo.processInfo.arguments
         if args.contains("--preview-hr-stale") { return nil }
@@ -434,8 +452,20 @@ struct HealthView: View {
     // The LIVE monitor must never plot historical offload values as though
     // they were current heart-rate observations.
     private var liveChartSegments: [[LiveSample]] {
-        guard !demo, lastHR != nil else { return [] }
-        return HealthChartReadings.segments(store.band.recentLiveHR)
+        if demo {
+            #if DEBUG
+            if ProcessInfo.processInfo.arguments.contains("--preview-hr-trace"), let bpm = lastHR {
+                return HealthChartReadings.segments([
+                    LiveSample(unix: 1_700_000_000, heartRate: bpm - 4, rrIntervalsMS: []),
+                    LiveSample(unix: 1_700_000_002, heartRate: bpm - 1, rrIntervalsMS: []),
+                    LiveSample(unix: 1_700_000_012, heartRate: bpm, rrIntervalsMS: [])
+                ])
+            }
+            #endif
+            return []
+        }
+        guard let connection = store.band.hrConnectedAt, let bpm = freshLiveHR else { return [] }
+        return HealthChartReadings.liveSegments(store.band.recentLiveHR, connection: connection, currentBPM: bpm)
     }
 
     private var series: [Double] {
@@ -578,6 +608,13 @@ enum HealthChartReadings {
     static let windowSeconds = 90
     static let maximumGapSeconds = 3
 
+    static func liveSegments(_ samples: [LiveSample], connection: Date, currentBPM: Int) -> [[LiveSample]] {
+        let connectionSecond = Int(connection.timeIntervalSince1970)
+        let current = samples.suffix(windowSeconds + 1).filter { $0.unix >= connectionSecond }
+        guard current.last?.heartRate == currentBPM else { return [] }
+        return segments(current)
+    }
+
     static func segments(_ samples: [LiveSample]) -> [[LiveSample]] {
         guard let latest = samples.last else { return [] }
         var runs: [[LiveSample]] = []
@@ -586,12 +623,12 @@ enum HealthChartReadings {
             guard sample.unix >= latest.unix - windowSeconds else { continue }
             let previous = current.last
             if let previous, sample.unix <= previous.unix { continue }
-            if !(35...220).contains(sample.heartRate) ||
+            if !(25...230).contains(sample.heartRate) ||
                 previous.map({ sample.unix - $0.unix > maximumGapSeconds }) == true {
                 if !current.isEmpty { runs.append(current) }
                 current = []
             }
-            if (35...220).contains(sample.heartRate) { current.append(sample) }
+            if (25...230).contains(sample.heartRate) { current.append(sample) }
         }
         if !current.isEmpty { runs.append(current) }
         return runs
