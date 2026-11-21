@@ -29,6 +29,14 @@ final class HealthChartReadingsTests: XCTestCase {
             .flatMap { $0 }.map(\.unix), [102, 104])
         XCTAssertTrue(HealthChartReadings.liveSegments(samples, connection: connection, currentBPM: 80).isEmpty)
     }
+    func testBackwardClockAdjustmentKeepsFreshEndpointAndDropsOldTimeline() {
+        let samples = [(200, 80), (190, 150), (191, 151)]
+            .map { LiveSample(unix: $0.0, heartRate: $0.1, rrIntervalsMS: []) }
+        let connection = Date(timeIntervalSince1970: 100)
+        XCTAssertEqual(HealthChartReadings.liveSegments(samples, connection: connection, currentBPM: 151)
+            .flatMap { $0 }.map(\.unix), [190, 191])
+    }
+
 }
 
 final class HomeHistoryRefreshTests: XCTestCase {

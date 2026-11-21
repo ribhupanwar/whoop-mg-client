@@ -609,10 +609,20 @@ enum HealthChartReadings {
     static let maximumGapSeconds = 3
 
     static func liveSegments(_ samples: [LiveSample], connection: Date, currentBPM: Int) -> [[LiveSample]] {
+        guard let latest = samples.last, latest.heartRate == currentBPM,
+              (25...230).contains(currentBPM) else { return [] }
         let connectionSecond = Int(connection.timeIntervalSince1970)
-        let current = samples.suffix(windowSeconds + 1).filter { $0.unix >= connectionSecond }
-        guard current.last?.heartRate == currentBPM else { return [] }
-        return segments(current)
+        let lowerBound = latest.unix >= connectionSecond ? connectionSecond : Int.min
+        var reversedCurrent: [LiveSample] = []
+        var previousSecond = latest.unix
+        // A backwards wall-clock adjustment starts a new contiguous plotting window.
+        for sample in samples.suffix(windowSeconds + 1).reversed() {
+            guard sample.unix <= previousSecond, sample.unix >= lowerBound else { break }
+            reversedCurrent.append(sample)
+            previousSecond = sample.unix
+        }
+        let result = segments(Array(reversedCurrent.reversed()))
+        return result.last?.last == latest ? result : [[latest]]
     }
 
     static func segments(_ samples: [LiveSample]) -> [[LiveSample]] {

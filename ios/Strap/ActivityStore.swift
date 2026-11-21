@@ -191,15 +191,16 @@ enum ActivityIconRegistry {
     ]
 
     static func importedKind(sportID: Int?, sportName: String) -> ActivityKind {
-        if let sportID {
-            return importedSports.first { $0.id == sportID }?.kind ?? .other
-        }
-
         let name = normalized(sportName)
-        if let sport = importedSports.first(where: { normalized($0.name) == name }) {
-            return sport.kind
+        let nameKind = importedSports.first { normalized($0.name) == name }?.kind
+            ?? ActivityKind.allCases.first { normalized($0.label) == name }
+        if let sportID {
+            guard let legacyKind = importedSports.first(where: { $0.id == sportID })?.kind else {
+                return .other
+            }
+            return nameKind ?? legacyKind
         }
-        return ActivityKind.allCases.first { normalized($0.label) == name } ?? .other
+        return nameKind ?? .other
     }
 
     static func detectedIcon(_ kind: String) -> String {
@@ -587,7 +588,7 @@ final class ActivityStore {
     func mergeWhoopWorkouts(_ incoming: [WhoopWorkout]) {
         var byID = Dictionary(uniqueKeysWithValues: whoopWorkouts().map { ($0.id, $0) })
         for var item in incoming {
-            item.sportID = byID[item.id]?.sportID ?? item.sportID
+            item.sportID = item.sportID ?? byID[item.id]?.sportID
             byID[item.id] = item
         }
         if let data = try? JSONEncoder().encode(Array(byID.values)) {

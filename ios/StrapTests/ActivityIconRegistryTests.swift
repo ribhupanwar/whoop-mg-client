@@ -106,4 +106,24 @@ final class ActivityIconRegistryTests: XCTestCase {
         XCTAssertNil(older.sportID)
         XCTAssertEqual(older.activityIcon, ActivityKind.run.icon)
     }
+
+    func testCurrentWorkoutNameDoesNotGetOverriddenByKnownLegacyID() throws {
+        let name = "ActivityIconRegistryTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+        defer { defaults.removePersistentDomain(forName: name) }
+        let store = ActivityStore(defaults: defaults)
+        let old = WhoopWorkout(id: "edited", sportName: "running", startUnix: 100, endUnix: 160,
+                               strain: nil, averageHeartRate: nil, sportID: 0)
+        let renamed = WhoopWorkout(id: "edited", sportName: "cycling", startUnix: 100, endUnix: 160,
+                                   strain: nil, averageHeartRate: nil)
+        store.mergeWhoopWorkouts([old, renamed])
+        let saved = try XCTUnwrap(store.whoopWorkouts().first)
+        XCTAssertEqual(saved.sportID, 0)
+        XCTAssertEqual(saved.activityIcon, ActivityKind.cycling.icon)
+
+        var explicitUpdate = renamed
+        explicitUpdate.sportID = 1
+        store.mergeWhoopWorkouts([explicitUpdate])
+        XCTAssertEqual(store.whoopWorkouts().first?.sportID, 1)
+    }
 }

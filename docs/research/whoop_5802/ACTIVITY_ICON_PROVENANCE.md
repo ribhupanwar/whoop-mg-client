@@ -24,7 +24,7 @@ STRAP commit `3541f1005c6bf82cab1bde4d6a50ba8e70790dbc` introduced the two asset
 
 ## Integration
 
-The accompanying TSV lists all documented legacy IDs and two sleep-related references. The app maps 53 legacy IDs to existing STRAP activity kinds. Its runtime registry resolves documented IDs and modern sport names without changing the original stored activity names. Unknown IDs use the Other icon as presentation only. Existing archived workouts decode when an ID is absent. A later API refresh preserves an ID already saved.
+The accompanying TSV lists all documented legacy IDs and two sleep-related references. The app maps 53 legacy IDs to existing STRAP activity kinds. Its runtime registry resolves documented IDs and modern sport names without changing the original stored activity names. Unknown IDs use the Other icon as presentation only. Existing archived workouts decode when an ID is absent. A later name-only API refresh preserves the saved ID and uses a recognized current name for presentation. An explicitly supplied updated ID replaces the earlier value.
 
 Home uses the same activity kind icons as manual selection and editing. The fallback icon set distinguishes Weightlifting and Strength Trainer, and gives Yoga, Pilates, Meditation, Elliptical, Functional Fitness, Basketball and Football distinct glyphs. Sleep and Nap retain their own glyphs. Icons render with Apple system symbols using STRAP’s tint and shared row layout. New original WHOOP icons bundled total zero. Other navigation, alarm and device glyphs retain their established implementations because the evidence did not establish authorized replacements.
 
