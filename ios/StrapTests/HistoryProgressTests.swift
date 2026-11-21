@@ -41,12 +41,27 @@ final class HistoryProgressTests: XCTestCase {
         let first = UUID()
         let second = UUID()
         var gate = HistoryClockGate()
+        let originalRevision = gate.revision
         gate.noteLoss(on: first)
+        XCTAssertNotEqual(gate.revision, originalRevision)
         XCTAssertFalse(gate.permitsHistory(on: first))
         XCTAssertTrue(gate.permitsHistory(on: second))
         gate.noteSynchronization(on: second)
         XCTAssertFalse(gate.permitsHistory(on: first))
         gate.noteSynchronization(on: first)
         XCTAssertTrue(gate.permitsHistory(on: first))
+        XCTAssertNotEqual(gate.revision, originalRevision, "Old continuation work stays invalid after RTC recovery")
+    }
+    func testContinuationBudgetRemainsBoundedWhileDurableRowsAdvance() {
+        let now = Date(timeIntervalSince1970: 50_000)
+        var frontier: Int? = 1_000
+        for attempt in 0..<3 {
+            let committed = 2_000 + attempt * 1_000
+            XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: committed,
+                previous: frontier, attempts: attempt, now: now))
+            frontier = committed
+        }
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 5_000,
+            previous: frontier, attempts: 3, now: now))
     }
 }

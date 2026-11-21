@@ -27,6 +27,14 @@ final class MGEcgPacketTests: XCTestCase {
         XCTAssertNotNil(MGEcgPacket.decodeVerifiedInner(inner(type: 47)))
     }
 
+    func testZeroCountAndAlignmentBytesAreNeverWaveformSamples() {
+        var bytes = inner()
+        bytes[24] = 0
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(bytes)?.samples, [])
+        bytes[227] = 1
+        XCTAssertNil(MGEcgPacket.decodeVerifiedInner(bytes))
+    }
+
     func testRejectsWrongRevisionCountAndCRC() {
         var bytes = inner()
         bytes[1] = 16
