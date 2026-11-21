@@ -106,12 +106,16 @@ enum SleepCoach {
         let need = baseline + additional + appliedDebt
         let efficiency = measuredEfficiency.flatMap { $0 > 0 && $0 <= 1 ? $0 : nil }
         let timeInBed = need / (efficiency ?? 1)
-        let wake = ((wakeMinutes % 1440) + 1440) % 1440
+        let wake = scheduledWake.map { CoachFormat.minutesSinceMidnight($0, calendar: calendar) }
+            ?? ((wakeMinutes % 1440) + 1440) % 1440
         // An overnight plan cannot fit a time-in-bed estimate above 24 hours.
         let usableEfficiency = timeInBed <= 24 ? efficiency : nil
         let plannedHours = usableEfficiency == nil ? need : timeInBed
         let bedMinutes = Int((plannedHours * 60.0).rounded())
-        let bedtime = ((wake - bedMinutes) % 1440 + 1440) % 1440
+        let bedtime = scheduledWake.map { date in
+            let start = date.addingTimeInterval(-Double(bedMinutes * 60))
+            return CoachFormat.minutesSinceMidnight(start, calendar: calendar)
+        } ?? ((wake - bedMinutes) % 1440 + 1440) % 1440
         return SleepRecommendation(
             baselineHours: baseline,
             appliedDebtHours: appliedDebt,
