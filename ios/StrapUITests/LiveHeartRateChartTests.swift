@@ -3,7 +3,7 @@ import XCTest
 final class LiveHeartRateChartTests: XCTestCase {
     func testLargeBPMAndHorizontalIndicatorShareTheSameReading() {
         let app = XCUIApplication()
-        app.launchArguments = ["--design-preview", "--preview-health-monitor", "--preview-live-bpm=150"]
+        app.launchArguments = ["--design-preview", "--preview-health-monitor", "--preview-live-bpm=150", "--preview-hr-trace"]
         app.launch()
         let value = app.staticTexts["health.live.bpm"]
         XCTAssertTrue(value.waitForExistence(timeout: 15))
@@ -12,6 +12,12 @@ final class LiveHeartRateChartTests: XCTestCase {
         XCTAssertTrue(indicator.exists)
         XCTAssertEqual(indicator.value as? String, "live")
         XCTAssertLessThan(indicator.frame.maxX, app.frame.maxX + 1)
+        let timeline = app.descendants(matching: .any)["health.live.timeline"].firstMatch
+        XCTAssertTrue(timeline.exists)
+        let screenshot = XCTAttachment(screenshot: app.screenshot())
+        screenshot.name = "Health Monitor with a deterministic live trace and dropout"
+        screenshot.lifetime = .keepAlways
+        add(screenshot)
     }
     func testStaleStateHasNeitherBPMNorLiveIndicator() {
         let app = XCUIApplication()
