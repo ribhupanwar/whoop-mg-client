@@ -149,4 +149,70 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         let detected = SleepDetect.detect(samples)
         XCTAssertEqual(detected.count, 2, "A gap dominated by off-wrist records with an isolated worn sample must not merge as an in-bed break")
     }
+
+    func testGenuineSleepExceedingTwelveHoursIsPreserved() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795039200
+
+        // 1. Active daytime baseline (1 hour)
+        for i in 0..<3600 {
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: 85, accel: 0.15, state: 0))
+        }
+
+        // 2. Continuous 13-hour recovery sleep (46,800 seconds)
+        let sleepStart = baseUnix + 3600
+        let sleepEnd = sleepStart + 13 * 3600
+        for u in sleepStart..<sleepEnd {
+            samples.append(makeV18Sample(unix: u, hr: 55, accel: 0.01, state: 2))
+        }
+
+        // 3. Morning wake baseline (30 minutes)
+        for u in sleepEnd..<(sleepEnd + 1800) {
+            samples.append(makeV18Sample(unix: u, hr: 85, accel: 0.15, state: 0))
+        }
+
+        let detected = SleepDetect.detect(samples)
+        XCTAssertEqual(detected.count, 1, "Genuine sleep > 12 hours must not be discarded")
+        if let night = detected.first {
+            XCTAssertEqual(night.startUnix, sleepStart)
+            XCTAssertEqual(night.endUnix, sleepEnd - 1)
+            XCTAssertEqual(night.durationS, 13 * 3600)
+        }
+    }
+
+    func testLeadingAwakeUpIsTrimmedFromOvernightOnset() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1795039200
+
+        // 1. Active baseline (1 hour)
+        for i in 0..<3600 {
+            samples.append(makeV18Sample(unix: baseUnix + i, hr: 85, accel: 0.15, state: 0))
+        }
+
+        // 2. Awake in bed reading/moving for 10 minutes (state 3, HR 78, accel 0.04)
+        let awakeLeadStart = baseUnix + 3600
+        let awakeLeadEnd = awakeLeadStart + 600
+        for u in awakeLeadStart..<awakeLeadEnd {
+            samples.append(makeV18Sample(unix: u, hr: 78, accel: 0.04, state: 3))
+        }
+
+        // 3. Settled sleep for 7 hours (state 2, HR 54, accel 0.01)
+        let settledStart = awakeLeadEnd
+        let settledEnd = settledStart + 7 * 3600
+        for u in settledStart..<settledEnd {
+            samples.append(makeV18Sample(unix: u, hr: 54, accel: 0.01, state: 2))
+        }
+
+        // 4. Morning wake baseline (30 minutes)
+        for u in settledEnd..<(settledEnd + 1800) {
+            samples.append(makeV18Sample(unix: u, hr: 85, accel: 0.15, state: 0))
+        }
+
+        let detected = SleepDetect.detect(samples)
+        XCTAssertEqual(detected.count, 1)
+        if let night = detected.first {
+            XCTAssertEqual(night.startUnix, settledStart, "Sustained leading up(3) state must be trimmed from sleep onset")
+            XCTAssertEqual(night.endUnix, settledEnd - 1)
+        }
+    }
 }

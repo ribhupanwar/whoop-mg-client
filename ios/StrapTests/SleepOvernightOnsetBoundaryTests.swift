@@ -115,4 +115,55 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         }
         XCTAssertTrue(SleepDetect.detect(invalid).isEmpty)
     }
+
+    func testGenuineSleepExceeding12HoursIsNotDiscarded() throws {
+        // Issue #126: Genuine extended sleep (>12 hours) during illness or deep recovery
+        // must not be discarded with a hard 12-hour ceiling.
+        let (rows, start) = capture(startHour: 22, startMinute: 0, totalMinutes: 13 * 60)
+        let periods = SleepDetect.detect(rows)
+        XCTAssertFalse(periods.isEmpty, "Genuine sleep >12 hours must be detected and not dropped")
+        let night = try XCTUnwrap(periods.first)
+        XCTAssertEqual(night.startUnix, start)
+        XCTAssertEqual(night.endUnix, start + 13 * 3600 - 1)
+        XCTAssertGreaterThan(night.durationS, 12 * 3600)
+    }
+
+    func testLyingAwakeInBedWithLowMotionDoesNotTriggerFalseSleepOnset() {
+        // Issue #126: Sedentary evening awake stillness with low motion but WITHOUT
+        // autonomic heart-rate drop must not trigger a false sleep onset.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let start = Int(calendar.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 22, minute: 30
+        ))!.timeIntervalSince1970)
+
+        // 90 minutes of active awake baseline (HR ~90, moving)
+        var records: [V18Sample] = []
+        for second in 0..<5400 {
+            records.append(row(start - 5400 + second, seconds: second,
+                               sleeping: false, sleepState: 0))
+        }
+        // 75 minutes of lying awake in bed (low motion 0.02g, but HR remains high ~88 bpm, no drop)
+        for second in 0..<(75 * 60) {
+            let sample = V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80,
+                    recordIndex: UInt32(5400 + second), unix: UInt32(start + second), subsecQ15: 0),
+                heartRate: 88, // No significant HR drop compared to active 91 bpm
+                rrIntervalsMS: [],
+                dynamicAccelG: 0.015, // Low motion
+                gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: 0x10, sleepState: 1, // band says still (1), not sleep (2)
+                cardiacFlags: nil, hrQualityFlags: nil,
+                spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent,
+                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            )
+            records.append(sample)
+        }
+        // Should NOT be detected as confirmed overnight sleep because HR drop is absent
+        XCTAssertTrue(SleepDetect.detect(records).isEmpty,
+                      "Lying awake with low motion but without HR drop must not be detected as sleep")
+    }
 }

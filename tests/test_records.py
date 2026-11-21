@@ -388,6 +388,28 @@ class TestV21(unittest.TestCase):
     def test_v21_is_not_mixed_into_the_per_second_stream(self):
         self.assertIsNone(decode_record(imu_inner()))
 
+    def test_valid_rr_survives_when_byte_28_bit_7_is_unset(self):
+        # Issue #126: In real physical WHOOP captures, byte 28 bit 7 is unset
+        # for 100% of samples while valid RR is present. Never gate RR on bit 7.
+        record = bytearray(REAL_V18)
+        record[28] = 0x0E  # bit 7 unset
+        record[15] = 2
+        record[16:18] = (818).to_bytes(2, "little", signed=True)
+        record[18:20] = (780).to_bytes(2, "little", signed=True)
+        record[20:24] = b"\x00\x00\x00\x00"
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample.hr_quality_flags, 14)
+        self.assertEqual(sample.rr_intervals_ms, [818, 780])
+
+    def test_psnr_unavailable_does_not_reject_sample(self):
+        record = bytearray(REAL_V18)
+        record[100] = 0x80  # -128
+        record[101] = 0x80  # -128
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample.heart_rate, 94)
+
 
 if __name__ == "__main__":
     unittest.main()

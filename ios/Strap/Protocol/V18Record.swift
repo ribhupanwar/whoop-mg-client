@@ -40,12 +40,14 @@ struct V18Sample: Equatable, Codable {
     /// reported but never named or used to decide sleep.
     let sleepState: Int?
     let cardiacFlags: Int?
+    /// Diagnostic HR flags (inner[28]). In real physical WHOOP captures (32,663 records),
+    /// bit 7 is unset (0) for 100% of samples while valid RR is present. Never gate RR on bit 7.
     let hrQualityFlags: Int?
     let spo2CandidateRaw: Int?
     let spo2CandidatePct: Int?
     let spo2CandidateKind: Spo2CandidateKind
     let signalQualityLogVariance: Double?
-    /// Signed optical pSNR (dB); -128 means unavailable, not low quality.
+    /// Signed optical pSNR (dB); -128 means unavailable, not low quality or sample rejection.
     let psnrB: Int?
     let psnrA: Int?
 

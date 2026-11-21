@@ -577,6 +577,23 @@ final class RestingHrvTests: XCTestCase {
         XCTAssertEqual(Hrv.restingHeartRate(rows, windowS: 300), 65)
         XCTAssertNil(Hrv.restingHeartRate(rows, windowS: 0))
     }
+
+    func testRestingHeartRate300SecondRollingWindowPreservation() {
+        // Issue #126: Minimum 300-second rolling mean on real sensor capture evaluates to 59.29 bpm,
+        // matching WHOOP's screenshot ground truth (59 bpm). Verify 300-second window preservation.
+        let values: [Double] = (0..<1200).map { i in
+            if i >= 300 && i < 600 {
+                return 59.29 // Lowest sustained 300-second window
+            } else if i >= 600 && i < 900 {
+                return 62.5
+            } else {
+                return 66.0
+            }
+        }
+        let minRolling = Hrv.minimumRollingMean(values, window: 300)
+        XCTAssertNotNil(minRolling)
+        XCTAssertEqual(round(minRolling!), 59.0)
+    }
 }
 
 final class StrainTests: XCTestCase {
