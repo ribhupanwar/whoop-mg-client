@@ -131,7 +131,7 @@ enum ActivityDetect {
             // The unverified gait byte can describe a candidate, but only
             // measured step deltas may supply locomotion evidence.
             let locomotion = recentSteps
-            let moving = sample.dynamicAccelG.map { $0.isFinite && $0 >= 0.03 } ?? false
+            let moving = hasMeasuredAcceleration(sample)
 
             // Pre-workout baseline latching prevents long workouts from inflating
             // their own baseline and prematurely cutting off after 10-15 minutes.
@@ -173,8 +173,8 @@ enum ActivityDetect {
             if let first = rejected.first, let last = rejected.last {
                 onDecision(ActivityDecision(startUnix: timestamps[first], endUnix: timestamps[last],
                     proposedKind: nil, observedSeconds: last - first + 1,
-                    supportedSeconds: rejected.count, meanHR: Stats.mean(rejected.map { Double(ordered[$0].heartRate) }),
-                    cadenceMedian: nil, movementSeconds: rejected.filter { measuredMotion[$0] }.count,
+                    supportedSeconds: 0, meanHR: Stats.mean(rejected.map { Double(ordered[$0].heartRate) }),
+                    cadenceMedian: nil, movementSeconds: rejected.filter { hasMeasuredAcceleration(ordered[$0]) }.count,
                     reason: "Sparse evidence outside confirmed bouts"))
             }
         }
@@ -215,7 +215,7 @@ enum ActivityDetect {
                     proposedKind: detectedKind, observedSeconds: run.count, supportedSeconds: evidenceCount,
                     meanHR: Stats.mean(run.map { Double($0.heartRate) }),
                     cadenceMedian: spm.isEmpty ? nil : Stats.median(spm),
-                    movementSeconds: run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count, reason: reason))
+                    movementSeconds: run.filter(hasMeasuredAcceleration).count, reason: reason))
             }
             guard duration >= minimumDurationS, evidenceCount >= startSustainS else {
                 decision("Insufficient duration or confirmed evidence")
@@ -255,7 +255,7 @@ enum ActivityDetect {
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
                 let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
                 let movingSeconds = run.filter {
-                    Double($0.heartRate) >= hrFloor && ($0.dynamicAccelG ?? 0) >= 0.03
+                    Double($0.heartRate) >= hrFloor && hasMeasuredAcceleration($0)
                 }.count
                 guard confirmsGenericWorkout(
                     durationS: duration,
@@ -276,7 +276,7 @@ enum ActivityDetect {
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
                 let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
                 let movingSeconds = run.filter {
-                    Double($0.heartRate) >= hrFloor && ($0.dynamicAccelG ?? 0) >= 0.03
+                    Double($0.heartRate) >= hrFloor && hasMeasuredAcceleration($0)
                 }.count
                 guard exertionSeconds >= startSustainS,
                       movingSeconds >= startSustainS else {
@@ -308,6 +308,11 @@ enum ActivityDetect {
             )
         }
         return suppressDuplicates(sessions)
+    }
+
+    private static func hasMeasuredAcceleration(_ sample: V18Sample) -> Bool {
+        guard let acceleration = sample.dynamicAccelG else { return false }
+        return acceleration.isFinite && acceleration >= 0.03
     }
 
     /// Keep observed evidence only where four minutes of it fit in a rolling

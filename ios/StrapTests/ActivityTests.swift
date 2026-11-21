@@ -577,7 +577,7 @@ final class StepDrivenDetectTests: XCTestCase {
         XCTAssertTrue(ActivityDetect.detect(baseline + driving).isEmpty)
     }
 
-    func testSynthetic189MinuteSparseEvidenceDoesNotChainIntoWorkout() {
+    func testSynthetic189MinuteSparseEvidenceDoesNotChainIntoWorkout() throws {
         let baseline = (0..<900).map { sample($0, hr: 75, steps: 0, accel: 0.01) }
         let sparse = (900..<(900 + 189 * 60)).map { second in
             sample(second, hr: 110, steps: (second - 900) / 10, gait: 2,
@@ -585,7 +585,9 @@ final class StepDrivenDetectTests: XCTestCase {
         }
         var decisions: [ActivityDecision] = []
         XCTAssertTrue(ActivityDetect.detect(baseline + sparse, onDecision: { decisions.append($0) }).isEmpty)
-        XCTAssertTrue(decisions.contains { $0.reason.contains("Sparse evidence") })
+        let rejection = try XCTUnwrap(decisions.first { $0.reason.contains("Sparse evidence") })
+        XCTAssertEqual(rejection.supportedSeconds, 0)
+        XCTAssertGreaterThan(rejection.movementSeconds, 0)
     }
 
     func testWorkoutStopsBeforeStationaryElevatedHRAndIntermittentMotion() throws {

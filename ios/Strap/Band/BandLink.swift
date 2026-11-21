@@ -387,21 +387,25 @@ final class BandLink: NSObject, ObservableObject {
             ])
         }
         let start = end - 24 * 3600 + 1
+        let contextStart = start - ActivityDetect.baselineMaxAgeS
+        let restingHR = summary?.restingHeartRate
+        let maxHR = self.maxHR
         let sleep = (summary?.sleepSessions ?? []).map {
             SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
                         quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
         }
         let rows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
-            archiveWriter.samples(from: start, through: end) { continuation.resume(with: $0) }
+            archiveWriter.samples(from: contextStart, through: end) { continuation.resume(with: $0) }
         }
         let zone = TimeZone.current.identifier
         let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
         return try await Task.detached(priority: .utility) {
             struct Report: Encodable {
-                let source = "Replay of the last 24 hours of retained V18 history"
+                let source = "Replay of the last 24 hours of retained V18 history with up to 15 minutes of baseline context"
                 let algorithm = "concurrent-evidence-v1"
                 let build: String?
                 let timezone: String
+                let windowStartUnix: Int
                 let firstUnix: Int?
                 let lastUnix: Int?
                 let inputSamples: Int
@@ -410,10 +414,13 @@ final class BandLink: NSObject, ObservableObject {
                 let note = "Detector replay only. Existing stored activities, edits, and deletions are not modified."
             }
             var decisions: [ActivityDecision] = []
-            let detected = ActivityDetect.detect(rows, sleepPeriods: sleep) { decisions.append($0) }
-            let report = Report(build: revision, timezone: zone, firstUnix: rows.first?.unix,
-                                lastUnix: rows.last?.unix, inputSamples: rows.count,
-                                decisions: decisions, detected: detected)
+            let detected = ActivityDetect.detect(rows, sleepPeriods: sleep, restingHR: restingHR, maxHR: maxHR) {
+                if $0.endUnix >= start { decisions.append($0) }
+            }
+            let report = Report(build: revision, timezone: zone, windowStartUnix: start,
+                                firstUnix: rows.first?.unix, lastUnix: rows.last?.unix,
+                                inputSamples: rows.count, decisions: decisions,
+                                detected: detected.filter { $0.endUnix >= start })
             let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("activity-diagnostics", isDirectory: true)
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
