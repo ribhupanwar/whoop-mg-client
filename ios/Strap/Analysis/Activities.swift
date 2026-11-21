@@ -14,13 +14,22 @@ struct ActivityCandidate {
     let reason: String
 }
 
-/// Automatic run/walk/workout detection ported from `whoop/activity.py`.
-///
-/// A session opens from sustained measured step-counter motion or a sustained
-/// heart-rate rise (baseline = median HR 5-15 min old, start at max(100,
-/// baseline+20) for 4 min; minimum session 5 min). The raw gait byte is not
-/// vendor-verified and cannot open a session. Steps/min comes from step-counter
-/// deltas, never the cadence byte, which can read 97-108 while sitting still.
+/// Measured cadence or simultaneous elevated HR and motion supply activity
+/// evidence. A candidate needs a dense five-minute confirmation window.
+/// Short gaps between confirmed evidence bouts may be pauses. Individual
+/// bursts beyond those bouts cannot keep a session open.
+struct ActivityDecision: Encodable {
+    let startUnix: Int
+    let endUnix: Int
+    let proposedKind: String?
+    let observedSeconds: Int
+    let supportedSeconds: Int
+    let meanHR: Double
+    let cadenceMedian: Double?
+    let movementSeconds: Int
+    let reason: String
+}
+
 enum ActivityDetect {
     static let baselineMinAgeS = 300
     static let baselineMaxAgeS = 900
@@ -51,7 +60,8 @@ enum ActivityDetect {
         sleepPeriods: [SleepPeriod] = [],
         minimumDurationS: Int = minSessionS,
         restingHR: Double? = nil,
-        maxHR: Double? = nil
+        maxHR: Double? = nil,
+        onDecision: ((ActivityDecision) -> Void)? = nil
     ) -> [ActivitySession] {
         // Preserve the established five-minute behavior unless a caller
         // explicitly opts into a longer, independently evaluated duration.
@@ -87,18 +97,13 @@ enum ActivityDetect {
         measuredMotion.reserveCapacity(ordered.count)
         var latchedBaseline: Double?
         var baselineFrozen = false
-        var inactiveCount = 0
+        var lastEvidenceUnix: Int?
 
         for (index, sample) in ordered.enumerated() {
-            // A long archive/off-wrist gap is not continuous exercise.
-            // Clear the latched pre-workout baseline before evaluating the
-            // next sample, rather than waiting for 181 inactive *records*.
-            if index > 0 && sample.unix - ordered[index - 1].unix > gapToleranceS {
+            if let lastEvidenceUnix, sample.unix - lastEvidenceUnix > gapToleranceS {
                 latchedBaseline = nil
                 baselineFrozen = false
-                inactiveCount = 0
             }
-            let locomotion: Bool
             // The gait byte is not vendor-verified. A still/unknown gait
             // must not suppress a sustained, measured step rate.
             // Prefer recent measured counter movement for every gait state:
@@ -123,13 +128,10 @@ enum ActivityDetect {
             } else {
                 recentSteps = (rates[index] ?? 0) >= walkSPM
             }
-            // Never classify running from an unverified gait byte alone:
-            // running gait requires either measured steps or elevated heart rate.
-            if sample.activityClass == gaitRun && (Double(sample.heartRate) >= hrStartAbsolute || recentSteps) {
-                locomotion = true
-            } else {
-                locomotion = recentSteps
-            }
+            // The unverified gait byte can describe a candidate, but only
+            // measured step deltas may supply locomotion evidence.
+            let locomotion = recentSteps
+            let moving = sample.dynamicAccelG.map { $0.isFinite && $0 >= 0.03 } ?? false
 
             // Pre-workout baseline latching prevents long workouts from inflating
             // their own baseline and prematurely cutting off after 10-15 minutes.
@@ -146,13 +148,12 @@ enum ActivityDetect {
                 // (e.g. cardio, cycling, rowing starting at sync boundary), allow sustained
                 // elevated HR combined with dynamic acceleration to initiate a candidate session
                 // while strictly rejecting sedentary resting stress.
-                let moving = (sample.dynamicAccelG ?? 0) >= 0.03
                 elevated = Double(sample.heartRate) >= hrStartAbsolute && moving
             } else {
                 elevated = false
             }
             measuredMotion.append(locomotion)
-            let isActive = locomotion || elevated
+            let isActive = locomotion || (elevated && moving)
             flags.append(isActive)
 
             if isActive {
@@ -161,18 +162,22 @@ enum ActivityDetect {
                     latchedBaseline = baselines[prevIndex] ?? computedBaseline
                     baselineFrozen = true
                 }
-                inactiveCount = 0
-            } else {
-                inactiveCount += 1
-                if inactiveCount > gapToleranceS {
-                    latchedBaseline = nil
-                    baselineFrozen = false
-                }
+                lastEvidenceUnix = sample.unix
             }
         }
-        let closed = GapClosing.closed(
-            flags, unix: ordered.map { $0.unix }, maxGapS: gapToleranceS
-        )
+        let timestamps = ordered.map(\.unix)
+        let supported = sustainedEvidence(flags, unix: timestamps)
+        let closed = GapClosing.closed(supported, unix: timestamps, maxGapS: gapToleranceS)
+        if let onDecision {
+            let rejected = ordered.indices.filter { flags[$0] && !closed[$0] }
+            if let first = rejected.first, let last = rejected.last {
+                onDecision(ActivityDecision(startUnix: timestamps[first], endUnix: timestamps[last],
+                    proposedKind: nil, observedSeconds: last - first + 1,
+                    supportedSeconds: rejected.count, meanHR: Stats.mean(rejected.map { Double(ordered[$0].heartRate) }),
+                    cadenceMedian: nil, movementSeconds: rejected.filter { measuredMotion[$0] }.count,
+                    reason: "Sparse evidence outside confirmed bouts"))
+            }
+        }
 
         var sessions: [ActivitySession] = []
         var index = 0
@@ -189,14 +194,11 @@ enum ActivityDetect {
             let end = index
             // HR remains elevated after a measured walk/run stops. Keep short
             // pauses inside the workout but exclude trailing HR-only cooldown.
-            // Preserve existing behavior for HR-only cardio workouts.
-            let motionIndices = (start..<end).filter { measuredMotion[$0] }
+            // Generic workouts already end at the last supported HR/motion evidence.
+            let motionIndices = (start..<end).filter { supported[$0] && measuredMotion[$0] }
             let motionEnd = motionIndices.count >= startSustainS
                 ? ((motionIndices.last ?? end) + 1) : end
             let run = Array(ordered[start..<motionEnd])
-
-            guard run[run.count - 1].unix - run[0].unix + 1 >= minimumDurationS else { continue }
-            guard flags[start..<motionEnd].filter({ $0 }).count >= startSustainS else { continue }
 
             let walkTicks = run.filter { $0.activityClass == gaitWalk }.count
             let runTicks = run.filter { $0.activityClass == gaitRun }.count
@@ -205,11 +207,27 @@ enum ActivityDetect {
             let hasSteps = run.contains { $0.stepCounter != nil }
 
             let detectedKind = kind(spm: spm, hasSteps: hasSteps)
+            let evidenceCount = supported[start..<motionEnd].filter { $0 }.count
+            let duration = run[run.count - 1].unix - run[0].unix + 1
+            func decision(_ reason: String) {
+                guard let onDecision else { return }
+                onDecision(ActivityDecision(startUnix: run[0].unix, endUnix: run[run.count - 1].unix,
+                    proposedKind: detectedKind, observedSeconds: run.count, supportedSeconds: evidenceCount,
+                    meanHR: Stats.mean(run.map { Double($0.heartRate) }),
+                    cadenceMedian: spm.isEmpty ? nil : Stats.median(spm),
+                    movementSeconds: run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count, reason: reason))
+            }
+            guard duration >= minimumDurationS, evidenceCount >= startSustainS else {
+                decision("Insufficient duration or confirmed evidence")
+                continue
+            }
             if detectedKind == "walk" {
                 // Casual steps must not be promoted to an automatic workout.
                 // Keep step counting independent; only gate auto-saved walking sessions.
-                let duration = run[run.count - 1].unix - run[0].unix + 1
-                guard duration >= max(minimumDurationS, walkWorkoutMinSessionS) else { continue }
+                guard duration >= max(minimumDurationS, walkWorkoutMinSessionS) else {
+                    decision("Walk below the ten-minute floor")
+                    continue
+                }
                 // Only an HR baseline observed BEFORE the candidate is
                 // eligible. A baseline computed from workout samples can make
                 // 135 bpm exercise appear unelevated relative to itself.
@@ -219,10 +237,13 @@ enum ActivityDetect {
                     (preWorkoutBaseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta
                 )
                 let exertionSeconds = (start..<motionEnd).filter { sampleIndex in
-                    measuredMotion[sampleIndex] &&
+                    supported[sampleIndex] && measuredMotion[sampleIndex] &&
                         Double(ordered[sampleIndex].heartRate) >= hrFloor
                 }.count
-                guard exertionSeconds >= startSustainS else { continue }
+                guard exertionSeconds >= startSustainS else {
+                    decision("Walk lacks sustained cardiovascular evidence")
+                    continue
+                }
             }
 
             if detectedKind == "workout" {
@@ -230,31 +251,38 @@ enum ActivityDetect {
                 // Require a longer session with independent, sustained HR
                 // elevation and measured acceleration. HR-only exercise is
                 // classified separately as cardio, not as a step workout.
-                let duration = run[run.count - 1].unix - run[0].unix + 1
                 let baseline = baselines[start]
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
                 let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
-                let movingSeconds = run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count
+                let movingSeconds = run.filter {
+                    Double($0.heartRate) >= hrFloor && ($0.dynamicAccelG ?? 0) >= 0.03
+                }.count
                 guard confirmsGenericWorkout(
                     durationS: duration,
                     exertionSeconds: exertionSeconds,
                     movingSeconds: movingSeconds,
                     hasPreActivityBaseline: baseline != nil
-                ) else { continue }
+                ) else {
+                    decision("Workout lacks sustained concurrent HR and motion")
+                    continue
+                }
             }
 
             if detectedKind == "cardio" {
                 // Cardio requires genuine cardiovascular exertion with physical motion.
                 // Resting tachycardia or sedentary psychological stress must not be
                 // auto-saved as a workout.
-                let duration = run[run.count - 1].unix - run[0].unix + 1
                 let baseline = baselines[start]
                 let hrFloor = max(hrStartAbsolute, (baseline ?? (hrStartAbsolute - hrStartDelta)) + hrStartDelta)
                 let exertionSeconds = run.filter { Double($0.heartRate) >= hrFloor }.count
-                let movingSeconds = run.filter { ($0.dynamicAccelG ?? 0) >= 0.03 }.count
-                guard duration >= minimumDurationS,
-                      exertionSeconds >= startSustainS,
-                      movingSeconds >= 60 else { continue }
+                let movingSeconds = run.filter {
+                    Double($0.heartRate) >= hrFloor && ($0.dynamicAccelG ?? 0) >= 0.03
+                }.count
+                guard exertionSeconds >= startSustainS,
+                      movingSeconds >= startSustainS else {
+                    decision("Cardio lacks sustained concurrent HR and motion")
+                    continue
+                }
             }
 
             var sessionStrain: Double? = nil
@@ -264,6 +292,7 @@ enum ActivityDetect {
                 sessionStrain = WhoopDerivedStrain.score(run, restingHR: resting, maxHR: maxHeart)
             }
 
+            decision("Confirmed in retained samples before overlap and persistence checks")
             sessions.append(
                 ActivitySession(
                     startUnix: run[0].unix,
@@ -279,6 +308,29 @@ enum ActivityDetect {
             )
         }
         return suppressDuplicates(sessions)
+    }
+
+    /// Keep observed evidence only where four minutes of it fit in a rolling
+    /// five-minute wall-clock interval. Never count a missing or inactive
+    /// second as evidence, even when it is later bridged as a short pause.
+    static func sustainedEvidence(_ flags: [Bool], unix: [Int]) -> [Bool] {
+        var supported = Array(repeating: false, count: flags.count)
+        var left = 0
+        var count = 0
+        var coveredThrough = -1
+        for right in flags.indices {
+            if flags[right] { count += 1 }
+            while unix[right] - unix[left] >= minSessionS {
+                if flags[left] { count -= 1 }
+                left += 1
+            }
+            guard count >= startSustainS else { continue }
+            for index in max(left, coveredThrough + 1)...right {
+                supported[index] = flags[index]
+            }
+            coveredThrough = right
+        }
+        return supported
     }
 
     /// Suppress auto-detected sessions that overlap by >= 50% with an earlier accepted session
@@ -347,9 +399,9 @@ enum ActivityDetect {
     ) -> Bool {
         guard durationS >= walkWorkoutMinSessionS else { return false }
         if hasPreActivityBaseline {
-            return exertionSeconds >= startSustainS && movingSeconds >= 90
+            return exertionSeconds >= startSustainS && movingSeconds >= startSustainS
         } else {
-            return exertionSeconds >= startSustainS * 2 && movingSeconds >= 180
+            return exertionSeconds >= startSustainS * 2 && movingSeconds >= startSustainS
         }
     }
 

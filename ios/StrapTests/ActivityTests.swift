@@ -293,7 +293,7 @@ final class ActivityStoreTests: XCTestCase {
 }
 
 final class StepDrivenDetectTests: XCTestCase {
-    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int, steps: Int, gait: Int? = 0, accel: Double? = 0.05) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(
                 version: 18, flags: 0x80, recordIndex: UInt32(unix),
@@ -301,7 +301,7 @@ final class StepDrivenDetectTests: XCTestCase {
             ),
             heartRate: hr,
             rrIntervalsMS: [],
-            dynamicAccelG: 0.05,
+            dynamicAccelG: accel,
             gravityXG: nil,
             gravityYG: nil,
             gravityZG: nil,
@@ -555,6 +555,53 @@ final class StepDrivenDetectTests: XCTestCase {
         // Endpoint sampling omits a couple of boundary steps from this synthetic
         // fixture; 898 is the validated observable counter delta, not 900.
         XCTAssertGreaterThanOrEqual(StepCounter.total(samples) ?? 0, 898)
+    }
+
+    func testSyntheticHouseholdMovementAndElevatedHRMustCoincide() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let chores = (900..<2700).map { second in
+            let moving = second % 60 < 15
+            return sample(second, hr: moving ? 82 : 115, steps: (second - 900) / 7,
+                          gait: moving ? 1 : 2, accel: moving ? 0.24 : 0.01)
+        }
+        XCTAssertTrue(ActivityDetect.detect(baseline + chores).isEmpty)
+        XCTAssertGreaterThan(StepCounter.total(chores) ?? 0, 0)
+    }
+
+    func testSyntheticDrivingVibrationWithoutHRRiseDoesNotCreateWorkout() {
+        let baseline = (0..<900).map { sample($0, hr: 74, steps: 0, accel: 0.01) }
+        let driving = (900..<4500).map { second in
+            sample(second, hr: 82, steps: (second - 900) / 15, gait: 2,
+                   accel: second.isMultiple(of: 2) ? 0.35 : 0.08)
+        }
+        XCTAssertTrue(ActivityDetect.detect(baseline + driving).isEmpty)
+    }
+
+    func testSynthetic189MinuteSparseEvidenceDoesNotChainIntoWorkout() {
+        let baseline = (0..<900).map { sample($0, hr: 75, steps: 0, accel: 0.01) }
+        let sparse = (900..<(900 + 189 * 60)).map { second in
+            sample(second, hr: 110, steps: (second - 900) / 10, gait: 2,
+                   accel: second % 60 < 12 ? 0.30 : 0.01)
+        }
+        var decisions: [ActivityDecision] = []
+        XCTAssertTrue(ActivityDetect.detect(baseline + sparse, onDecision: { decisions.append($0) }).isEmpty)
+        XCTAssertTrue(decisions.contains { $0.reason.contains("Sparse evidence") })
+    }
+
+    func testWorkoutStopsBeforeStationaryElevatedHRAndIntermittentMotion() throws {
+        let baseline = (0..<900).map { sample($0, hr: 72, steps: 50, accel: 0.01) }
+        let workout = (900..<1800).map { sample($0, hr: 135, steps: 50, accel: 0.23) }
+        let sitting = (1800..<9000).map { second in
+            sample(second, hr: 117, steps: 50,
+                   accel: second % 60 < 6 ? 0.15 : nil)
+        }
+        let result = ActivityDetect.detect(baseline + workout + sitting)
+        XCTAssertEqual(result.count, 1)
+        let session = try XCTUnwrap(result.first)
+        XCTAssertEqual(session.kind, "workout")
+        // The 80%-dense confirmation window can absorb a short initial
+        // transition but cannot keep an office-length tail open.
+        XCTAssertLessThan(session.endUnix, 1800 + ActivityDetect.minSessionS)
     }
 
     func testCandidateClassificationDiagnosesDailyMovement() {
