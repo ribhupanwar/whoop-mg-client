@@ -195,6 +195,7 @@ enum DailyAnalysis {
         sleepCorrections: [String: [Int]] = [:],
         analyzedSleepSessions: [SleepSession]? = nil,
         analysisCache: HistoryAnalysisCache? = nil,
+        diagnostic: ((String, String, Int) -> Void)? = nil,
         progress: ((Int, Int, Bool) -> Void)? = nil
     ) -> [DayMetrics] {
         let ordered = samples.sorted { $0.unix < $1.unix }
@@ -241,6 +242,13 @@ enum DailyAnalysis {
 
         var result: [DayMetrics] = []
         for key in byDay.keys.sorted() {
+            var stageStart = DispatchTime.now().uptimeNanoseconds
+            func mark(_ stage: String) {
+                let now = DispatchTime.now().uptimeNanoseconds
+                diagnostic?(key, stage, Int((now - stageStart) / 1_000_000))
+                stageStart = now
+            }
+            mark("begin")
             let daySamples = byDay[key]!
             let dayPeriods = periods.filter {
                 let end = Date(timeIntervalSince1970: TimeInterval($0.endUnix))
@@ -275,10 +283,12 @@ enum DailyAnalysis {
                 return cache.ticket(key: HistoryAnalysisCache.dailyKey(key), samples: inputs, context: context)
             }
             if let saved = analysisCache?.load(DayMetrics.self, ticket: ticket) {
+                mark("cache hit")
                 result.append(saved)
                 progress?(result.count, byDay.count, true)
                 continue
             }
+            mark("cache miss; starting nightly biometrics")
             // NOOP-style per-sleep-session aggregation: derive each validated
             // session independently, then weight HRV by session duration.
             // Never join R-R beats across gaps or unrelated sleep sessions.
@@ -338,8 +348,11 @@ enum DailyAnalysis {
             let awakeDaySamples = daySamples.filter { sample in
                 !overlappingPeriods.contains { $0.startUnix <= sample.unix && sample.unix <= $0.endUnix }
             }
+            mark("nightly biometrics; starting awake HRV")
             let awakeWindow = Hrv.restingHRV(awakeDaySamples, minWindowS: 300)
+            mark("awake HRV; starting awake RHR")
             let awakeResting = Hrv.restingHeartRate(awakeDaySamples, windowS: 300)
+            mark("awake RHR")
             let strainResting = awakeResting
             var strain: Double?
             var zoneSeconds: [Int]?
@@ -383,7 +396,9 @@ enum DailyAnalysis {
                     zoneCoverageEndUnix: zoneSeconds == nil ? nil : zoneSamples.last.map { $0.unix + 1 }
                 )
             )
+            mark("daily metrics; saving checkpoint")
             if let day = result.last { analysisCache?.save(day, ticket: ticket) }
+            mark("checkpoint complete")
             progress?(result.count, byDay.count, false)
         }
         return result.sorted { $0.dateKey < $1.dateKey }

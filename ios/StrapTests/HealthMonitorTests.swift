@@ -66,12 +66,12 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertEqual(missing[.temperature].baselineDays, 6)
         XCTAssertNil(missing[.temperature].value)
     }
-    func testAnEditOrPendingAnalysisCannotShowTheOldNightsVitals() {
+    func testPreviouslyCommittedVitalsRemainAvailableUntilBoundsChange() {
         let prior = (-7 ... -1).map { day($0) }
         let old = day(0)
         let changed = session.applyingSavedBounds([String(session.sourceStartUnix): [session.startUnix + 30, session.endUnix]])
         XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: changed, calendar: calendar).availableCount, 0)
-        XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: session, analyzing: true, calendar: calendar).availableCount, 0)
+        XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: session, calendar: calendar).availableCount, 5)
     }
     func testLegacyDayDecodesWithoutInventingTemperatureBaseline() throws {
         let original = day(0)

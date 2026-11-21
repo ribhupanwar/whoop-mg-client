@@ -17,6 +17,37 @@ final class BandConnectionStateMachineTests: XCTestCase {
         ])
     }
 
+    func testHelloWaitsForDelayedMatchingProtocolAck() {
+        var exchange = BandHelloExchange(sequence: 9)
+        exchange.writeCompleted = true
+        XCTAssertFalse(exchange.isConfirmed)
+        let invalidReplies: [[UInt8]] = [
+            [0x26, 1, 0x91, 8, 1],
+            [0x26, 1, 0x03, 9, 1],
+            [0x26, 1, 0x91, 9, 0],
+            [0x26, 1, 0x91, 9]
+        ]
+        for reply in invalidReplies {
+            exchange.receive(reply)
+            XCTAssertFalse(exchange.isConfirmed)
+        }
+        exchange.receive([0x26, 1, 0x91, 9, 1])
+        XCTAssertTrue(exchange.isConfirmed)
+    }
+
+    func testFragmentedHelloReplyBeforeWriteCallback() {
+        let reply = Gen5Frame.build([0x24, 1, 0x91, 9, 1])
+        let reassembler = FrameReassembler()
+        var exchange = BandHelloExchange(sequence: 9)
+        XCTAssertTrue(reassembler.feed(Array(reply.prefix(7))).isEmpty)
+        for frame in reassembler.feed(Array(reply.dropFirst(7))) {
+            exchange.receive(frame)
+        }
+        XCTAssertFalse(exchange.isConfirmed)
+        exchange.writeCompleted = true
+        XCTAssertTrue(exchange.isConfirmed)
+    }
+
     // MARK: - State Machine Lifecycle Tests
 
     func testLifecycleStatesForwardAndReverse() {

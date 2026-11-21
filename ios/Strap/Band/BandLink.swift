@@ -56,6 +56,22 @@ enum BandStatus: Equatable {
     }
 }
 
+struct BandHelloExchange {
+    let sequence: UInt8
+    var writeCompleted = false
+    private(set) var responseReceived = false
+
+    var isConfirmed: Bool { writeCompleted && responseReceived }
+
+    mutating func receive(_ frame: [UInt8]) {
+        guard frame.count >= 5,
+              frame[0] == BandPacket.commandResponse || frame[0] == BandPacket.puffinCommandResponse,
+              frame[2] == BandCommand.clientHello.rawValue,
+              frame[3] == sequence, frame[4] == 1 else { return }
+        responseReceived = true
+    }
+}
+
 struct DrainStats: Equatable {
     var frames = 0
     var samples = 0
@@ -185,6 +201,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private enum Keys {
         static let days = "strap.days.v1"
+        static let incompleteHistory = "strap.history.incomplete.v1"
         static let summary = "strap.capture.summary.v1"
         static let sleepAnalysis = "strap.sleep.analysis.v1"
         static let capturePath = "strap.capture.path.v1"
@@ -290,7 +307,9 @@ final class BandLink: NSObject, ObservableObject {
     private var notifyCharacteristics: [CBCharacteristic] = []
     private var reassemblers: [CBUUID: FrameReassembler] = [:]
     private var subscribed: Set<CBUUID> = []
-    private var subscriptionAttempts = 0
+    private var helloExchange: BandHelloExchange?
+    private var handshakeDeadline: DispatchWorkItem?
+    private var handshakeFailures = 0
 
     /// Public read-only stage helps distinguish GATT connection from an
     /// authenticated Gen5 stream when the live packet counter stays at zero.
@@ -467,11 +486,12 @@ final class BandLink: NSObject, ObservableObject {
             }
         }
     }
-    private var seenRecordIndices: Set<UInt32> = []
     private var drainFrames = 0
     private var historicalRecordFrames = 0
     private var drainAcks = 0
     private var drainStartedAt: Date?
+    private var historyCompletionReceived = false
+    private var hasIncompleteHistory = UserDefaults.standard.bool(forKey: Keys.incompleteHistory)
     private var lastFrameAt: Date?
     private var drainTimer: Timer?
     private var liveHRWatchdog: Timer?
@@ -557,6 +577,7 @@ final class BandLink: NSObject, ObservableObject {
         scanTimeout?.cancel()
         pickerTimeout?.cancel()
         commandDeadline?.cancel()
+        handshakeDeadline?.cancel()
     }
 
     /// Raw chunks are saved before the strap's trim ACK. Recover them after
@@ -624,6 +645,10 @@ final class BandLink: NSObject, ObservableObject {
     var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
 
     func recalculateRetainedMetrics() {
+        guard !hasIncompleteHistory else {
+            BLEDiagnosticLog.shared.log("analysis deferred: historical transfer is incomplete")
+            return
+        }
         // Repeated settings, recovery and drain callbacks request one follow-up,
         // rather than queueing multiple full-night analyses behind stale work.
         guard !isAnalyzingHistory else {
@@ -637,6 +662,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let request = metricsRequest
         let correctionRevision = sleepCorrectionRevision
+        let syncGeneration = historySyncGeneration
         isAnalyzingHistory = true
         let began = Date()
         historyProgress = HistoryProgress(stage: .preparing, completed: 0, total: 0, reused: 0,
@@ -683,7 +709,9 @@ final class BandLink: NSObject, ObservableObject {
             var freshDays = DailyAnalysis.metrics(
                 from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
                 sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions,
-                analysisCache: cache, progress: { completed, total, reused in
+                analysisCache: cache, diagnostic: { key, stage, elapsed in
+                    BLEDiagnosticLog.shared.log("analysis day=\(key) stage=\(stage) elapsedMs=\(elapsed)")
+                }, progress: { completed, total, reused in
                     if reused { reusedDays += 1 }
                     let snapshot = HistoryProgress(stage: .days, completed: completed, total: total,
                                                    reused: reusedDays, startedAt: daysBegan, lastStepAt: Date())
@@ -773,7 +801,8 @@ final class BandLink: NSObject, ObservableObject {
             let checkpointError = cacheSetupError ?? cache?.lastError
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
-                guard self.sleepCorrectionRevision == correctionRevision else {
+                guard self.sleepCorrectionRevision == correctionRevision,
+                      self.historySyncGeneration == syncGeneration, !self.hasIncompleteHistory else {
                     // Never publish/persist a calculation begun before a new edit.
                     self.isAnalyzingHistory = false
                     self.historyProgress = nil
@@ -887,16 +916,12 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     var recovery: RecoveryResult {
-        if isAnalyzingHistory {
-            return RecoveryResult(score: nil, reason: "Recalculating retained history",
-                                  hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
-        }
-        return latestSleepSession.map { recoveryAssessment(for: $0).result }
+        latestSleepSession.map { recoveryAssessment(for: $0).result }
             ?? Recovery.score(lnRMSSD: nil, rhr: nil, sleepHours: nil, sleepNeedHours: needHours, baseline: nil)
     }
 
     var recoveryNight: DayMetrics? {
-        guard !isAnalyzingHistory, let session = latestSleepSession else { return nil }
+        guard let session = latestSleepSession else { return nil }
         return recoveryNight(for: session, calendar: .current)
     }
 
@@ -1009,6 +1034,7 @@ final class BandLink: NSObject, ObservableObject {
     // MARK: - Connection
 
     func connect(sex: Sex, maxHR: Double?, restingHR: Double? = nil, needHours: Double) {
+        handshakeFailures = 0
         staleHRReconnects = 0
         hrRecoveryAttempts = 0
         configure(sex: sex, maxHR: maxHR, restingHR: restingHR, needHours: needHours)
@@ -1067,6 +1093,7 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Connect to a strap the picker found and remember it for next launch.
     func connect(to band: DiscoveredBand) {
+        handshakeFailures = 0
         guard central.state == .poweredOn else {
             lastMessage = status.title
             return
@@ -1603,7 +1630,9 @@ final class BandLink: NSObject, ObservableObject {
         notifyCharacteristics = []
         reassemblers = [:]
         subscribed = []
-        subscriptionAttempts = 0
+        helloExchange = nil
+        handshakeDeadline?.cancel()
+        handshakeDeadline = nil
         handshakeStarted = false
         helloAttempts = 0
         commandQueue.forEach { $0.onFailure?("Band disconnected. Reconnect and try again.") }
@@ -1623,10 +1652,8 @@ final class BandLink: NSObject, ObservableObject {
     // MARK: - Handshake
 
     private func maybeBeginHandshake() {
-        BLEDiagnosticLog.shared.log("maybeBeginHandshake gen=\(linkGeneration) connected=\(peripheral?.state == .connected) cmdChar=\(commandCharacteristic != nil) subs=\(subscriptionAttempts) started=\(handshakeStarted) hrBond=\(hrBondConfirmed)")
-        guard !handshakeStarted,
-              commandCharacteristic != nil,
-              subscriptionAttempts > 0,
+        guard !handshakeStarted, commandCharacteristic != nil,
+              subscribed.contains(BandUUID.commandFrom),
               peripheral?.state == .connected else { return }
         handshakeStarted = true
         status = .authenticating
@@ -1634,13 +1661,45 @@ final class BandLink: NSObject, ObservableObject {
         enqueue(BandCommand.clientHello.rawValue, body: [0x01])
     }
 
-    private func beginDrainRequests() {
-        // The clientHello acknowledgement moves status to .connected before
-        // scheduling this callback. Requiring .authenticating here silently
-        // prevented the initial history request on a successfully bonded link.
-        guard hrBondConfirmed, peripheral?.state == .connected,
-              commandCharacteristic != nil, status != .draining else { return }
+    private func armHandshakeDeadline(seconds: TimeInterval) {
+        handshakeDeadline?.cancel()
+        let generation = linkGeneration
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self, self.linkGeneration == generation, !self.hrBondConfirmed,
+                  let peripheral = self.peripheral else { return }
+            self.handshakeFailures += 1
+            if self.handshakeFailures >= 3 { self.wantsConnection = false }
+            let message = "WHOOP handshake timed out waiting for notification readiness or CLIENT_HELLO acknowledgement."
+            self.historySyncError = message
+            self.lastMessage = message
+            self.central.cancelPeripheralConnection(peripheral)
+        }
+        handshakeDeadline = timeout
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: timeout)
+    }
+
+    private func confirmHelloIfReady() {
+        guard !hrBondConfirmed, helloExchange?.isConfirmed == true,
+              subscribed.contains(BandUUID.data), let peripheral,
+              peripheral.state == .connected else { return }
+        handshakeDeadline?.cancel()
+        handshakeDeadline = nil
+        helloExchange = nil
+        hrBondConfirmed = true
+        handshakeFailures = 0
+        BLEDiagnosticLog.shared.log("CLIENT_HELLO confirmed gen=\(linkGeneration)")
+        // Renew a standard HR subscription that was opened before pairing.
+        if hrSubscribedBeforeBond, let hr = hrCharacteristic, hr.isNotifying {
+            hrResubscribePending = true
+            peripheral.setNotifyValue(false, for: hr)
+        }
+        hrSubscribedBeforeBond = false
+        status = .connected(bandName ?? "WHOOP MG")
+        isRebooting = false
+        rebootMessage = nil
         startDraining()
+        syncWakeAlarm(force: true)
+        refreshBattery()
     }
 
     /// Pull stored history again on an already-authenticated link. Used for a
@@ -1650,11 +1709,11 @@ final class BandLink: NSObject, ObservableObject {
             connect(sex: sex, maxHR: maxHR, needHours: needHours)
             return
         }
-        guard status != .draining else {
+        guard drainStartedAt == nil else {
             lastMessage = "History transfer already in progress."
             return
         }
-        guard status != .authenticating else {
+        guard hrBondConfirmed else {
             historySyncError = "WHOOP handshake is still pending. History sync cannot start until the band acknowledges pairing."
             lastMessage = historySyncError ?? "WHOOP handshake pending"
             return
@@ -1663,7 +1722,6 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func retryHistorySync() {
-        if drainStartedAt != nil { finishDrain(reason: "retry requested") }
         readHistory()
     }
 
@@ -1682,13 +1740,18 @@ final class BandLink: NSObject, ObservableObject {
 
     private func recordCompletedHistorySync() {
         let now = Date()
+        hasIncompleteHistory = false
+        UserDefaults.standard.removeObject(forKey: Keys.incompleteHistory)
         lastHistorySyncAt = now
         UserDefaults.standard.set(now, forKey: "strap.history.lastComplete.v1")
         historySyncError = nil
     }
 
     private func startDraining(continuing: Bool = false) {
-        if drainStartedAt != nil { finishDrain(reason: "starting a new sync") }
+        guard hrBondConfirmed, drainStartedAt == nil else { return }
+        hasIncompleteHistory = true
+        UserDefaults.standard.set(true, forKey: Keys.incompleteHistory)
+        historyCompletionReceived = false
         if !continuing {
             continuationAttempts = 0
             continuationFrontier = retainedHistoricalSamples.last?.unix
@@ -1817,6 +1880,9 @@ final class BandLink: NSObject, ObservableObject {
         let writeID = UUID()
         currentWriteID = writeID
         let inner: [UInt8] = [BandPacket.command, commandSeq, next.opcode] + next.body
+        if next.opcode == BandCommand.clientHello.rawValue {
+            helloExchange = BandHelloExchange(sequence: commandSeq)
+        }
         commandSeq &+= 1
         let frame = Gen5Frame.build(inner)
         if next.expectResponse {
@@ -1824,6 +1890,11 @@ final class BandLink: NSObject, ObservableObject {
                 guard let self, self.currentWriteID == writeID, self.commandInFlight,
                       let peripheral = self.peripheral else { return }
                 self.commandWriteTimedOut = true
+                if next.opcode == BandCommand.clientHello.rawValue {
+                    self.handshakeFailures += 1
+                    if self.handshakeFailures >= 3 { self.wantsConnection = false }
+                    self.handshakeDeadline?.cancel()
+                }
                 self.liveHeartRate = nil
                 let message = next.opcode == BandCommand.clientHello.rawValue
                     ? "WHOOP pairing acknowledgement timed out. Reconnecting; saved history is safe."
@@ -1857,8 +1928,10 @@ final class BandLink: NSObject, ObservableObject {
         }
         commandQueue.removeFirst()
         commandInFlight = false
+        let generation = linkGeneration
         DispatchQueue.main.asyncAfter(deadline: .now() + Self.commandSpacing) { [weak self] in
-            self?.pump()
+            guard let self, self.linkGeneration == generation else { return }
+            self.pump()
         }
     }
 
@@ -1890,7 +1963,6 @@ final class BandLink: NSObject, ObservableObject {
         lastChunkCount = 0
         lastCheckpointCount = 0
         lastCheckpointAt = Date()
-        seenRecordIndices = []
         drainFrames = 0
         drainAcks = 0
         drainStats = DrainStats()
@@ -1943,9 +2015,7 @@ final class BandLink: NSObject, ObservableObject {
             let incoming = Array(capturedSamples.dropFirst(lastCheckpointCount))
             lastCheckpointCount = capturedSamples.count
             lastCheckpointAt = now
-            mergeHistoricalArchive(incoming) { [weak self] in
-                self?.recalculateRetainedMetrics()
-            }
+            mergeHistoricalArchive(incoming) {}
         }
         if drainFrames > 0 && pendingHistoryFlushes == 0 && idle >= Self.drainIdleSeconds {
             finishDrain(reason: "idle timeout after \(Int(idle))s")
@@ -1956,9 +2026,15 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    private func finishCompletedDrainIfReady() {
+        guard historyCompletionReceived, pendingHistoryFlushes == 0 else { return }
+        finishDrain(reason: "explicit completion")
+    }
+
     private func finishDrain(reason: String = "interrupted", restoreConnectedState: Bool = true) {
         guard drainStartedAt != nil else { return }
         let generation = historySyncGeneration
+        historyCompletionReceived = false
         drainTimer?.invalidate()
         drainTimer = nil
         drainStartedAt = nil
@@ -1969,7 +2045,6 @@ final class BandLink: NSObject, ObservableObject {
         // buffer instead of holding a second raw-history copy until the next sync.
         let samples = capturedSamples
         capturedSamples = []
-        seenRecordIndices.removeAll()
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
         historyRRRecords = pendingHistoryRRRecords
         historyRRDeclared = pendingHistoryRRDeclared
@@ -2071,21 +2146,31 @@ final class BandLink: NSObject, ObservableObject {
                 self.pendingHistoryFlushes -= 1
                 self.historyPersistenceStalled = true
                 self.historySyncError = "Raw history could not be saved. Band history has not been acknowledged. Retry sync."
+                self.finishCompletedDrainIfReady()
                 return
             }
             self.archiveWriter.persistChunk(incoming, token: checkpoint) { [weak self] result in
                 guard let self, self.captureWriter === writer, self.drainStartedAt != nil else { return }
-                self.pendingHistoryFlushes -= 1
                 switch result {
                 case .success:
-                    guard !self.historyPersistenceStalled else { return }
-                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token)
-                    self.drainAcks += 1
-                    self.lastFrameAt = Date()
+                    guard !self.historyPersistenceStalled else {
+                        self.pendingHistoryFlushes -= 1
+                        self.finishCompletedDrainIfReady()
+                        return
+                    }
+                    self.enqueue(BandCommand.historicalDataResult.rawValue, body: [0x01] + token) { [weak self] in
+                        guard let self, self.captureWriter === writer, self.drainStartedAt != nil else { return }
+                        self.pendingHistoryFlushes -= 1
+                        self.drainAcks += 1
+                        self.lastFrameAt = Date()
+                        self.finishCompletedDrainIfReady()
+                    }
                 case .failure(let error):
+                    self.pendingHistoryFlushes -= 1
                     self.historyPersistenceStalled = true
                     self.hasUnsavedArchiveRecords = true
                     self.historySyncError = "History database save failed: \(error.localizedDescription). Band history is preserved for retry."
+                    self.finishCompletedDrainIfReady()
                 }
             }
         }
@@ -2202,6 +2287,13 @@ final class BandLink: NSObject, ObservableObject {
     private func handleFrame(_ inner: [UInt8], uuid: CBUUID) {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
+        if uuid == BandUUID.commandFrom, helloExchange != nil {
+            helloExchange?.receive(inner)
+            confirmHelloIfReady()
+        }
+        if type == BandPacket.historicalData || type == BandPacket.metadata {
+            guard drainStartedAt != nil else { return }
+        }
 
         if uuid == BandUUID.events {
             let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
@@ -2271,23 +2363,21 @@ final class BandLink: NSObject, ObservableObject {
             }
             // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
             // biometric record. Recognize it without inventing heartbeats.
-            if Gen5V26Record.decode(inner) != nil { return }
+            if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
                 return
             }
-            if seenRecordIndices.insert(sample.header.recordIndex).inserted {
-                if !sample.rrIntervalsMS.isEmpty { pendingHistoryRRRecords += 1 }
-                let declared = Int(inner[15])
-                if declared <= 4 {
-                    pendingHistoryRRDeclared += declared
-                    pendingHistoryRRAccepted += sample.rrIntervalsMS.count
-                    pendingHistoryRRRejected += declared - sample.rrIntervalsMS.count
-                } else {
-                    pendingHistoryRRRejected += 1 // malformed count byte
-                }
-                capturedSamples.append(sample)
+            if !sample.rrIntervalsMS.isEmpty { pendingHistoryRRRecords += 1 }
+            let declared = Int(inner[15])
+            if declared <= 4 {
+                pendingHistoryRRDeclared += declared
+                pendingHistoryRRAccepted += sample.rrIntervalsMS.count
+                pendingHistoryRRRejected += declared - sample.rrIntervalsMS.count
+            } else {
+                pendingHistoryRRRejected += 1 // malformed count byte
             }
+            capturedSamples.append(sample)
         } else if type == BandPacket.metadata, inner.count >= 3 {
             if inner[2] == BandPacket.historyEnd, inner.count >= 21 {
                 // WHOOP 5: eight-byte end_data token at absolute frame[21:29].
@@ -2299,8 +2389,9 @@ final class BandLink: NSObject, ObservableObject {
                 guard let writer = captureWriter else { return }
                 persistHistoryChunk(token: token, writer: writer)
             } else if inner[2] == 3, drainStartedAt != nil {
-                // HISTORY_COMPLETE: stop only on the explicit completion marker.
-                finishDrain(reason: "explicit completion")
+                // Completion can be delivered before the queued ATT callback.
+                historyCompletionReceived = true
+                finishCompletedDrainIfReady()
             }
         } else if (type == BandPacket.commandResponse || type == BandPacket.puffinCommandResponse), inner.count >= 5 {
             // WHOOP 5/MG Puffin command response inner structure:
@@ -2493,10 +2584,9 @@ extension BandLink: CBCentralManagerDelegate {
         // A restored/standing connection is a fresh GATT session. Rebuild
         // subscriptions and protocol state instead of reusing stale handles.
         resetLink()
-        // resetLink clears the stored peripheral reference. Restore it before
-        // GATT discovery: all subsequent characteristic callbacks and handshake
-        // guards require self.peripheral to be the connected device.
+        // Restore the reference before discovery callbacks can arrive.
         self.peripheral = peripheral
+        armHandshakeDeadline(seconds: 40)
         bandName = peripheral.name ?? preferredBandName ?? bandName
         status = .authenticating
         lastMessage = "Bluetooth connected; discovering WHOOP services…"
@@ -2565,6 +2655,7 @@ extension BandLink: CBCentralManagerDelegate {
 
 extension BandLink: CBPeripheralDelegate {
     func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard peripheral === self.peripheral else { return }
         if let error {
             status = .failed("Service discovery failed: \(error.localizedDescription)")
             return
@@ -2592,6 +2683,7 @@ extension BandLink: CBPeripheralDelegate {
         didDiscoverCharacteristicsFor service: CBService,
         error: Error?
     ) {
+        guard peripheral === self.peripheral else { return }
         if let error {
             lastMessage = "Characteristics unavailable: \(error.localizedDescription)"
             if service.uuid == BandUUID.service {
@@ -2605,7 +2697,6 @@ extension BandLink: CBPeripheralDelegate {
                 commandCharacteristic = characteristic
             case BandUUID.heartRateMeasurement:
                 hrCharacteristic = characteristic
-                subscriptionAttempts += 1
                 if characteristic.properties.contains(.notify) {
                     peripheral.setNotifyValue(true, for: characteristic)
                 } else {
@@ -2625,12 +2716,16 @@ extension BandLink: CBPeripheralDelegate {
                 if BandUUID.notifiable.contains(characteristic.uuid),
                    !notifyCharacteristics.contains(where: { $0.uuid == characteristic.uuid }) {
                     notifyCharacteristics.append(characteristic)
-                    subscriptionAttempts += 1
-                    peripheral.setNotifyValue(true, for: characteristic)
+                    if characteristic.isNotifying {
+                        subscribed.insert(characteristic.uuid)
+                    } else {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    }
                 }
             }
         }
         maybeBeginHandshake()
+        confirmHelloIfReady()
     }
 
     func peripheral(
@@ -2644,8 +2739,9 @@ extension BandLink: CBPeripheralDelegate {
             if characteristic.uuid == BandUUID.heartRateMeasurement {
                 hrResubscribePending = false
             }
-            if BandUUID.notifiable.contains(characteristic.uuid) {
-                status = .failed("WHOOP notification subscription failed: \(error.localizedDescription)")
+            subscribed.remove(characteristic.uuid)
+            if characteristic.uuid == BandUUID.commandFrom || characteristic.uuid == BandUUID.data {
+                BLEDiagnosticLog.shared.log("required subscription failed uuid=\(characteristic.uuid.uuidString)")
             }
             if isAuthenticationError(error) {
                 lastMessage = "The strap needs pairing before it will stream. Accept the prompt, then reconnect."
@@ -2656,6 +2752,8 @@ extension BandLink: CBPeripheralDelegate {
         }
         if characteristic.isNotifying {
             subscribed.insert(characteristic.uuid)
+        } else {
+            subscribed.remove(characteristic.uuid)
         }
         if characteristic.uuid == BandUUID.heartRateMeasurement {
             if characteristic.isNotifying {
@@ -2664,6 +2762,7 @@ extension BandLink: CBPeripheralDelegate {
             }
         }
         maybeBeginHandshake()
+        confirmHelloIfReady()
         if characteristic.uuid == BandUUID.heartRateMeasurement {
             if !characteristic.isNotifying {
                 liveHeartRate = nil
@@ -2737,13 +2836,14 @@ extension BandLink: CBPeripheralDelegate {
         commandDeadline?.cancel()
         commandDeadline = nil
         if let error {
-            commandInFlight = false
+            if commandQueue.first?.opcode == BandCommand.clientHello.rawValue { helloExchange = nil }
             if isAuthenticationError(error), helloAttempts < 2 {
                 helloAttempts += 1
                 lastMessage = "Waiting for the pairing prompt — accept it to authenticate the strap."
                 let generation = linkGeneration
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                     guard let self, self.linkGeneration == generation else { return }
+                    self.commandInFlight = false
                     self.pump()
                 }
                 return
@@ -2768,7 +2868,7 @@ extension BandLink: CBPeripheralDelegate {
             return
         }
         let finished = commandQueue.first?.opcode
-        commandQueue.first?.onWrite?()
+        let onWrite = commandQueue.first?.onWrite
         if finished == BandCommand.setGenericHRProfile.rawValue {
             hrEnableQueued = false
             let bodyByte = commandQueue.first?.body.first ?? 0x01
@@ -2776,28 +2876,11 @@ extension BandLink: CBPeripheralDelegate {
             isBroadcastingHR = hrProfileEnabled
         }
         completeCommandSent()
+        onWrite?()
         if finished == BandCommand.clientHello.rawValue {
-            hrBondConfirmed = true
-            BLEDiagnosticLog.shared.log("CLIENT_HELLO ack gen=\(linkGeneration) hrBondConfirmed=true")
-            // Field captures show an enabled 0x2A37 subscription BEFORE
-            // Gen5 encryption can remain silent forever. The bonded link
-            // must renew its CCCD regardless of isNotifying=true.
-            if hrSubscribedBeforeBond, let hr = hrCharacteristic, hr.isNotifying {
-                hrResubscribePending = true
-                peripheral.setNotifyValue(false, for: hr)
-            }
-            hrSubscribedBeforeBond = false
-            status = .connected(bandName ?? "WHOOP MG")
-            isRebooting = false
-            rebootMessage = nil
-            let generation = linkGeneration
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-                guard let self, self.linkGeneration == generation, self.hrBondConfirmed else { return }
-                self.beginDrainRequests()
-                self.ensureHeartRateStream()
-                self.syncWakeAlarm(force: true)
-                self.refreshBattery()
-            }
+            helloExchange?.writeCompleted = true
+            armHandshakeDeadline(seconds: 10)
+            confirmHelloIfReady()
         }
     }
 }

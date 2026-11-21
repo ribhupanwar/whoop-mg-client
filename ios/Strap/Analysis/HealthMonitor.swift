@@ -38,10 +38,10 @@ struct HealthMonitorSnapshot {
 /// Empirical personal ranges from distinct, earlier, qualifying sleep nights.
 /// Data availability, clinical validation and an in-range result are distinct.
 enum HealthMonitor {
-    static func make(days: [DayMetrics], session: SleepSession?, analyzing: Bool = false,
+    static func make(days: [DayMetrics], session: SleepSession?,
                      calendar: Calendar = .current) -> HealthMonitorSnapshot {
         let key = session.map { JournalStore.dayKey(for: Date(timeIntervalSince1970: Double($0.endUnix - 1)), calendar: calendar) }
-        let current = analyzing ? nil : days.first {
+        let current = days.first {
             $0.dateKey == key && $0.state == "sleep" && $0.sleepStartUnix == session?.startUnix
                 && $0.sleepEndUnix == session.map { $0.endUnix - 1 }
         }

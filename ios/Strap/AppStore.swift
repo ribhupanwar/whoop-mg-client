@@ -93,8 +93,9 @@ final class AppStore: ObservableObject {
             self?.objectWillChange.send()
         }
         monitorCancellable = Publishers.CombineLatest3(band.$days, band.$summary, band.$isAnalyzingHistory)
-            .map { days, summary, analyzing in
-                HealthMonitor.make(days: days, session: summary?.latestSleepSession, analyzing: analyzing)
+            .filter { _, _, analyzing in !analyzing }
+            .map { days, summary, _ in
+                HealthMonitor.make(days: days, session: summary?.latestSleepSession)
             }
             .sink { [weak self] snapshot in self?.healthMonitor = snapshot }
         // Fitness comparisons change with saved observations/profile, never
@@ -171,7 +172,7 @@ final class AppStore: ObservableObject {
     var recordedNights: [RecordedNight] {
         var result: [String: RecordedNight] = [:]
         for day in band.days {
-            guard !band.isAnalyzingHistory, let hours = day.reliableSleepHours else { continue }
+            guard let hours = day.reliableSleepHours else { continue }
             result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: settings.sleepNeedHours, actualHours: hours)
         }
         let protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
