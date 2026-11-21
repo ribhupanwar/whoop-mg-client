@@ -2355,7 +2355,16 @@ final class BandLink: NSObject, ObservableObject {
             reassemblers[uuid] = created
             reassembler = created
         }
-        for inner in reassembler.feed([UInt8](value)) {
+        let previousDropped = reassembler.droppedBytes
+        let frames = reassembler.feed([UInt8](value))
+        if uuid == BandUUID.data, drainStartedAt != nil, reassembler.droppedBytes > previousDropped {
+            // An undecodable byte range may contain part of an offload chunk.
+            // Preserve the capture and withhold the trim ACK for replay.
+            historyPersistenceStalled = true
+            historySyncError = "A WHOOP history frame failed integrity validation. Retry sync to replay the chunk."
+            BLEDiagnosticLog.shared.log("history frame integrity failed gen=\(linkGeneration)")
+        }
+        for inner in frames {
             handleFrame(inner, uuid: uuid)
         }
     }
