@@ -29,12 +29,24 @@ final class HistoryProgressTests: XCTestCase {
     }
     func testBacklogContinuationRequiresProgressAndHasHardStop() {
         let now = Date(timeIntervalSince1970: 10_000)
-        XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, newest: 8000, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: false, newest: 8000, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newest: 8000, previous: 8000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newest: nil, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newest: 8000, previous: 7000, attempts: 3, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newest: 9900, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newest: 11_000, previous: 7000, attempts: 0, now: now))
+        XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: false, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 8000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: nil, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 7000, attempts: 3, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 9900, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 11_000, previous: 7000, attempts: 0, now: now))
+    }
+    func testClockLossRequiresSynchronizationFromTheSameBand() {
+        let first = UUID()
+        let second = UUID()
+        var gate = HistoryClockGate()
+        gate.noteLoss(on: first)
+        XCTAssertFalse(gate.permitsHistory(on: first))
+        XCTAssertTrue(gate.permitsHistory(on: second))
+        gate.noteSynchronization(on: second)
+        XCTAssertFalse(gate.permitsHistory(on: first))
+        gate.noteSynchronization(on: first)
+        XCTAssertTrue(gate.permitsHistory(on: first))
     }
 }

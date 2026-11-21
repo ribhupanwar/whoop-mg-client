@@ -217,6 +217,16 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample.gravityZG ?? 0, 0.8576, accuracy: 0.0005)
     }
 
+    func testV18UnknownSleepByteBitsRemainOpaque() throws {
+        var inner = bytes(realV18Hex)
+        inner[73] = 0b0010_0000
+        let state = try XCTUnwrap(V18Decoder.decode(inner)).sleepState
+        inner[73] |= 0b1100_1111
+        let sample = try XCTUnwrap(V18Decoder.decode(inner))
+        XCTAssertEqual(sample.sleepState, state)
+        XCTAssertEqual(sample.sleepStateByte, Int(inner[73]))
+    }
+
     func testImplausibleHRZeroesOnlyHR() {
         var inner = bytes(realV18Hex)
         inner[14] = 250

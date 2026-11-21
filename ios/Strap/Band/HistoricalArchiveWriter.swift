@@ -18,10 +18,17 @@ final class HistoricalArchiveWriter {
     }
 
     func merge(_ incoming: [V18Sample], completion: @escaping (Result<[V18Sample], Error>) -> Void) {
+        mergeReportingProgress(incoming) { result in
+            completion(result.map { $0.samples })
+        }
+    }
+
+    func mergeReportingProgress(_ incoming: [V18Sample],
+                                completion: @escaping (Result<(samples: [V18Sample], progress: HistoryDatabase.CommitProgress), Error>) -> Void) {
         queue.async {
             let result = Result {
-                _ = try self.commit(incoming, token: nil)
-                return try self.open().recentSamples()
+                let progress = try self.commit(incoming, token: nil)
+                return (samples: try self.open().recentSamples(), progress: progress)
             }
             DispatchQueue.main.async { completion(result) }
         }
@@ -30,6 +37,11 @@ final class HistoricalArchiveWriter {
     /// A chunk commit does not load the analysis window or launch new analysis.
     func persistChunk(_ incoming: [V18Sample], token: String,
                       completion: @escaping (Result<Int, Error>) -> Void) {
+        persistChunkReportingProgress(incoming, token: token) { completion($0.map(\.changed)) }
+    }
+
+    func persistChunkReportingProgress(_ incoming: [V18Sample], token: String,
+                                       completion: @escaping (Result<HistoryDatabase.CommitProgress, Error>) -> Void) {
         queue.async {
             let result = Result { try self.commit(incoming, token: token) }
             DispatchQueue.main.async { completion(result) }
@@ -93,15 +105,15 @@ final class HistoricalArchiveWriter {
         return opened
     }
 
-    private func commit(_ incoming: [V18Sample], token: String?) throws -> Int {
+    private func commit(_ incoming: [V18Sample], token: String?) throws -> HistoryDatabase.CommitProgress {
         for sample in incoming {
             if let old = pending[sample.unix], !HistoricalRecordSelection.prefers(sample, over: old) { continue }
             pending[sample.unix] = sample
         }
         do {
-            let changed = try open().commit(Array(pending.values), token: token)
+            let progress = try open().commitReportingProgress(Array(pending.values), token: token)
             pending.removeAll(keepingCapacity: true)
-            return changed
+            return progress
         } catch {
             // Reopen after a storage failure: don't reuse a connection whose
             // rollback may itself have failed. Pending rows survive the retry;
