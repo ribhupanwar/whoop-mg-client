@@ -1480,6 +1480,7 @@ final class BandLink: NSObject, ObservableObject {
         hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
+        recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
         hrCharacteristic = nil

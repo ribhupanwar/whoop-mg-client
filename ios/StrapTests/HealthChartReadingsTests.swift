@@ -37,6 +37,12 @@ final class HealthChartReadingsTests: XCTestCase {
             .flatMap { $0 }.map(\.unix), [190, 191])
     }
 
+    func testFreshConnectionCanPlotAfterWallClockMovesBeforeHandshakeTime() {
+        let fresh = LiveSample(unix: 98, heartRate: 150, rrIntervalsMS: [])
+        let connection = Date(timeIntervalSince1970: 100.5)
+        XCTAssertEqual(HealthChartReadings.liveSegments([fresh], connection: connection, currentBPM: 150), [[fresh]])
+    }
+
 }
 
 final class HomeHistoryRefreshTests: XCTestCase {
