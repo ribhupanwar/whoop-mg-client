@@ -20,13 +20,14 @@ final class SettingsTests: XCTestCase {
         let data = try JSONEncoder().encode(settings)
         let decoded = try JSONDecoder().decode(AppSettings.self, from: data)
         XCTAssertEqual(decoded, settings)
-        XCTAssertEqual(decoded.sleepIntent.extraHours, 0.5)
+        XCTAssertEqual(decoded.sleepIntent, .hard)
     }
 
     func testDashboardLayoutDefaultsToEveryRowInOrder() throws {
         let settings = try JSONDecoder().decode(AppSettings.self, from: Data("{}".utf8))
         XCTAssertEqual(settings.dashboardOrder, DashboardRow.allCases)
         XCTAssertTrue(settings.hiddenDashboardRows.isEmpty)
+        XCTAssertEqual(settings.sleepNeedHours, 8)
     }
 
     func testSavedDashboardOrderAndHiddenRowsSurviveRoundTrip() throws {
