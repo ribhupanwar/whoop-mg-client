@@ -43,16 +43,21 @@ struct HomeView: View {
 
     private var demo: Bool { store.isPreview }
 
-    private var syncIsActive: Bool {
+    private var previewsActiveRefresh: Bool {
         #if DEBUG
-        if demo, ProcessInfo.processInfo.arguments.contains("--preview-home-refresh") { return true }
+        return demo && ProcessInfo.processInfo.arguments.contains("--preview-home-refresh")
+        #else
+        return false
         #endif
-        return !demo && HomeHistoryRefresh.isActive(
+    }
+
+    private var syncIsActive: Bool {
+        previewsActiveRefresh || (!demo && HomeHistoryRefresh.isActive(
             status: store.band.status,
             saving: store.band.isSavingHistory,
             analyzing: store.band.isAnalyzingHistory,
             failed: store.band.historySyncError != nil
-        )
+        ))
     }
 
     private var refreshIndicator: some View {
@@ -143,7 +148,7 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if pullProgress > 0.15 {
+                if previewsActiveRefresh || pullProgress > 0.15 {
                     refreshIndicator
                         .offset(y: 39)
                         .allowsHitTesting(false)
