@@ -399,12 +399,7 @@ struct HealthView: View {
 
     // Use the same validated overnight HRV source as the Home dashboard.
     // A daytime capture must not overwrite the night's recovery metric.
-    private var displayedNight: DayMetrics? {
-        guard !store.band.isAnalyzingHistory, let session = store.band.latestSleepSession else { return nil }
-        let key = JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)))
-        return store.band.days.first { $0.dateKey == key && $0.state == "sleep"
-            && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1 }
-    }
+    private var displayedNight: DayMetrics? { store.band.recoveryNight }
 
     private var latestNightHRV: Double? {
         guard let night = displayedNight, night.hrvWindowSeconds >= 300,

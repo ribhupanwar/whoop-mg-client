@@ -9,6 +9,7 @@ struct SleepAnalysisView: View {
     @State private var showNeedInfo = false
     @State private var coachExpanded = false
     @State private var historyWeekOffset = 0
+    @State private var recoveryExportURL: URL?
     @State private var sleepExportURL: URL?
     @State private var sleepExportError: String?
     @State private var preparingSleepExport = false
@@ -480,8 +481,14 @@ struct SleepAnalysisView: View {
                 )
             }
         }
-        .onChange(of: session?.startUnix) { _, _ in sleepExportURL = nil }
-        .onChange(of: session?.endUnix) { _, _ in sleepExportURL = nil }
+        .onChange(of: session?.startUnix) { _, _ in
+            sleepExportURL = nil
+            recoveryExportURL = nil
+        }
+        .onChange(of: session?.endUnix) { _, _ in
+            sleepExportURL = nil
+            recoveryExportURL = nil
+        }
     }
 
     private var diagnosticDisclosures: some View {
@@ -537,6 +544,23 @@ struct SleepAnalysisView: View {
                     ShareLink("Share sleep CSV", item: sleepExportURL)
                         .padding(.top, 6)
                     Hint("Contains this night's recorded heart rate, R-R intervals, movement and estimated labels. Share only when you choose.")
+                }
+                Button {
+                    preparingSleepExport = true
+                    sleepExportError = nil
+                    recoveryExportURL = nil
+                    Task {
+                        do { recoveryExportURL = try await store.band.exportRecoveryDiagnostics() }
+                        catch { sleepExportError = error.localizedDescription }
+                        preparingSleepExport = false
+                    }
+                } label: {
+                    Label("Export Recovery diagnostics", systemImage: "square.and.arrow.up")
+                }
+                .disabled(preparingSleepExport || store.band.isAnalyzingHistory)
+                if let recoveryExportURL {
+                    ShareLink("Share Recovery JSON", item: recoveryExportURL)
+                    Hint("Contains personal sleep and Recovery data. It stays on this device until you choose to share it.")
                 }
                 if let sleepExportError { Hint(sleepExportError) }
             }

@@ -832,22 +832,63 @@ final class BandLink: NSObject, ObservableObject {
             return RecoveryResult(score: nil, reason: "Recalculating retained history",
                                   hrvComponent: nil, rhrComponent: nil, sleepComponent: nil)
         }
-        // Bind HRV/RHR to the displayed night, never the longest quiet run
-        // anywhere in the multi-day archive (which may be a different day).
-        let nightKey = latestSleepSession.map {
-            JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)))
+        return latestSleepSession.map { recoveryAssessment(for: $0).result }
+            ?? Recovery.score(lnRMSSD: nil, rhr: nil, sleepHours: nil, sleepNeedHours: needHours, baseline: nil)
+    }
+
+    var recoveryNight: DayMetrics? {
+        guard !isAnalyzingHistory, let session = latestSleepSession else { return nil }
+        return recoveryNight(for: session, calendar: .current)
+    }
+
+    private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
+        let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
+        let key = JournalStore.dayKey(for: date, calendar: calendar)
+        return days.last {
+            $0.dateKey == key && $0.state == "sleep"
+                && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
         }
-        let night = days.first {
-            $0.dateKey == nightKey && $0.sleepStartUnix == latestSleepSession?.startUnix
-                && $0.sleepEndUnix == latestSleepSession.map { $0.endUnix - 1 }
+    }
+
+    private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
+        let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
+        return DatedRecovery.evaluate(day: recoveryNight(for: session, calendar: calendar), priorDays: days,
+                                      date: date, sleepNeedHours: needHours, calendar: calendar)
+    }
+
+    func exportRecoveryDiagnostics() async throws -> URL {
+        guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
+        let calendar = Calendar.current
+        let assessment = recoveryAssessment(for: session, calendar: calendar)
+        let sync = lastHistorySyncAt
+        let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
+        let archived = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
+            archiveWriter.samples(from: session.startUnix, through: session.endUnix - 1) {
+                continuation.resume(with: $0)
+            }
         }
-        return Recovery.score(
-            lnRMSSD: night?.lnRMSSD,
-            rhr: night?.restingHR,
-            sleepHours: night?.reliableSleepHours,
-            sleepNeedHours: needHours,
-            baseline: DailyAnalysis.baseline(from: Array(days.filter { $0.dateKey < (nightKey ?? "") }.suffix(DailyAnalysis.rollingBaselineDays)))
-        )
+        let samples = HistoricalCaptureRecovery.merged(archived).values.sorted { $0.unix < $1.unix }
+        let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("recovery-exports", isDirectory: true)
+        return try await Task.detached(priority: .utility) {
+            let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
+                .map { $0.startUnix...($0.endUnix - 1) }
+            let hrv = Hrv.swsRestingHRV(samples, deepEpochs: deep, minWindowS: 300)
+            let report = RecoveryDiagnostics.Report(
+                buildRevision: revision, timezone: calendar.timeZone.identifier,
+                lastCompletedHistorySync: sync, assessment: assessment,
+                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), session: session,
+                archiveFirstUnix: samples.first?.unix, archiveLastUnix: samples.last?.unix,
+                archiveFirstRecordIndex: samples.first?.header.recordIndex,
+                archiveLastRecordIndex: samples.last?.header.recordIndex,
+                archiveSampleCount: samples.count, recomputedHRV: hrv.result,
+                recomputedHRVWindowSeconds: hrv.windowSeconds, recomputedHRVUsedDeepSleep: hrv.isSWS,
+                quietWindows: Hrv.restingWindowDiagnostics(samples, minWindowS: 300),
+                deepQuietWindows: Hrv.restingWindowDiagnostics(
+                    samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
+                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300))
+            return try RecoveryDiagnostics.write(report, to: directory)
+        }.value
     }
 
     /// Import dated WHOOP recovery inputs without overwriting band-captured

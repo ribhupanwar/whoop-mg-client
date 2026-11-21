@@ -199,3 +199,51 @@ extension MetricTimelineTests {
         XCTAssertEqual(DailyAnalysis.rollingBaselineDays, 28)
     }
 }
+
+extension MetricTimelineTests {
+    func testRecoveryUsesLatest28EligibleUniquePriorDays() throws {
+        let target = date(40)
+        let samples = (1...39).map { index -> DayMetrics in
+            if index.isMultiple(of: 4) {
+                return DayMetrics(dateKey: day(index).dateKey, state: "awake",
+                                  restingHR: nil, lnRMSSD: nil, hrvWindowSeconds: 0, sleepHours: 0,
+                                  sleepStartUnix: nil, sleepEndUnix: nil, strain: nil, steps: nil)
+            }
+            return day(index)
+        }
+        let history = Array(samples.reversed()) + [day(39), day(40), day(41)]
+        let result = DatedRecovery.evaluate(day: day(40), priorDays: history, date: target,
+                                             sleepNeedHours: 8, calendar: calendar)
+        let expected = samples.filter { $0.restingHR != nil }.suffix(28).map(\.dateKey)
+        XCTAssertEqual(result.baselineDays.map(\.dateKey), expected)
+        let timeline = MetricTimeline.make(days: history, live: [], manual: [], caloriesByDay: [:],
+                                           ending: target, count: 1, sleepNeedHours: 8, calendar: calendar)
+        XCTAssertEqual(timeline.first?.recovery, result.result.score)
+    }
+
+    func testSameNightMeasurementsRespondToBaselineAndSleepChanges() throws {
+        let history = (1...7).map { day($0) }
+        let changed = history.enumerated().map { index, row in
+            DayMetrics(dateKey: row.dateKey, state: "sleep", restingHR: 64 + Double(index),
+                       lnRMSSD: log(33 + Double(index)), hrvWindowSeconds: 300, sleepHours: 8,
+                       sleepStartUnix: nil, sleepEndUnix: nil, strain: nil, steps: nil)
+        }
+        let night = day(10)
+        func evaluate(_ target: DayMetrics, _ days: [DayMetrics]) -> DatedRecovery {
+            DatedRecovery.evaluate(day: target, priorDays: days, date: date(10),
+                                  sleepNeedHours: 8, calendar: calendar)
+        }
+        let a = evaluate(night, history)
+        let b = evaluate(night, changed)
+        XCTAssertNotEqual(a.result.score, b.result.score)
+        let breakdown = try XCTUnwrap(RecoveryDiagnostics.Breakdown(assessment: b))
+        XCTAssertEqual(Stats.rounded(breakdown.unroundedScore, 1), b.result.score)
+        let revised = DayMetrics(dateKey: night.dateKey, state: night.state, restingHR: night.restingHR,
+                                 lnRMSSD: night.lnRMSSD, hrvWindowSeconds: night.hrvWindowSeconds, sleepHours: 6,
+                                 sleepStartUnix: nil, sleepEndUnix: nil, strain: nil, steps: nil,
+                                 sleepDurationReliable: true)
+        let reloaded = try JSONDecoder().decode(DayMetrics.self, from: JSONEncoder().encode(revised))
+        XCTAssertNotEqual(evaluate(reloaded, changed).result.score, b.result.score)
+        XCTAssertNil(evaluate(night, Array(changed.prefix(6))).result.score)
+    }
+}

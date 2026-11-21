@@ -342,7 +342,7 @@ enum Hrv {
 
     /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
     /// change either production estimator or its quality thresholds.
-    struct RestingWindowDiagnostic {
+    struct RestingWindowDiagnostic: Encodable {
         let startUnix: Int
         let endUnix: Int
         let durationSeconds: Int
