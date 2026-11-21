@@ -525,16 +525,25 @@ final class RestingHrvTests: XCTestCase {
         XCTAssertEqual(fallbackResult.result.rmssdMS!, 10.0, accuracy: 0.5)
     }
 
-    func testRestingHeartRateIsLowestSustainedWindow() {
-        var rows = stretch(0, 120, hr: 70, accel: 0.01)
-        rows[60] = makeSample(60, hr: 50, accel: 0.01)
-        let value = Hrv.restingHeartRate(rows)
-        XCTAssertEqual(value!, 69.6667, accuracy: 0.0001)
+    func testRestingHeartRateUsesMedianAcrossEligibleWindows() {
+        let rows = stretch(0, 60, hr: 50, accel: 0.01)
+            + stretch(120, 120, hr: 70, accel: 0.01)
+        XCTAssertEqual(Hrv.restingHeartRate(rows), 70)
     }
 
     func testRestingHeartRateNeedsQuietAndContiguousSeconds() {
-        let rows = stretch(0, 120, hr: 60, accel: 0.5)
+        let rows = stretch(0, 30, hr: 60, accel: 0.01)
+            + stretch(30, 1, hr: 60, accel: 0.5)
+            + stretch(31, 29, hr: 60, accel: 0.01)
+            + stretch(90, 59, hr: 60, accel: 0.01)
         XCTAssertNil(Hrv.restingHeartRate(rows))
+    }
+
+    func testRestingHeartRateAcrossLongRecording() {
+        let rows = stretch(0, 300, hr: 50, accel: 0.01)
+            + stretch(600, 8 * 3600, hr: 65, accel: 0.01)
+        XCTAssertEqual(Hrv.restingHeartRate(rows, windowS: 300), 65)
+        XCTAssertNil(Hrv.restingHeartRate(rows, windowS: 0))
     }
 }
 
