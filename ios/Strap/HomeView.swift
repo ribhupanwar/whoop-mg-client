@@ -71,36 +71,26 @@ struct HomeView: View {
         TimelineView(.animation(paused: reduceMotion || !syncIsActive)) { clock in
             let turn: Double = clock.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.0) / 1.0
             let angle: Double = syncIsActive
-                ? (reduceMotion ? -90.0 : turn * 360.0 - 90.0)
-                : Double(pullProgress) * 90.0 - 90.0
+                ? (reduceMotion ? HomeRefreshConstants.arcGapStartAngleDegrees : turn * 360.0 + HomeRefreshConstants.arcGapStartAngleDegrees)
+                : Double(pullProgress) * 90.0 + HomeRefreshConstants.arcGapStartAngleDegrees
             let trimEnd: Double = syncIsActive
-                ? 0.72
-                : min(0.72, max(0.05, Double(pullProgress) * 0.72))
+                ? HomeRefreshConstants.arcTrimFraction
+                : min(HomeRefreshConstants.arcTrimFraction, max(0.05, Double(pullProgress) * HomeRefreshConstants.arcTrimFraction))
             let indicatorOpacity: Double = syncIsActive
                 ? 1.0
                 : min(1.0, max(0.0, Double(pullProgress - 0.10) / 0.50))
+            let indicatorColor = Color.appMuted.opacity(0.85)
 
             ZStack {
-                Circle().fill(Color.appRaised)
-                Circle().strokeBorder(Color.appMuted.opacity(0.25), lineWidth: 2)
                 Circle()
                     .trim(from: 0, to: trimEnd)
-                    .stroke(Color.appSleep, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .stroke(indicatorColor, style: StrokeStyle(lineWidth: HomeRefreshConstants.arcStrokeWidth, lineCap: .round))
                     .rotationEffect(.degrees(angle))
-                Path { path in
-                    path.addLines([
-                        CGPoint(x: 1, y: 2),
-                        CGPoint(x: 4, y: 11),
-                        CGPoint(x: 8, y: 5),
-                        CGPoint(x: 12, y: 11),
-                        CGPoint(x: 15, y: 2)
-                    ])
-                }
-                .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.7, lineCap: .round, lineJoin: .round))
-                .frame(width: 16, height: 13)
-                .accessibilityHidden(true)
+
+                WhoopWGlyph(color: indicatorColor)
+                    .accessibilityHidden(true)
             }
-            .frame(width: 34, height: 34)
+            .frame(width: HomeRefreshConstants.diameter, height: HomeRefreshConstants.diameter)
             .opacity(indicatorOpacity)
         }
         .accessibilityElement(children: .ignore)
@@ -175,9 +165,9 @@ struct HomeView: View {
             .padding(.horizontal, AppLayout.screenInset)
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
-                if isRefreshingVisible {
+                if isRefreshingVisible && compactScores {
                     refreshIndicator
-                        .offset(y: 39)
+                        .offset(y: 38)
                         .allowsHitTesting(false)
                         .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.88)))
                 }
@@ -457,13 +447,18 @@ struct HomeView: View {
 
     private var ringTrio: some View {
         VStack(spacing: 0) {
+            if isRefreshingVisible && !compactScores {
+                refreshIndicator
+                    .padding(.bottom, HomeRefreshConstants.indicatorToTitleGap)
+                    .transition(reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: 0.88)))
+            }
             Text("STRAP")
                 .font(StrapTypography.body(18, weight: .medium))
                 .tracking(3.2)
                 .foregroundStyle(Color.appFG)
                 .frame(maxWidth: .infinity)
-                .padding(.top, 8)
-                .padding(.bottom, 12)
+                .padding(.top, (isRefreshingVisible && !compactScores) ? 0 : 8)
+                .padding(.bottom, HomeRefreshConstants.titleToRingsGap)
                 .accessibilityLabel("STRAP")
             let diameter: CGFloat = AppLayout.heroRingDiameter
             HStack(spacing: AppLayout.ringGap) {
@@ -1875,6 +1870,38 @@ private struct HomeBandDeviceSettingsView: View {
     }
 }
 
+
+enum HomeRefreshConstants {
+    static let diameter: CGFloat = 30.0
+    static let arcStrokeWidth: CGFloat = 1.6
+    static let arcTrimFraction: CGFloat = 0.84
+    static let arcGapStartAngleDegrees: Double = -150.0
+    static let glyphStrokeWidth: CGFloat = 1.6
+    static let glyphSize: CGFloat = 14.0
+    static let indicatorToTitleGap: CGFloat = 14.0
+    static let titleToRingsGap: CGFloat = 14.0
+}
+
+struct WhoopWGlyph: View {
+    var color: Color = Color.appMuted.opacity(0.85)
+
+    static let pathPoints: [(start: CGPoint, end: CGPoint)] = [
+        (start: CGPoint(x: 1.2, y: 0.4), end: CGPoint(x: 3.4, y: 8.2)),
+        (start: CGPoint(x: 9.4, y: 0.4), end: CGPoint(x: 5.1, y: 13.8)),
+        (start: CGPoint(x: 10.8, y: 5.6), end: CGPoint(x: 13.6, y: 11.2))
+    ]
+
+    var body: some View {
+        Path { path in
+            for stroke in Self.pathPoints {
+                path.move(to: stroke.start)
+                path.addLine(to: stroke.end)
+            }
+        }
+        .stroke(color, style: StrokeStyle(lineWidth: HomeRefreshConstants.glyphStrokeWidth, lineCap: .round, lineJoin: .round))
+        .frame(width: HomeRefreshConstants.glyphSize, height: HomeRefreshConstants.glyphSize)
+    }
+}
 
 enum HomeHistoryRefresh {
     static func isActive(status: BandStatus, saving: Bool, analyzing: Bool, failed: Bool) -> Bool {

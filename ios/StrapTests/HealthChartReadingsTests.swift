@@ -67,4 +67,27 @@ final class HomeHistoryRefreshTests: XCTestCase {
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .ready, saving: false, analyzing: true))
         XCTAssertFalse(HomeHistoryRefresh.canRequest(status: .reconnecting(attempt: 1), saving: false, analyzing: false))
     }
+
+    func testWhoopWGlyphGeometryAndRefreshConstants() {
+        XCTAssertEqual(HomeRefreshConstants.diameter, 30.0)
+        XCTAssertEqual(HomeRefreshConstants.arcStrokeWidth, 1.6)
+        XCTAssertEqual(HomeRefreshConstants.arcTrimFraction, 0.84, accuracy: 0.001)
+        XCTAssertEqual(HomeRefreshConstants.arcGapStartAngleDegrees, -150.0)
+        XCTAssertEqual(HomeRefreshConstants.glyphStrokeWidth, 1.6)
+        XCTAssertEqual(HomeRefreshConstants.glyphSize, 14.0)
+        XCTAssertEqual(HomeRefreshConstants.indicatorToTitleGap, 14.0)
+        XCTAssertEqual(HomeRefreshConstants.titleToRingsGap, 14.0)
+
+        let points = WhoopWGlyph.pathPoints
+        XCTAssertEqual(points.count, 3)
+        // Stroke 1: Left \
+        XCTAssertEqual(points[0].start, CGPoint(x: 1.2, y: 0.4))
+        XCTAssertEqual(points[0].end, CGPoint(x: 3.4, y: 8.2))
+        // Stroke 2: Center /
+        XCTAssertEqual(points[1].start, CGPoint(x: 9.4, y: 0.4))
+        XCTAssertEqual(points[1].end, CGPoint(x: 5.1, y: 13.8))
+        // Stroke 3: Right \
+        XCTAssertEqual(points[2].start, CGPoint(x: 10.8, y: 5.6))
+        XCTAssertEqual(points[2].end, CGPoint(x: 13.6, y: 11.2))
+    }
 }
