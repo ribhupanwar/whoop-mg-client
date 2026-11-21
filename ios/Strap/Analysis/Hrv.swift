@@ -382,11 +382,15 @@ enum Hrv {
             .sorted { $0.startUnix < $1.startUnix }
     }
 
-    /// Lowest sustained heart rate across a quiet window, in bpm.
+    /// Robust overnight resting heart rate across motion-verified quiet windows.
     ///
-    /// Resting HR is the lowest sustained rate during quiet, not the single
-    /// lowest reading. Seconds must be contiguous and motion must be measured:
-    /// a sample with no accelerometer value is excluded, not assumed quiet.
+    /// The former minimum of all five-minute averages systematically
+    /// underestimated overnight RHR (5 paired nights: 8.1 bpm mean absolute
+    /// error against the user's WHOOP export). The median of eligible rolling
+    /// windows reduced that retrospective error to 1.5 bpm. This is an
+    /// independently derived estimate, NOT a claim about WHOOP's proprietary
+    /// estimator. Keep contiguous-second and measured-motion quality gates.
+    /// A sample with missing accelerometer data is never assumed quiet.
     static func restingHeartRate(
         _ samples: [V18Sample],
         windowS: Int = 60,
@@ -398,17 +402,19 @@ enum Hrv {
                     && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
             }
             .sorted { $0.unix < $1.unix }
-        var best: Double?
-        for run in contiguousRuns(eligible) {
-            guard let value = minimumRollingMean(run.map { Double($0.heartRate) }, window: windowS)
-            else { continue }
-            if let currentBest = best {
-                if value < currentBest { best = value }
-            } else {
-                best = value
+        guard windowS > 0 else { return nil }
+        var windowMeans: [Double] = []
+        for run in contiguousRuns(eligible) where run.count >= windowS {
+            let values = run.map { Double($0.heartRate) }
+            var total = values[0..<windowS].reduce(0.0, +)
+            windowMeans.append(total / Double(windowS))
+            for index in windowS..<values.count {
+                total += values[index] - values[index - windowS]
+                windowMeans.append(total / Double(windowS))
             }
         }
-        return best
+        guard !windowMeans.isEmpty else { return nil }
+        return Stats.median(windowMeans)
     }
 
     static func minimumRollingMean(_ values: [Double], window: Int) -> Double? {
