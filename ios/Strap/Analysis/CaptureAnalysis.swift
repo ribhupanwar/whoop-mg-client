@@ -251,7 +251,7 @@ enum DailyAnalysis {
             let context = DayContext(key: key, sex: sex, maxHR: maxHR,
                                      calendar: String(describing: calendar.identifier),
                                      zone: calendar.timeZone.identifier, sessions: related)
-            let ticket = analysisCache?.ticket(key: "day:\(key)", samples: inputs, context: context)
+            let ticket = analysisCache?.ticket(key: HistoryAnalysisCache.dailyKey(key), samples: inputs, context: context)
             if let saved = analysisCache?.load(DayMetrics.self, ticket: ticket) {
                 result.append(saved)
                 progress?(result.count, byDay.count, true)

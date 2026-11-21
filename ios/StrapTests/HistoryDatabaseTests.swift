@@ -156,6 +156,20 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertEqual(reuse, [false])
     }
 
+    func testDailyRHRRecipeDoesNotReusePreMedianCheckpoint() throws {
+        let cache = try HistoryAnalysisCache(url: url)
+        let date = "2026-11-21"
+        let old = try XCTUnwrap(cache.ticket(key: "day:\(date)", samples: [], context: date))
+        let new = try XCTUnwrap(cache.ticket(key: HistoryAnalysisCache.dailyKey(date), samples: [], context: date))
+        XCTAssertEqual(old.fingerprint, new.fingerprint)
+        cache.save([59.0], ticket: old)
+        XCTAssertNil(cache.load([Double].self, ticket: new))
+        cache.save([67.0], ticket: new)
+        let reopened = try HistoryAnalysisCache(url: url)
+        XCTAssertEqual(reopened.load([Double].self, ticket: new), [67.0])
+        XCTAssertEqual(reopened.load([Double].self, ticket: old), [59.0])
+    }
+
     func testAnalysisCacheRequiresMatchingFingerprint() throws {
         let database = try HistoryDatabase(url: url)
         try database.cache([1, 2, 3], key: "test", fingerprint: "input-a")

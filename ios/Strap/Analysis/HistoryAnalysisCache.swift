@@ -7,6 +7,10 @@ import Foundation
 final class HistoryAnalysisCache {
     // Bump whenever a cached sleep/day calculation changes its meaning.
     static let recipe = 4
+
+    // PR #106 changed the daily RHR statistic from minimum to median.
+    // Keep staged-night checkpoints reusable while refreshing daily metrics.
+    static func dailyKey(_ dateKey: String) -> String { "day-rhr-median-v1:\(dateKey)" }
     struct Ticket { let key: String; let fingerprint: String }
     private let database: HistoryDatabase
     private let encoder = JSONEncoder()
