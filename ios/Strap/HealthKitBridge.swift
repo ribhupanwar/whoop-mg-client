@@ -136,9 +136,9 @@ final class HealthKitBridge: ObservableObject {
         }
     }
 
-    static func detectedWorkoutDeletionPredicate(startTimes: [Int], source: HKSource) -> NSPredicate {
+    static func detectedWorkoutDeletionPredicate(startTimes: [Int], sourcePredicate: NSPredicate) -> NSPredicate {
         NSCompoundPredicate(andPredicateWithSubpredicates: [
-            HKQuery.predicateForObjects(from: source),
+            sourcePredicate,
             HKQuery.predicateForObjects(withMetadataKey: sourceKey, operatorType: .equalTo,
                                         value: detectedSource),
             HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID,
@@ -148,8 +148,9 @@ final class HealthKitBridge: ObservableObject {
 
     @MainActor
     func deleteDetectedWorkouts(startTimes: [Int]) async {
-        guard state == .ready, !startTimes.isEmpty else { return }
-        let predicate = Self.detectedWorkoutDeletionPredicate(startTimes: startTimes, source: .default())
+        guard state == .ready, !startTimes.isEmpty, Bundle.main.bundleIdentifier != nil else { return }
+        let sourcePredicate = HKQuery.predicateForObjects(from: HKSource.default())
+        let predicate = Self.detectedWorkoutDeletionPredicate(startTimes: startTimes, sourcePredicate: sourcePredicate)
         let error = await withCheckedContinuation { (continuation: CheckedContinuation<String?, Never>) in
             store.deleteObjects(of: HKObjectType.workoutType(), predicate: predicate) { success, _, error in
                 continuation.resume(returning: success ? nil : (error?.localizedDescription ?? "Workout could not be removed from Apple Health."))

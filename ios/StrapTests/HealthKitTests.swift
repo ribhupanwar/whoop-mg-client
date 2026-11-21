@@ -24,13 +24,16 @@ final class HealthKitMappingTests: XCTestCase {
     }
 
     func testDetectedDeletionRequiresAppSourceAndBandWorkoutIdentifiers() throws {
-        let source = HKSource.default()
-        let predicate = HealthKitBridge.detectedWorkoutDeletionPredicate(startTimes: [1_700_000_000], source: source)
+        // The unsigned test host cannot create a default HealthKit source.
+        let source = NSPredicate(value: false)
+        let predicate = HealthKitBridge.detectedWorkoutDeletionPredicate(
+            startTimes: [1_700_000_000], sourcePredicate: source
+        )
         let compound = try XCTUnwrap(predicate as? NSCompoundPredicate)
         XCTAssertEqual(compound.compoundPredicateType, .and)
         let parts = try XCTUnwrap(compound.subpredicates as? [NSPredicate])
         XCTAssertEqual(parts, [
-            HKQuery.predicateForObjects(from: source),
+            source,
             HKQuery.predicateForObjects(withMetadataKey: HealthKitBridge.sourceKey, operatorType: .equalTo,
                                         value: "strap-band"),
             HKQuery.predicateForObjects(withMetadataKey: HKMetadataKeyExternalUUID,
