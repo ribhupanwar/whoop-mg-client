@@ -5,6 +5,9 @@ struct DatedRecovery: Encodable {
     let dateKey: String
     struct BaselineDay: Encodable {
         let dateKey: String
+        let recordedState: String
+        let hrvWindowSeconds: Int
+        let restingHRWindowSeconds: Int?
         let lnRMSSD: Double
         let restingHR: Double
     }
@@ -42,7 +45,10 @@ struct DatedRecovery: Encodable {
                                     sleepNeedHours: sleepNeedHours, baseline: baseline)
         let inputs = baselineCandidates.compactMap { day -> BaselineDay? in
             guard let lnRMSSD = day.lnRMSSD, let rhr = day.restingHR else { return nil }
-            return BaselineDay(dateKey: day.dateKey, lnRMSSD: lnRMSSD, restingHR: rhr)
+            return BaselineDay(dateKey: day.dateKey, recordedState: day.state,
+                               hrvWindowSeconds: day.hrvWindowSeconds,
+                               restingHRWindowSeconds: day.restingHRWindowSeconds,
+                               lnRMSSD: lnRMSSD, restingHR: rhr)
         }
         return DatedRecovery(dateKey: dateKey, day: matchedDay,
                              baselineDays: inputs, baseline: baseline, sleepNeedHours: sleepNeedHours, result: result)

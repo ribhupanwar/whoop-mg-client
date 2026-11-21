@@ -549,10 +549,17 @@ struct SleepAnalysisView: View {
                     preparingSleepExport = true
                     sleepExportError = nil
                     recoveryExportURL = nil
+                    let requestedSession = store.band.latestSleepSession
                     Task {
-                        do { recoveryExportURL = try await store.band.exportRecoveryDiagnostics() }
-                        catch { sleepExportError = error.localizedDescription }
-                        preparingSleepExport = false
+                        defer { preparingSleepExport = false }
+                        do {
+                            let url = try await store.band.exportRecoveryDiagnostics()
+                            guard store.band.latestSleepSession == requestedSession else { return }
+                            recoveryExportURL = url
+                        } catch {
+                            guard store.band.latestSleepSession == requestedSession else { return }
+                            sleepExportError = error.localizedDescription
+                        }
                     }
                 } label: {
                     Label("Export Recovery diagnostics", systemImage: "square.and.arrow.up")
