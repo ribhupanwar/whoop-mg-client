@@ -65,8 +65,8 @@ enum HistorySyncPolicy {
 
     /// Chase only a genuinely advancing, still-old backlog. Never spin on
     /// duplicate/empty chunks or a future-dated strap clock.
-    static func shouldContinue(timedOut: Bool, newestInserted: Int?, previous: Int?, attempts: Int, now: Date) -> Bool {
-        guard timedOut, attempts < 3, let newest = newestInserted, newest > 0,
+    static func shouldContinue(timedOut: Bool, sealedAndAcknowledged: Bool, newestInserted: Int?, previous: Int?, attempts: Int, now: Date) -> Bool {
+        guard timedOut, sealedAndAcknowledged, attempts < 3, let newest = newestInserted, newest > 0,
               previous.map({ newest > $0 }) ?? true else { return false }
         let lag = now.timeIntervalSince1970 - Double(newest)
         return lag > 5 * 60
@@ -75,16 +75,16 @@ enum HistorySyncPolicy {
 
 /// Tied to the peer that reported RTC loss, including across reconnects.
 struct HistoryClockGate {
-    private var invalidPeer: UUID?
+    private var invalidPeers: Set<UUID> = []
     private(set) var revision = 0
 
     mutating func noteLoss(on peer: UUID) {
-        invalidPeer = peer
+        invalidPeers.insert(peer)
         revision &+= 1
     }
     mutating func noteSynchronization(on peer: UUID) {
-        if invalidPeer == peer { invalidPeer = nil }
+        invalidPeers.remove(peer)
     }
 
-    func permitsHistory(on peer: UUID) -> Bool { invalidPeer != peer }
+    func permitsHistory(on peer: UUID) -> Bool { !invalidPeers.contains(peer) }
 }

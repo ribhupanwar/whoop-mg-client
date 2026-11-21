@@ -2157,7 +2157,9 @@ final class BandLink: NSObject, ObservableObject {
         let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
         let completed = reason == "explicit completion" && !historyPersistenceStalled
             && historyUndecodableFrames == 0 && lastChunkCount == samples.count
-        let mayContinue = !historyPersistenceStalled && drainAcks > 0 && reason.hasPrefix("idle timeout")
+        let timedOut = reason.hasPrefix("idle timeout")
+        let sealedAndAcknowledged = !historyPersistenceStalled && pendingHistoryFlushes == 0
+            && historyUndecodableFrames == 0 && lastChunkCount == samples.count && drainAcks > 0
         emptySyncStreak = samples.isEmpty ? min(10, emptySyncStreak + 1) : 0
         if !completed {
             historySyncError = "History sync stopped (\(reason)). Saved data is safe; retry to fetch the remaining records."
@@ -2199,9 +2201,10 @@ final class BandLink: NSObject, ObservableObject {
             UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
             if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
             self.recalculateRetainedMetrics()
-            if mayContinue, self.historySyncGeneration == generation, self.historyClock.revision == clockRevision,
+            if timedOut, self.historySyncGeneration == generation, self.historyClock.revision == clockRevision,
                self.status.isReady, self.isConnected, self.drainStartedAt == nil,
-               HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: self.newestInsertedThisPass,
+               HistorySyncPolicy.shouldContinue(timedOut: timedOut, sealedAndAcknowledged: sealedAndAcknowledged,
+                   newestInserted: self.newestInsertedThisPass,
                    previous: self.continuationFrontier, attempts: self.continuationAttempts, now: Date()) {
                 self.continuationAttempts += 1
                 self.continuationFrontier = self.newestInsertedThisPass

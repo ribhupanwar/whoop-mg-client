@@ -29,13 +29,13 @@ final class HistoryProgressTests: XCTestCase {
     }
     func testBacklogContinuationRequiresProgressAndHasHardStop() {
         let now = Date(timeIntervalSince1970: 10_000)
-        XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: false, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 8000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: nil, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 8000, previous: 7000, attempts: 3, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 9900, previous: 7000, attempts: 0, now: now))
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 11_000, previous: 7000, attempts: 0, now: now))
+        XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: false, sealedAndAcknowledged: true, newestInserted: 8000, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 8000, previous: 8000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: nil, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 8000, previous: 7000, attempts: 3, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 9900, previous: 7000, attempts: 0, now: now))
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 11_000, previous: 7000, attempts: 0, now: now))
     }
     func testClockLossRequiresSynchronizationFromTheSameBand() {
         let first = UUID()
@@ -46,22 +46,32 @@ final class HistoryProgressTests: XCTestCase {
         XCTAssertNotEqual(gate.revision, originalRevision)
         XCTAssertFalse(gate.permitsHistory(on: first))
         XCTAssertTrue(gate.permitsHistory(on: second))
+        gate.noteLoss(on: second)
+        XCTAssertFalse(gate.permitsHistory(on: first))
+        XCTAssertFalse(gate.permitsHistory(on: second))
         gate.noteSynchronization(on: second)
+        XCTAssertTrue(gate.permitsHistory(on: second))
         XCTAssertFalse(gate.permitsHistory(on: first))
         gate.noteSynchronization(on: first)
         XCTAssertTrue(gate.permitsHistory(on: first))
         XCTAssertNotEqual(gate.revision, originalRevision, "Old continuation work stays invalid after RTC recovery")
     }
+    func testContinuationRequiresASealedAndAcknowledgedPass() {
+        let now = Date(timeIntervalSince1970: 50_000)
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: false,
+            newestInserted: 2_000, previous: 1_000, attempts: 0, now: now))
+    }
+
     func testContinuationBudgetRemainsBoundedWhileDurableRowsAdvance() {
         let now = Date(timeIntervalSince1970: 50_000)
         var frontier: Int? = 1_000
         for attempt in 0..<3 {
             let committed = 2_000 + attempt * 1_000
-            XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: committed,
+            XCTAssertTrue(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: committed,
                 previous: frontier, attempts: attempt, now: now))
             frontier = committed
         }
-        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, newestInserted: 5_000,
+        XCTAssertFalse(HistorySyncPolicy.shouldContinue(timedOut: true, sealedAndAcknowledged: true, newestInserted: 5_000,
             previous: frontier, attempts: 3, now: now))
     }
 }
