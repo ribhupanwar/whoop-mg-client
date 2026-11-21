@@ -142,6 +142,18 @@ final class HistoryDatabaseTests: XCTestCase {
 
         var progress: [Int] = []
         var reuse: [Bool] = []
+        let cancelled = DailyAnalysis.metrics(from: rows, sex: .male, maxHR: 190, calendar: calendar,
+                                              analyzedSleepSessions: [], analysisCache: cache,
+                                              shouldContinue: { progress.count < 3 }) {
+            completed, _, reused in
+            progress.append(completed)
+            reuse.append(reused)
+        }
+        XCTAssertEqual(cancelled.count, 3)
+        XCTAssertEqual(progress, [1, 2, 3])
+        XCTAssertEqual(reuse, [true, true, false])
+        progress = []
+        reuse = []
         let result = DailyAnalysis.metrics(from: rows, sex: .male, maxHR: 190, calendar: calendar,
                                            analyzedSleepSessions: [], analysisCache: cache) {
             completed, total, reused in
@@ -150,7 +162,7 @@ final class HistoryDatabaseTests: XCTestCase {
             reuse.append(reused)
         }
         XCTAssertEqual(progress, [1, 2, 3, 4])
-        XCTAssertEqual(reuse, [true, true, false, false])
+        XCTAssertEqual(reuse, [true, true, true, false])
         XCTAssertEqual(result.count, 4)
         XCTAssertEqual(try reopened.commit(replay(day: 3), token: "replay-3"), 0)
         XCTAssertEqual(DailyAnalysis.metrics(

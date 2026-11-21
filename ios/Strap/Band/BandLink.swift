@@ -74,6 +74,23 @@ struct BandHelloExchange {
     }
 }
 
+private final class HistoryAnalysisCancellation {
+    private let lock = NSLock()
+    private var cancelled = false
+
+    var isCancelled: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return cancelled
+    }
+
+    func cancel() {
+        lock.lock()
+        cancelled = true
+        lock.unlock()
+    }
+}
+
 private struct SavedBandMetrics: Codable {
     let days: [DayMetrics]
     let summary: CaptureSummary?
@@ -188,6 +205,7 @@ final class BandLink: NSObject, ObservableObject {
     private var lastCheckpointCount = 0
     private var lastCheckpointAt = Date.distantPast
     private lazy var archiveWriter = HistoricalArchiveWriter(url: historicalArchiveURL)
+    private var analysisCancellation: HistoryAnalysisCancellation?
     private let analysisQueue = DispatchQueue(label: "strap.history.analysis", qos: .userInitiated)
 
     var latestSleepSession: SleepSession? {
@@ -696,7 +714,22 @@ final class BandLink: NSObject, ObservableObject {
         let sessionsSnapshot = summary?.sleepSessions ?? []
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
             as? [String: [Int]] ?? [:]
+        let cancellation = HistoryAnalysisCancellation()
+        analysisCancellation = cancellation
         analysisQueue.async { [weak self] in
+            var submittedResult = false
+            defer {
+                if cancellation.isCancelled && !submittedResult {
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self, self.metricsRequest == request else { return }
+                        self.isAnalyzingHistory = false
+                        self.historyProgress = nil
+                        self.metricsRefreshPending = false
+                        self.recalculateRetainedMetrics()
+                    }
+                }
+            }
+            guard !cancellation.isCancelled else { return }
             let cache: HistoryAnalysisCache?
             var cacheSetupError: String?
             do { cache = try HistoryAnalysisCache(url: databaseURL) }
@@ -715,6 +748,7 @@ final class BandLink: NSObject, ObservableObject {
                     }
                 }
             )
+            guard !cancellation.isCancelled else { return }
             rebuilt.sleepSessions = SleepSession.retainingUncovered(
                 previous: sessionsSnapshot, fresh: rebuilt.sleepSessions ?? [],
                 coverageStart: rebuilt.firstUnix, coverageEnd: rebuilt.lastUnix,
@@ -727,7 +761,7 @@ final class BandLink: NSObject, ObservableObject {
             var freshDays = DailyAnalysis.metrics(
                 from: samples, sex: sexSnapshot, maxHR: maxSnapshot,
                 sleepCorrections: corrections, analyzedSleepSessions: fresh.sleepSessions,
-                analysisCache: cache, diagnostic: { key, stage, elapsed in
+                analysisCache: cache, shouldContinue: { !cancellation.isCancelled }, diagnostic: { key, stage, elapsed in
                     BLEDiagnosticLog.shared.log("analysis day=\(key) stage=\(stage) elapsedMs=\(elapsed)")
                 }, progress: { completed, total, reused in
                     if reused { reusedDays += 1 }
@@ -739,6 +773,7 @@ final class BandLink: NSObject, ObservableObject {
                     }
                 }
             )
+            guard !cancellation.isCancelled else { return }
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
                 self.historyProgress = HistoryProgress(stage: .finishing, completed: 0, total: 0, reused: 0,
@@ -799,6 +834,7 @@ final class BandLink: NSObject, ObservableObject {
             // Persist the same night-bound report used by Sleep Analysis, so
             // weekly Recovery charts never substitute a different sleep score.
             for index in freshDays.indices {
+                guard !cancellation.isCancelled else { return }
                 let day = freshDays[index]
                 guard let session = fresh.sleepSessions?.first(where: {
                     $0.startUnix == day.sleepStartUnix && $0.endUnix - 1 == day.sleepEndUnix
@@ -814,9 +850,11 @@ final class BandLink: NSObject, ObservableObject {
                     needHours: needSnapshot, nights: datedNights, sleepBaseline: sleepBaseline)
                 freshDays[index].sleepPerformancePct = datedReport?.performancePct
             }
+            guard !cancellation.isCancelled else { return }
             let scoredDays = freshDays
             let finalFresh = fresh
             let checkpointError = cacheSetupError ?? cache?.lastError
+            submittedResult = true
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
                 guard self.sleepCorrectionRevision == correctionRevision,
@@ -884,6 +922,7 @@ final class BandLink: NSObject, ObservableObject {
 
     func notifySleepCorrectionChanged() {
         sleepCorrectionRevision += 1
+        analysisCancellation?.cancel()
         applySavedSleepBounds()
         guard let session = latestSleepSession else { recalculateRetainedMetrics(); return }
         let revision = sleepCorrectionRevision
@@ -1772,6 +1811,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startDraining(continuing: Bool = false) {
         guard hrBondConfirmed, drainStartedAt == nil else { return }
+        analysisCancellation?.cancel()
         hasIncompleteHistory = true
         UserDefaults.standard.set(true, forKey: Keys.incompleteHistory)
         historyCompletionReceived = false
@@ -2097,7 +2137,8 @@ final class BandLink: NSObject, ObservableObject {
             missingSeconds = 0
         }
         let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
-        let completed = reason == "explicit completion" && !historyPersistenceStalled && historyUndecodableFrames == 0
+        let completed = reason == "explicit completion" && !historyPersistenceStalled
+            && historyUndecodableFrames == 0 && lastChunkCount == samples.count
         let newest = uniqueSeconds.max()
         let continueBacklog = !historyPersistenceStalled && HistorySyncPolicy.shouldContinue(
             timedOut: reason.hasPrefix("idle timeout"), newest: newest,
@@ -2226,6 +2267,7 @@ final class BandLink: NSObject, ObservableObject {
             throw PersistenceDiagnostics.Failure(message: "Invalid recorded sleep bounds.")
         }
         // Cancel in-flight analysis so it cannot undo the reviewed selection.
+        analysisCancellation?.cancel()
         metricsRequest += 1
         sleepCorrectionRevision += 1
         var updated = summary ?? .empty

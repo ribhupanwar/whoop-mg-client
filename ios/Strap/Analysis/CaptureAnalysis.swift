@@ -195,6 +195,7 @@ enum DailyAnalysis {
         sleepCorrections: [String: [Int]] = [:],
         analyzedSleepSessions: [SleepSession]? = nil,
         analysisCache: HistoryAnalysisCache? = nil,
+        shouldContinue: () -> Bool = { true },
         diagnostic: ((String, String, Int) -> Void)? = nil,
         progress: ((Int, Int, Bool) -> Void)? = nil
     ) -> [DayMetrics] {
@@ -242,6 +243,7 @@ enum DailyAnalysis {
 
         var result: [DayMetrics] = []
         for key in byDay.keys.sorted() {
+            guard shouldContinue() else { break }
             var stageStart = DispatchTime.now().uptimeNanoseconds
             func mark(_ stage: String) {
                 let now = DispatchTime.now().uptimeNanoseconds
