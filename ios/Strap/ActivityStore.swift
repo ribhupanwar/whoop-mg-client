@@ -408,6 +408,9 @@ private struct DeletedDetectedActivity: Codable, Equatable {
 
 final class ActivityStore {
     private let detectedLock = NSRecursiveLock()
+    private let persistLock = NSRecursiveLock()
+    private var cachedDetected: [ActivitySession]?
+    private var cachedDeletions: [DeletedDetectedActivity]?
     private let defaults: UserDefaults
     private let manualRevisionDirectory: URL
     private(set) var lastManualWriteError: String?
@@ -598,65 +601,89 @@ final class ActivityStore {
 
     // MARK: - Band-detected sessions
 
+    private func loadedDeletedSessionsLocked() -> [DeletedDetectedActivity] {
+        if let cached = cachedDeletions { return cached }
+        guard let data = defaults.data(forKey: deletedDetectedKey),
+              let saved = try? JSONDecoder().decode([DeletedDetectedActivity].self, from: data) else {
+            cachedDeletions = []
+            return []
+        }
+        cachedDeletions = saved
+        return saved
+    }
+
+    private func loadedDetectedSessionsLocked(deletions: [DeletedDetectedActivity]) -> [ActivitySession] {
+        let saved: [ActivitySession]
+        if let cached = cachedDetected {
+            saved = cached
+        } else if let data = defaults.data(forKey: detectedKey),
+                  let loaded = try? JSONDecoder().decode([ActivitySession].self, from: data) {
+            cachedDetected = loaded
+            saved = loaded
+        } else {
+            cachedDetected = []
+            saved = []
+        }
+        return saved.filter { session in !deletions.contains { Self.matches(session, deletion: $0) } }
+            .sorted { $0.startUnix < $1.startUnix }
+    }
+
     func detectedActivities() -> [ActivitySession] {
         detectedLock.lock()
         defer { detectedLock.unlock() }
-        guard let data = defaults.data(forKey: detectedKey),
-              let saved = try? JSONDecoder().decode([ActivitySession].self, from: data) else {
-            return []
-        }
-        let deletions = deletedDetectedSessions()
-        return saved.filter { session in !deletions.contains { Self.matches(session, deletion: $0) } }
-            .sorted { $0.startUnix < $1.startUnix }
+        let deletions = loadedDeletedSessionsLocked()
+        return loadedDetectedSessionsLocked(deletions: deletions)
     }
 
     /// Hides a deleted band session across replays whose boundaries shift slightly.
     func isDetectedDeleted(_ session: ActivitySession) -> Bool {
         detectedLock.lock()
         defer { detectedLock.unlock() }
-        return deletedDetectedSessions().contains { Self.matches(session, deletion: $0) }
+        return loadedDeletedSessionsLocked().contains { Self.matches(session, deletion: $0) }
     }
 
     func deletedDetectedStartTimes() -> [Int] {
         detectedLock.lock()
         defer { detectedLock.unlock() }
-        return Array(Set(deletedDetectedSessions().map(\.startUnix))).sorted()
+        return Array(Set(loadedDeletedSessionsLocked().map(\.startUnix))).sorted()
     }
 
     func deleteDetected(_ session: ActivitySession, now: Date = Date()) {
-        detectedLock.lock()
-        defer { detectedLock.unlock() }
-        // Never overwrite unreadable activity or deletion history. A corrupt
-        // tombstone archive must not be replaced with a partial new list.
-        if let original = defaults.data(forKey: detectedKey),
-           (try? JSONDecoder().decode([ActivitySession].self, from: original)) == nil { return }
-        if let original = defaults.data(forKey: deletedDetectedKey),
-           (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil { return }
-        var deletions = deletedDetectedSessions()
-        if !deletions.contains(where: { Self.matches(session, deletion: $0) }) {
-            deletions.append(DeletedDetectedActivity(
+        let update: (deletionsData: Data, remainingData: Data)? = {
+            detectedLock.lock()
+            defer { detectedLock.unlock() }
+            // Never overwrite unreadable activity or deletion history. A corrupt
+            // tombstone archive must not be replaced with a partial new list.
+            if let original = defaults.data(forKey: detectedKey),
+               (try? JSONDecoder().decode([ActivitySession].self, from: original)) == nil { return nil }
+            if let original = defaults.data(forKey: deletedDetectedKey),
+               (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil { return nil }
+
+            var deletions = loadedDeletedSessionsLocked()
+            if !deletions.contains(where: { Self.matches(session, deletion: $0) }) {
+                deletions.append(DeletedDetectedActivity(
+                    startUnix: session.startUnix, endUnix: session.endUnix,
+                    deletedAtUnix: Int(now.timeIntervalSince1970)
+                ))
+            }
+            cachedDeletions = deletions
+
+            let remaining = loadedDetectedSessionsLocked(deletions: deletions).filter { !Self.matches($0, deletion: DeletedDetectedActivity(
                 startUnix: session.startUnix, endUnix: session.endUnix,
                 deletedAtUnix: Int(now.timeIntervalSince1970)
-            ))
-        }
-        if let data = try? JSONEncoder().encode(deletions) {
-            defaults.set(data, forKey: deletedDetectedKey)
-        }
-        let remaining = detectedActivities().filter { !Self.matches($0, deletion: DeletedDetectedActivity(
-            startUnix: session.startUnix, endUnix: session.endUnix,
-            deletedAtUnix: Int(now.timeIntervalSince1970)
-        )) }
-        if let data = try? JSONEncoder().encode(remaining) {
-            defaults.set(data, forKey: detectedKey)
-        }
-    }
+            )) }
+            cachedDetected = remaining
 
-    private func deletedDetectedSessions() -> [DeletedDetectedActivity] {
-        guard let data = defaults.data(forKey: deletedDetectedKey),
-              let saved = try? JSONDecoder().decode([DeletedDetectedActivity].self, from: data) else {
-            return []
-        }
-        return saved
+            guard let dData = try? JSONEncoder().encode(deletions),
+                  let rData = try? JSONEncoder().encode(remaining) else { return nil }
+            return (dData, rData)
+        }()
+
+        guard let update else { return }
+        persistLock.lock()
+        defaults.set(update.deletionsData, forKey: deletedDetectedKey)
+        defaults.set(update.remainingData, forKey: detectedKey)
+        persistLock.unlock()
     }
 
     private static func matches(_ session: ActivitySession, deletion: DeletedDetectedActivity) -> Bool {
@@ -669,50 +696,52 @@ final class ActivityStore {
     /// so a session that overlaps an already-stored one is merged rather than
     /// appended, and the longer measurement wins.
     func mergeDetected(_ sessions: [ActivitySession], now: Date = Date()) {
-        detectedLock.lock()
-        defer { detectedLock.unlock() }
         guard !sessions.isEmpty else { return }
-        // A corrupt existing archive must not be silently replaced by the
-        // latest sync batch. Preserve the original bytes for recovery.
-        if let existing = defaults.data(forKey: detectedKey),
-           (try? JSONDecoder().decode([ActivitySession].self, from: existing)) == nil {
-            return
-        }
-        // Replayed history can contain several overlapping variants of the
-        // same workout. Deduplicate across both existing and incoming rows,
-        // not just the first match; repeat until transitive overlaps collapse.
-        // Historical workouts are user records, not a rolling cache.
-        // Never prune older sessions during an unrelated band sync.
-        if let original = defaults.data(forKey: deletedDetectedKey),
-           (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil { return }
-        let deletions = deletedDetectedSessions()
-        var seen = Set<String>()
-        var items = (detectedActivities() + sessions).filter { session in
-            guard !deletions.contains(where: { Self.matches(session, deletion: $0) }) else { return false }
-            return seen.insert("\(session.startUnix):\(session.endUnix)").inserted
-        }
-        var changed = true
-        while changed {
-            changed = false
-            outer: for i in items.indices {
-                for j in items.indices where j > i {
-                    guard Self.overlaps(items[i], items[j]) else { continue }
-                    // Keep the more complete record. Stable tie-break makes
-                    // repeated imports idempotent regardless of arrival order.
-                    let a = items[i], b = items[j]
-                    let winner = a.durationS > b.durationS ? a
-                        : b.durationS > a.durationS ? b
-                        : a.startUnix <= b.startUnix ? a : b
-                    items[i] = winner
-                    items.remove(at: j)
-                    changed = true
-                    break outer
+        let payload: Data? = {
+            detectedLock.lock()
+            defer { detectedLock.unlock() }
+            // A corrupt existing archive must not be silently replaced by the
+            // latest sync batch. Preserve the original bytes for recovery.
+            if let existing = defaults.data(forKey: detectedKey),
+               (try? JSONDecoder().decode([ActivitySession].self, from: existing)) == nil {
+                return nil
+            }
+            if let original = defaults.data(forKey: deletedDetectedKey),
+               (try? JSONDecoder().decode([DeletedDetectedActivity].self, from: original)) == nil {
+                return nil
+            }
+            let deletions = loadedDeletedSessionsLocked()
+            var seen = Set<String>()
+            var items = (loadedDetectedSessionsLocked(deletions: deletions) + sessions).filter { session in
+                guard !deletions.contains(where: { Self.matches(session, deletion: $0) }) else { return false }
+                return seen.insert("\(session.startUnix):\(session.endUnix)").inserted
+            }
+            var changed = true
+            while changed {
+                changed = false
+                outer: for i in items.indices {
+                    for j in items.indices where j > i {
+                        guard Self.overlaps(items[i], items[j]) else { continue }
+                        let a = items[i], b = items[j]
+                        let winner = a.durationS > b.durationS ? a
+                            : b.durationS > a.durationS ? b
+                            : a.startUnix <= b.startUnix ? a : b
+                        items[i] = winner
+                        items.remove(at: j)
+                        changed = true
+                        break outer
+                    }
                 }
             }
-        }
-        items = items.sorted { $0.startUnix < $1.startUnix }
-        if let data = try? JSONEncoder().encode(items) {
-            defaults.set(data, forKey: detectedKey)
+            items = items.sorted { $0.startUnix < $1.startUnix }
+            cachedDetected = items
+            return try? JSONEncoder().encode(items)
+        }()
+
+        if let payload {
+            persistLock.lock()
+            defaults.set(payload, forKey: detectedKey)
+            persistLock.unlock()
         }
     }
 
