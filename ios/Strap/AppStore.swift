@@ -175,7 +175,7 @@ final class AppStore: ObservableObject {
         let protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
         for (key, day) in whoopImportedDays where result[key] == nil && !protected.contains(key) {
             guard let hours = day.sleepHours else { continue }
-            result[key] = RecordedNight(dateKey: key, neededHours: day.sleepNeedHours ?? settings.sleepNeedHours, actualHours: hours)
+            // Imported WHOOP sleep need may already include historical debt and strain.\n            // Using it again as the debt baseline compounds those adjustments\n            // into subsequent STRAP recommendations. Compare recorded sleep to\n            // the user's configured base target instead.\n            result[key] = RecordedNight(dateKey: key, neededHours: settings.sleepNeedHours, actualHours: hours)
         }
         return result.values.sorted { $0.dateKey < $1.dateKey }
     }
