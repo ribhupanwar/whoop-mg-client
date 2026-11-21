@@ -21,6 +21,14 @@ final class HealthChartReadingsTests: XCTestCase {
         XCTAssertEqual(runs.map { $0.map(\.unix) }, [[100, 101], [103], [110, 111]])
         XCTAssertEqual(runs.last?.last?.heartRate, 85)
     }
+    func testLiveSegmentCannotReconnectToPriorConnectionOrMismatchedBPM() {
+        let samples = [(100, 78), (102, 80), (104, 225)]
+            .map { LiveSample(unix: $0.0, heartRate: $0.1, rrIntervalsMS: []) }
+        let connection = Date(timeIntervalSince1970: 101.5)
+        XCTAssertEqual(HealthChartReadings.liveSegments(samples, connection: connection, currentBPM: 225)
+            .flatMap { $0 }.map(\.unix), [102, 104])
+        XCTAssertTrue(HealthChartReadings.liveSegments(samples, connection: connection, currentBPM: 80).isEmpty)
+    }
 }
 
 final class HomeHistoryRefreshTests: XCTestCase {
