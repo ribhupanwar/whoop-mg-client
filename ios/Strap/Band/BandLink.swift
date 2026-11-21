@@ -1566,12 +1566,14 @@ final class BandLink: NSObject, ObservableObject {
     // MARK: - Handshake
 
     private func maybeBeginHandshake() {
+        BLEDiagnosticLog.shared.log("maybeBeginHandshake gen=\(linkGeneration) connected=\(peripheral?.state == .connected) cmdChar=\(commandCharacteristic != nil) subs=\(subscriptionAttempts) started=\(handshakeStarted) hrBond=\(hrBondConfirmed)")
         guard !handshakeStarted,
               commandCharacteristic != nil,
               subscriptionAttempts > 0,
               peripheral?.state == .connected else { return }
         handshakeStarted = true
         status = .authenticating
+        BLEDiagnosticLog.shared.log("CLIENT_HELLO enqueue gen=\(linkGeneration)")
         enqueue(BandCommand.clientHello.rawValue, body: [0x01])
     }
 
@@ -1996,6 +1998,7 @@ final class BandLink: NSObject, ObservableObject {
     /// END could free strap history past the failed chunk. Writer identity also
     /// prevents an old connection's completion from ACKing a new connection.
     private func persistHistoryChunk(token: [UInt8], writer: CaptureWriter) {
+        BLEDiagnosticLog.shared.log("historyChunk start token=\(token.map { String(format: "%02x", $0) }.joined()) gen=\(linkGeneration)")
         guard !historyPersistenceStalled else { return }
         let incoming = Array(capturedSamples.dropFirst(lastChunkCount))
         lastChunkCount = capturedSamples.count
@@ -2574,6 +2577,7 @@ extension BandLink: CBPeripheralDelegate {
         didUpdateNotificationStateFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        BLEDiagnosticLog.shared.log("notifyState uuid=\(characteristic.uuid.uuidString) notifying=\(characteristic.isNotifying) error=\(error?.localizedDescription ?? "none") gen=\(linkGeneration)")
         guard peripheral === self.peripheral else { return }
         if let error {
             if characteristic.uuid == BandUUID.heartRateMeasurement {
@@ -2666,6 +2670,7 @@ extension BandLink: CBPeripheralDelegate {
         didWriteValueFor characteristic: CBCharacteristic,
         error: Error?
     ) {
+        BLEDiagnosticLog.shared.log("didWrite char=\(characteristic.uuid.uuidString) err=\(error?.localizedDescription ?? "none") gen=\(linkGeneration) helloInFlight=\(commandInFlight)")
         guard peripheral === self.peripheral, characteristic == commandCharacteristic,
               !commandWriteTimedOut else { return }
         commandDeadline?.cancel()
@@ -2710,6 +2715,7 @@ extension BandLink: CBPeripheralDelegate {
         completeCommandSent()
         if finished == BandCommand.clientHello.rawValue {
             hrBondConfirmed = true
+            BLEDiagnosticLog.shared.log("CLIENT_HELLO ack gen=\(linkGeneration) hrBondConfirmed=true")
             // Field captures show an enabled 0x2A37 subscription BEFORE
             // Gen5 encryption can remain silent forever. The bonded link
             // must renew its CCCD regardless of isNotifying=true.
