@@ -95,6 +95,82 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertEqual(try database.metadata("last_history_chunk"), "durable")
     }
 
+    func testFragmentedHistoryReplayReopensAndCompletesFourDailyMetrics() throws {
+        let start = 1_800_000_000
+        let dates = (0..<4).map { start + $0 * 86_400 }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+
+        func replay(day: Int) -> [V18Sample] {
+            let decoder = FrameReassembler()
+            return (0..<360).flatMap { offset -> [V18Sample] in
+                let unix = UInt32(dates[day] + offset)
+                var inner = [UInt8](repeating: 0, count: 112)
+                inner[0] = 0x2F
+                inner[1] = 18
+                for byte in 0..<4 {
+                    // The record index starts over on each simulated transfer.
+                    inner[3 + byte] = UInt8(truncatingIfNeeded: offset >> (8 * byte))
+                    inner[7 + byte] = UInt8(truncatingIfNeeded: unix >> (8 * byte))
+                }
+                inner[14] = 60
+                let frame = Gen5Frame.build(inner)
+                let prefix = decoder.feed(Array(frame.prefix(19)))
+                return (prefix + decoder.feed(Array(frame.dropFirst(19)))).compactMap(V18Decoder.decode)
+            }
+        }
+
+        let cache = try HistoryAnalysisCache(url: url)
+        do {
+            let database = try HistoryDatabase(url: url)
+            for day in [1, 0] {
+                XCTAssertEqual(try database.commit(replay(day: day), token: "first-\(day)"), 360)
+            }
+            _ = DailyAnalysis.metrics(from: try database.samples(from: start, through: dates[3] + 359),
+                                      sex: .male, maxHR: 190, calendar: calendar,
+                                      analyzedSleepSessions: [], analysisCache: cache)
+        }
+
+        let reopened = try HistoryDatabase(url: url)
+        XCTAssertEqual(try reopened.metadata("last_history_chunk"), "first-0")
+        XCTAssertEqual(try reopened.commit(replay(day: 1), token: "replay-1"), 0)
+        for day in [3, 2] {
+            XCTAssertEqual(try reopened.commit(replay(day: day), token: "second-\(day)"), 360)
+        }
+        let rows = try reopened.samples(from: start, through: dates[3] + 359)
+        XCTAssertEqual(rows.count, 1_440)
+
+        var progress: [Int] = []
+        var reuse: [Bool] = []
+        let cancelled = DailyAnalysis.metrics(from: rows, sex: .male, maxHR: 190, calendar: calendar,
+                                              analyzedSleepSessions: [], analysisCache: cache,
+                                              shouldContinue: { progress.count < 3 }) {
+            completed, _, reused in
+            progress.append(completed)
+            reuse.append(reused)
+        }
+        XCTAssertEqual(cancelled.count, 3)
+        XCTAssertEqual(progress, [1, 2, 3])
+        XCTAssertEqual(reuse, [true, true, false])
+        progress = []
+        reuse = []
+        let result = DailyAnalysis.metrics(from: rows, sex: .male, maxHR: 190, calendar: calendar,
+                                           analyzedSleepSessions: [], analysisCache: cache) {
+            completed, total, reused in
+            XCTAssertEqual(total, 4)
+            progress.append(completed)
+            reuse.append(reused)
+        }
+        XCTAssertEqual(progress, [1, 2, 3, 4])
+        XCTAssertEqual(reuse, [true, true, true, false])
+        XCTAssertEqual(result.count, 4)
+        XCTAssertEqual(try reopened.commit(replay(day: 3), token: "replay-3"), 0)
+        XCTAssertEqual(DailyAnalysis.metrics(
+            from: try reopened.samples(from: start, through: dates[3] + 359),
+            sex: .male, maxHR: 190, calendar: calendar, analyzedSleepSessions: [], analysisCache: cache
+        ), result)
+    }
+
     func testAnalysisResumesCompletedNightAndInvalidatesChangedInput() throws {
         let start = 1_800_000_000
         let period = SleepPeriod(startUnix: start, endUnix: start + 3599,

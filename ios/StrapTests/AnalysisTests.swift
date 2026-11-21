@@ -539,6 +539,38 @@ final class RestingHrvTests: XCTestCase {
         XCTAssertNil(Hrv.restingHeartRate(rows))
     }
 
+    func testRestingHeartRateBenchmarkAgainstPreviousMinimumWindow() {
+        let rows = (0..<(8 * 3600)).map { second in
+            makeSample(second, hr: 52 + ((second / 180) % 24), accel: 0.01)
+        }
+        let window = 300
+        // Previous implementation before PR #106, using the same measured
+        // samples, motion gate and contiguous-run helper as the new estimator.
+        func previousEstimate() -> Double? {
+            let eligible = rows.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG ?? .infinity) <= Hrv.restingQuietAccelG
+            }.sorted { $0.unix < $1.unix }
+            return Hrv.contiguousRuns(eligible).compactMap {
+                Hrv.minimumRollingMean($0.map { Double($0.heartRate) }, window: window)
+            }.min()
+        }
+
+        XCTAssertNotNil(previousEstimate())
+        XCTAssertNotNil(Hrv.restingHeartRate(rows, windowS: window))
+        var minimumRuntime: UInt64 = 0
+        var medianRuntime: UInt64 = 0
+        for _ in 0..<5 {
+            let minimumStart = DispatchTime.now().uptimeNanoseconds
+            XCTAssertNotNil(previousEstimate())
+            let medianStart = DispatchTime.now().uptimeNanoseconds
+            XCTAssertNotNil(Hrv.restingHeartRate(rows, windowS: window))
+            minimumRuntime += medianStart - minimumStart
+            medianRuntime += DispatchTime.now().uptimeNanoseconds - medianStart
+        }
+        print("RHR benchmark (8h synthetic, mean ms): minimum=\(Double(minimumRuntime) / 5_000_000) median=\(Double(medianRuntime) / 5_000_000)")
+    }
+
     func testRestingHeartRateAcrossLongRecording() {
         let rows = stretch(0, 300, hr: 50, accel: 0.01)
             + stretch(600, 8 * 3600, hr: 65, accel: 0.01)
