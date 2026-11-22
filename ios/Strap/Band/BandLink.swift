@@ -563,7 +563,11 @@ final class BandLink: NSObject, ObservableObject {
     private var maxHR: Double?
     private var needHours: Double = 8
 
-    override init() {
+    override convenience init() {
+        self.init(restoreIdentifier: Self.restoreIdentifier)
+    }
+
+    init(restoreIdentifier: String?) {
         super.init()
         if let data = UserDefaults.standard.data(forKey: Keys.metricsSnapshot),
            let saved = try? JSONDecoder().decode(SavedBandMetrics.self, from: data) {
@@ -610,8 +614,12 @@ final class BandLink: NSObject, ObservableObject {
             status = .unpaired
         }
         applySavedSleepBounds()
-        central = CBCentralManager(delegate: self, queue: nil,
-            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
+        if let restoreIdentifier {
+            central = CBCentralManager(delegate: self, queue: nil,
+                options: [CBCentralManagerOptionRestoreIdentifierKey: restoreIdentifier])
+        } else {
+            central = CBCentralManager(delegate: self, queue: nil)
+        }
         recoverSavedCaptures()
     }
 
@@ -1914,14 +1922,14 @@ final class BandLink: NSObject, ObservableObject {
             // Never present an old sample as today's live pulse.
             self.liveHeartRate = nil
             if self.wristState == .onWrist && self.wristOffDebounceTask == nil {
+                self.wristState = .uncertain
+                self.lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> uncertain; waiting debounce before confirming offWrist")
                 self.wristOffDebounceTask = Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: UInt64(Self.wristOffDebounceInterval * 1_000_000_000))
                     guard let self, !Task.isCancelled else { return }
-                    if self.liveHeartRate == nil && self.wristState == .onWrist {
-                        self.wristState = .unknown
-                        self.isWearing = false
-                        self.lastWristStateChangeAt = Date()
-                        BLEDiagnosticLog.shared.log("wristState debounced to unknown after \(Self.wristOffDebounceInterval)s without valid HR")
+                    if self.liveHeartRate == nil && self.wristState == .uncertain {
+                        self.applyWearingStateTransition(.unknown, source: "debounced after \(Self.wristOffDebounceInterval)s without valid HR")
                     }
                 }
             }
@@ -2451,6 +2459,9 @@ final class BandLink: NSObject, ObservableObject {
         }
 
         if uuid == BandUUID.events {
+            if let statusPacket = WhoopStatusPacket.decode(inner) {
+                handleStatusPacket(statusPacket)
+            }
             if let packet = BandHardwareEventPacket.decode(inner) {
                 handleHardwareEventPacket(packet, innerType: type)
             }
@@ -2476,13 +2487,7 @@ final class BandLink: NSObject, ObservableObject {
             type40HRPackets += 1
             staleHRReconnects = 0
             liveHeartRate = bpm
-            if wristState != .onWrist {
-                wristState = .onWrist
-                isWearing = true
-                lastWristStateChangeAt = Date()
-            }
-            wristOffDebounceTask?.cancel()
-            wristOffDebounceTask = nil
+            applyWearingStateTransition(.onWrist, source: "Type-40 live HR")
             if case .connected = status {
                 status = .streaming(bpm: bpm)
             } else if case .ready = status {
@@ -2571,6 +2576,55 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    private func handleStatusPacket(_ packet: WhoopStatusPacket) {
+        if let pct = packet.batteryPercent {
+            batteryPercent = Int(round(pct))
+            BLEDiagnosticLog.shared.log("statusPacket battery=\(pct)% tenths=\(packet.rawBatteryTenths ?? 0)")
+        }
+        if let charging = packet.isCharging {
+            isCharging = charging
+        }
+        if packet.contactState != .unknown {
+            applyWearingStateTransition(packet.contactState, source: "statusPacket (raw=0x\(String(format: "%04X", packet.wristStateRaw ?? 0)))")
+        }
+    }
+
+    func applyWearingStateTransition(_ newState: WristContactState, source: String) {
+        wristOffDebounceTask?.cancel()
+        wristOffDebounceTask = nil
+
+        switch newState {
+        case .onWrist:
+            if wristState != .onWrist {
+                wristState = .onWrist
+                isWearing = true
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> onWrist (\(source))")
+            }
+        case .offWrist:
+            if wristState != .offWrist {
+                wristState = .offWrist
+                isWearing = false
+                liveHeartRate = nil
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> offWrist (\(source)); live HR cleared")
+            }
+        case .uncertain:
+            if wristState == .onWrist {
+                wristState = .uncertain
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> uncertain (\(source))")
+            }
+        case .unknown:
+            if wristState != .unknown {
+                wristState = .unknown
+                isWearing = false
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
+            }
+        }
+    }
+
     private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {
         BLEDiagnosticLog.shared.log("hwEvent opcode=0x\(String(format: "%02X", packet.rawOpcode)) event=\(packet.event.map { "\($0)" } ?? "unknown") ts=\(packet.timestamp ?? 0)")
         switch packet.rawOpcode {
@@ -2579,20 +2633,9 @@ final class BandLink: NSObject, ObservableObject {
         case BandHardwareEvent.setRTC.rawValue where innerType == 0x30:
             if let peer = peripheral?.identifier { historyClock.noteSynchronization(on: peer) }
         case BandHardwareEvent.wristOn.rawValue:
-            wristOffDebounceTask?.cancel()
-            wristOffDebounceTask = nil
-            wristState = .onWrist
-            isWearing = true
-            lastWristStateChangeAt = Date()
-            BLEDiagnosticLog.shared.log("wristState -> onWrist (hardware event 0x09)")
+            applyWearingStateTransition(.onWrist, source: "hardware event 0x09")
         case BandHardwareEvent.wristOff.rawValue:
-            wristOffDebounceTask?.cancel()
-            wristOffDebounceTask = nil
-            wristState = .offWrist
-            isWearing = false
-            liveHeartRate = nil
-            lastWristStateChangeAt = Date()
-            BLEDiagnosticLog.shared.log("wristState -> offWrist (hardware event 0x0A); live HR cleared")
+            applyWearingStateTransition(.offWrist, source: "hardware event 0x0A")
         case BandHardwareEvent.doubleTap.rawValue:
             lastDoubleTapAt = Date()
             BLEDiagnosticLog.shared.log("doubleTap registered (hardware event 0x0E)")
@@ -2609,7 +2652,7 @@ final class BandLink: NSObject, ObservableObject {
         case BandHardwareEvent.bleHRProfileEnable.rawValue:
             isBroadcastingHR = true
         default:
-            break
+            BLEDiagnosticLog.shared.log("hwEvent unhandled/unknown opcode=0x\(String(format: "%02X", packet.rawOpcode))")
         }
     }
 
@@ -2623,13 +2666,7 @@ final class BandLink: NSObject, ObservableObject {
                                        connected: isConnected, now: Date()) == nil else { return }
         staleHRReconnects = 0
         liveHeartRate = reading.heartRate
-        if wristState != .onWrist {
-            wristState = .onWrist
-            isWearing = true
-            lastWristStateChangeAt = Date()
-        }
-        wristOffDebounceTask?.cancel()
-        wristOffDebounceTask = nil
+        applyWearingStateTransition(.onWrist, source: "standard HR 0x2A37")
         if case .connected = status {
             status = .streaming(bpm: reading.heartRate)
         } else if case .ready = status {
@@ -2905,7 +2942,11 @@ extension BandLink: CBPeripheralDelegate {
             case BandUUID.heartRateMeasurement:
                 hrCharacteristic = characteristic
                 if characteristic.properties.contains(.notify) {
-                    peripheral.setNotifyValue(true, for: characteristic)
+                    if !characteristic.isNotifying {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    } else {
+                        hrSubscriptionConfirmedAt = Date()
+                    }
                 } else {
                     lastMessage = "The band did not expose HR notifications on 0x2A37."
                 }
@@ -2916,7 +2957,7 @@ extension BandLink: CBPeripheralDelegate {
             case BandUUID.batteryLevel:
                 batteryCharacteristic = characteristic
                 peripheral.readValue(for: characteristic)
-                if characteristic.properties.contains(.notify) {
+                if characteristic.properties.contains(.notify), !characteristic.isNotifying {
                     peripheral.setNotifyValue(true, for: characteristic)
                 }
             default:

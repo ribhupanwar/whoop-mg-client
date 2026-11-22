@@ -1,10 +1,11 @@
 import Foundation
 
-/// Tri-state wearing/contact status of the strap.
-enum WristContactState: String, Equatable, Codable {
+/// Four-state wearing/contact status of the strap.
+enum WristContactState: String, Equatable, Codable, CaseIterable {
     case unknown
     case onWrist
     case offWrist
+    case uncertain
 }
 
 /// Decoded hardware event from Gen5 / MG events characteristic (fd4b0004).
@@ -13,6 +14,8 @@ struct BandHardwareEventPacket: Equatable {
     let event: BandHardwareEvent?
     let timestamp: UInt32?
     let payload: [UInt8]
+
+    var isKnown: Bool { event != nil }
 
     init(rawOpcode: UInt8, event: BandHardwareEvent?, timestamp: UInt32?, payload: [UInt8]) {
         self.rawOpcode = rawOpcode
@@ -60,5 +63,88 @@ struct BandHardwareEventPacket: Equatable {
                 payload: payload
             )
         }
+    }
+}
+
+/// Decoded telemetry status envelope packet from Gen5 / MG hardware.
+///
+/// Encodes battery state-of-charge in tenths of percent (Ghidra 0x10bc3d110 / 0x10a3c4c30),
+/// charging status, and 16-bit capacitive/optical wrist contact state (0x10a3cd4f0).
+struct WhoopStatusPacket: Equatable {
+    let rawBatteryTenths: Int?
+    let batteryPercent: Double?
+    let isCharging: Bool?
+    let wristStateRaw: UInt16?
+    let contactState: WristContactState
+
+    init(
+        rawBatteryTenths: Int?,
+        batteryPercent: Double?,
+        isCharging: Bool?,
+        wristStateRaw: UInt16?,
+        contactState: WristContactState
+    ) {
+        self.rawBatteryTenths = rawBatteryTenths
+        self.batteryPercent = batteryPercent
+        self.isCharging = isCharging
+        self.wristStateRaw = wristStateRaw
+        self.contactState = contactState
+    }
+
+    /// Decode status envelope from inner bytes.
+    ///
+    /// Gen5 Type 48 (0x30) Battery/Status Event:
+    /// - inner[0] == 0x30 (EVENT)
+    /// - inner[2] == 0x03 (Battery & Status Event)
+    /// - inner[13..14] == SoC in tenths of percent (UInt16 LE)
+    /// - inner[15] == charging bit / status (bit 0 = charging)
+    /// - inner[16..17] == wristState bitfield (UInt16 LE):
+    ///     - bit 0 (0x0001): capacitive touch contact
+    ///     - bit 1 (0x0002): optical PPG reflectance contact
+    ///     - bit 2 (0x0004): on-body placement validity
+    static func decode(_ inner: [UInt8]) -> WhoopStatusPacket? {
+        guard !inner.isEmpty else { return nil }
+
+        if inner[0] == 0x30, inner.count >= 3, inner[2] == 0x03 {
+            var tenths: Int? = nil
+            var batteryPct: Double? = nil
+            var charging: Bool? = nil
+            var wristRaw: UInt16? = nil
+            var contact: WristContactState = .unknown
+
+            if inner.count >= 15 {
+                let soc = Int(inner[13]) | (Int(inner[14]) << 8)
+                tenths = soc
+                let pct = Double(soc) / 10.0
+                if (0.0...100.0).contains(pct) {
+                    batteryPct = pct
+                }
+            }
+            if inner.count >= 16 {
+                charging = (inner[15] & 0x01) != 0
+            }
+            if inner.count >= 18 {
+                let raw = UInt16(inner[16]) | (UInt16(inner[17]) << 8)
+                wristRaw = raw
+                if (raw & 0x0001) != 0 || (raw & 0x0002) != 0 {
+                    contact = .onWrist
+                } else if raw == 0 {
+                    contact = .offWrist
+                } else {
+                    contact = .uncertain
+                }
+            } else if inner.count >= 15 {
+                // If wristState is truncated but battery is valid
+                contact = .unknown
+            }
+            return WhoopStatusPacket(
+                rawBatteryTenths: tenths,
+                batteryPercent: batteryPct,
+                isCharging: charging,
+                wristStateRaw: wristRaw,
+                contactState: contact
+            )
+        }
+        return nil
     }
 }
