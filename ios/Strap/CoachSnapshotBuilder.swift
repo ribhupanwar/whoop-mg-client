@@ -3,8 +3,8 @@ import Foundation
 /// Builds a structured, multi-day grounded biometric snapshot for STRAP Coach.
 /// Exposes today's in-progress data, yesterday's finalized baseline, 7-day norms,
 /// recent workouts, and Health Monitor status without fabricating numbers.
-public struct CoachBiometricSnapshotBuilder {
-    public static func build(
+struct CoachBiometricSnapshotBuilder {
+    static func build(
         days: [DayMetrics],
         recoveryScore: Int?,
         dayStrain: Double,
