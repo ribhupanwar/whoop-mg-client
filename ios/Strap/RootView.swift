@@ -66,6 +66,7 @@ struct RootView: View {
     @State private var tab: AppTab = .home
     @State private var showInsights = false
     @State private var showPlan = false
+    @State private var showCoach = false
     @State private var homePath: [Route] = []
 
     var body: some View {
@@ -106,6 +107,13 @@ struct RootView: View {
         .safeAreaInset(edge: .bottom) { floatingNavigation }
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
         .sheet(isPresented: $showPlan) { NavigationStack { PlanView().strapDestinations() }.environmentObject(store) }
+        .sheet(isPresented: $showCoach) {
+            StrapAICoachView()
+                .environmentObject(store)
+                .presentationDetents([.fraction(0.72), .large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(25)
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 // Count app launches even when returning to Health, Train, Plan or More.
@@ -175,18 +183,27 @@ struct RootView: View {
             .background(Color(hex: 0x171E22).opacity(0.95), in: RoundedRectangle(cornerRadius: 28))
             .overlay(RoundedRectangle(cornerRadius: 28)
                 .strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
-            Button { showInsights = true } label: {
-                Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 22, weight: .medium))
-                    .foregroundStyle(Color.white)
-                    .frame(width: 54, height: 54)
-                    .background(Color(hex: 0x171E22).opacity(0.95), in: Circle())
-                    .overlay(Circle().strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
+            Button { showCoach = true } label: {
+                ZStack {
+                    Circle()
+                        .strokeBorder(Color(hex: 0x6661B9).opacity(0.7), lineWidth: 1.4)
+                        .frame(width: 43, height: 43)
+                    Circle()
+                        .trim(from: 0.05, to: 0.79)
+                        .stroke(Color(hex: 0x7995F7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 43, height: 43)
+                    WhoopWGlyph(color: .white)
+                        .frame(width: 25, height: 25)
+                }
+                .frame(width: 54, height: 54)
+                .background(Color(hex: 0x171E2B).opacity(0.98), in: Circle())
+                .overlay(Circle().strokeBorder(Color(hex: 0x3E385A).opacity(0.8), lineWidth: 0.6))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Daily insights")
-            .accessibilityHint("Open today's recorded recovery, HRV, resting heart rate and journal")
-            .accessibilityIdentifier("nav.dailyInsights")
+            .accessibilityLabel("STRAP AI Coach")
+            .accessibilityHint("Open coaching chat and model settings")
+            .accessibilityIdentifier("nav.aiCoach")
         }
         .padding(.horizontal, 10)
         .padding(.bottom, 5)

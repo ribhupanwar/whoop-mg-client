@@ -361,3 +361,10 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 - **IMPLEMENTED** in #156. Debug-only Instruments timing for durable history commits. The reconciled head passed [iOS packaging and tests](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059748) and the [six-job protocol matrix](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059739).
 - **DEVICE-VERIFY.** Test wrist transitions, notification restoration and interrupted history sync on Gen5 and MG hardware.
 - **DEFERRED.** The HELLO forensic notes distinguish static observations from hypotheses. Request bytes, response layout and firmware-specific behavior still need matched captures before any production change.
+
+## STRAP AI Coach
+
+- Open the Coach button next to the bottom tabs. Daily Insights remains on Home.
+- The local educational path works without a provider key. General on-device conversations use Apple's model on supported iOS 26 devices.
+- Select **AI model settings** to configure Groq or Gemini with your own API key. Optional Tavily search sends the current question. Cloud health-snapshot sharing is off by default.
+- **DEVICE-VERIFY.** Validate Apple model availability and Keychain behavior on a SideStore-installed device. Verify external provider calls with user-owned keys.

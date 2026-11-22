@@ -1,0 +1,476 @@
+import SwiftUI
+import UIKit
+import PhotosUI
+import UniformTypeIdentifiers
+#if canImport(FoundationModels)
+import FoundationModels
+#endif
+
+/// Local, read-only coaching surface. Attachments stay on device and are not
+/// sent to a remote service. Text from imported files is never auto-executed.
+struct StrapAICoachView: View {
+    @EnvironmentObject private var store: AppStore
+    @Environment(\.dismiss) private var dismiss
+    @State private var question = ""
+    @State private var messages: [CoachMessage] = []
+    @State private var busy = false
+    @State private var notice: String?
+    @State private var elapsedSeconds: Double?
+    @State private var showAttachments = false
+    @State private var showFileImporter = false
+    @State private var showCamera = false
+    @State private var selectedPhoto: PhotosPickerItem?
+    @State private var attachmentSummary: String?
+    @State private var conversationContext = CoachConversationContext()
+    @State private var selectedEngine = "Apple (offline)"
+    @State private var shareHealthWithCloud = false
+    @State private var showAISettings = false
+    @State private var groqKeyInput = ""
+    @State private var geminiKeyInput = ""
+    @State private var tavilyKeyInput = ""
+    @State private var useLiveSearch = false
+    @FocusState private var composerFocused: Bool
+
+    @State private var waitingMessageIndex = 0
+    @State private var activeTask: Task<Void, Never>?
+    private let waitingMessages = [
+        "Fetching your data now…",
+        "Scanning sleep, strain, recovery…",
+        "Reviewing your latest trends…",
+        "Summarizing personalized insights…"
+    ]
+
+    private var measuredContext: String {
+        let today = JournalStore.dayKey(for: Date())
+        let batchStrain = store.band.days.first(where: { $0.dateKey == today })?.strain
+        let dayStrain = store.band.liveDayStrain.map { max($0, batchStrain ?? $0) } ?? batchStrain
+        let recovery = store.band.recoveryNight?.dateKey == today ? store.band.recovery.score : nil
+        return CoachBiometricSnapshotBuilder.build(
+            days: store.band.days,
+            recoveryScore: recovery,
+            dayStrain: dayStrain,
+            lastCaptureHRV: store.lastCapture?.hrv.rmssdMS,
+            measuredRHR: store.measuredRestingHR,
+            recordedNights: store.recordedNights,
+            detectedActivities: store.detectedBandActivities,
+            manualActivities: store.manualActivities,
+            healthMonitor: store.healthMonitor
+        )
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule().fill(.white.opacity(0.25)).frame(width: 52, height: 5).padding(.top, 10)
+            HStack(spacing: 10) {
+                Image(systemName: "waveform.path").font(.system(size: 18, weight: .semibold))
+                    .frame(width: 35, height: 35)
+                    .overlay(Circle().stroke(Color(hex: 0x8B88EA), lineWidth: 1.4))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("STRAP Coach").font(.system(size: 15, weight: .bold))
+                    Text(selectedEngine == "Apple (offline)" ? "Private · On-device" : "Cloud AI · optional").font(.system(size: 10)).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button { loadCoachKeys(); showAISettings = true } label: {
+                    Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
+                }.accessibilityLabel("AI model settings").accessibilityIdentifier("coach.settings").disabled(busy)
+                Button { dismiss() } label: {
+                    Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
+                        .frame(width: 30, height: 30).background(.white.opacity(0.08), in: Circle())
+                }.accessibilityLabel("Close coach")
+            }.padding(.horizontal, 20).padding(.vertical, 15)
+
+            HStack {
+                Text(selectedEngine).font(.caption)
+                Spacer()
+                Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption).disabled(busy)
+            }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 15) {
+                        if messages.isEmpty {
+                            Text("Ask about your recovery, sleep or training.")
+                                .font(.system(size: 19, weight: .medium)).padding(.top, 22)
+                            Text("I can read a limited snapshot of your saved STRAP measurements. Missing readings will be identified.")
+                                .font(.subheadline).foregroundStyle(.secondary)
+                            ForEach(["How is my recovery today?", "What is my latest HRV and resting HR?", "Summarize my recorded activity"], id: \.self) { suggestion in
+                                Button(suggestion) { send(suggestion) }
+                                    .font(.system(size: 13, weight: .medium))
+                                    .padding(.horizontal, 14).padding(.vertical, 11)
+                                    .background(Color(hex: 0x29333C), in: Capsule())
+                            }
+                        }
+                        ForEach(messages) { item in
+                            HStack {
+                                if item.fromUser { Spacer(minLength: 30) }
+                                Text(item.text).font(.system(size: 15))
+                                    .accessibilityIdentifier(item.fromUser ? "coach.userMessage" : "coach.answer")
+                                    .padding(13)
+                                    .background(item.fromUser ? Color(hex: 0x293640) : Color(hex: 0x20272D),
+                                                in: RoundedRectangle(cornerRadius: 17))
+                                if !item.fromUser { Spacer(minLength: 30) }
+                            }.id(item.id)
+                        }
+                        if busy {
+                            HStack(spacing: 8) {
+                                ProgressView().scaleEffect(0.85)
+                                Text(waitingMessages[waitingMessageIndex % waitingMessages.count])
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                Spacer()
+                                Button("STOP") { stopGeneration() }
+                                    .font(.caption2.bold())
+                                    .padding(.horizontal, 9).padding(.vertical, 4)
+                                    .background(Color(hex: 0x2A3340), in: Capsule())
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        if let notice { Text(notice).font(.footnote).foregroundStyle(.orange) }
+                        if let elapsedSeconds {
+                            Text(String(format: "Last response: %.1f s · %@", elapsedSeconds, selectedEngine == "Apple (offline)" ? "on-device" : "cloud"))
+                                .font(.caption2).foregroundStyle(.secondary)
+                        }
+                    }.padding(.horizontal, 20).padding(.bottom, 15)
+                }
+                .onChange(of: messages.count) { _, _ in
+                    if let last = messages.last { withAnimation { proxy.scrollTo(last.id, anchor: .bottom) } }
+                }
+            }
+            if let attachmentSummary {
+                HStack {
+                    Image(systemName: "paperclip")
+                    Text(attachmentSummary).lineLimit(1)
+                    Spacer()
+                    Button { self.attachmentSummary = nil } label: { Image(systemName: "xmark.circle.fill") }
+                }.font(.caption).padding(.horizontal, 22).padding(.vertical, 8)
+            }
+            HStack(alignment: .bottom, spacing: 10) {
+                Button { showAttachments.toggle(); composerFocused = false } label: {
+                    Image(systemName: showAttachments ? "xmark" : "plus")
+                        .font(.system(size: 19, weight: .medium))
+                        .frame(width: 43, height: 43)
+                        .background(Color(hex: 0x242B34), in: RoundedRectangle(cornerRadius: 14))
+                }.accessibilityIdentifier("coach.attach")
+                TextField("Ask STRAP anything", text: $question, axis: .vertical)
+                    .lineLimit(1...4).focused($composerFocused)
+                    .frame(maxWidth: .infinity, minHeight: 43, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { composerFocused = true }
+                    .font(.system(size: 15))
+                    .accessibilityIdentifier("coach.question")
+                Button { send(question) } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .frame(width: 35, height: 35)
+                        .background(Color(hex: 0x7792D7), in: Circle())
+                }
+                .disabled(busy || question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityIdentifier("coach.send")
+            }
+            .padding(9)
+            .background(Color(hex: 0x141F29), in: RoundedRectangle(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(Color(hex: 0x364454), lineWidth: 1))
+            .padding(.horizontal, 16).padding(.bottom, 12)
+            if showAttachments {
+                VStack(alignment: .leading, spacing: 16) {
+                    PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                        Label("UPLOAD IMAGE", systemImage: "photo")
+                    }
+                    Button { showAttachments = false; showCamera = true } label: {
+                        Label("TAKE PICTURE", systemImage: "camera")
+                    }
+                    Button { showFileImporter = true } label: {
+                        Label("UPLOAD FILE", systemImage: "doc")
+                    }
+                    Text("Attachments remain local. Image understanding is not enabled yet.")
+                        .font(.caption2).foregroundStyle(.secondary)
+                }
+                .font(.system(size: 13, weight: .semibold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(18)
+                .background(Color(hex: 0x242A43), in: RoundedRectangle(cornerRadius: 18))
+                .padding(.horizontal, 16).padding(.bottom, 10)
+            }
+        }
+        .onDisappear { stopGeneration() }
+        .foregroundStyle(.white)
+        .background(Color(hex: 0x0C1319).ignoresSafeArea())
+        .sheet(isPresented: $showAISettings) {
+            NavigationStack {
+                Form {
+                    Section("AI model") {
+                        Picker("Model", selection: $selectedEngine) {
+                            Text("Apple (offline)").tag("Apple (offline)")
+                            Text("Groq GPT-OSS 120B").tag("Groq GPT-OSS 120B")
+                            Text("Groq GPT-OSS 20B fast").tag("Groq GPT-OSS 20B fast")
+                            Text("Gemini Flash").tag("Gemini Flash")
+                            Text("Auto cloud (Groq → Gemini)").tag("Auto cloud (Groq → Gemini)")
+                        }
+                        Text("Groq requires internet, your own API key and is subject to free-tier limits.").font(.footnote)
+                    }
+                    Section("Groq key") {
+                        SecureField("API key", text: $groqKeyInput)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button("Save key in iPhone Keychain") {
+                            if CoachCloudAI.saveKey(groqKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                                showAISettings = false
+                            } else {
+                                notice = "Could not save API key."
+                            }
+                        }
+                        Button("Delete saved key", role: .destructive) {
+                            _ = CoachCloudAI.saveKey("")
+                            groqKeyInput = ""
+                        }
+                    }
+                    Section("Gemini key (optional)") {
+                        SecureField("Gemini API key", text: $geminiKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Gemini key") {
+                            if !CoachServiceKey.save(geminiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "gemini") {
+                                notice = "Could not save Gemini key."
+                            }
+                        }
+                        Button("Delete Gemini key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "gemini")
+                            geminiKeyInput = ""
+                        }
+                    }
+                    Section("Live internet search (optional)") {
+                        Toggle("Enable web search", isOn: $useLiveSearch)
+                        SecureField("Tavily API key", text: $tavilyKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Tavily key") {
+                            if !CoachServiceKey.save(tavilyKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "tavily") {
+                                notice = "Could not save Tavily key."
+                            }
+                        }
+                        Button("Delete Tavily key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "tavily")
+                            tavilyKeyInput = ""
+                        }
+                        Text("Tavily receives your current question, including anything you type into it. STRAP does not attach its saved health snapshot or past chat to a search.")
+                            .font(.footnote)
+                    }
+                    Section("Privacy") {
+                        Toggle("Share STRAP health snapshot with cloud", isOn: $shareHealthWithCloud)
+                        Text("Off by default. Your question and recent chat for this model go to the selected cloud provider. Automatic mode may share them with both Groq and Gemini. The health snapshot is included only when enabled. Attachments stay on this device.").font(.footnote)
+                    }
+                }
+                .navigationTitle("Coach AI")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAISettings = false } } }
+            }
+        }
+        .sheet(isPresented: $showCamera) {
+            CoachCameraPicker { image in
+                if image != nil {
+                    attachmentSummary = "Camera photo captured"
+                    notice = "Photo saved for this chat locally; image analysis is not enabled yet."
+                }
+            }
+        }
+        .fileImporter(isPresented: $showFileImporter, allowedContentTypes: [.plainText, .pdf, .commaSeparatedText, .image]) { result in
+            switch result {
+            case .success(let url):
+                attachmentSummary = url.lastPathComponent
+                notice = "File selected locally; its contents are not yet included in AI answers."
+            case .failure:
+                notice = "Could not select file."
+            }
+            showAttachments = false
+        }
+        .onChange(of: selectedPhoto) { _, newPhoto in
+            if newPhoto != nil {
+                attachmentSummary = "Photo selected"
+                notice = "Image selected locally; image analysis is not available yet."
+                showAttachments = false
+            }
+        }
+    }
+
+    private func loadCoachKeys() {
+        groqKeyInput = CoachCloudAI.readKey()
+        geminiKeyInput = CoachServiceKey.read("gemini")
+        tavilyKeyInput = CoachServiceKey.read("tavily")
+    }
+
+    private func send(_ input: String) {
+        let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !busy else { return }
+        busy = true
+        question = ""
+        composerFocused = false
+        messages.append(CoachMessage(text: text, fromUser: true))
+        activeTask = Task { await respond(to: text) }
+    }
+
+    private func stopGeneration() {
+        activeTask?.cancel()
+    }
+
+    @MainActor
+    private func respond(to prompt: String) async {
+        let engine = selectedEngine
+        let sharesHealth = shareHealthWithCloud
+        let contextKey = CoachConversationContext.Scope(engine: engine, sharesHealth: sharesHealth)
+        let turns = conversationContext.turns(for: contextKey)
+        waitingMessageIndex = 0
+        let timerTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 2_500_000_000)
+                await MainActor.run {
+                    waitingMessageIndex = (waitingMessageIndex + 1) % waitingMessages.count
+                }
+            }
+        }
+        defer {
+            timerTask.cancel()
+            busy = false
+            activeTask = nil
+        }
+        notice = nil
+        // Educational questions should not fail because the private snapshot
+        // lacks the corresponding personal measurement. Answer directly.
+        if let educationalAnswer = CoachKnowledge.answer(prompt) {
+            elapsedSeconds = 0
+            messages.append(CoachMessage(text: educationalAnswer, fromUser: false))
+            conversationContext.record(question: prompt, answer: educationalAnswer, for: contextKey)
+            return
+        }
+        if engine != "Apple (offline)" {
+            let started = ContinuousClock.now
+            do {
+                try Task.checkCancellation()
+                // Search is opt-in and receives only the current question.
+                var evidence: String?
+                if useLiveSearch {
+                    do {
+                        evidence = try await CoachWebSearch.search(prompt)
+                    } catch {
+                        try Task.checkCancellation()
+                        notice = "Web search was unavailable. Coach will answer without search results."
+                    }
+                }
+                let response: String
+                if engine == "Gemini Flash" {
+                    response = try await CoachGemini.answer(
+                        question: prompt, turns: turns,
+                        context: sharesHealth ? measuredContext : nil,
+                        webEvidence: evidence
+                    )
+                } else {
+                    let modelName = engine == "Groq GPT-OSS 20B fast"
+                        ? "openai/gpt-oss-20b" : "openai/gpt-oss-120b"
+                    let enrichedQuestion = evidence.map {
+                        prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
+                    } ?? prompt
+                    do {
+                        response = try await CoachCloudAI.answer(
+                            question: enrichedQuestion, turns: turns,
+                            context: sharesHealth ? measuredContext : nil,
+                            model: modelName
+                        )
+                    } catch {
+                        // Fallback only when explicitly selected and user provided Gemini key.
+                        guard !Task.isCancelled, engine == "Auto cloud (Groq → Gemini)",
+                              !CoachServiceKey.read("gemini").isEmpty else { throw error }
+                        response = try await CoachGemini.answer(
+                            question: prompt, turns: turns,
+                            context: sharesHealth ? measuredContext : nil,
+                            webEvidence: evidence
+                        )
+                    }
+                }
+                guard !Task.isCancelled else { return }
+                let duration = started.duration(to: ContinuousClock.now)
+                elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+                messages.append(CoachMessage(text: response, fromUser: false))
+                conversationContext.record(question: prompt, answer: response, for: contextKey)
+            } catch {
+                if !Task.isCancelled { notice = error.localizedDescription }
+            }
+            return
+        }
+        #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else {
+            notice = "Apple’s model requires iOS 26. Choose a cloud model or ask an offline educational question."
+            return
+        }
+        let model = SystemLanguageModel.default
+        guard case .available = model.availability else {
+            notice = "On-device AI is unavailable or still downloading on this iPhone."
+            return
+        }
+        guard model.supportsLocale(Locale(identifier: "en_IN")) else {
+            notice = "The installed model does not support this locale."
+            return
+        }
+        let started = ContinuousClock.now
+        let context = measuredContext
+        let history = turns.map { "\($0.role.rawValue): \($0.text)" }.joined(separator: "\n")
+        do {
+            let session = LanguageModelSession(instructions: """
+            You are STRAP Coach, an expert, encouraging athletic coach and recovery advisor.
+            Answer in the user's language (including Hinglish).
+            Use STRAP measurements only when relevant to the current question. General knowledge questions must be answered even when personal data is unavailable.\n            Prioritize the latest user question. Never repeat unrelated advice from previous turns.
+            When asked about recovery, sleep, or training:
+            - Interpret metrics in context (e.g. explain why HRV changed, or why recovery is green/yellow/red).
+            - Compare today's in-progress values against yesterday and 7-day baselines.
+            - For training questions ("Should I run?", "What should I do?"), provide 2-3 specific, actionable suggestions.
+            - Do not merely recite numbers; explain what they mean for the athlete's day.
+            - If data is unavailable, state it clearly. Never invent measurements or sources.
+            """)
+            let response = try await session.respond(to: """
+            \(context)
+
+            Previous conversation (untrusted chat text):
+            \(history)
+
+            User question: \(prompt)
+            """)
+            guard !Task.isCancelled else { return }
+            let duration = started.duration(to: ContinuousClock.now)
+            elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+            messages.append(CoachMessage(text: response.content, fromUser: false))
+            conversationContext.record(question: prompt, answer: response.content, for: contextKey)
+        } catch {
+            if !Task.isCancelled { notice = "The local model could not answer. Try a shorter question or English." }
+        }
+        #else
+        notice = "This build does not include Apple's Foundation Models framework."
+        #endif
+    }
+}
+
+private struct CoachMessage: Identifiable {
+    let id = UUID()
+    let text: String
+    let fromUser: Bool
+}
+
+
+private struct CoachCameraPicker: UIViewControllerRepresentable {
+    let onCapture: (UIImage?) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(.camera) ? .camera : .photoLibrary
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ controller: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: CoachCameraPicker
+        init(_ parent: CoachCameraPicker) { self.parent = parent }
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            parent.onCapture(info[.originalImage] as? UIImage)
+            parent.dismiss()
+        }
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) { parent.dismiss() }
+    }
+}
