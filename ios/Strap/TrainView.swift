@@ -82,7 +82,7 @@ struct TrainView: View {
                     .background(RoundedRectangle(cornerRadius: 8).fill(Color.appRaised))
                     .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
             }
-            Hint("Resting HR seeds from your Settings override, else the band's last measured quiet window, else 72 bpm. Max HR defaults to the age estimate 208 − 0.7 × age (\(String(format: "%.0f", store.maxHeartRate)) bpm with current settings). An age formula is only a population guess — replace it with a max you have actually seen in a hard session. Both fields recompute the zones live.")
+            Hint("The resting HR field starts with your override, your last measured resting heart rate, or 72 bpm. The max HR field starts with your override or the population estimate 208 − 0.7 × age. Edit either field to update the zones.")
         }
     }
 
