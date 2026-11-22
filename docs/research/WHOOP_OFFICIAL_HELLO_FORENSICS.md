@@ -227,7 +227,7 @@ Without a captured HELLO handshake (TX + RX), we cannot:
 - Correlate binary call graph with actual traffic
 - Confirm Gen5 framing details for HELLO specifically
 
-**Status:** `CAPTURE_VERIFIED` — **NOT AVAILABLE** for HELLO protocol.
+**Capture evidence:** No verified HELLO capture is available.
 
 ---
 
@@ -327,6 +327,6 @@ Without a captured HELLO handshake (TX + RX), we cannot:
 2. Physical BLE capture validates wire format
 3. Signature verification logic is recovered
 
-Current STRAP implementation is **functionally sufficient for basic pairing** (opcode/sequence/characteristic correct) but **lacks cryptographic authentication** that the official app performs. This may explain intermittent pairing failures or security restrictions on newer firmware.
+The 5.78.0 analysis identifies a handler that accepts serial, signature and board ID parameters. Their presence does not establish how the app verifies them or whether they affect STRAP pairing failures. The cause of intermittent pairing failures remains unverified.
 
 ---

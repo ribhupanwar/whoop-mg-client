@@ -410,6 +410,19 @@ class TestV21(unittest.TestCase):
         self.assertIsNotNone(sample)
         self.assertEqual(sample.heart_rate, 94)
 
+    def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
+        # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
+        record = bytearray(REAL_V18)
+        record[14] = 45
+        # Set skin temp to 21.5C (2150 in scale 100)
+        record[65:67] = (2150).to_bytes(2, "little", signed=True)
+        # Set dynamic accel to 0.001 g
+        import struct
+        record[33:37] = struct.pack("<f", 0.001)
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertFalse(sample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
+
 
 if __name__ == "__main__":
     unittest.main()

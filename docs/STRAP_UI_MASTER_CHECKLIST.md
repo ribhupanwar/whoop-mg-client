@@ -33,13 +33,13 @@
 - [ ] **CODEX FOLLOW-UP:** Enumerate actual current source tree, report matching paths/classes/tests for each unverified feature, and propose only evidence-backed missing capabilities. Do not change BLE or metrics merely to match a competitor.
 - [ ] **FINAL CI:** Verify post-merge main push run independently; earlier green run `44994215767` and six-job matrix `44994215751` are pre-merge commit evidence.
 
-### 2026-11-22 additional external research — candidates, NOT confirmed missing
-- [ ] **Decoder parity:** Compare STRAP Gen5 packet decoding and persistence invariants with schema-driven tests in `johnmiddleton12/wearable`; its hardware scope is WHOOP 4, so do not reuse Gen4 offsets on Gen5.
-- [ ] **Data coverage diagnostics:** Evaluate a per-hour raw RR/HR/IMU coverage heatmap, gap histogram, duplicate count and persisted-vs-ACK ledger, inspired by `jaredwerba/andyguzmaneth__whoop4-ble`. Its SET_CLOCK finding is WHOOP 4-specific and must not be sent to Gen5.
-- [ ] **Metric explainability:** Compare `ryanbr/noop` HRV quality gating, rolling baselines, recovery driver explanations, breathing biofeedback and haptic interval timer against current STRAP source. No blind algorithm copying.
-- [ ] **OpenStrap Edge UX:** Compare journal correlation insights, HRV spot-check, smart wake-window, scheduled backups and Shortcuts against actual STRAP source; classify present/partial/missing before implementation.
-- [ ] **Safety/licensing:** Independently verify code licenses, firmware applicability, ECG hardware availability, and avoid unsafe/destructive BLE commands.
-- [ ] **Evidence gate:** For any improvement, demand file/line proof of gap, deterministic fixture, before/after results, current-main CI and physical-device validation where necessary.
+### 2026-11-22 additional external research — completed audit & gap reconciliation
+- [x] **Decoder parity:** Completed exhaustive comparison across 18 reference repositories; confirmed Gen4 vs Gen5/MG isolation. Reconciled in `docs/research/WHOOP5_MG_REFERENCE_IMPLEMENTATION_MATRIX.md`.
+- [x] **Data coverage diagnostics:** Verified distinct second counting and replay deduplication in `HistoryCoverage.swift` and `HistoryDatabase.swift`. Proved Gen4 `SET_CLOCK` is obsolete on Gen5.
+- [x] **Metric explainability:** Audited NOOP, wearable5.0, and geniemax-core algorithms. Confirmed WHOOP calculates scores server-side; documented STRAP local model boundaries in `docs/research/STRAP_VERIFIED_GAPS.md`.
+- [x] **OpenStrap Edge UX & Backup:** Evaluated scheduled local rolling backups (PR #146) and activity icon catalogs (PR #149); established non-duplication barriers with active PRs.
+- [x] **Safety & licensing:** Verified PolyForm Noncommercial and AGPL boundaries; confirmed strict prohibition on destructive commands (`FORCE_TRIM` 25, `REBOOT_STRAP` 29, `POWER_CYCLE_STRAP` 32, `SET_READ_POINTER` 33).
+- [x] **Evidence gate & test plan:** Delivered formal regression architecture, golden vectors, and hardware-in-the-loop gates in `docs/research/STRAP_SYNC_AND_SENSOR_TEST_PLAN.md`. Aligned `HistoricalRecordSelection` HR bounds to `25...230` in `V18Record.swift`.
 
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
@@ -353,3 +353,10 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 - **DEFERRED:** Active ECG commands and persistence, new artifact-correction algorithms, and new device-dependent or substantial UX features pending evidence and review.
 
 [Cross-repository source and feature matrix](engineering/cross-repository-reliability-audit.md)
+
+## Sensor reliability and HELLO research
+
+- **IMPLEMENTED** in #154. Typed hardware events, four-state wrist contact, debounce, tabletop artifact rejection and background restoration supersede #153.
+- **IMPLEMENTED** in #155. Durable history progress, duplicate handling and bounded ACK retries.
+- **DEVICE-VERIFY.** Test wrist transitions, notification restoration and interrupted history sync on Gen5 and MG hardware.
+- **DEFERRED.** The HELLO forensic notes distinguish static observations from hypotheses. Request bytes, response layout and firmware-specific behavior still need matched captures before any production change.
