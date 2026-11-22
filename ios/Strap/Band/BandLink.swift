@@ -2646,9 +2646,10 @@ final class BandLink: NSObject, ObservableObject {
             isCharging = false
             BLEDiagnosticLog.shared.log("batteryPack removed (hardware event 0x16)")
         case BandHardwareEvent.bleBonded.rawValue:
+            // A firmware bond event is not proof that CLIENT_HELLO was acknowledged.
+            // Keep the transport readiness gate tied to the verified HELLO response.
             isBonded = true
-            hrBondConfirmed = true
-            BLEDiagnosticLog.shared.log("bleBonded confirmed (hardware event 0x17)")
+            BLEDiagnosticLog.shared.log("bleBonded observed (hardware event 0x17); CLIENT_HELLO confirmation remains independent")
         case BandHardwareEvent.bleHRProfileEnable.rawValue:
             isBroadcastingHR = true
         default:
