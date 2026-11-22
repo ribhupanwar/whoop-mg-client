@@ -88,7 +88,10 @@ enum CoachCloudAI {
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-            throw CoachCloudError.http((response as? HTTPURLResponse)?.statusCode ?? -1)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? -1
+            // Provider error codes are not interchangeable: 401=credentials,
+            // 404=missing model/route, 429=quota. Never show secret response data.
+            throw CoachCloudError.http(status)
         }
         let result = try JSONDecoder().decode(Completion.self, from: data)
         guard let text = result.choices.first?.message.content, !text.isEmpty else {
@@ -115,7 +118,15 @@ enum CoachCloudError: LocalizedError {
         switch self {
         case .invalidModel: return "Unknown AI model."
         case .missingKey: return "Add your own Groq API key in Coach settings."
-        case .http(let status): return "Cloud AI request failed (HTTP \(status)). Check key or free-tier limits."
+        case .http(let status):
+            switch status {
+            case 400: return "Groq rejected this request (HTTP 400). Check selected model."
+            case 401, 403: return "Groq authentication failed (HTTP \(status)). Verify your GroqCloud API key."
+            case 404: return "Groq model or API route not found (HTTP 404). Try Llama 8B; check model availability."
+            case 429: return "Groq free-tier rate limit reached (HTTP 429). Try again later or select Gemini."
+            case 500...599: return "Groq service temporarily unavailable (HTTP \(status)). Try Gemini fallback."
+            default: return "Groq request failed (HTTP \(status))."
+            }
         case .emptyResponse: return "Cloud AI returned an empty answer."
         }
     }
