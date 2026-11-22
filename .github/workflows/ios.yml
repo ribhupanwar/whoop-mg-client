@@ -186,7 +186,7 @@ jobs:
                       info.get(key) for key in ("NSBluetoothAlwaysUsageDescription",
                                               "NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription")
                   ),
-                  "font registration": len(set(fonts)) == 11 and all(app + font in names for font in fonts),
+                  "font registration": len(fonts) == len(set(fonts)) == 11 and all(app + font in names for font in fonts),
               }
               invalid = [name for name, passed in checks.items() if not passed]
               if invalid:
