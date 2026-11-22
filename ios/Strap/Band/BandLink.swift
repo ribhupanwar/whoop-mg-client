@@ -537,6 +537,15 @@ final class BandLink: NSObject, ObservableObject {
     private var pendingHistoryRRRejected = 0
     private var pendingHistoryUndecodableFrames = 0
     private var pendingHistoryVersionCounts: [Int: Int] = [:]
+
+    // MARK: - Off-Wrist Debounce & Status Envelope
+    private var offWristDebounceTimer: Timer?
+    private var lastWristOffAt: Date?
+    private var lastWristState: UInt16?
+    private var isWristStateValid = false
+    static let offWristDebounceInterval: TimeInterval = 45.0
+    static let wristStateHistoryCapacity = 8
+    private var wristStateHistory: [UInt16] = []
     private var lastHRRecoveryAt: Date?
     private var hrRecoveryAttempts = 0
     private var hrDiscoveryRequestedAt: Date?
@@ -1689,6 +1698,13 @@ final class BandLink: NSObject, ObservableObject {
         liveHeartRate = nil
         isWearing = false
         isCharging = false
+        // Reset wrist state tracking
+        offWristDebounceTimer?.invalidate()
+        offWristDebounceTimer = nil
+        lastWristOffAt = nil
+        lastWristState = nil
+        isWristStateValid = false
+        wristStateHistory.removeAll(keepingCapacity: true)
         recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
@@ -2239,6 +2255,105 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Hardware Event Handlers
+
+    private func handleWristOn() {
+        offWristDebounceTimer?.invalidate()
+        offWristDebounceTimer = nil
+        lastWristOffAt = nil
+        isWearing = true
+    }
+
+    private func handleWristOff() {
+        lastWristOffAt = Date()
+        // Debounce: only mark as off-wrist after the debounce interval expires
+        // without a wristOn event. This prevents flickering during brief adjustments.
+        offWristDebounceTimer?.invalidate()
+        offWristDebounceTimer = Timer.scheduledTimer(withTimeInterval: Self.offWristDebounceInterval, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.isWearing = false
+            self.liveHeartRate = nil
+            self.lastWristOffAt = nil
+        }
+        RunLoop.main.add(offWristDebounceTimer!, forMode: .common)
+    }
+
+    private func handleDoubleTap() {
+        // Double-tap is a firmware-autonomous gesture (pairing indication, blue LED pulse).
+        // No app action required; logged for diagnostics.
+        BLEDiagnosticLog.shared.log("hardwareEvent doubleTap")
+    }
+
+    private func handleBleBonded() {
+        // BLE pairing/bonding completed. The bond is now established.
+        BLEDiagnosticLog.shared.log("hardwareEvent bleBonded")
+        // hrBondConfirmed is set via CLIENT_HELLO handshake; this event confirms
+        // the bond at the firmware level.
+    }
+
+    private func handleBleConnectionUp() {
+        BLEDiagnosticLog.shared.log("hardwareEvent bleConnectionUp")
+    }
+
+    private func handleBleConnectionDown() {
+        BLEDiagnosticLog.shared.log("hardwareEvent bleConnectionDown")
+    }
+
+    private func handleTemperatureLevel() {
+        // Skin temperature update notification from firmware.
+        BLEDiagnosticLog.shared.log("hardwareEvent temperatureLevel")
+    }
+
+    private func handlePairingMode() {
+        // Pairing mode activated (pulsing blue LED).
+        BLEDiagnosticLog.shared.log("hardwareEvent pairingMode")
+    }
+
+    private func handleBoot() {
+        // Band power-on / reboot event.
+        BLEDiagnosticLog.shared.log("hardwareEvent boot")
+        isRebooting = false
+        rebootExpectedDisconnect = false
+        rebootMessage = nil
+    }
+
+    private func updateBatteryAndWristState(tenthsOfPercent: UInt32, charging: Bool, wristState: UInt16) {
+        // Battery percent from tenths-of-percent (e.g., 850 = 85.0%)
+        batteryPercent = Int(tenthsOfPercent / 10)
+        isCharging = charging
+
+        // Wrist state bitfield analysis (from Ghidra 0x10a3cd4f0 / 0x10bc3d110):
+        // Bit 0: onWrist (capacitive contact detected)
+        // Bit 1: opticalContact (PPG signal present)
+        // Bit 2: sensorClean (optical path clear)
+        // Bit 3: reserved
+        // Bits 4-15: reserved / firmware-specific
+        // We track a history of wristState values to apply hysteresis.
+        lastWristState = wristState
+        isWristStateValid = true
+        wristStateHistory.append(wristState)
+        if wristStateHistory.count > Self.wristStateHistoryCapacity {
+            wristStateHistory.removeFirst()
+        }
+
+        // Derive wearing state from wristState bitfield with hysteresis:
+        // - onWrist (bit 0) is the primary capacitive contact indicator
+        // - Require consistent onWrist across recent samples to avoid flicker
+        let onWristCount = wristStateHistory.filter { ($0 & 0x01) != 0 }.count
+        let wearingThreshold = max(1, wristStateHistory.count / 2)
+        let wristStateWearing = onWristCount >= wearingThreshold
+
+        // Combine with existing debounced wristOn/wristOff events:
+        // If we have a recent wristOff debounce pending, trust the hardware event.
+        // Otherwise, use wristState as a supplementary signal.
+        if offWristDebounceTimer == nil {
+            isWearing = wristStateWearing
+        }
+
+        // If charging state changed, log it
+        BLEDiagnosticLog.shared.log("statusEnvelope battery=\(batteryPercent ?? -1)% charging=\(charging) wristState=\(String(format: "%04x", wristState)) wearing=\(isWearing)")
+    }
+
     /// Freeze *all* later ACKs after a failed commit. Otherwise a later empty
     /// END could free strap history past the failed chunk. Writer identity also
     /// prevents an old connection's completion from ACKing a new connection.
@@ -2434,14 +2549,27 @@ final class BandLink: NSObject, ObservableObject {
             case BandHardwareEvent.setRTC.rawValue where type == 0x30:
                 if let peer = peripheral?.identifier { historyClock.noteSynchronization(on: peer) }
             case BandHardwareEvent.wristOn.rawValue:
-                isWearing = true
+                handleWristOn()
             case BandHardwareEvent.wristOff.rawValue:
-                isWearing = false
-                liveHeartRate = nil
+                handleWristOff()
             case BandHardwareEvent.batteryPackConnected.rawValue:
                 isCharging = true
             case BandHardwareEvent.batteryPackRemoved.rawValue:
                 isCharging = false
+            case BandHardwareEvent.doubleTap.rawValue:
+                handleDoubleTap()
+            case BandHardwareEvent.bleBonded.rawValue:
+                handleBleBonded()
+            case BandHardwareEvent.bleConnectionUp.rawValue:
+                handleBleConnectionUp()
+            case BandHardwareEvent.bleConnectionDown.rawValue:
+                handleBleConnectionDown()
+            case BandHardwareEvent.temperatureLevel.rawValue:
+                handleTemperatureLevel()
+            case BandHardwareEvent.pairingMode.rawValue:
+                handlePairingMode()
+            case BandHardwareEvent.boot.rawValue:
+                handleBoot()
             case BandHardwareEvent.bleHRProfileEnable.rawValue:
                 isBroadcastingHR = true
             default:
@@ -2533,6 +2661,18 @@ final class BandLink: NSObject, ObservableObject {
                 // Completion can be delivered before the queued ATT callback.
                 historyCompletionReceived = true
                 finishCompletedDrainIfReady()
+            } else {
+                // Status envelope: parse battery tenths-of-percent, charging, and wristState bitfield.
+                // Expected inner structure (from Ghidra 0x10bc3d110):
+                // inner[0] = 0x31 (metadata), inner[1] = version?, inner[2] = subtype
+                // Battery: tenthsOfPercent at offset 3 (UInt32 LE), charging at offset 7 (Bool),
+                // wristState at offset 8 (UInt16 LE)
+                if inner.count >= 10 {
+                    let tenthsOfPercent = UInt32(inner[3]) | (UInt32(inner[4]) << 8) | (UInt32(inner[5]) << 16) | (UInt32(inner[6]) << 24)
+                    let charging = inner[7] != 0
+                    let wristState = UInt16(inner[8]) | (UInt16(inner[9]) << 8)
+                    updateBatteryAndWristState(tenthsOfPercent: tenthsOfPercent, charging: charging, wristState: wristState)
+                }
             }
         } else if (type == BandPacket.commandResponse || type == BandPacket.puffinCommandResponse), inner.count >= 5 {
             // WHOOP 5/MG Puffin command response inner structure:

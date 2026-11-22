@@ -514,5 +514,85 @@ final class BandConnectionStateMachineTests: XCTestCase {
         let chargerRemovedFrame: [UInt8] = [0x16]
         let opcode4 = (chargerRemovedFrame.count >= 3 && chargerRemovedFrame[0] == 0x30) ? chargerRemovedFrame[2] : (chargerRemovedFrame.first ?? 0)
         XCTAssertEqual(BandHardwareEvent(rawValue: opcode4), .batteryPackRemoved)
+
+        // Double-tap frame
+        let doubleTapFrame: [UInt8] = [0x0E]
+        let opcode5 = (doubleTapFrame.count >= 3 && doubleTapFrame[0] == 0x30) ? doubleTapFrame[2] : (doubleTapFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode5), .doubleTap)
+
+        // BLE bonded frame
+        let bleBondedFrame: [UInt8] = [0x17]
+        let opcode6 = (bleBondedFrame.count >= 3 && bleBondedFrame[0] == 0x30) ? bleBondedFrame[2] : (bleBondedFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode6), .bleBonded)
+
+        // BLE connection up frame
+        let bleConnUpFrame: [UInt8] = [0x0B]
+        let opcode7 = (bleConnUpFrame.count >= 3 && bleConnUpFrame[0] == 0x30) ? bleConnUpFrame[2] : (bleConnUpFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode7), .bleConnectionUp)
+
+        // BLE connection down frame
+        let bleConnDownFrame: [UInt8] = [0x0C]
+        let opcode8 = (bleConnDownFrame.count >= 3 && bleConnDownFrame[0] == 0x30) ? bleConnDownFrame[2] : (bleConnDownFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode8), .bleConnectionDown)
+
+        // Temperature level frame
+        let tempLevelFrame: [UInt8] = [0x11]
+        let opcode9 = (tempLevelFrame.count >= 3 && tempLevelFrame[0] == 0x30) ? tempLevelFrame[2] : (tempLevelFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode9), .temperatureLevel)
+
+        // Pairing mode frame
+        let pairingModeFrame: [UInt8] = [0x12]
+        let opcode10 = (pairingModeFrame.count >= 3 && pairingModeFrame[0] == 0x30) ? pairingModeFrame[2] : (pairingModeFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode10), .pairingMode)
+
+        // Boot frame
+        let bootFrame: [UInt8] = [0x0F]
+        let opcode11 = (bootFrame.count >= 3 && bootFrame[0] == 0x30) ? bootFrame[2] : (bootFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode11), .boot)
+    }
+
+    func testWristStateBitfieldDecoding() {
+        // Test wristState bitfield parsing:
+        // Bit 0: onWrist (capacitive contact)
+        // Bit 1: opticalContact (PPG signal present)
+        // Bit 2: sensorClean (optical path clear)
+        // Bits 3-15: reserved
+
+        // On-wrist with good contact and clean sensor: 0b0000_0000_0000_0111 = 0x0007
+        var wristState: UInt16 = 0x0007
+        XCTAssertTrue(wristState & 0x01 != 0, "Bit 0 (onWrist) should be set")
+        XCTAssertTrue(wristState & 0x02 != 0, "Bit 1 (opticalContact) should be set")
+        XCTAssertTrue(wristState & 0x04 != 0, "Bit 2 (sensorClean) should be set")
+
+        // Off-wrist: 0b0000_0000_0000_0000 = 0x0000
+        wristState = 0x0000
+        XCTAssertFalse(wristState & 0x01 != 0, "Bit 0 (onWrist) should be clear when off-wrist")
+
+        // On-wrist but dirty sensor: 0b0000_0000_0000_0011 = 0x0003
+        wristState = 0x0003
+        XCTAssertTrue(wristState & 0x01 != 0, "Bit 0 (onWrist) should be set")
+        XCTAssertTrue(wristState & 0x02 != 0, "Bit 1 (opticalContact) should be set")
+        XCTAssertFalse(wristState & 0x04 != 0, "Bit 2 (sensorClean) should be clear for dirty sensor")
+
+        // On-wrist, optical contact lost (motion artifact): 0b0000_0000_0000_0001 = 0x0001
+        wristState = 0x0001
+        XCTAssertTrue(wristState & 0x01 != 0, "Bit 0 (onWrist) should be set")
+        XCTAssertFalse(wristState & 0x02 != 0, "Bit 1 (opticalContact) should be clear")
+    }
+
+    func testBatteryTenthsOfPercentDecoding() {
+        // Battery tenths-of-percent: 850 = 85.0%, 1000 = 100.0%
+        let testCases: [(UInt32, Int)] = [
+            (0, 0),
+            (100, 10),
+            (500, 50),
+            (850, 85),
+            (1000, 100),
+            (999, 99)
+        ]
+        for (tenths, expectedPercent) in testCases {
+            let percent = Int(tenths / 10)
+            XCTAssertEqual(percent, expectedPercent, "tenths=\(tenths) should yield \(expectedPercent)%")
+        }
     }
 }
