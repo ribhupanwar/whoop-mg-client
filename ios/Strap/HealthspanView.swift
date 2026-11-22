@@ -106,8 +106,8 @@ struct HealthspanView: View {
                 .accessibilityLabel("Previous week")
                 .disabled(weekOffset <= -51)
                 Spacer()
-                Text(DateInterval(start: selectedStart, end: selectedEnd)
-                    .formatted(.interval.month(.abbreviated).day()))
+                Text(selectedStart.formatted(.dateTime.month(.abbreviated).day()) + " – "
+                     + selectedEnd.formatted(.dateTime.month(.abbreviated).day()))
                     .font(StrapTypography.body(17, weight: .bold))
                 Spacer()
                 Button { weekOffset += 1 } label: {
