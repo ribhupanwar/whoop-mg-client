@@ -290,22 +290,17 @@ struct SleepAnalysisView: View {
         showSleepEditor = true
     }
 
-    private var canEndSleepNow: Bool {
-        guard let period = editablePeriod else { return false }
-        // A manually finalized night must never offer an action that silently
-        // extends its saved end back to the current clock time.
-        if session?.isEdited == true { return false }
+    private func canEndSleepNow(at now: Date) -> Bool {
+        guard let period = editablePeriod, let session else { return false }
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
-        if SleepCorrectionStore.times(for: period, overrides: corrections) != nil { return false }
-        let now = Date().timeIntervalSince1970
-        // End Now is for an active/recently detected window only. Older nights must be edited explicitly.
-        return now >= Double(period.startUnix) && now - Double(period.endUnix) <= 15 * 60
-            && now - Double(period.startUnix) <= 86400
+        guard SleepCorrectionStore.times(for: period, overrides: corrections) == nil else { return false }
+        return session.canEndNow(lastObservedUnix: store.band.summary?.lastUnix,
+                                 nowUnix: Int(now.timeIntervalSince1970))
     }
 
     private func requestEndSleepNow() {
-        guard canEndSleepNow, let period = editablePeriod else { return }
         let now = Date()
+        guard canEndSleepNow(at: now), let period = editablePeriod else { return }
         let start = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? period.startUnix))
         guard now > start, now.timeIntervalSince(start) <= 86400 else {
             openSleepEditor()
@@ -344,17 +339,21 @@ struct SleepAnalysisView: View {
             }
             .padding(.bottom, 8)
 
-            if !demo, canEndSleepNow {
-                Button(action: requestEndSleepNow) {
-                    Label("END SLEEP NOW", systemImage: "stop.circle")
-                        .font(StrapTypography.body(12, weight: .bold))
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 12)
+            if !demo {
+                TimelineView(.periodic(from: .now, by: 60)) { timeline in
+                    if canEndSleepNow(at: timeline.date) {
+                        Button(action: requestEndSleepNow) {
+                            Label("END SLEEP NOW", systemImage: "stop.circle")
+                                .font(StrapTypography.body(12, weight: .bold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 12)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color.appSleep)
+                        .accessibilityHint("Confirm ending the current sleep at the present time")
+                        .padding(.bottom, 12)
+                    }
                 }
-                .buttonStyle(.bordered)
-                .tint(Color.appSleep)
-                .accessibilityHint("Confirm ending the current sleep at the present time")
-                .padding(.bottom, 12)
             }
 
             if demo {
