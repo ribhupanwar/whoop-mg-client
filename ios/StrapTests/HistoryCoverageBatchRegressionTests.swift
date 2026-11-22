@@ -50,7 +50,7 @@ final class HistoryCoverageBatchRegressionTests: XCTestCase {
     func testInvalidHeartRateAndMotionDoNotCountAsValidChannels() {
         let received = [
             sample(300, hr: 34, rr: [], motion: -.infinity),
-            sample(301, hr: 221, rr: [], motion: -.nan),
+            sample(301, hr: 221, rr: [], motion: .nan),
             sample(302, hr: 60, rr: [], motion: -0.01),
             sample(303, hr: 70, rr: [800], motion: 0)
         ]
