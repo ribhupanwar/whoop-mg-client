@@ -7,18 +7,8 @@ struct SleepCoachView: View {
     @State private var nextWake = WakeAlarm.nextWakeDate()
     @State private var showSchedule = false
 
-    private var plannedWakeMinutes: Int {
-        if store.isPreview { return SampleData.demoWakeMinutes }
-        return nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
-    }
-
     private var recommendation: SleepRecommendation {
-        SleepCoach.recommendation(
-            baseNeedHours: store.settings.sleepNeedHours,
-            intent: store.settings.sleepIntent,
-            debtHours: SleepCoach.sleepDebt(nights: store.isPreview ? SampleData.nights : store.recordedNights),
-            wakeMinutes: plannedWakeMinutes
-        )
+        store.sleepPlan(nextWake: nextWake)
     }
 
     var body: some View {
@@ -27,10 +17,9 @@ struct SleepCoachView: View {
                 planCard
                 alarmCard
                 DisclosureGroup("How the plan is calculated") {
-                    Text("STRAP uses your sleep need, goal and recorded sleep debt. The plan allows 15 minutes to fall asleep and assumes 90% sleep efficiency.")
-                    if recommendation.debtHours == nil {
-                        Text("Sleep debt will appear once you have recorded nights.")
-                    }
+                    Text("Sleep need is the estimated time asleep. Time in bed divides that need by your estimated sleep efficiency.")
+                    Text("Sleep debt and efficiency each require at least three qualifying nights in the last 14 days. With no usable efficiency, the bedtime allows exactly the estimated sleep need.")
+                    Text("Hard, Easy, and Rest describe your goal. Each adds zero minutes in this planning model.")
                 }
                 .font(StrapTypography.body(13))
                 .foregroundStyle(Color.appMuted)
@@ -72,7 +61,7 @@ struct SleepCoachView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
                 .accessibilityHidden(true)
-            Text("Aim for bed at \(CoachFormat.clock(rec.bedtimeMinutes)). Your estimated sleep need is \(CoachFormat.duration(rec.needHours)).")
+            Text("Aim for bed at \(CoachFormat.localClock(rec.bedtimeMinutes)). Your estimated sleep need is \(CoachFormat.duration(rec.needHours)).")
                 .font(StrapTypography.body(19, weight: .semibold))
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity)
@@ -82,11 +71,21 @@ struct SleepCoachView: View {
             }
             .pickerStyle(.segmented)
             .padding(.bottom, 14)
+            Stepper(value: $store.settings.sleepNeedHours, in: 5...12, step: 0.25) {
+                Text("Baseline sleep need · \(CoachFormat.duration(rec.baselineHours))")
+            }
+            LabeledContent("Sleep debt applied", value: rec.debtHours == nil
+                ? "0:00 · insufficient history" : CoachFormat.duration(rec.appliedDebtHours))
+            LabeledContent("Effort adjustment", value: CoachFormat.duration(rec.additionalHours))
+            LabeledContent("Sleep efficiency", value: rec.measuredEfficiency.map {
+                $0.formatted(.percent.precision(.fractionLength(0)))
+            } ?? "Unavailable")
+            .padding(.bottom, 12)
             HStack(alignment: .top) {
-                timeLabel("Suggested bedtime", minutes: rec.bedtimeMinutes)
+                timeLabel("Suggested bedtime", minutes: rec.bedtimeMinutes, identifier: "planner.bedtime")
                 Spacer(minLength: 12)
                 timeLabel(nextWake == nil && !store.isPreview ? "Target wake time" : "Scheduled wake time",
-                          minutes: plannedWakeMinutes)
+                          minutes: rec.wakeMinutes)
             }
             SectionTitle("Time in bed")
                 .padding(.top, 12)
@@ -107,9 +106,10 @@ struct SleepCoachView: View {
         .foregroundStyle(Color.appFG)
     }
 
-    private func timeLabel(_ label: String, minutes: Int) -> some View {
+    private func timeLabel(_ label: String, minutes: Int, identifier: String = "") -> some View {
         VStack(spacing: 3) {
-            Text(CoachFormat.clock(minutes))
+            Text(CoachFormat.localClock(minutes))
+                .accessibilityIdentifier(identifier)
                 .font(StrapTypography.metric(28, weight: .bold))
                 .monospacedDigit()
             Text(label)

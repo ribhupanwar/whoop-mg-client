@@ -1084,7 +1084,8 @@ struct HomeView: View {
     // MARK: Tonight's sleep
 
     private var tonightCard: some View {
-        Panel {
+        let plan = store.sleepPlan(nextWake: nextWake)
+        return Panel {
             HStack {
                 Text("TONIGHT'S SLEEP")
                     .font(StrapTypography.body(11, weight: .bold))
@@ -1106,7 +1107,8 @@ struct HomeView: View {
                         Image(systemName: "sunrise")
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
-                        Text(demo ? SampleData.bedtime : CoachFormat.clock(bedtimeRecommendation.bedtimeMinutes))
+                        Text(CoachFormat.localClock(plan.bedtimeMinutes))
+                            .accessibilityIdentifier("home.bedtime")
                             .font(StrapTypography.metric(24, weight: .bold))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -1135,7 +1137,7 @@ struct HomeView: View {
                         Image(systemName: "applewatch")
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
-                        Text(demo ? SampleData.latestAlarm : nextWake?.formatted(date: .omitted, time: .shortened) ?? "—")
+                        Text(demo || nextWake != nil ? CoachFormat.localClock(plan.wakeMinutes) : "—")
                             .font(StrapTypography.metric(24, weight: .bold))
                             .monospacedDigit()
                             .lineLimit(1)
@@ -1176,16 +1178,6 @@ struct HomeView: View {
             .accessibilityIdentifier("home.sleepPlanner")
         }
         .padding(.bottom, 14)
-    }
-
-    private var bedtimeRecommendation: SleepRecommendation {
-        let wakeMinutes = nextWake.map(CoachFormat.minutesSinceMidnight) ?? store.settings.wakeTimeMinutes
-        return SleepCoach.recommendation(
-            baseNeedHours: store.settings.sleepNeedHours,
-            intent: store.settings.sleepIntent,
-            debtHours: SleepCoach.sleepDebt(nights: store.recordedNights),
-            wakeMinutes: wakeMinutes
-        )
     }
 
     private var lastNightText: String {
