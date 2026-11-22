@@ -65,6 +65,16 @@ struct SleepSession: Codable, Equatable {
         guard let asleepHours, timeInBedHours > 0 else { return nil }
         return 100 * asleepHours / timeInBedHours
     }
+    /// A manual end action belongs to a current window at the archive frontier.
+    /// A detector window with newer observations has already ended.
+    func canEndNow(lastObservedUnix: Int?, nowUnix: Int) -> Bool {
+        guard !isEdited, let lastObservedUnix, endUnix > startUnix,
+              endUnix - 1 == lastObservedUnix, nowUnix >= lastObservedUnix,
+              nowUnix - lastObservedUnix <= 15 * 60,
+              nowUnix > startUnix, nowUnix - startUnix <= 86_400 else { return false }
+        return true
+    }
+
     var durationReason: String? {
         if let reason = staging.reason { return reason }
         if !isComplete { return "Part of this window has no usable HR; the full sleep duration is unknown." }
