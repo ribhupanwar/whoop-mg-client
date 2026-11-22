@@ -182,6 +182,7 @@ struct SleepAnalysis: Codable, Equatable {
     let consistencyNights: Int
     let stress: StressSplit
     let performancePct: Double?
+    var sleepNeedBreakdown: SleepNeedBreakdown? = nil
 }
 
 // MARK: - Activities

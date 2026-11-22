@@ -158,6 +158,8 @@ final class AppStore: ObservableObject {
             whoopImportedDays = WhoopImportedHistory.make(try WhoopCSVImport.loadSources(defaults: defaults))
             whoopImportReadError = nil
         } catch { whoopImportReadError = "WHOOP import data could not be read; original bytes preserved." }
+        band.sleepPlanningImports = whoopImportedDays
+        band.recalculateRetainedMetrics()
     }
 
     /// Display-only union. It never writes WHOOP fields over band history.
@@ -172,29 +174,8 @@ final class AppStore: ObservableObject {
     var recordedNights: [RecordedNight] {
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey)
             as? [String: [Int]] ?? [:]
-        let sessions = band.summary?.sleepSessions ?? []
-        var result: [String: RecordedNight] = [:]
-        for day in band.days {
-            guard let hours = day.reliableSleepHours, let start = day.sleepStartUnix,
-                  let end = day.sleepEndUnix,
-                  SleepCoach.matchesSavedCorrection(start: start, end: end, corrections: corrections) else { continue }
-            let session = sessions.first { $0.startUnix == start && $0.endUnix - 1 == end }
-            result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: settings.sleepNeedHours,
-                actualHours: hours, efficiency: session.flatMap(\.efficiencyPct).map { $0 / 100 })
-        }
-        var protected = Set(band.days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
-        for session in sessions {
-            let wake = Date(timeIntervalSince1970: Double(session.endUnix - 1))
-            protected.insert(JournalStore.dayKey(for: wake, calendar: .current))
-        }
-        for (key, day) in whoopImportedDays where result[key] == nil && !protected.contains(key) {
-            guard let hours = day.sleepHours, let minutes = day.timeInBedMinutes,
-                  hours > 0, minutes >= hours * 60, minutes <= 1440 else { continue }
-            // Imported targets may include adjustments. Only use the observed durations.
-            result[key] = RecordedNight(dateKey: key, neededHours: settings.sleepNeedHours,
-                actualHours: hours, efficiency: hours * 60 / minutes)
-        }
-        return result.values.sorted { $0.dateKey < $1.dateKey }
+        return SleepCoach.recordedNights(days: band.days, sessions: band.summary?.sleepSessions ?? [],
+            imported: whoopImportedDays, baselineHours: settings.sleepNeedHours, corrections: corrections)
     }
 
     func sleepPlan(nextWake: Date?) -> SleepRecommendation {

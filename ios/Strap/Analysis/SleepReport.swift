@@ -138,7 +138,7 @@ enum SleepReport {
     /// Do not score an incomplete night or infer wake from a movement fraction.
     static func analyze(
         samples: [V18Sample], session: SleepSession, needHours: Double,
-        nights: [NightSpan], sleepBaseline: Baseline?
+        nights: [NightSpan], sleepBaseline: Baseline?, sleepNeedBreakdown: SleepNeedBreakdown? = nil
     ) -> SleepAnalysis? {
         guard let asleep = session.asleepHours, let efficiency = session.efficiencyPct,
               needHours.isFinite, needHours > 0 else { return nil }
@@ -157,7 +157,7 @@ enum SleepReport {
             hoursVsNeededPct: hoursPct, efficiencyPct: efficiency,
             wakeEvents: session.movementBouts,
             consistencyPct: consistencyResult.pct, consistencyNights: consistencyResult.nights,
-            stress: stress, performancePct: Stats.mean(components)
+            stress: stress, performancePct: Stats.mean(components), sleepNeedBreakdown: sleepNeedBreakdown
         )
     }
 

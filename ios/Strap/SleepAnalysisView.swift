@@ -43,12 +43,20 @@ struct SleepAnalysisView: View {
     private var typicalRestorativeMinutes: Double? { nil }
 
     private var typicalHoursVsNeededPct: Double? {
-        let ratios = nights.sorted { $0.dateKey < $1.dateKey }.suffix(30)
-            .compactMap { night -> Double? in
-                guard night.neededHours.isFinite, night.neededHours > 0,
-                      night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
-                return min(100.0, max(0.0, 100.0 * night.actualHours / night.neededHours))
-            }
+        let recorded = nights
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let ratios = recorded.suffix(30).compactMap { night -> Double? in
+            guard let wake = formatter.date(from: night.dateKey),
+                  night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
+            let target = SleepCoach.scoredNightNeed(baseNeedHours: night.neededHours,
+                priorNights: recorded, wakeDate: wake, calendar: calendar)
+            return min(100, 100 * night.actualHours / target.totalHours)
+        }
         guard ratios.count >= 3 else { return nil }
         return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
     }
@@ -552,7 +560,8 @@ struct SleepAnalysisView: View {
                     Task {
                         defer { preparingSleepExport = false }
                         do {
-                            let url = try await store.band.exportRecoveryDiagnostics()
+                            let url = try await store.band.exportRecoveryDiagnostics(
+                                upcomingSleepPlan: store.sleepPlan(nextWake: WakeAlarm.nextWakeDate()))
                             guard store.band.latestSleepSession == requestedSession else { return }
                             recoveryExportURL = url
                         } catch {
@@ -832,8 +841,17 @@ struct SleepAnalysisView: View {
 
             DisclosureGroup("Sleep need breakdown") {
                 VStack(spacing: 8) {
-                    needKey("Baseline sleep target", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
-                    needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
+                    if let target = analysis?.sleepNeedBreakdown {
+                        needKey("Baseline sleep target", color: .appRaised, value: CoachFormat.duration(target.baselineHours))
+                        needKey("Debt applied to this night", color: Color(hex: 0xCCCCCC), value: CoachFormat.duration(target.appliedDebtHours))
+                        needKey("Other adjustments", color: .appAccent, value: CoachFormat.duration(target.additionalHours))
+                    } else if demo {
+                        needKey("Baseline sleep target", color: .appRaised, value: SampleData.needBase)
+                        needKey("Debt applied to this night", color: Color(hex: 0xCCCCCC), value: SampleData.needDebt)
+                    } else {
+                        Text("This stored report predates the sleep-need breakdown.")
+                            .foregroundStyle(Color.appMuted)
+                    }
                 }
                 .padding(12)
                 .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
@@ -1172,8 +1190,12 @@ struct SleepAnalysisView: View {
         }
     }
     private var weekNeed: [Double?] {
-        demo ? SampleData.weeklyHoursNeeded.map(Optional.some) : weekDates.map { date in
-            nights.first { $0.dateKey == dayKey(date) }?.neededHours
+        if demo { return SampleData.weeklyHoursNeeded.map(Optional.some) }
+        let recorded = nights
+        return weekDates.map { date in
+            guard let night = recorded.first(where: { $0.dateKey == dayKey(date) }) else { return nil }
+            return SleepCoach.scoredNightNeed(baseNeedHours: night.neededHours,
+                priorNights: recorded, wakeDate: date).totalHours
         }
     }
     private var weekPerformance: [Double?] {

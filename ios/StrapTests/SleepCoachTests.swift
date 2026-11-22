@@ -84,6 +84,91 @@ final class SleepCoachTests: XCTestCase {
 
     // MARK: Debt
 
+    func testScoredNightUsesPriorQualifiedNightsAndExcludesItsOwnDeficit() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let wake = calendar.date(from: DateComponents(year: 2026, month: 11, day: 22))!
+        let prior = (19...21).map { day in
+            RecordedNight(dateKey: "2026-11-\(day)", neededHours: 8, actualHours: 8)
+        }
+        let target = RecordedNight(dateKey: "2026-11-22", neededHours: 8, actualHours: 5.570555555555556)
+        let noDebt = SleepCoach.scoredNightNeed(baseNeedHours: 8, priorNights: prior + [target],
+                                               wakeDate: wake, calendar: calendar)
+        XCTAssertEqual(noDebt.totalHours, 8)
+        let shorter = prior.map { RecordedNight(dateKey: $0.dateKey, neededHours: 8, actualHours: 7.5) }
+        let withDebt = SleepCoach.scoredNightNeed(baseNeedHours: 8, priorNights: shorter + [target],
+                                                 wakeDate: wake, calendar: calendar)
+        XCTAssertEqual(withDebt.appliedDebtHours, 1.5)
+        XCTAssertEqual(withDebt.totalHours, 9.5)
+    }
+
+    func testCompletedNightCarriesDebtForwardAndSurplusRepaysItOnce() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Asia/Kolkata")!
+        let nights = [
+            RecordedNight(dateKey: "2026-11-18", neededHours: 8, actualHours: 8),
+            RecordedNight(dateKey: "2026-11-19", neededHours: 8, actualHours: 8),
+            RecordedNight(dateKey: "2026-11-20", neededHours: 8, actualHours: 7),
+            RecordedNight(dateKey: "2026-11-21", neededHours: 8, actualHours: 9)
+        ]
+        func debtBefore(_ day: Int) -> Double {
+            let wake = calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: 1))!
+            return SleepCoach.scoredNightNeed(baseNeedHours: 8, priorNights: nights + nights,
+                                             wakeDate: wake, calendar: calendar).appliedDebtHours
+        }
+        XCTAssertEqual(debtBefore(20), 0)
+        XCTAssertEqual(debtBefore(21), 1)
+        XCTAssertEqual(debtBefore(22), 0)
+    }
+
+    func testPlannerHistoryKeepsCorrectedLocalNightAndExcludesOverlappingImports() {
+        let start = 1_795_288_513
+        let end = 1_795_309_557
+        let correctedStart = start + 1_800
+        let correction = [String(start): [correctedStart, end]]
+        func night(_ start: Int, hours: Double) -> DayMetrics {
+            DayMetrics(dateKey: "2026-11-22", state: "sleep", restingHR: nil, lnRMSSD: nil,
+                hrvWindowSeconds: 0, sleepHours: hours, sleepStartUnix: start, sleepEndUnix: end - 1,
+                strain: nil, steps: nil, sleepDurationReliable: true)
+        }
+        let stale = night(start, hours: 5.5)
+        let corrected = night(correctedStart, hours: 5)
+        let overlappingImport = WhoopImportedDay(dateKey: "2026-11-21", sleepHours: 5.5,
+            onsetUnix: start, wakeUnix: end, timeInBedMinutes: 351)
+        let imports = [overlappingImport.dateKey: overlappingImport]
+        XCTAssertTrue(SleepCoach.recordedNights(days: [stale], sessions: [], imported: imports,
+                                                baselineHours: 8, corrections: correction).isEmpty)
+        let resolved = SleepCoach.recordedNights(days: [corrected, stale, corrected], sessions: [],
+                                                imported: imports, baselineHours: 8, corrections: correction)
+        XCTAssertEqual(resolved, [RecordedNight(dateKey: "2026-11-22", neededHours: 8, actualHours: 5)])
+    }
+
+    func testNovember22ScoreComponentsUsingExportedDurations() throws {
+        let start = 1_795_288_513
+        let end = 1_795_309_557
+        let staging = SleepStaging(segments: [.init(startUnix: start, endUnix: end, stage: .light)],
+            deepMinutes: 56.5, lightMinutes: 192.73333333333332, remMinutes: 85,
+            wakeMinutes: 16.5, epochs: 702, hrCoverage: 0.999952480517012, reason: nil)
+        let session = SleepSession(version: 6, sourceStartUnix: start, startUnix: start, endUnix: end,
+            staging: staging, heartRate: [], movementBouts: 0, isEdited: false)
+        // Five aligned nights and one outlier reproduce the exported consistency component.
+        let aligned = (1...5).map { day in
+            let offset = day * 86_400
+            return NightSpan(startUnix: start - offset, endUnix: end - offset)
+        }
+        let nights = aligned + [NightSpan(startUnix: start + 10_800, endUnix: end + 10_800)]
+        let old = try XCTUnwrap(SleepReport.analyze(samples: [], session: session, needHours: 8,
+            nights: nights, sleepBaseline: nil))
+        XCTAssertEqual(old.hoursVsNeededPct, 69.63194444444444, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(old.performancePct), 82.74250520954332, accuracy: 0.000001)
+        let target = SleepCoach.sleepNeed(baseNeedHours: 8, debtHours: 2)
+        let revised = try XCTUnwrap(SleepReport.analyze(samples: [], session: session,
+            needHours: target.totalHours, nights: nights, sleepBaseline: nil, sleepNeedBreakdown: target))
+        XCTAssertEqual(revised.hoursVsNeededPct, 55.705555555555556, accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(revised.performancePct), 78.10037557991369, accuracy: 0.000001)
+        XCTAssertEqual(revised.sleepNeedBreakdown, target)
+    }
+
     func testDebtUnknownWithNoNights() {
         XCTAssertNil(SleepCoach.sleepDebt(nights: []))
         let rec = SleepCoach.recommendation(baseNeedHours: 8, intent: .easy, debtHours: nil, wakeMinutes: 420)

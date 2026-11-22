@@ -685,6 +685,7 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Rebuild derived scores from the retained raw archive without requiring
     /// another BLE drain. This also migrates cached values after algorithm fixes.
+    var sleepPlanningImports: [String: WhoopImportedDay] = [:]
     var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
 
     func recalculateRetainedMetrics() {
@@ -715,6 +716,8 @@ final class BandLink: NSObject, ObservableObject {
         let sexSnapshot = sex
         let maxSnapshot = maxHR
         let needSnapshot = needHours
+        let importedNights = sleepPlanningImports
+        let calendar = Calendar.current
         let baselineSnapshot = awakeBaseline
         let isActivityDeleted = isDetectedActivityDeleted
         let daysSnapshot = days
@@ -826,11 +829,16 @@ final class BandLink: NSObject, ObservableObject {
             let sleepBaseline = DailyAnalysis.baseline(
                 from: Array(allDays.filter { $0.state == "sleep" }.suffix(DailyAnalysis.rollingBaselineDays))
             )
-            let report = fresh.latestSleepSession.flatMap {
-                SleepReport.analyze(
-                    samples: samples, session: $0, needHours: needSnapshot,
-                    nights: nights, sleepBaseline: sleepBaseline
-                )
+            let recordedNights = SleepCoach.recordedNights(days: allDays, sessions: fresh.sleepSessions ?? [],
+                imported: importedNights, baselineHours: needSnapshot, corrections: corrections, calendar: calendar)
+            func target(for session: SleepSession) -> SleepNeedBreakdown {
+                SleepCoach.scoredNightNeed(baseNeedHours: needSnapshot, priorNights: recordedNights,
+                    wakeDate: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)), calendar: calendar)
+            }
+            let report = fresh.latestSleepSession.flatMap { session in
+                let need = target(for: session)
+                return SleepReport.analyze(samples: samples, session: session, needHours: need.totalHours,
+                    nights: nights, sleepBaseline: sleepBaseline, sleepNeedBreakdown: need)
             }
             let diagnosticPeriods = fresh.sleepPeriods
             let restSamples = diagnosticPeriods.isEmpty ? samples : samples.filter { sample in
@@ -853,8 +861,9 @@ final class BandLink: NSObject, ObservableObject {
                 let datedNights = Array(allDays.map { existing in
                     freshDays.first(where: { $0.dateKey == existing.dateKey }) ?? existing
                 }.filter { $0.dateKey <= day.dateKey }.suffix(14)).compactMap(\.night)
+                let need = target(for: session)
                 let datedReport = SleepReport.analyze(samples: samples, session: session,
-                    needHours: needSnapshot, nights: datedNights, sleepBaseline: sleepBaseline)
+                    needHours: need.totalHours, nights: datedNights, sleepBaseline: sleepBaseline, sleepNeedBreakdown: need)
                 freshDays[index].sleepPerformancePct = datedReport?.performancePct
             }
             guard !cancellation.isCancelled else { return }
@@ -1000,7 +1009,7 @@ final class BandLink: NSObject, ObservableObject {
                                       date: date, sleepNeedHours: needHours, calendar: calendar)
     }
 
-    func exportRecoveryDiagnostics() async throws -> URL {
+    func exportRecoveryDiagnostics(upcomingSleepPlan: SleepRecommendation? = nil) async throws -> URL {
         guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
         let calendar = Calendar.current
         let assessment = recoveryAssessment(for: session, calendar: calendar)
@@ -1010,6 +1019,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let legacy = DatedRecovery.replayLegacyHome(day: oldDay, priorDays: days,
             dateKey: assessment.dateKey, sleepNeedHours: needHours)
+        let sleepAnalysis = lastSleepAnalysis
         let sync = lastHistorySyncAt
         let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
         let archived = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
@@ -1037,7 +1047,8 @@ final class BandLink: NSObject, ObservableObject {
                 quietWindows: Hrv.restingWindowDiagnostics(samples, minWindowS: 300),
                 deepQuietWindows: Hrv.restingWindowDiagnostics(
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
-                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300))
+                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300), sleepAnalysis: sleepAnalysis,
+                upcomingSleepPlan: upcomingSleepPlan)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }
