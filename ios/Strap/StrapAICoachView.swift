@@ -27,6 +27,9 @@ struct StrapAICoachView: View {
     @State private var shareHealthWithCloud = false
     @State private var showAISettings = false
     @State private var groqKeyInput = ""
+    @State private var geminiKeyInput = ""
+    @State private var tavilyKeyInput = ""
+    @State private var useLiveSearch = false
     @FocusState private var composerFocused: Bool
 
     @State private var waitingMessageIndex = 0
@@ -67,7 +70,7 @@ struct StrapAICoachView: View {
                     Text(selectedEngine == "Apple (offline)" ? "Private · On-device" : "Cloud AI · optional").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true } label: {
+                Button { loadCoachKeys(); showAISettings = true } label: {
                     Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
                 }.accessibilityLabel("AI model settings")
                 Button { dismiss() } label: {
@@ -79,7 +82,7 @@ struct StrapAICoachView: View {
             HStack {
                 Text(selectedEngine).font(.caption)
                 Spacer()
-                Button("Change model") { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true }.font(.caption)
+                Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption)
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
             ScrollViewReader { proxy in
                 ScrollView {
@@ -197,6 +200,7 @@ struct StrapAICoachView: View {
                             Text("Apple (offline)").tag("Apple (offline)")
                             Text("Groq Llama 70B").tag("Groq Llama 70B")
                             Text("Groq Llama 8B fast").tag("Groq Llama 8B fast")
+                            Text("Gemini Flash").tag("Gemini Flash")
                         }
                         Text("Groq requires internet, your own API key and is subject to free-tier limits.").font(.footnote)
                     }
@@ -250,6 +254,12 @@ struct StrapAICoachView: View {
                 showAttachments = false
             }
         }
+    }
+
+    private func loadCoachKeys() {
+        groqKeyInput = CoachCloudAI.readKey()
+        geminiKeyInput = CoachServiceKey.read("gemini")
+        tavilyKeyInput = CoachServiceKey.read("tavily")
     }
 
     private func send(_ input: String) {
