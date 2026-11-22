@@ -203,8 +203,6 @@ struct HealthspanOrb: View {
     let years: Double?
     var chronologicalYears: Int? = nil
 
-    private let cyan = Color(hex: 0x54D7E9)
-
     private var ageGapText: String {
         guard let years, let chronologicalYears else { return "Building your baseline" }
         let gap = years - Double(chronologicalYears)
@@ -215,33 +213,8 @@ struct HealthspanOrb: View {
         GeometryReader { geometry in
             let diameter = min(geometry.size.width, geometry.size.height)
             ZStack {
-                // A subtly irregular, translucent membrane rather than a flat ring.
-                LiquidAgeMembrane()
-                    .fill(RadialGradient(
-                        colors: [Color.black.opacity(0.94), Color(hex: 0x06282E),
-                                 cyan.opacity(0.50), cyan.opacity(0.16)],
-                        center: .center, startRadius: diameter * 0.12,
-                        endRadius: diameter * 0.51))
-                    .overlay {
-                        LiquidAgeMembrane()
-                            .stroke(cyan.opacity(0.68), lineWidth: 1.4)
-                    }
-                    .shadow(color: cyan.opacity(0.22), radius: 20)
-                Canvas { context, size in
-                    // Deterministic particles: no random animation or repeated layout jitter.
-                    for index in 0..<190 {
-                        let angle = Double(index) * 2.399963229728653
-                        let radial = 0.24 + 0.25 * Double((index * 37) % 101) / 100.0
-                        let x = size.width * (0.5 + cos(angle) * radial)
-                        let y = size.height * (0.5 + sin(angle) * radial)
-                        let dot = CGFloat(index % 11 == 0 ? 4.2 : index % 4 == 0 ? 2.5 : 1.25)
-                        let opacity = 0.22 + Double(index % 7) * 0.10
-                        context.fill(Path(ellipseIn: CGRect(x: x - dot / 2, y: y - dot / 2,
-                                                           width: dot, height: dot)),
-                                     with: .color(cyan.opacity(opacity)))
-                    }
-                }
-                .clipShape(LiquidAgeMembrane())
+                HealthspanParticleField()
+                    .accessibilityHidden(true)
                 VStack(spacing: 6) {
                     Text(years.map { String(format: "%.1f", $0) } ?? "—")
                         .font(StrapTypography.metric(47, weight: .bold))
@@ -262,28 +235,6 @@ struct HealthspanOrb: View {
         }
         .accessibilityLabel(years.map { String(format: "Fitness age %.1f years. %@", $0, ageGapText) }
                             ?? "Fitness age needs more data")
-    }
-}
-
-/// Stable asymmetric edge to resemble the fluid healthspan silhouette.
-private struct LiquidAgeMembrane: Shape {
-    func path(in rect: CGRect) -> Path {
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) * 0.465
-        var path = Path()
-        let segments = 180
-        for index in 0...segments {
-            let angle = Double(index) * 2 * .pi / Double(segments)
-            let variation = 1.0 + 0.027 * sin(5 * angle + 0.6)
-                + 0.019 * sin(8 * angle - 1.2)
-                + 0.011 * cos(3 * angle)
-            let point = CGPoint(
-                x: center.x + radius * CGFloat(variation * cos(angle)),
-                y: center.y + radius * CGFloat(variation * sin(angle)))
-            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        path.closeSubpath()
-        return path
     }
 }
 
