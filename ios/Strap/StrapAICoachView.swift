@@ -190,6 +190,7 @@ struct StrapAICoachView: View {
                 .padding(.horizontal, 16).padding(.bottom, 10)
             }
         }
+        .onDisappear { stopGeneration() }
         .foregroundStyle(.white)
         .background(Color(hex: 0x0C1319).ignoresSafeArea())
         .sheet(isPresented: $showAISettings) {
@@ -338,6 +339,7 @@ struct StrapAICoachView: View {
         if engine != "Apple (offline)" {
             let started = ContinuousClock.now
             do {
+                try Task.checkCancellation()
                 // Search is opt-in and receives only the current question.
                 var evidence: String?
                 if useLiveSearch { evidence = try await CoachWebSearch.search(prompt) }

@@ -36,12 +36,13 @@ final class AICoachTests: XCTestCase {
         XCTAssertTrue(answer?.contains("mL/kg/min") == true)
         XCTAssertFalse(answer?.contains("data nahi") == true)
         XCTAssertNil(CoachKnowledge.answer("Mera VO2 max kitna hai?"))
+        XCTAssertNil(CoachKnowledge.answer("What is my VO2 max?"))
         XCTAssertNil(CoachKnowledge.answer("How is my recovery today?"))
     }
 
-    func testSnapshotBuilderIncludesTodayYesterdayAndBaseline() {
+    func testSnapshotBuilderIncludesTodayYesterdayAndBaseline() throws {
         let calendar = Calendar(identifier: .gregorian)
-        let now = try! XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 12)))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 22, hour: 12)))
         let todayKey = JournalStore.dayKey(for: now, calendar: calendar)
 
         let yesterday = DayMetrics(
