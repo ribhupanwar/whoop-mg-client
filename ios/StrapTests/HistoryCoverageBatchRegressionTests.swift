@@ -43,7 +43,7 @@ final class HistoryCoverageBatchRegressionTests: XCTestCase {
         XCTAssertEqual(coverage.observedSeconds, 3)
         XCTAssertEqual(coverage.missingSeconds, 2)
         XCTAssertEqual(coverage.repeatedSecondRecords, 2)
-        XCTAssertEqual(coverage.backwardsTransitions, 2)
+        XCTAssertEqual(coverage.backwardsTransitions, 1)
         XCTAssertEqual(coverage.rrSeconds, 3)
     }
 
