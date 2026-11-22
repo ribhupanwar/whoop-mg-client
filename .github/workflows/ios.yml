@@ -164,6 +164,37 @@ jobs:
           done
           echo "All eleven licensed fonts are present in the IPA payload"
 
+      - name: Verify release metadata inside IPA
+        run: |
+          python3 - "$RUNNER_TEMP/ipa/Strap-unsigned.ipa" "$GITHUB_SHA" <<'PY'
+          import plistlib
+          import sys
+          import zipfile
+
+          path, expected_revision = sys.argv[1:]
+          app = "Payload/Strap.app/"
+          with zipfile.ZipFile(path) as ipa:
+              info = plistlib.loads(ipa.read(app + "Info.plist"))
+              names = set(ipa.namelist())
+              fonts = info.get("UIAppFonts", [])
+              checks = {
+                  "bundle identifier": info.get("CFBundleIdentifier") == "com.ribhupanwar.strap",
+                  "source revision": info.get("StrapBuildRevision") == expected_revision,
+                  "release version": bool(info.get("CFBundleShortVersionString") and info.get("CFBundleVersion")),
+                  "Bluetooth background mode": "bluetooth-central" in info.get("UIBackgroundModes", []),
+                  "permission usage descriptions": all(
+                      info.get(key) for key in ("NSBluetoothAlwaysUsageDescription",
+                                              "NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription")
+                  ),
+                  "font registration": len(fonts) == len(set(fonts)) == 11 and all(app + font in names for font in fonts),
+              }
+              invalid = [name for name, passed in checks.items() if not passed]
+              if invalid:
+                  raise SystemExit("Invalid IPA metadata: " + ", ".join(invalid))
+              print(f"STRAP version {info['CFBundleShortVersionString']} build {info['CFBundleVersion']}")
+              print(f"Source revision {info['StrapBuildRevision']}")
+          PY
+
       - name: Verify packaged HealthKit entitlement
         run: |
           set -euo pipefail
