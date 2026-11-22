@@ -40,7 +40,8 @@ struct CoachBiometricSnapshotBuilder {
         sections.append(todayLines.joined(separator: "\n"))
         
         // 2. YESTERDAY's Finalized Metrics
-        if let yesterday = sortedDays.suffix(2).first, yesterday.dateKey != todayKey {
+        let priorDays = sortedDays.filter { $0.dateKey < todayKey }
+        if let yesterday = priorDays.last {
             var yLines = ["• YESTERDAY (\(yesterday.dateKey)):"]
             if let yStrain = yesterday.strain {
                 yLines.append("  - Final Day Strain: \(String(format: "%.1f", yStrain))")
@@ -58,7 +59,7 @@ struct CoachBiometricSnapshotBuilder {
         }
         
         // 3. 7-DAY BASELINE TRENDS
-        let last7 = Array(sortedDays.suffix(7))
+        let last7 = Array(priorDays.suffix(7))
         if !last7.isEmpty {
             let validHRVs = last7.compactMap { $0.lnRMSSD.map { exp($0) } }
             let validRHRs = last7.compactMap { $0.restingHR }
@@ -69,10 +70,10 @@ struct CoachBiometricSnapshotBuilder {
                 "  - Qualifying Nights: \(last7.count) of 7"
             ]
             if let minH = validHRVs.min(), let maxH = validHRVs.max() {
-                trendLines.append("  - Typical HRV Range: \(Int(round(minH)))–\(Int(round(maxH))) ms")
+                trendLines.append("  - Typical HRV Range: \(Int(round(minH)))-\(Int(round(maxH))) ms")
             }
             if let minR = validRHRs.min(), let maxR = validRHRs.max() {
-                trendLines.append("  - Typical RHR Range: \(Int(round(minR)))–\(Int(round(maxR))) bpm")
+                trendLines.append("  - Typical RHR Range: \(Int(round(minR)))-\(Int(round(maxR))) bpm")
             }
             if !validStrains.isEmpty {
                 let avgStrain = validStrains.reduce(0.0, +) / Double(validStrains.count)

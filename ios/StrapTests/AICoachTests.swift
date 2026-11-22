@@ -67,7 +67,7 @@ final class AICoachTests: XCTestCase {
         
         let snapshot = CoachBiometricSnapshotBuilder.build(
             days: allDays,
-            recoveryScore: 68,
+            recoveryScore: 68.0,
             dayStrain: 4.2,
             lastCaptureHRV: 45.0,
             measuredRHR: 58.0,
