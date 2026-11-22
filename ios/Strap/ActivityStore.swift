@@ -324,7 +324,6 @@ var icon: String {
         case .nap: return "moon.zzz.fill"
         }
     }
-    }
 
     /// Lifting is entered as sets; everything else by minutes.
     var usesSets: Bool { 
