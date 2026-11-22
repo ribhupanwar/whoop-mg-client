@@ -44,9 +44,10 @@ struct StrapAICoachView: View {
         let today = JournalStore.dayKey(for: Date())
         let batchStrain = store.band.days.first(where: { $0.dateKey == today })?.strain
         let dayStrain = store.band.liveDayStrain.map { max($0, batchStrain ?? $0) } ?? batchStrain
+        let recovery = store.band.recoveryNight?.dateKey == today ? store.band.recovery.score : nil
         return CoachBiometricSnapshotBuilder.build(
             days: store.band.days,
-            recoveryScore: store.band.recovery.score,
+            recoveryScore: recovery,
             dayStrain: dayStrain,
             lastCaptureHRV: store.lastCapture?.hrv.rmssdMS,
             measuredRHR: store.measuredRestingHR,
@@ -71,7 +72,7 @@ struct StrapAICoachView: View {
                 Spacer()
                 Button { loadCoachKeys(); showAISettings = true } label: {
                     Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
-                }.accessibilityLabel("AI model settings").accessibilityIdentifier("coach.settings")
+                }.accessibilityLabel("AI model settings").accessibilityIdentifier("coach.settings").disabled(busy)
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
                         .frame(width: 30, height: 30).background(.white.opacity(0.08), in: Circle())
@@ -81,7 +82,7 @@ struct StrapAICoachView: View {
             HStack {
                 Text(selectedEngine).font(.caption)
                 Spacer()
-                Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption)
+                Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption).disabled(busy)
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
             ScrollViewReader { proxy in
                 ScrollView {

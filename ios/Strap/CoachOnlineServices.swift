@@ -24,11 +24,17 @@ enum CoachServiceKey {
             kSecAttrService as String: "com.ribhupanwar.strap.coach." + service,
             kSecAttrAccount as String: "user-api-key"
         ]
-        SecItemDelete(query as CFDictionary)
-        guard !key.isEmpty else { return true }
-        var payload = query
-        payload[kSecValueData as String] = Data(key.utf8)
-        payload[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        guard !key.isEmpty else {
+            let status = SecItemDelete(query as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
+        }
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(key.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        guard status == errSecItemNotFound else { return status == errSecSuccess }
+        let payload = query.merging(attributes) { _, new in new }
         return SecItemAdd(payload as CFDictionary, nil) == errSecSuccess
     }
 }

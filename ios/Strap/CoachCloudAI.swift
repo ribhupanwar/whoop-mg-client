@@ -1,5 +1,4 @@
 import Foundation
-import Security
 
 /// Optional user-configured cloud model. No service key is bundled with STRAP.
 /// This service is called only after the user explicitly selects Cloud AI.
@@ -8,32 +7,12 @@ enum CoachCloudAI {
     static let models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
     static func readKey() -> String {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.ribhupanwar.strap.coach.groq",
-            kSecAttrAccount as String: "user-api-key",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return "" }
-        return String(data: data, encoding: .utf8) ?? ""
+        CoachServiceKey.read("groq")
     }
 
     @discardableResult
     static func saveKey(_ key: String) -> Bool {
-        let base: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: "com.ribhupanwar.strap.coach.groq",
-            kSecAttrAccount as String: "user-api-key"
-        ]
-        SecItemDelete(base as CFDictionary)
-        guard !key.isEmpty else { return true }
-        var query = base
-        query[kSecValueData as String] = Data(key.utf8)
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        CoachServiceKey.save(key, service: "groq")
     }
 
     static func answer(
