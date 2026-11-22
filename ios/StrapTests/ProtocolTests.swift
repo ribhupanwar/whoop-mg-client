@@ -401,6 +401,64 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample?.rrIntervalsMS, [800])
         XCTAssertEqual(sample?.heartRate, 94)
     }
+
+    func testHistoricalRecordSelectionPrefersValidHR() {
+        let baseHeader = BandRecordHeader(version: 18, flags: 0, recordIndex: 100, unix: 1700000000, subsecQ15: 0)
+        let sampleBradycardia = V18Sample(
+            header: baseHeader,
+            heartRate: 28, // Valid HR within 25...230
+            rrIntervalsMS: [],
+            dynamicAccelG: nil,
+            gravityXG: nil,
+            gravityYG: nil,
+            gravityZG: nil,
+            stepCounter: nil,
+            stepCadence: nil,
+            activityClass: nil,
+            skinTempC: nil,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        let sampleZeroHR = V18Sample(
+            header: baseHeader,
+            heartRate: 0, // Invalid/absent HR
+            rrIntervalsMS: [800],
+            dynamicAccelG: 0.05,
+            gravityXG: nil,
+            gravityYG: nil,
+            gravityZG: nil,
+            stepCounter: nil,
+            stepCadence: nil,
+            activityClass: nil,
+            skinTempC: nil,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+
+        // Valid resting bradycardia HR (28 bpm) is preferred over zero HR
+        XCTAssertTrue(HistoricalRecordSelection.prefers(sampleBradycardia, over: sampleZeroHR))
+        XCTAssertFalse(HistoricalRecordSelection.prefers(sampleZeroHR, over: sampleBradycardia))
+    }
 }
 
 // MARK: - Standard heart-rate profile (0x2A37)
