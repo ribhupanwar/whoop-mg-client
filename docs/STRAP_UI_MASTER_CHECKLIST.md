@@ -1,4 +1,38 @@
-# STRAP Remaining Work — Execution Batches (2026-11-18)
+# STRAP Master Checklist — Reconciled 2026-11-22
+
+## 2026-11-22 — Verified reconciliation and competitor comparison (supersedes older pending labels where noted)
+
+> Evidence categories: MERGED = commit history confirms integration; CI VERIFIED = exact workflow run checked; CODE DOCUMENTED = existing repository evidence, not a fresh end-to-end test; DEVICE VERIFY = physical-band comparison still required. This snapshot does not assert the latest post-merge main workflow passed.
+
+### Verified merged changes
+- [x] **MERGED:** PR #137 sleep-need production-path boundary regression tests; merge commit `177585ca0591e19a437e8cfe37c7ec6b3f0d7cae`.
+- [x] **MERGED:** PR #138 Healthspan seventh-calendar-day lean-mass eligibility and regression; merge commit `59bb894c2a9d25adc1ecaed98a2117f0f78ef8fe`.
+- [x] **MERGED:** PR #140 packaged IPA metadata and registered-font verification; merge commit `ae3b90a3e4dfd0f508008fcec8ddcf20bd158c7f`.
+- [ ] **OPEN AT REVIEW:** PR #139 Ghidra WHOOP 5.80.2 research handoff. Documentation-only; not evidence of production feature integration.
+
+### Actual CI evidence
+- [x] **CI VERIFIED on PR #140 commit `50404621cc6fa87b2bdab55d07a4efc883c76b3f`:** iOS workflow [44994215767](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44994215767) succeeded. Its job steps include simulator build, native unit tests, SideStore IPA archive/package, licensed fonts, release metadata, HealthKit entitlement and artifact uploads.
+- [x] **CI VERIFIED on same commit:** protocol workflow [44994215751](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44994215751) succeeded across six OS/Python matrix jobs.
+- [x] **CI VERIFIED on PR #137 commit `0c02d3a7`:** iOS [44983747242](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44983747242) and protocol [44983747238](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44983747238) succeeded.
+- [ ] **POST-MERGE MAIN GATE:** These are PR-commit workflow results, not independently verified post-merge main CI. Recheck exact current main SHA and associated main push runs before declaring final release green.
+- [ ] **DEVICE VERIFY:** Hardware BLE, overnight RR/HRV, sleep stage parity, automatic activity detection, and backup/restore are not proven by simulator CI.
+
+### NOOP / OpenStrap Edge comparison (source README/protocol/features, not a full source diff)
+- [x] **STRAP DOCUMENTED:** Direct WHOOP Gen5 BLE HR/history, sleep/recovery/strain, Healthspan fitness-age estimates, activity detection, alarm schedule, GPS/GPX/FIT and backup/export paths, HealthKit, and SideStore packaging. Actual hardware accuracy remains a separate gate.
+- [ ] **REVIEW ONLY — OpenStrap Edge:** HRV spot-check, live breathing coherence, journal-based correlations, scheduled local backups, light-sleep smart alarm wake-window, iOS Shortcuts/widgets/Live Activities, and guided help. Do not mark these as missing from STRAP until inspecting current implementation; do not bulk-import.
+- [ ] **REVIEW ONLY — NOOP:** Protocol contracts and firmware-specific Gen5/MG compatibility, RR quality gating, ECG capability-specific behavior and BLE recovery. Compare exact versions and implementation before changing any bytes.
+- [ ] **KNOWN INVESTIGATION:** Generic HR-only `workout` classification may bypass walking-specific false-positive gate; reproduce against current main before fixing.
+- [ ] **KNOWN HARDWARE RISK:** OpenStrap documents reports of data withheld despite BLE connection on some firmware 50.43.x versions. Diagnose with real band; a connected flag is not proof of data readiness.
+- [ ] **LICENSE GATE:** NOOP README lists PolyForm Noncommercial 1.0.0; check source-file licensing and OpenStrap Edge licensing before reuse. Prefer independent implementation from documented behavior.
+
+### Next acceptance criteria
+1. Confirm current main head and latest post-merge CI.
+2. Test real WHOOP 5/MG sync, history, reconnect and RR integrity.
+3. Compare 5–7 matched nights and workouts to WHOOP, preserving missing-data semantics.
+4. Test generic-workout bypass with synthetic and device fixtures.
+5. Decide feature imports only after checking STRAP source for existing equivalents.
+
+---
 
 > Execution order for the remaining backlog. A batch is complete only after code review, focused tests, native iOS build, and device/data verification where required. Do not bulk-merge draft PR #46 or stale overlapping PRs. Preserve historical records, licensed fonts, and missing-data semantics.
 
