@@ -132,7 +132,7 @@ struct HealthspanView: View {
         Panel {
             CardHead(title: "Fitness age")
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Text(snapshot.map { String(format: "%.0f", $0.years) } ?? "—")
+                Text(snapshot.map { String(format: "%.1f", $0.years) } ?? "—")
                     .font(StrapTypography.metric(48, weight: .light))
                 Text("years").font(StrapTypography.body(13)).foregroundStyle(Color.appMuted)
             }
@@ -309,8 +309,7 @@ struct HealthspanView: View {
             }
             let days = MetricTimeline.make(days: input.days, live: input.live, manual: input.manual,
                 caloriesByDay: [:], ending: input.date, count: 14, sleepNeedHours: input.settings.sleepNeedHours,
-                maxHR: input.settings.ageConfirmed
-                    ? input.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: input.settings.age) : nil,
+                maxHR: input.settings.profileMaxHeartRate(on: input.date),
                 calendar: calendar)
             let latest = FitnessAgeModel.snapshot(age: input.settings.age, sex: input.settings.sex,
                 ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
@@ -448,8 +447,12 @@ private struct HealthspanTrendChart: View {
     let points: [HealthspanPoint]
     let actualAge: Double?
     @State private var selectedDate: Date?
-    private var low: Double { max(15, (points.compactMap(\.years).min() ?? Double(actualAge ?? 30)) - 6) }
-    private var high: Double { max(Double(actualAge ?? 0) + 2, (points.compactMap(\.years).max() ?? low + 10) + 6) }
+    private var ages: [Double] {
+        points.flatMap { [$0.years, $0.comparisonAge].compactMap { $0 } }
+            + [actualAge].compactMap { $0 }
+    }
+    private var low: Double { max(0, (ages.min() ?? 30) - 6) }
+    private var high: Double { (ages.max() ?? 34) + 6 }
     var body: some View {
         GeometryReader { geometry in
             let left: CGFloat = 26

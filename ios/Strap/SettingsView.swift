@@ -80,7 +80,7 @@ struct SettingsView: View {
     private var profilePanel: some View {
         Panel {
             SectionTitle("Profile")
-            fieldRow(label: "Age") {
+            fieldRow(label: store.settings.birthDate == nil ? "Age" : "Age fallback") {
                 HStack(spacing: 6) {
                 TextField("30", value: $store.settings.age, format: .number)
                     .keyboardType(.numberPad)
@@ -100,7 +100,7 @@ struct SettingsView: View {
                 profileOK { store.settings.ageConfirmed = true }
                 }
             }
-            if !store.settings.ageConfirmed {
+            if !store.settings.ageConfirmed, store.settings.birthDate == nil {
                 Button("Confirm age for Fitness Age") {
                     store.settings.ageConfirmed = true
                 }
@@ -491,7 +491,7 @@ struct SettingsView: View {
             get: { store.settings.maxHROverride != nil },
             set: { isOn in
                 store.settings.maxHROverride = isOn
-                    ? (store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age))
+                    ? (store.settings.maxHROverride ?? store.maxHeartRate)
                     : nil
             }
         )
@@ -499,7 +499,7 @@ struct SettingsView: View {
 
     private var maxOverrideValue: Binding<Double> {
         Binding(
-            get: { store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age) },
+            get: { store.settings.maxHROverride ?? store.maxHeartRate },
             set: { store.settings.maxHROverride = $0 }
         )
     }

@@ -17,6 +17,19 @@ final class HealthspanProfileTests: XCTestCase {
         }
     }
 
+    func testBirthDateProvidesTrainingAgeWithoutConfirmingLegacyPlaceholder() throws {
+        var settings = AppSettings()
+        XCTAssertNil(settings.profileAge())
+        XCTAssertNil(settings.profileMaxHeartRate())
+        AppleHealthProfile(birthDate: ProfileBirthDate(DateComponents(year: 1966, month: 11, day: 22)))
+            .fillMissing(in: &settings)
+        let date = try XCTUnwrap(ProfileBirthDate.calendar().date(from: DateComponents(year: 2026, month: 11, day: 22)))
+        let decoded = try JSONDecoder().decode(AppSettings.self, from: JSONEncoder().encode(settings))
+        XCTAssertEqual(decoded.profileAge(on: date), 60)
+        XCTAssertEqual(decoded.profileMaxHeartRate(on: date), 166)
+        XCTAssertFalse(decoded.ageConfirmed)
+    }
+
     func testHealthProfileImportPreservesExplicitEntriesAndOlderMassCannotReplaceNewer() {
         var settings = AppSettings()
         settings.ageConfirmed = true

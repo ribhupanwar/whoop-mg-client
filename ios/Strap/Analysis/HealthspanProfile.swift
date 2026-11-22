@@ -64,3 +64,17 @@ struct AppleHealthProfile {
         }
     }
 }
+
+extension AppSettings {
+    func profileAge(on date: Date = Date()) -> Double? {
+        if let birthDate {
+            return birthDate.age(on: date).flatMap { (5...110).contains($0) ? $0 : nil }
+        }
+        return ageConfirmed && (5...110).contains(age) ? Double(age) : nil
+    }
+
+    func profileMaxHeartRate(on date: Date = Date()) -> Double? {
+        if let maxHROverride, maxHROverride.isFinite, maxHROverride > 60 { return maxHROverride }
+        return profileAge(on: date).map { 208 - 0.7 * $0 }
+    }
+}
