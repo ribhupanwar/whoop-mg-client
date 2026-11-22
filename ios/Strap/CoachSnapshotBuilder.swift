@@ -45,7 +45,8 @@ struct CoachBiometricSnapshotBuilder {
             if let yStrain = yesterday.strain {
                 yLines.append("  - Final Day Strain: \(String(format: "%.1f", yStrain))")
             }
-            if let ySleep = yesterday.sleepHours {
+            let ySleep = yesterday.sleepHours
+            if ySleep.isFinite && ySleep >= 0 {
                 yLines.append("  - Sleep Duration: \(String(format: "%.1f", ySleep)) hrs")
             }
             if let yRHR = yesterday.restingHR {
