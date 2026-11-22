@@ -2,6 +2,21 @@ import XCTest
 @testable import Strap
 
 final class SleepSessionTests: XCTestCase {
+    func testNovember22DetectedWindowEndsBeforeAwakeArchiveFrontier() {
+        let start = 1_795_288_513
+        let end = 1_795_309_557
+        func session(edited: Bool) -> SleepSession {
+            SleepSession(version: 6, sourceStartUnix: start, startUnix: start, endUnix: end,
+                         staging: .unavailable, heartRate: [], movementBouts: 0, isEdited: edited)
+        }
+        let lastAwake = 1_795_310_187
+        XCTAssertFalse(session(edited: false).canEndNow(lastObservedUnix: lastAwake, nowUnix: lastAwake + 1))
+        XCTAssertTrue(session(edited: false).canEndNow(lastObservedUnix: end - 1, nowUnix: end + 60))
+        XCTAssertFalse(session(edited: false).canEndNow(lastObservedUnix: end - 1, nowUnix: end + 901))
+        XCTAssertFalse(session(edited: true).canEndNow(lastObservedUnix: end - 1, nowUnix: end + 60))
+        XCTAssertFalse(session(edited: false).canEndNow(lastObservedUnix: nil, nowUnix: end + 60))
+    }
+
     func testCorruptedExtremeCorrectionKeysCannotCrashAliasResolution() {
         let night = period(3600)
         let edit = [start + 120, start + 3300]
