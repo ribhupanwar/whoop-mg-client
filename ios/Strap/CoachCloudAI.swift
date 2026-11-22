@@ -36,20 +36,9 @@ enum CoachCloudAI {
         return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
     }
 
-    static func answer(question: String, history: String, context: String?, model: String) async throws -> String {
-        let lines = history.components(separatedBy: "\n").filter { !$0.isEmpty }
-        var turns: [(role: String, text: String)] = []
-        for line in lines {
-            if line.hasPrefix("User: ") {
-                turns.append(("user", String(line.dropFirst(6))))
-            } else if line.hasPrefix("Assistant: ") {
-                turns.append(("assistant", String(line.dropFirst(11))))
-            }
-        }
-        return try await answer(question: question, turns: turns, context: context, model: model)
-    }
-
-    static func answer(question: String, turns: [(role: String, text: String)], context: String?, model: String) async throws -> String {
+    static func answer(
+        question: String, turns: [CoachConversationContext.Turn], context: String?, model: String
+    ) async throws -> String {
         guard models.contains(model) else { throw CoachCloudError.invalidModel }
         let key = readKey()
         guard !key.isEmpty else { throw CoachCloudError.missingKey }
@@ -75,7 +64,7 @@ enum CoachCloudAI {
             ])
         }
         for turn in turns.suffix(8) {
-            messagesPayload.append(["role": turn.role, "content": turn.text])
+            messagesPayload.append(["role": turn.role.rawValue, "content": turn.text])
         }
         messagesPayload.append(["role": "user", "content": question])
         let body: [String: Any] = [

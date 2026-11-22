@@ -311,7 +311,7 @@ struct StrapAICoachView: View {
         let engine = selectedEngine
         let sharesHealth = shareHealthWithCloud
         let contextKey = CoachConversationContext.Scope(engine: engine, sharesHealth: sharesHealth)
-        let history = conversationContext.history(for: contextKey)
+        let turns = conversationContext.turns(for: contextKey)
         waitingMessageIndex = 0
         let timerTask = Task {
             while !Task.isCancelled {
@@ -344,7 +344,7 @@ struct StrapAICoachView: View {
                 let response: String
                 if engine == "Gemini Flash" {
                     response = try await CoachGemini.answer(
-                        question: prompt, history: history,
+                        question: prompt, turns: turns,
                         context: sharesHealth ? measuredContext : nil,
                         webEvidence: evidence
                     )
@@ -356,7 +356,7 @@ struct StrapAICoachView: View {
                     } ?? prompt
                     do {
                         response = try await CoachCloudAI.answer(
-                            question: enrichedQuestion, history: history,
+                            question: enrichedQuestion, turns: turns,
                             context: sharesHealth ? measuredContext : nil,
                             model: modelName
                         )
@@ -365,7 +365,7 @@ struct StrapAICoachView: View {
                         guard !Task.isCancelled, engine == "Auto cloud (Groq → Gemini)",
                               !CoachServiceKey.read("gemini").isEmpty else { throw error }
                         response = try await CoachGemini.answer(
-                            question: prompt, history: history,
+                            question: prompt, turns: turns,
                             context: sharesHealth ? measuredContext : nil,
                             webEvidence: evidence
                         )
@@ -397,6 +397,7 @@ struct StrapAICoachView: View {
         }
         let started = ContinuousClock.now
         let context = measuredContext
+        let history = turns.map { "\($0.role.rawValue): \($0.text)" }.joined(separator: "\n")
         do {
             let session = LanguageModelSession(instructions: """
             You are STRAP Coach, an expert, encouraging athletic coach and recovery advisor.

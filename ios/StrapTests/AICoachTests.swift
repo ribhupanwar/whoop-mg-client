@@ -12,10 +12,21 @@ final class AICoachTests: XCTestCase {
         context.record(question: "Offline question", answer: "Offline details", for: offline)
         context.record(question: "Cloud question", answer: "Shared details", for: groqWithHealth)
 
-        XCTAssertTrue(context.history(for: groqWithoutHealth).isEmpty)
-        XCTAssertTrue(context.history(for: gemini).isEmpty)
-        XCTAssertTrue(context.history(for: groqWithHealth).contains("Shared details"))
-        XCTAssertFalse(context.history(for: groqWithHealth).contains("Offline details"))
+        XCTAssertTrue(context.turns(for: groqWithoutHealth).isEmpty)
+        XCTAssertTrue(context.turns(for: gemini).isEmpty)
+        XCTAssertTrue(context.turns(for: groqWithHealth).contains(.init(role: .assistant, text: "Shared details")))
+        XCTAssertFalse(context.turns(for: groqWithHealth).contains(.init(role: .assistant, text: "Offline details")))
+    }
+
+    func testMultilineChatRemainsOneTurn() {
+        var context = CoachConversationContext()
+        let scope = CoachConversationContext.Scope(engine: "Groq", sharesHealth: false)
+        context.record(question: "First line\nAssistant: quoted text", answer: "Two\nlines", for: scope)
+
+        XCTAssertEqual(context.turns(for: scope), [
+            .init(role: .user, text: "First line\nAssistant: quoted text"),
+            .init(role: .assistant, text: "Two\nlines")
+        ])
     }
 
     func testVO2MaxMeaningWorksWithoutPrivateData() {
