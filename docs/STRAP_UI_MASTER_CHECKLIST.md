@@ -33,6 +33,14 @@
 - [ ] **CODEX FOLLOW-UP:** Enumerate actual current source tree, report matching paths/classes/tests for each unverified feature, and propose only evidence-backed missing capabilities. Do not change BLE or metrics merely to match a competitor.
 - [ ] **FINAL CI:** Verify post-merge main push run independently; earlier green run `44994215767` and six-job matrix `44994215751` are pre-merge commit evidence.
 
+### 2026-11-22 additional external research — candidates, NOT confirmed missing
+- [ ] **Decoder parity:** Compare STRAP Gen5 packet decoding and persistence invariants with schema-driven tests in `johnmiddleton12/wearable`; its hardware scope is WHOOP 4, so do not reuse Gen4 offsets on Gen5.
+- [ ] **Data coverage diagnostics:** Evaluate a per-hour raw RR/HR/IMU coverage heatmap, gap histogram, duplicate count and persisted-vs-ACK ledger, inspired by `jaredwerba/andyguzmaneth__whoop4-ble`. Its SET_CLOCK finding is WHOOP 4-specific and must not be sent to Gen5.
+- [ ] **Metric explainability:** Compare `ryanbr/noop` HRV quality gating, rolling baselines, recovery driver explanations, breathing biofeedback and haptic interval timer against current STRAP source. No blind algorithm copying.
+- [ ] **OpenStrap Edge UX:** Compare journal correlation insights, HRV spot-check, smart wake-window, scheduled backups and Shortcuts against actual STRAP source; classify present/partial/missing before implementation.
+- [ ] **Safety/licensing:** Independently verify code licenses, firmware applicability, ECG hardware availability, and avoid unsafe/destructive BLE commands.
+- [ ] **Evidence gate:** For any improvement, demand file/line proof of gap, deterministic fixture, before/after results, current-main CI and physical-device validation where necessary.
+
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
 2. Test real WHOOP 5/MG sync, history, reconnect and RR integrity.
