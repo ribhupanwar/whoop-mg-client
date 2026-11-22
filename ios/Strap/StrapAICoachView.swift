@@ -335,22 +335,37 @@ struct StrapAICoachView: View {
         }
         if selectedEngine != "Apple (offline)" {
             let started = ContinuousClock.now
-            let modelName = selectedEngine == "Groq Llama 70B"
-                ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant"
             do {
-                let response = try await CoachCloudAI.answer(
-                    question: prompt,
-                    history: conversationContext.suffix(6).joined(separator: "\n"),
-                    context: shareHealthWithCloud ? measuredContext : nil,
-                    model: modelName
-                )
+                // Search is opt-in and receives only the current question.
+                let evidence = useLiveSearch ? try await CoachWebSearch.search(prompt) : nil
+                let history = conversationContext.suffix(6).joined(separator: "\n")
+                let response: String
+                if selectedEngine == "Gemini Flash" {
+                    response = try await CoachGemini.answer(
+                        question: prompt, history: history,
+                        context: shareHealthWithCloud ? measuredContext : nil,
+                        webEvidence: evidence
+                    )
+                } else {
+                    let modelName = selectedEngine == "Groq Llama 70B"
+                        ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant"
+                    let enrichedQuestion = evidence.map {
+                        prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
+                    } ?? prompt
+                    response = try await CoachCloudAI.answer(
+                        question: enrichedQuestion, history: history,
+                        context: shareHealthWithCloud ? measuredContext : nil,
+                        model: modelName
+                    )
+                }
+                guard !Task.isCancelled else { return }
                 let duration = started.duration(to: ContinuousClock.now)
                 elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
                 messages.append(CoachMessage(text: response, fromUser: false))
                 conversationContext.append("User: " + prompt)
                 conversationContext.append("Assistant: " + response)
             } catch {
-                notice = error.localizedDescription
+                if !Task.isCancelled { notice = error.localizedDescription }
             }
             return
         }
