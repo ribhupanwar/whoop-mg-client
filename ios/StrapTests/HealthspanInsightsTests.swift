@@ -10,11 +10,28 @@ final class HealthspanInsightsTests: XCTestCase {
         }
         let now = try date(22, 10)
         let seventhDay = ProfileBodyMeasurement(kilograms: 48, date: try date(16, 9), source: "Test")
-        XCTAssertEqual(HealthspanInsights.recentLeanMass(seventhDay, asOf: now, calendar: calendar), seventhDay)
+        XCTAssertEqual(HealthspanInsights.recentLeanMass(seventhDay, endingOn: calendar.startOfDay(for: now), now: now, calendar: calendar), seventhDay)
         let previousDay = ProfileBodyMeasurement(kilograms: 48, date: try date(15, 23), source: "Test")
-        XCTAssertNil(HealthspanInsights.recentLeanMass(previousDay, asOf: now, calendar: calendar))
+        XCTAssertNil(HealthspanInsights.recentLeanMass(previousDay, endingOn: calendar.startOfDay(for: now), now: now, calendar: calendar))
+        let today = ProfileBodyMeasurement(kilograms: 48, date: try date(22, 9), source: "Test")
+        XCTAssertEqual(HealthspanInsights.recentLeanMass(today, endingOn: calendar.startOfDay(for: now),
+                                                        now: now, calendar: calendar), today)
         let future = ProfileBodyMeasurement(kilograms: 48, date: try date(22, 12), source: "Test")
-        XCTAssertNil(HealthspanInsights.recentLeanMass(future, asOf: now, calendar: calendar))
+        XCTAssertNil(HealthspanInsights.recentLeanMass(future, endingOn: calendar.startOfDay(for: now), now: now, calendar: calendar))
+    }
+
+    func testHistoricalWindowIncludesLateSamplesOnDaylightSavingDay() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        func date(_ day: Int, _ hour: Int) throws -> Date {
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour)))
+        }
+        let end = try date(1, 0)
+        let now = try date(2, 12)
+        let last = ProfileBodyMeasurement(kilograms: 48, date: try date(1, 23), source: "Test")
+        let next = ProfileBodyMeasurement(kilograms: 48, date: try date(2, 0), source: "Test")
+        XCTAssertEqual(HealthspanInsights.recentLeanMass(last, endingOn: end, now: now, calendar: calendar), last)
+        XCTAssertNil(HealthspanInsights.recentLeanMass(next, endingOn: end, now: now, calendar: calendar))
     }
 
     func testScreenshotAgeReplayUsesOnlySupportedImpacts() throws {

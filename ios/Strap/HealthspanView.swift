@@ -297,6 +297,7 @@ struct HealthspanView: View {
         snapshot = makeSnapshot()
         insights = nil
         let calendar = Calendar.current
+        let now = Date()
         baselineCoverage = FitnessAgeModel.baselineCoverage(days: input.days, asOf: input.date)
         let result = await Task.detached(priority: .utility) {
             let series = (0..<input.count).compactMap { index -> HealthspanPoint? in
@@ -315,7 +316,7 @@ struct HealthspanView: View {
                 ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
                 live: input.live, asOf: input.date, birthDate: input.settings.birthDate)
             let leanMass = HealthspanInsights.recentLeanMass(input.settings.leanMass,
-                                                              asOf: input.date, calendar: calendar)
+                                                              endingOn: input.date, now: now, calendar: calendar)
             return (series, HealthspanInsights(days: days, leanMass: leanMass), latest)
         }.value
         guard !Task.isCancelled else { return }
