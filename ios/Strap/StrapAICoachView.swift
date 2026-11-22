@@ -201,6 +201,7 @@ struct StrapAICoachView: View {
                             Text("Groq Llama 70B").tag("Groq Llama 70B")
                             Text("Groq Llama 8B fast").tag("Groq Llama 8B fast")
                             Text("Gemini Flash").tag("Gemini Flash")
+                            Text("Auto cloud (Groq → Gemini)").tag("Auto cloud (Groq → Gemini)")
                         }
                         Text("Groq requires internet, your own API key and is subject to free-tier limits.").font(.footnote)
                     }
@@ -337,7 +338,8 @@ struct StrapAICoachView: View {
             let started = ContinuousClock.now
             do {
                 // Search is opt-in and receives only the current question.
-                let evidence = useLiveSearch ? try await CoachWebSearch.search(prompt) : nil
+                var evidence: String?
+                if useLiveSearch { evidence = try await CoachWebSearch.search(prompt) }
                 let history = conversationContext.suffix(6).joined(separator: "\n")
                 let response: String
                 if selectedEngine == "Gemini Flash" {
@@ -347,16 +349,27 @@ struct StrapAICoachView: View {
                         webEvidence: evidence
                     )
                 } else {
-                    let modelName = selectedEngine == "Groq Llama 70B"
-                        ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant"
+                    let modelName = selectedEngine == "Groq Llama 8B fast"
+                        ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile"
                     let enrichedQuestion = evidence.map {
                         prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
                     } ?? prompt
-                    response = try await CoachCloudAI.answer(
-                        question: enrichedQuestion, history: history,
-                        context: shareHealthWithCloud ? measuredContext : nil,
-                        model: modelName
-                    )
+                    do {
+                        response = try await CoachCloudAI.answer(
+                            question: enrichedQuestion, history: history,
+                            context: shareHealthWithCloud ? measuredContext : nil,
+                            model: modelName
+                        )
+                    } catch {
+                        // Fallback only when explicitly selected and user provided Gemini key.
+                        guard selectedEngine == "Auto cloud (Groq → Gemini)",
+                              !CoachServiceKey.read("gemini").isEmpty else { throw error }
+                        response = try await CoachGemini.answer(
+                            question: prompt, history: history,
+                            context: shareHealthWithCloud ? measuredContext : nil,
+                            webEvidence: evidence
+                        )
+                    }
                 }
                 guard !Task.isCancelled else { return }
                 let duration = started.duration(to: ContinuousClock.now)
