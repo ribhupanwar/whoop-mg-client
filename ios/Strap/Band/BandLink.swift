@@ -379,6 +379,7 @@ final class BandLink: NSObject, ObservableObject {
     private var continuationAttempts = 0
     private var continuationFrontier: Int?
     private var newestInsertedThisPass: Int?
+    private var seenRecordIndices: Set<UInt32> = []
     private var historyClock = HistoryClockGate()
     @Published private(set) var passiveECG: MGEcgPacket?
     @Published private(set) var currentBandModel: String?
@@ -1961,9 +1962,6 @@ final class BandLink: NSObject, ObservableObject {
 
     private func pump() {
         guard !commandInFlight else { return }
-        if drainStartedAt == nil {
-            commandQueue.removeAll { $0.opcode == BandCommand.historicalDataResult.rawValue }
-        }
         guard let next = commandQueue.first, let peripheral, peripheral.state == .connected,
               let characteristic = commandCharacteristic else { return }
         commandInFlight = true
@@ -1976,6 +1974,7 @@ final class BandLink: NSObject, ObservableObject {
         commandSeq &+= 1
         let frame = Gen5Frame.build(inner)
         if next.expectResponse {
+            let isHistoryAck = next.opcode == BandCommand.historicalDataResult.rawValue
             let timeout = DispatchWorkItem { [weak self] in
                 guard let self, self.currentWriteID == writeID, self.commandInFlight,
                       let peripheral = self.peripheral else { return }
@@ -1984,11 +1983,22 @@ final class BandLink: NSObject, ObservableObject {
                     self.handshakeFailures += 1
                     if self.handshakeFailures >= 3 { self.wantsConnection = false }
                     self.handshakeDeadline?.cancel()
+                } else if isHistoryAck {
+                    // History ACK write timed out. Retry the ACK instead of disconnecting,
+                    // since the data has already been committed. The band will re-send
+                    // the chunk on reconnect if not ACKed.
+                    BLEDiagnosticLog.shared.log("history ACK write timed out, retrying token=\(next.body.dropFirst().map { String(format: "%02x", $0) }.joined())")
+                    self.commandWriteTimedOut = false
+                    self.commandInFlight = false
+                    self.currentWriteID = nil
+                    self.commandDeadline?.cancel()
+                    self.commandDeadline = nil
+                    // Re-queue the same ACK for retry (it's still at the front of the queue)
+                    self.pump()
+                    return
                 }
                 self.liveHeartRate = nil
-                let message = next.opcode == BandCommand.clientHello.rawValue
-                    ? "WHOOP pairing acknowledgement timed out. Reconnecting; saved history is safe."
-                    : "WHOOP command write timed out. Reconnecting; saved history is safe."
+                let message = "WHOOP command write timed out. Reconnecting; saved history is safe."
                 self.lastMessage = message
                 self.historySyncError = message
                 // Do not advance a timed-out ATT queue: a late write callback
@@ -2047,6 +2057,11 @@ final class BandLink: NSObject, ObservableObject {
 
     private func startCaptureFile() {
         historySyncGeneration += 1
+        // Clear any pending historicalDataResult ACKs from previous drain generation.
+        // These must not be sent on a new connection as they would acknowledge stale chunks.
+        commandQueue.removeAll { $0.opcode == BandCommand.historicalDataResult.rawValue }
+        // Reset duplicate chunk detection for new drain generation.
+        seenRecordIndices.removeAll(keepingCapacity: true)
         capturedSamples = []
         pendingHistoryFlushes = 0
         historyPersistenceStalled = false
@@ -2507,6 +2522,13 @@ final class BandLink: NSObject, ObservableObject {
                 || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
+                return
+            }
+            // Duplicate chunk detection: track recordIndex to detect replayed chunks.
+            // Per BLE_SYNC_FORENSICS.md, deduping is enforced via recordIndex tracking.
+            if !seenRecordIndices.insert(sample.header.recordIndex).inserted {
+                duplicatePacketCount += 1
+                BLEDiagnosticLog.shared.log("duplicate history chunk recordIndex=\(sample.header.recordIndex)")
                 return
             }
             if !sample.rrIntervalsMS.isEmpty { pendingHistoryRRRecords += 1 }
