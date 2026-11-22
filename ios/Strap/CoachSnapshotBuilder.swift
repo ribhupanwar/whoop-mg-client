@@ -6,7 +6,7 @@ import Foundation
 struct CoachBiometricSnapshotBuilder {
     static func build(
         days: [DayMetrics],
-        recoveryScore: Int?,
+        recoveryScore: Double?,
         dayStrain: Double,
         lastCaptureHRV: Double?,
         measuredRHR: Double?,
@@ -22,7 +22,7 @@ struct CoachBiometricSnapshotBuilder {
         var sections: [String] = []
         
         // 1. TODAY's In-Progress Metrics
-        let recText = recoveryScore.map { "\($0)%" } ?? "Pending"
+        let recText = recoveryScore.map { "\(Int($0.rounded()))%" } ?? "Pending"
         let strainText = String(format: "%.1f", dayStrain)
         let hrvText = lastCaptureHRV.map { String(format: "%.0f ms", $0) } ?? "Unavailable"
         let rhrText = measuredRHR.map { String(format: "%.0f bpm", $0) } ?? "Unavailable"

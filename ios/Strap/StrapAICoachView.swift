@@ -39,10 +39,13 @@ struct StrapAICoachView: View {
     ]
 
     private var measuredContext: String {
-        CoachBiometricSnapshotBuilder.build(
+        let today = JournalStore.dayKey(for: Date())
+        let batchStrain = store.band.days.first(where: { $0.dateKey == today })?.strain
+        let dayStrain = store.band.liveDayStrain.map { max($0, batchStrain ?? 0) } ?? (batchStrain ?? 0.0)
+        return CoachBiometricSnapshotBuilder.build(
             days: store.band.days,
             recoveryScore: store.band.recovery.score,
-            dayStrain: store.band.dayStrain.current,
+            dayStrain: dayStrain,
             lastCaptureHRV: store.lastCapture?.hrv.rmssdMS,
             measuredRHR: store.measuredRestingHR,
             recordedNights: store.recordedNights,
