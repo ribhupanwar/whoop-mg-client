@@ -16,7 +16,7 @@ final class AICoachTests: XCTestCase {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
         let todayKey = JournalStore.dayKey(for: now, calendar: calendar)
-        let yesterdayDate = calendar.date(byAdding: .day, value: -1, to: now)!
+        let yesterdayDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
         let yesterdayKey = JournalStore.dayKey(for: yesterdayDate, calendar: calendar)
         
         let yesterday = DayMetrics(
