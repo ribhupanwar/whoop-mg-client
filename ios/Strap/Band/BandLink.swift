@@ -2079,8 +2079,9 @@ final class BandLink: NSObject, ObservableObject {
             drainSignpostID = nil
         }
         // Begin new drain signpost
-        drainSignpostID = os_signpost_id_generate(drainSignpostLog)
-        os_signpost(.begin, log: drainSignpostLog, name: "History Drain", signpostID: drainSignpostID!)
+        let id = OSSignpostID(log: drainSignpostLog)
+        drainSignpostID = id
+        os_signpost(.begin, log: drainSignpostLog, name: "History Drain", signpostID: id)
 
         historySyncGeneration += 1
         historyAckRetryCount = 0
