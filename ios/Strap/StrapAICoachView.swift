@@ -198,8 +198,8 @@ struct StrapAICoachView: View {
                     Section("AI model") {
                         Picker("Model", selection: $selectedEngine) {
                             Text("Apple (offline)").tag("Apple (offline)")
-                            Text("Groq Llama 70B").tag("Groq Llama 70B")
-                            Text("Groq Llama 8B fast").tag("Groq Llama 8B fast")
+                            Text("Groq GPT-OSS 120B").tag("Groq GPT-OSS 120B")
+                            Text("Groq GPT-OSS 20B fast").tag("Groq GPT-OSS 20B fast")
                             Text("Gemini Flash").tag("Gemini Flash")
                             Text("Auto cloud (Groq → Gemini)").tag("Auto cloud (Groq → Gemini)")
                         }
@@ -349,8 +349,8 @@ struct StrapAICoachView: View {
                         webEvidence: evidence
                     )
                 } else {
-                    let modelName = selectedEngine == "Groq Llama 8B fast"
-                        ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile"
+                    let modelName = selectedEngine == "Groq GPT-OSS 20B fast"
+                        ? "openai/gpt-oss-20b" : "openai/gpt-oss-120b"
                     let enrichedQuestion = evidence.map {
                         prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
                     } ?? prompt
