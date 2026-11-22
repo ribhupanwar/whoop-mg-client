@@ -103,22 +103,52 @@ enum SleepCoach {
         baselineHours: Double, corrections: [String: [Int]], calendar: Calendar = .current
     ) -> [RecordedNight] {
         var result: [String: RecordedNight] = [:]
-        for day in days {
+        var acceptedBounds: [Range<Int>] = []
+        let editedStarts = Set(sessions.filter(\.isEdited).map(\.startUnix))
+        let local = days.compactMap { day -> (DayMetrics, Range<Int>, Double)? in
             guard let hours = day.reliableSleepHours, let start = day.sleepStartUnix,
-                  let end = day.sleepEndUnix,
-                  SleepCoach.matchesSavedCorrection(start: start, end: end, corrections: corrections) else { continue }
-            let session = sessions.first { $0.startUnix == start && $0.endUnix - 1 == end }
+                  let end = day.sleepEndUnix, start > 0, end >= start, end < Int.max,
+                  matchesSavedCorrection(start: start, end: end, corrections: corrections)
+            else { return nil }
+            return (day, start..<(end + 1), hours)
+        }.sorted { lhs, rhs in
+            let lhsEdited = editedStarts.contains(lhs.1.lowerBound)
+            let rhsEdited = editedStarts.contains(rhs.1.lowerBound)
+            if lhsEdited != rhsEdited { return lhsEdited }
+            return lhs.1.upperBound > rhs.1.upperBound
+        }
+        for (day, bounds, hours) in local {
+            guard result[day.dateKey] == nil,
+                  !acceptedBounds.contains(where: { $0.overlaps(bounds) }) else { continue }
+            let session = sessions.first {
+                $0.startUnix == bounds.lowerBound && $0.endUnix == bounds.upperBound
+            }
             result[day.dateKey] = RecordedNight(dateKey: day.dateKey, neededHours: baselineHours,
                 actualHours: hours, efficiency: session.flatMap(\.efficiencyPct).map { $0 / 100 })
+            acceptedBounds.append(bounds)
         }
         var protected = Set(days.filter { $0.sleepStartUnix != nil }.map(\.dateKey))
+        var protectedBounds: [Range<Int>] = days.compactMap { day in
+            guard let start = day.sleepStartUnix, let end = day.sleepEndUnix,
+                  end >= start, end < Int.max else { return nil }
+            return start..<(end + 1)
+        }
         for session in sessions {
             let wake = Date(timeIntervalSince1970: Double(session.endUnix - 1))
             protected.insert(JournalStore.dayKey(for: wake, calendar: calendar))
+            if session.endUnix > session.startUnix {
+                protectedBounds.append(session.startUnix..<session.endUnix)
+            }
         }
-        for (key, day) in imported where result[key] == nil && !protected.contains(key) {
-            guard let hours = day.sleepHours, let minutes = day.timeInBedMinutes,
+        for key in imported.keys.sorted(by: >) where result[key] == nil && !protected.contains(key) {
+            guard let day = imported[key], let hours = day.sleepHours, let minutes = day.timeInBedMinutes,
                   hours > 0, minutes >= hours * 60, minutes <= 1440 else { continue }
+            if let start = day.onsetUnix, let end = day.wakeUnix {
+                guard end > start else { continue }
+                let bounds = start..<end
+                guard !protectedBounds.contains(where: { $0.overlaps(bounds) }) else { continue }
+                protectedBounds.append(bounds)
+            }
             // Imported targets may include adjustments. Only use the observed durations.
             result[key] = RecordedNight(dateKey: key, neededHours: baselineHours,
                 actualHours: hours, efficiency: hours * 60 / minutes)
