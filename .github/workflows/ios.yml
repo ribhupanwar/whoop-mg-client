@@ -25,9 +25,9 @@ jobs:
   build-test-ipa:
     # Native Liquid Glass requires the iOS 26 SDK (Xcode 26+).
     runs-on: macos-15
-    # Normal compute is ~8 min; cap a hung simulator/test so it cannot burn
-    # hours of 10x-billed macOS minutes (the default is 360).
-    timeout-minutes: 25
+    # Allow slower macOS runner queues, simulator tests and release archiving.
+    # Keep a finite cap to avoid indefinitely billed hung jobs.
+    timeout-minutes: 45
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1
       HOMEBREW_NO_INSTALL_CLEANUP: 1
