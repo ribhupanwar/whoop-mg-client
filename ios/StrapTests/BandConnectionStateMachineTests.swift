@@ -626,117 +626,153 @@ final class BandConnectionStateMachineTests: XCTestCase {
         XCTAssertEqual(decoded, recordIndex)
     }
 
-    // MARK: - Phase 3 Performance Regression Tests
+    func testBandHardwareEventPacketDecoderTypedParsing() {
+        // Real DOUBLE_TAP(14 / 0x0E) inner payload: [0x30, 0x34, 0x0e, 0x00, 0x80, 0x89, 0x26, 0x6a, 0x3d, 0x2a, 0x00, 0x00]
+        let doubleTapInner: [UInt8] = [0x30, 0x34, 0x0E, 0x00, 0x80, 0x89, 0x26, 0x6A, 0x3D, 0x2A, 0x00, 0x00]
+        let pDoubleTap = BandHardwareEventPacket.decode(doubleTapInner)
+        XCTAssertNotNil(pDoubleTap)
+        XCTAssertEqual(pDoubleTap?.rawOpcode, 0x0E)
+        XCTAssertEqual(pDoubleTap?.event, .doubleTap)
+        XCTAssertEqual(pDoubleTap?.timestamp, 1780910464) // 0x6a268980 in little-endian
+        XCTAssertEqual(pDoubleTap?.payload, [0x3D, 0x2A, 0x00, 0x00])
 
-    func testDuplicateRecordIndexAcrossCaptureBoundaries() {
-        // Verify that duplicate record indices do not incorrectly discard valid records
-        // across capture boundaries (new drain generations).
-        var seenIndices: Set<UInt32> = []
+        // Synthetic WRIST_ON(9 / 0x09) inner payload: [0x30, 0x03, 0x09, 0x01, 0x80, 0x3b, 0xb1, 0x6a, 0x00, 0x00, 0x00, 0x00]
+        let wristOnInner: [UInt8] = [0x30, 0x03, 0x09, 0x01, 0x80, 0x3B, 0xB1, 0x6A, 0x00, 0x00, 0x00, 0x00]
+        let pWristOn = BandHardwareEventPacket.decode(wristOnInner)
+        XCTAssertNotNil(pWristOn)
+        XCTAssertEqual(pWristOn?.rawOpcode, 0x09)
+        XCTAssertEqual(pWristOn?.event, .wristOn)
+        XCTAssertEqual(pWristOn?.timestamp, 1790000000)
 
-        // First drain generation: records 100-105
-        let firstDrain: [UInt32] = [100, 101, 102, 103, 104, 105]
-        var firstDrainDuplicates = 0
-        for idx in firstDrain {
-            if !seenIndices.insert(idx).inserted { firstDrainDuplicates += 1 }
-        }
-        XCTAssertEqual(firstDrainDuplicates, 0, "First drain should have no duplicates")
-        XCTAssertEqual(seenIndices.count, 6)
+        // Synthetic WRIST_OFF(10 / 0x0A) inner payload
+        let wristOffInner: [UInt8] = [0x30, 0x03, 0x0A, 0x01, 0x8A, 0x3B, 0xB1, 0x6A]
+        let pWristOff = BandHardwareEventPacket.decode(wristOffInner)
+        XCTAssertNotNil(pWristOff)
+        XCTAssertEqual(pWristOff?.rawOpcode, 0x0A)
+        XCTAssertEqual(pWristOff?.event, .wristOff)
+        XCTAssertEqual(pWristOff?.timestamp, 1790000010)
 
-        // Simulate new drain generation (capture boundary) - clear seenIndices
-        // This mimics startCaptureFile() clearing seenRecordIndices
-        seenIndices.removeAll(keepingCapacity: true)
+        // Synthetic BATTERY_PACK_CONNECTED(21 / 0x15)
+        let chargerOnInner: [UInt8] = [0x30, 0x03, 0x15, 0x01]
+        let pChargerOn = BandHardwareEventPacket.decode(chargerOnInner)
+        XCTAssertNotNil(pChargerOn)
+        XCTAssertEqual(pChargerOn?.rawOpcode, 0x15)
+        XCTAssertEqual(pChargerOn?.event, .batteryPackConnected)
+        XCTAssertNil(pChargerOn?.timestamp) // No 4-byte timestamp in 4-byte inner
 
-        // Second drain generation: records 103-108 (overlap with first drain)
-        // These are VALID new records from the band's perspective after a reconnect
-        let secondDrain: [UInt32] = [103, 104, 105, 106, 107, 108]
-        var secondDrainDuplicates = 0
-        for idx in secondDrain {
-            if !seenIndices.insert(idx).inserted { secondDrainDuplicates += 1 }
-        }
-        // After clearing, the second drain should have NO duplicates internally
-        XCTAssertEqual(secondDrainDuplicates, 0, "Second drain should have no internal duplicates after boundary clear")
-        XCTAssertEqual(seenIndices.count, 6, "Second drain should track 6 unique recordIndices")
+        // Synthetic BATTERY_PACK_REMOVED(22 / 0x16)
+        let chargerOffInner: [UInt8] = [0x30, 0x03, 0x16, 0x01]
+        let pChargerOff = BandHardwareEventPacket.decode(chargerOffInner)
+        XCTAssertNotNil(pChargerOff)
+        XCTAssertEqual(pChargerOff?.rawOpcode, 0x16)
+        XCTAssertEqual(pChargerOff?.event, .batteryPackRemoved)
 
-        // Verify the band would resend 103-105 after reconnect (expected behavior)
-        // Our deduping only applies WITHIN a single drain generation
+        // Synthetic BLE_BONDED(23 / 0x17)
+        let bleBondedInner: [UInt8] = [0x30, 0x03, 0x17, 0x01]
+        let pBleBonded = BandHardwareEventPacket.decode(bleBondedInner)
+        XCTAssertNotNil(pBleBonded)
+        XCTAssertEqual(pBleBonded?.rawOpcode, 0x17)
+        XCTAssertEqual(pBleBonded?.event, .bleBonded)
+
+        // Legacy/direct single-byte opcode
+        let directBonded = BandHardwareEventPacket.decode([0x17])
+        XCTAssertEqual(directBonded?.rawOpcode, 0x17)
+        XCTAssertEqual(directBonded?.event, .bleBonded)
+
+        // Malformed / empty packet
+        XCTAssertNil(BandHardwareEventPacket.decode([]))
+        XCTAssertNil(BandHardwareEventPacket.decode([0x30, 0x01])) // Too short for type 0x30
     }
 
-    func testHistoryAckRetryDoesNotCauseInfiniteLoop() {
-        // Verify ACK retry logic has a bound and cannot loop infinitely
-        var retryCount = 0
-        let maxRetries = 10 // Safety bound
+    func testWristContactStateTabletopArtifactRejection() {
+        let baseHeader = BandRecordHeader(version: 18, flags: 0, recordIndex: 1, unix: 1700000000, subsecQ15: 0)
 
-        // Simulate ACK timeout retry logic
-        func simulateAckRetry(attempt: Int) -> Bool {
-            retryCount = attempt
-            // In real code: after maxRetries, we would give up and disconnect
-            // The test verifies the logic has a bound
-            return attempt < maxRetries
-        }
+        // Valid worn sample: normal skin temp (33.5C) + normal HR (65 bpm)
+        let wornSample = V18Sample(
+            header: baseHeader,
+            heartRate: 65,
+            rrIntervalsMS: [920],
+            dynamicAccelG: 0.02,
+            gravityXG: 0.1,
+            gravityYG: 0.2,
+            gravityZG: 0.9,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 33.5,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertTrue(wornSample.wearing)
+        XCTAssertEqual(wornSample.wristContactState, .onWrist)
 
-        // First few retries should succeed
-        XCTAssertTrue(simulateAckRetry(attempt: 1))
-        XCTAssertTrue(simulateAckRetry(attempt: 2))
-        XCTAssertTrue(simulateAckRetry(attempt: 3))
+        // Off-wrist sample: zero HR
+        let zeroHRSample = V18Sample(
+            header: baseHeader,
+            heartRate: 0,
+            rrIntervalsMS: [],
+            dynamicAccelG: 0.01,
+            gravityXG: 0.0,
+            gravityYG: 0.0,
+            gravityZG: 1.0,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 28.0,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertFalse(zeroHRSample.wearing)
+        XCTAssertEqual(zeroHRSample.wristContactState, .offWrist)
 
-        // At maxRetries, should stop retrying
-        XCTAssertFalse(simulateAckRetry(attempt: maxRetries))
-        XCTAssertEqual(retryCount, maxRetries)
-    }
-
-    func testHistoryAckNotSentBeforeDurablePersistence() {
-        // Verify ACK is only sent AFTER database commit succeeds
-        // This is tested via the persistHistoryChunk flow:
-        // 1. captureWriter.flushToDisk() - raw frames saved
-        // 2. archiveWriter.persistChunkReportingProgress() - SQLite commit
-        // 3. Only on success: enqueue(historicalDataResult) with ACK
-
-        let token: [UInt8] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
-        let ackBody = [0x01] + token
-
-        // The ACK body format must match exactly what the band expects
-        XCTAssertEqual(ackBody.count, 9)
-        XCTAssertEqual(ackBody[0], 0x01) // ACK prefix
-        XCTAssertEqual(Array(ackBody[1...]), token) // 8-byte token
-
-        // Verify the command opcode
-        XCTAssertEqual(BandCommand.historicalDataResult.rawValue, 0x17)
-    }
-
-    func testPerformanceBaselineCapture() {
-        // This test captures performance baselines for CI comparison
-        // Run with: xcodebuild test -scheme Strap -only-testing:BandConnectionStateMachineTests/testPerformanceBaselineCapture
-        let profiler = PerformanceProfiler.shared
-        profiler.reset()
-
-        // Simulate 8-hour history replay (28,800 seconds of data)
-        // At ~1 record/second, that's ~28,800 records
-        let recordCount = 28800
-        var recordIndices: [UInt32] = []
-        for i in 0..<recordCount {
-            recordIndices.append(UInt32(i))
-        }
-
-        let startTime = CFAbsoluteTimeGetCurrent()
-        var seenIndices: Set<UInt32> = []
-        for idx in recordIndices {
-            _ = seenIndices.insert(idx)
-            profiler.recordBLEPacketReceived()
-        }
-        let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-
-        let packetsPerSecond = Double(recordCount) / elapsed
-        profiler.recordBLEMemoryUsage(50 * 1024 * 1024) // 50 MB simulated
-
-        // Log baseline for CI tracking
-        print("Performance Baseline: \(String(format: "%.0f", packetsPerSecond)) packets/sec, \(elapsed * 1000) ms total")
-
-        // Assert reasonable performance (adjust thresholds as needed)
-        XCTAssertGreaterThan(packetsPerSecond, 10000, "Should process >10k packets/sec in simulation")
-        XCTAssertLessThan(elapsed, 5.0, "28k records should process in <5 seconds")
-
-        let baselines = profiler.captureBaselines()
-        XCTAssertGreaterThan(baselines.blePacketsPerSecond, 0)
-        XCTAssertEqual(baselines.bleDuplicateRate, 0, accuracy: 0.001)
+        // Tabletop artifact sample: optical noise produces spurious HR (45 bpm),
+        // but cold ambient temperature (21.5C) and complete static stillness (0.001g) prove off-wrist.
+        let tabletopArtifactSample = V18Sample(
+            header: baseHeader,
+            heartRate: 45,
+            rrIntervalsMS: [],
+            dynamicAccelG: 0.001,
+            gravityXG: 0.0,
+            gravityYG: 0.0,
+            gravityZG: 1.0,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 21.5,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertFalse(tabletopArtifactSample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
+        XCTAssertEqual(tabletopArtifactSample.wristContactState, .offWrist)
     }
 }

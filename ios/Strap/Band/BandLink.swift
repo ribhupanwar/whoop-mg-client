@@ -1,8 +1,6 @@
 import Combine
 import CoreBluetooth
-import Darwin
 import Foundation
-import os.signpost
 
 enum BandStatus: Equatable {
     case unpaired
@@ -147,8 +145,14 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var serialNumber: String?
     @Published private(set) var modelNumber: String?
     @Published private(set) var isBroadcastingHR: Bool = false
+    @Published private(set) var wristState: WristContactState = .unknown
     @Published private(set) var isWearing: Bool = false
     @Published private(set) var isCharging: Bool = false
+    @Published private(set) var isBonded: Bool = false
+    @Published private(set) var lastDoubleTapAt: Date?
+    @Published private(set) var lastWristStateChangeAt: Date?
+    private var wristOffDebounceTask: Task<Void, Never>?
+    static let wristOffDebounceInterval: TimeInterval = 45.0
     @Published private(set) var isRebooting = false
     @Published private(set) var rebootMessage: String?
     private var rebootExpectedDisconnect = false
@@ -382,7 +386,6 @@ final class BandLink: NSObject, ObservableObject {
     private var continuationFrontier: Int?
     private var newestInsertedThisPass: Int?
     private var seenRecordIndices: Set<UInt32> = []
-    private var historyAckRetryCount = 0
     private var historyClock = HistoryClockGate()
     @Published private(set) var passiveECG: MGEcgPacket?
     @Published private(set) var currentBandModel: String?
@@ -560,18 +563,13 @@ final class BandLink: NSObject, ObservableObject {
     private var sex: Sex = .unspecified
     private var maxHR: Double?
     private var needHours: Double = 8
-    private var swiftUIRefreshCount = 0
-    private var swiftUIRefreshTimer: Timer?
 
-    override init() {
+    override convenience init() {
+        self.init(restoreIdentifier: Self.restoreIdentifier)
+    }
+
+    init(restoreIdentifier: String?) {
         super.init()
-        // Track SwiftUI refresh rate during active sync
-        swiftUIRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
-            guard let self else { return }
-            PerformanceProfiler.shared.recordSwiftUIRefresh(count: self.swiftUIRefreshCount)
-            self.swiftUIRefreshCount = 0
-        }
-        RunLoop.main.add(swiftUIRefreshTimer!, forMode: .common)
         if let data = UserDefaults.standard.data(forKey: Keys.metricsSnapshot),
            let saved = try? JSONDecoder().decode(SavedBandMetrics.self, from: data) {
             days = saved.days
@@ -617,8 +615,12 @@ final class BandLink: NSObject, ObservableObject {
             status = .unpaired
         }
         applySavedSleepBounds()
-        central = CBCentralManager(delegate: self, queue: nil,
-            options: [CBCentralManagerOptionRestoreIdentifierKey: Self.restoreIdentifier])
+        if let restoreIdentifier {
+            central = CBCentralManager(delegate: self, queue: nil,
+                options: [CBCentralManagerOptionRestoreIdentifierKey: restoreIdentifier])
+        } else {
+            central = CBCentralManager(delegate: self, queue: nil)
+        }
         recoverSavedCaptures()
     }
 
@@ -1700,8 +1702,14 @@ final class BandLink: NSObject, ObservableObject {
         hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
+        wristOffDebounceTask?.cancel()
+        wristOffDebounceTask = nil
+        wristState = .unknown
         isWearing = false
         isCharging = false
+        isBonded = false
+        lastDoubleTapAt = nil
+        lastWristStateChangeAt = nil
         recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
@@ -1914,6 +1922,18 @@ final class BandLink: NSObject, ObservableObject {
             if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
             // Never present an old sample as today's live pulse.
             self.liveHeartRate = nil
+            if self.wristState == .onWrist && self.wristOffDebounceTask == nil {
+                self.wristState = .uncertain
+                self.lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> uncertain; waiting debounce before confirming offWrist")
+                self.wristOffDebounceTask = Task { @MainActor [weak self] in
+                    try? await Task.sleep(nanoseconds: UInt64(Self.wristOffDebounceInterval * 1_000_000_000))
+                    guard let self, !Task.isCancelled else { return }
+                    if self.liveHeartRate == nil && self.wristState == .uncertain {
+                        self.applyWearingStateTransition(.unknown, source: "debounced after \(Self.wristOffDebounceInterval)s without valid HR")
+                    }
+                }
+            }
             // Defer watchdog rearm writes as well as reconnects while
             // history or the pairing handshake owns the link. A rejected
             // vendor HR write could otherwise abort a healthy history drain.
@@ -1999,8 +2019,6 @@ final class BandLink: NSObject, ObservableObject {
                     // History ACK write timed out. Retry the ACK instead of disconnecting,
                     // since the data has already been committed. The band will re-send
                     // the chunk on reconnect if not ACKed.
-                    historyAckRetryCount += 1
-                    PerformanceProfiler.shared.recordBLEAckRetry(count: historyAckRetryCount)
                     BLEDiagnosticLog.shared.log("history ACK write timed out, retrying token=\(next.body.dropFirst().map { String(format: "%02x", $0) }.joined())")
                     self.commandWriteTimedOut = false
                     self.commandInFlight = false
@@ -2069,21 +2087,8 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Drain lifecycle
 
-    private var drainSignpostID: OSSignpostID?
-    private let drainSignpostLog = OSLog(subsystem: "com.strap.app", category: .pointsOfInterest)
-
     private func startCaptureFile() {
-        // End previous drain signpost if any
-        if let id = drainSignpostID {
-            os_signpost(.end, log: drainSignpostLog, name: "History Drain", signpostID: id)
-            drainSignpostID = nil
-        }
-        // Begin new drain signpost
-        drainSignpostID = OSSignpostID(log: drainSignpostLog)
-        os_signpost(.begin, log: drainSignpostLog, name: "History Drain", signpostID: drainSignpostID!)
-
         historySyncGeneration += 1
-        historyAckRetryCount = 0
         // Clear any pending historicalDataResult ACKs from previous drain generation.
         // These must not be sent on a new connection as they would acknowledge stale chunks.
         commandQueue.removeAll { $0.opcode == BandCommand.historicalDataResult.rawValue }
@@ -2127,38 +2132,8 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
-
-        // Periodic CPU/Memory sampling during drain (every 5 seconds)
-        if Int(elapsed) % 5 == 0 && Int(elapsed) > 0 {
-            // Memory sampling (available on iOS)
-            var memoryInfo = mach_task_basic_info()
-            var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-            let kerr: kern_return_t = withUnsafeMutablePointer(to: &memoryInfo) {
-                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                    task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-                }
-            }
-            if kerr == KERN_SUCCESS {
-                PerformanceProfiler.shared.recordMemorySample(UInt64(memoryInfo.resident_size))
-            }
-            // CPU approximation: use process CPU time delta (simpler, works on iOS)
-            var cpuInfo = task_thread_times_info()
-            var cpuCount = mach_msg_type_number_t(MemoryLayout<task_thread_times_info>.size / MemoryLayout<natural_t>.size)
-            let cpuKerr: kern_return_t = withUnsafeMutablePointer(to: &cpuInfo) {
-                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                    task_info(mach_task_self_, task_flavor_t(TASK_THREAD_TIMES_INFO), $0, &cpuCount)
-                }
-            }
-            if cpuKerr == KERN_SUCCESS {
-                // Approximate CPU % from user + system time (not perfectly accurate but useful for trends)
-                let totalTime = UInt64(cpuInfo.user_time.seconds + cpuInfo.system_time.seconds) * 1_000_000_000 +
-                                UInt64(cpuInfo.user_time.microseconds + cpuInfo.system_time.microseconds) * 1000
-                PerformanceProfiler.shared.recordCPUSample(Double(totalTime) / 1_000_000_000.0 * 100.0)
-            }
-        }
         // Throttle high-frequency drain diagnostic counters to 1 Hz to prevent
         // flooding SwiftUI with hundreds of objectWillChange notifications per second.
-        swiftUIRefreshCount += 1
         if historyRRRecords != pendingHistoryRRRecords || historyUndecodableFrames != pendingHistoryUndecodableFrames {
             historyRRRecords = pendingHistoryRRRecords
             historyRRDeclared = pendingHistoryRRDeclared
@@ -2204,25 +2179,6 @@ final class BandLink: NSObject, ObservableObject {
         drainStartedAt = nil
         captureWriter?.close()
         captureWriter = nil
-
-        // End drain signpost with stats
-        if let id = drainSignpostID {
-            let duration = Date().timeIntervalSince(lastFrameAt ?? Date())
-            os_signpost(.end, log: drainSignpostLog, name: "History Drain", signpostID: id, "frames=%d samples=%d duration=%.2fs reason=%s", drainFrames, drainStats.samples, duration, reason)
-            drainSignpostID = nil
-        }
-
-        // Record peak memory during drain
-        var memoryInfo = mach_task_basic_info()
-        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
-        let kerr: kern_return_t = withUnsafeMutablePointer(to: &memoryInfo) {
-            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
-                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
-            }
-        }
-        if kerr == KERN_SUCCESS {
-            PerformanceProfiler.shared.recordBLEMemoryUsage(UInt64(memoryInfo.resident_size))
-        }
 
         // Ordering belongs to the archive worker. Release the completed drain
         // buffer instead of holding a second raw-history copy until the next sync.
@@ -2518,25 +2474,11 @@ final class BandLink: NSObject, ObservableObject {
         }
 
         if uuid == BandUUID.events {
-            let eventOpcode = (inner.count >= 3 && inner[0] == 0x30) ? inner[2] : (inner.first ?? 0)
-            switch eventOpcode {
-            case BandHardwareEvent.rtcLost.rawValue where type == 0x30:
-                handleHistoryClockLoss()
-            case BandHardwareEvent.setRTC.rawValue where type == 0x30:
-                if let peer = peripheral?.identifier { historyClock.noteSynchronization(on: peer) }
-            case BandHardwareEvent.wristOn.rawValue:
-                isWearing = true
-            case BandHardwareEvent.wristOff.rawValue:
-                isWearing = false
-                liveHeartRate = nil
-            case BandHardwareEvent.batteryPackConnected.rawValue:
-                isCharging = true
-            case BandHardwareEvent.batteryPackRemoved.rawValue:
-                isCharging = false
-            case BandHardwareEvent.bleHRProfileEnable.rawValue:
-                isBroadcastingHR = true
-            default:
-                break
+            if let statusPacket = WhoopStatusPacket.decode(inner) {
+                handleStatusPacket(statusPacket)
+            }
+            if let packet = BandHardwareEventPacket.decode(inner) {
+                handleHardwareEventPacket(packet, innerType: type)
             }
         }
 
@@ -2560,6 +2502,7 @@ final class BandLink: NSObject, ObservableObject {
             type40HRPackets += 1
             staleHRReconnects = 0
             liveHeartRate = bpm
+            applyWearingStateTransition(.onWrist, source: "Type-40 live HR")
             if case .connected = status {
                 status = .streaming(bpm: bpm)
             } else if case .ready = status {
@@ -2589,7 +2532,6 @@ final class BandLink: NSObject, ObservableObject {
                 }
             }
         } else if type == BandPacket.historicalData {
-            PerformanceProfiler.shared.recordBLEPacketReceived()
             if inner.count > 1 {
                 pendingHistoryVersionCounts[Int(inner[1]), default: 0] += 1
             }
@@ -2605,7 +2547,6 @@ final class BandLink: NSObject, ObservableObject {
             // Per BLE_SYNC_FORENSICS.md, deduping is enforced via recordIndex tracking.
             if !seenRecordIndices.insert(sample.header.recordIndex).inserted {
                 duplicatePacketCount += 1
-                PerformanceProfiler.shared.recordBLEDuplicateDetected(count: duplicatePacketCount)
                 BLEDiagnosticLog.shared.log("duplicate history chunk recordIndex=\(sample.header.recordIndex)")
                 return
             }
@@ -2657,6 +2598,87 @@ final class BandLink: NSObject, ObservableObject {
         }
     }
 
+    private func handleStatusPacket(_ packet: WhoopStatusPacket) {
+        if let pct = packet.batteryPercent {
+            batteryPercent = Int(round(pct))
+            BLEDiagnosticLog.shared.log("statusPacket battery=\(pct)% tenths=\(packet.rawBatteryTenths ?? 0)")
+        }
+        if let charging = packet.isCharging {
+            isCharging = charging
+        }
+        if packet.contactState != .unknown {
+            applyWearingStateTransition(packet.contactState, source: "statusPacket (raw=0x\(String(format: "%04X", packet.wristStateRaw ?? 0)))")
+        }
+    }
+
+    func applyWearingStateTransition(_ newState: WristContactState, source: String) {
+        wristOffDebounceTask?.cancel()
+        wristOffDebounceTask = nil
+
+        switch newState {
+        case .onWrist:
+            if wristState != .onWrist {
+                wristState = .onWrist
+                isWearing = true
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> onWrist (\(source))")
+            }
+        case .offWrist:
+            if wristState != .offWrist {
+                wristState = .offWrist
+                isWearing = false
+                liveHeartRate = nil
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> offWrist (\(source)); live HR cleared")
+            }
+        case .uncertain:
+            if wristState == .onWrist {
+                wristState = .uncertain
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> uncertain (\(source))")
+            }
+        case .unknown:
+            if wristState != .unknown {
+                wristState = .unknown
+                isWearing = false
+                lastWristStateChangeAt = Date()
+                BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
+            }
+        }
+    }
+
+    private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {
+        BLEDiagnosticLog.shared.log("hwEvent opcode=0x\(String(format: "%02X", packet.rawOpcode)) event=\(packet.event.map { "\($0)" } ?? "unknown") ts=\(packet.timestamp ?? 0)")
+        switch packet.rawOpcode {
+        case BandHardwareEvent.rtcLost.rawValue where innerType == 0x30:
+            handleHistoryClockLoss()
+        case BandHardwareEvent.setRTC.rawValue where innerType == 0x30:
+            if let peer = peripheral?.identifier { historyClock.noteSynchronization(on: peer) }
+        case BandHardwareEvent.wristOn.rawValue:
+            applyWearingStateTransition(.onWrist, source: "hardware event 0x09")
+        case BandHardwareEvent.wristOff.rawValue:
+            applyWearingStateTransition(.offWrist, source: "hardware event 0x0A")
+        case BandHardwareEvent.doubleTap.rawValue:
+            lastDoubleTapAt = Date()
+            BLEDiagnosticLog.shared.log("doubleTap registered (hardware event 0x0E)")
+        case BandHardwareEvent.batteryPackConnected.rawValue:
+            isCharging = true
+            BLEDiagnosticLog.shared.log("batteryPack connected (hardware event 0x15)")
+        case BandHardwareEvent.batteryPackRemoved.rawValue:
+            isCharging = false
+            BLEDiagnosticLog.shared.log("batteryPack removed (hardware event 0x16)")
+        case BandHardwareEvent.bleBonded.rawValue:
+            // A firmware bond event is not proof that CLIENT_HELLO was acknowledged.
+            // Keep the transport readiness gate tied to the verified HELLO response.
+            isBonded = true
+            BLEDiagnosticLog.shared.log("bleBonded observed (hardware event 0x17); CLIENT_HELLO confirmation remains independent")
+        case BandHardwareEvent.bleHRProfileEnable.rawValue:
+            isBroadcastingHR = true
+        default:
+            BLEDiagnosticLog.shared.log("hwEvent unhandled/unknown opcode=0x\(String(format: "%02X", packet.rawOpcode))")
+        }
+    }
+
     private func handleHeartRate(_ characteristic: CBCharacteristic) {
         guard let value = characteristic.value,
               let reading = StandardHeartRate.parse(value),
@@ -2667,6 +2689,7 @@ final class BandLink: NSObject, ObservableObject {
                                        connected: isConnected, now: Date()) == nil else { return }
         staleHRReconnects = 0
         liveHeartRate = reading.heartRate
+        applyWearingStateTransition(.onWrist, source: "standard HR 0x2A37")
         if case .connected = status {
             status = .streaming(bpm: reading.heartRate)
         } else if case .ready = status {
@@ -2713,10 +2736,13 @@ extension BandLink: CBCentralManagerDelegate {
         restored.delegate = self
         bandName = restored.name ?? preferredBandName
         status = .connecting(bandName ?? "Restored strap")
+        BLEDiagnosticLog.shared.log("willRestoreState peripheral=\(restored.identifier.uuidString) state=\(restored.state.rawValue)")
         // CoreBluetooth may restore an already-connected peripheral without
         // delivering didConnect again. Rebuild GATT and restart history sync.
         if restored.state == .connected {
             centralManager(central, didConnect: restored)
+        } else if restored.state == .disconnected {
+            central.connect(restored, options: nil)
         }
     }
 
@@ -2939,7 +2965,11 @@ extension BandLink: CBPeripheralDelegate {
             case BandUUID.heartRateMeasurement:
                 hrCharacteristic = characteristic
                 if characteristic.properties.contains(.notify) {
-                    peripheral.setNotifyValue(true, for: characteristic)
+                    if !characteristic.isNotifying {
+                        peripheral.setNotifyValue(true, for: characteristic)
+                    } else {
+                        hrSubscriptionConfirmedAt = Date()
+                    }
                 } else {
                     lastMessage = "The band did not expose HR notifications on 0x2A37."
                 }
@@ -2950,7 +2980,7 @@ extension BandLink: CBPeripheralDelegate {
             case BandUUID.batteryLevel:
                 batteryCharacteristic = characteristic
                 peripheral.readValue(for: characteristic)
-                if characteristic.properties.contains(.notify) {
+                if characteristic.properties.contains(.notify), !characteristic.isNotifying {
                     peripheral.setNotifyValue(true, for: characteristic)
                 }
             default:

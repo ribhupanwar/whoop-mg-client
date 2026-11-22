@@ -52,15 +52,25 @@ struct V18Sample: Equatable, Codable {
     let psnrA: Int?
 
     var unix: Int { Int(header.unix) }
-    var wearing: Bool { heartRate > 0 }
+    var wearing: Bool {
+        if heartRate <= 0 { return false }
+        // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness
+        if let temp = skinTempC, temp < 25.0, (dynamicAccelG ?? 0) < 0.005 {
+            return false
+        }
+        return true
+    }
+    var wristContactState: WristContactState {
+        wearing ? .onWrist : .offWrist
+    }
 }
 
 /// Stable choice when replayed history contains multiple records in one second.
 /// Preserve a usable HR value before preferring richer auxiliary channels.
 enum HistoricalRecordSelection {
     static func prefers(_ candidate: V18Sample, over current: V18Sample) -> Bool {
-        let candidateHRValid = (35...220).contains(candidate.heartRate)
-        let currentHRValid = (35...220).contains(current.heartRate)
+        let candidateHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(candidate.heartRate)
+        let currentHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(current.heartRate)
         if candidateHRValid != currentHRValid { return candidateHRValid }
         if candidate.rrIntervalsMS.count != current.rrIntervalsMS.count {
             return candidate.rrIntervalsMS.count > current.rrIntervalsMS.count

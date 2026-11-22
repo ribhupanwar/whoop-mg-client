@@ -47,38 +47,20 @@ final class HistoryDatabase {
     }
 
     func commitReportingProgress(_ rows: [V18Sample], token: String?) throws -> CommitProgress {
-        let batchSize = rows.count
-        return try transactionWithBatchSize(batchSize) {
+#if DEBUG
+        let start = ProcessInfo.processInfo.systemUptime
+        defer {
+            PerformanceProfiler.shared.recordSQLiteTransaction(
+                batchSize: rows.count,
+                latency: ProcessInfo.processInfo.systemUptime - start
+            )
+        }
+#endif
+        return try transaction {
             let progress = try insert(rows)
             if let token { try setMetadata("last_history_chunk", value: token) }
             return progress
         }
-    }
-
-    private func transactionWithBatchSize<T>(_ batchSize: Int, _ body: () throws -> T) throws -> T {
-        let startTime = CFAbsoluteTimeGetCurrent()
-        var contentionCount = 0
-        let maxRetries = 3
-        for attempt in 1...maxRetries {
-            do {
-                try execute("BEGIN IMMEDIATE")
-                do { let result = try body(); try execute("COMMIT");
-                    let latency = CFAbsoluteTimeGetCurrent() - startTime
-                    PerformanceProfiler.shared.recordSQLiteTransaction(batchSize: batchSize, latency: latency, contentionCount: contentionCount)
-                    return result }
-                catch { try? execute("ROLLBACK"); throw error }
-            } catch {
-                if attempt < maxRetries {
-                    contentionCount += 1
-                    Thread.sleep(forTimeInterval: 0.01 * Double(attempt))
-                    continue
-                }
-                let latency = CFAbsoluteTimeGetCurrent() - startTime
-                PerformanceProfiler.shared.recordSQLiteTransaction(batchSize: batchSize, latency: latency, contentionCount: contentionCount)
-                throw error
-            }
-        }
-        throw failure()
     }
 
     /// Keep the original JSON intact. The migration marker commits with its

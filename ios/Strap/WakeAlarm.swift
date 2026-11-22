@@ -180,7 +180,6 @@ public enum WakeAlarm {
 
     /// Re-evaluates and schedules local notifications across all enabled weekdays.
     public static func rescheduleNotifications() {
-        let startTime = CFAbsoluteTimeGetCurrent()
         let center = UNUserNotificationCenter.current()
         center.removePendingNotificationRequests(withIdentifiers: [identifier])
         for i in 1...7 {
@@ -208,8 +207,6 @@ public enum WakeAlarm {
                 let reqId = "\(identifier).day\(entry.weekday)"
                 center.add(UNNotificationRequest(identifier: reqId, content: content, trigger: trigger))
             }
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            PerformanceProfiler.shared.recordNotificationProcessingTime(elapsed)
         }
     }
 }

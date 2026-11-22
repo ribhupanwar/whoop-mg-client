@@ -107,7 +107,6 @@ struct RootView: View {
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
         .sheet(isPresented: $showPlan) { NavigationStack { PlanView().strapDestinations() }.environmentObject(store) }
         .onChange(of: scenePhase) { _, phase in
-            let startTime = CFAbsoluteTimeGetCurrent()
             if phase == .active {
                 // Count app launches even when returning to Health, Train, Plan or More.
                 AppOpenDayTracker.recordOpen()
@@ -115,8 +114,6 @@ struct RootView: View {
                 store.band.autoConnectIfNeeded()
             }
             else { store.band.persistLiveRRArchive(force: true) }
-            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
-            PerformanceProfiler.shared.recordBackgroundTransitionTime(elapsed)
         }
         .onAppear {
             AppOpenDayTracker.recordOpen()
