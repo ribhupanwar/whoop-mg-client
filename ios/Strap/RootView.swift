@@ -110,6 +110,10 @@ struct RootView: View {
         .sheet(isPresented: $showCoach) {
             if #available(iOS 26.0, *) {
                 StrapAICoachView()
+                    .environmentObject(store)
+                    .presentationDetents([.fraction(0.72), .large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(25)
             } else {
                 Text("STRAP Coach requires iOS 26 or later.")
                     .padding()
