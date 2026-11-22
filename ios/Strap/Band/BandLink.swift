@@ -1,6 +1,8 @@
 import Combine
 import CoreBluetooth
+import Darwin
 import Foundation
+import os.signpost
 
 enum BandStatus: Equatable {
     case unpaired
@@ -380,6 +382,7 @@ final class BandLink: NSObject, ObservableObject {
     private var continuationFrontier: Int?
     private var newestInsertedThisPass: Int?
     private var seenRecordIndices: Set<UInt32> = []
+    private var historyAckRetryCount = 0
     private var historyClock = HistoryClockGate()
     @Published private(set) var passiveECG: MGEcgPacket?
     @Published private(set) var currentBandModel: String?
@@ -557,9 +560,18 @@ final class BandLink: NSObject, ObservableObject {
     private var sex: Sex = .unspecified
     private var maxHR: Double?
     private var needHours: Double = 8
+    private var swiftUIRefreshCount = 0
+    private var swiftUIRefreshTimer: Timer?
 
     override init() {
         super.init()
+        // Track SwiftUI refresh rate during active sync
+        swiftUIRefreshTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            PerformanceProfiler.shared.recordSwiftUIRefresh(count: self.swiftUIRefreshCount)
+            self.swiftUIRefreshCount = 0
+        }
+        RunLoop.main.add(swiftUIRefreshTimer!, forMode: .common)
         if let data = UserDefaults.standard.data(forKey: Keys.metricsSnapshot),
            let saved = try? JSONDecoder().decode(SavedBandMetrics.self, from: data) {
             days = saved.days
@@ -1987,6 +1999,8 @@ final class BandLink: NSObject, ObservableObject {
                     // History ACK write timed out. Retry the ACK instead of disconnecting,
                     // since the data has already been committed. The band will re-send
                     // the chunk on reconnect if not ACKed.
+                    historyAckRetryCount += 1
+                    PerformanceProfiler.shared.recordBLEAckRetry(count: historyAckRetryCount)
                     BLEDiagnosticLog.shared.log("history ACK write timed out, retrying token=\(next.body.dropFirst().map { String(format: "%02x", $0) }.joined())")
                     self.commandWriteTimedOut = false
                     self.commandInFlight = false
@@ -2055,8 +2069,21 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Drain lifecycle
 
+    private var drainSignpostID: OSSignpostID?
+    private let drainSignpostLog = OSLog(subsystem: "com.strap.app", category: .pointsOfInterest)
+
     private func startCaptureFile() {
+        // End previous drain signpost if any
+        if let id = drainSignpostID {
+            os_signpost(.end, log: drainSignpostLog, name: "History Drain", signpostID: id)
+            drainSignpostID = nil
+        }
+        // Begin new drain signpost
+        drainSignpostID = os_signpost_id_generate(drainSignpostLog)
+        os_signpost(.begin, log: drainSignpostLog, name: "History Drain", signpostID: drainSignpostID!)
+
         historySyncGeneration += 1
+        historyAckRetryCount = 0
         // Clear any pending historicalDataResult ACKs from previous drain generation.
         // These must not be sent on a new connection as they would acknowledge stale chunks.
         commandQueue.removeAll { $0.opcode == BandCommand.historicalDataResult.rawValue }
@@ -2100,8 +2127,38 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
+
+        // Periodic CPU/Memory sampling during drain (every 5 seconds)
+        if Int(elapsed) % 5 == 0 && Int(elapsed) > 0 {
+            // Memory sampling (available on iOS)
+            var memoryInfo = mach_task_basic_info()
+            var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+            let kerr: kern_return_t = withUnsafeMutablePointer(to: &memoryInfo) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                    task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+                }
+            }
+            if kerr == KERN_SUCCESS {
+                PerformanceProfiler.shared.recordMemorySample(UInt64(memoryInfo.resident_size))
+            }
+            // CPU approximation: use process CPU time delta (simpler, works on iOS)
+            var cpuInfo = task_thread_times_info()
+            var cpuCount = mach_msg_type_number_t(MemoryLayout<task_thread_times_info>.size / MemoryLayout<natural_t>.size)
+            let cpuKerr: kern_return_t = withUnsafeMutablePointer(to: &cpuInfo) {
+                $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                    task_info(mach_task_self_, task_flavor_t(TASK_THREAD_TIMES_INFO), $0, &cpuCount)
+                }
+            }
+            if cpuKerr == KERN_SUCCESS {
+                // Approximate CPU % from user + system time (not perfectly accurate but useful for trends)
+                let totalTime = UInt64(cpuInfo.user_time.seconds + cpuInfo.system_time.seconds) * 1_000_000_000 +
+                                UInt64(cpuInfo.user_time.microseconds + cpuInfo.system_time.microseconds) * 1000
+                PerformanceProfiler.shared.recordCPUSample(Double(totalTime) / 1_000_000_000.0 * 100.0)
+            }
+        }
         // Throttle high-frequency drain diagnostic counters to 1 Hz to prevent
         // flooding SwiftUI with hundreds of objectWillChange notifications per second.
+        swiftUIRefreshCount += 1
         if historyRRRecords != pendingHistoryRRRecords || historyUndecodableFrames != pendingHistoryUndecodableFrames {
             historyRRRecords = pendingHistoryRRRecords
             historyRRDeclared = pendingHistoryRRDeclared
@@ -2147,6 +2204,25 @@ final class BandLink: NSObject, ObservableObject {
         drainStartedAt = nil
         captureWriter?.close()
         captureWriter = nil
+
+        // End drain signpost with stats
+        if let id = drainSignpostID {
+            let duration = Date().timeIntervalSince(lastFrameAt ?? Date())
+            os_signpost(.end, log: drainSignpostLog, name: "History Drain", signpostID: id, "frames=%d samples=%d duration=%.2fs reason=%s", drainFrames, drainStats.samples, duration, reason)
+            drainSignpostID = nil
+        }
+
+        // Record peak memory during drain
+        var memoryInfo = mach_task_basic_info()
+        var count = mach_msg_type_number_t(MemoryLayout<mach_task_basic_info>.size)/4
+        let kerr: kern_return_t = withUnsafeMutablePointer(to: &memoryInfo) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: 1) {
+                task_info(mach_task_self_, task_flavor_t(MACH_TASK_BASIC_INFO), $0, &count)
+            }
+        }
+        if kerr == KERN_SUCCESS {
+            PerformanceProfiler.shared.recordBLEMemoryUsage(UInt64(memoryInfo.resident_size))
+        }
 
         // Ordering belongs to the archive worker. Release the completed drain
         // buffer instead of holding a second raw-history copy until the next sync.
@@ -2513,6 +2589,7 @@ final class BandLink: NSObject, ObservableObject {
                 }
             }
         } else if type == BandPacket.historicalData {
+            PerformanceProfiler.shared.recordBLEPacketReceived()
             if inner.count > 1 {
                 pendingHistoryVersionCounts[Int(inner[1]), default: 0] += 1
             }
@@ -2528,6 +2605,7 @@ final class BandLink: NSObject, ObservableObject {
             // Per BLE_SYNC_FORENSICS.md, deduping is enforced via recordIndex tracking.
             if !seenRecordIndices.insert(sample.header.recordIndex).inserted {
                 duplicatePacketCount += 1
+                PerformanceProfiler.shared.recordBLEDuplicateDetected(count: duplicatePacketCount)
                 BLEDiagnosticLog.shared.log("duplicate history chunk recordIndex=\(sample.header.recordIndex)")
                 return
             }

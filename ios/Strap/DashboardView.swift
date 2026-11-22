@@ -501,7 +501,12 @@ struct DashboardView: View {
 
     private func trendChart(title: String, unit: String, values: [Double?],
                             color: Color, upper: Double) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        defer {
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            PerformanceProfiler.shared.recordChartRenderTime(elapsed)
+        }
+        return VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(title).font(StrapTypography.body(12, weight: .bold)).tracking(0.7).foregroundStyle(Color.appFG)
                 Spacer()
