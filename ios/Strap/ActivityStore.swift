@@ -29,7 +29,7 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
     case skiing, crossCountrySkiing, snowboarding, iceSkating, iceHockey
     
     // Team sports (ball)
-    case basketball, football, americanFootball, soccer, rugby, volleyball, handball, baseball, softball, cricket, lacrosse, fieldHockey, iceHockey, gaelicFootball, hurlingCamogie, australianFootball, ultimateFrisbee, netball, polo
+    case basketball, football, americanFootball, soccer, rugby, volleyball, handball, baseball, softball, cricket, lacrosse, fieldHockey, gaelicFootball, hurlingCamogie, australianFootball, ultimateFrisbee, netball, polo
     
     // Racquet/paddle sports
     case tennis, tableTennis, badminton, pickleball, squash, racquetball, padel, paddleTennis
@@ -44,7 +44,7 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
     case elliptical, stairClimber, treadmill, assaultBike, functionalFitness, crossTraining, hiit, strengthTraining, weightlifting, powerlifting, boxFitness, f45Training, berrysBootcamp
     
     // Running variants
-    case outdoorRun, trailRun, intervalRun, indoorRun, trackAndField
+    case outdoorRun, intervalRun, indoorRun, trackAndField
     
     // Walking variants
     case indoorWalk, commuting, dogWalking, strollerWalking, strollerJogging
@@ -56,7 +56,7 @@ enum ActivityKind: String, Codable, CaseIterable, Identifiable {
     case horsebackRiding
     
     // Lifestyle & other
-    case gardening, yardWork, caddying, manualLabor, coaching, highStressWork, gaming, stagePerformance, musicalPerformance, publicSpeaking, cooking, cleaning, dedicatedParenting, babywearing, toddlerwearing, watchingSports, spectating, motocross, motorRacing, kiteBoarding, skateboarding, sailing
+    case gardening, yardWork, caddying, manualLabor, coaching, highStressWork, gaming, stagePerformance, musicalPerformance, publicSpeaking, cooking, cleaning, dedicatedParenting, babywearing, toddlerwearing, watchingSports, spectating, motocross, motorRacing, kiteBoarding, skateboarding
     
     // Recovery & wellness
     case sleep, nap
