@@ -300,6 +300,19 @@ final class LiveHrvTests: XCTestCase {
         LiveSample(unix: unix, heartRate: 60, rrIntervalsMS: rr)
     }
 
+    func testRmssdMatchesIndependentPairSumAcrossAnArtifactAndReplayedSeconds() throws {
+        let first = (0..<15).map { makeLive($0, [$0.isMultiple(of: 2) ? 800 : 810]) }
+        let second = (0..<15).map { makeLive(17 + $0, [$0.isMultiple(of: 2) ? 850 : 880]) }
+
+        let result = Hrv.fromLiveSamples(Array(second.reversed()) + first + [makeLive(15, [1550])] + first)
+        // Fourteen measured 10-ms deltas and fourteen 30-ms deltas.
+        // The missing second and the rejected beat contribute no pair.
+        XCTAssertEqual(try XCTUnwrap(result.rmssdMS), sqrt(500), accuracy: 0.000001)
+        XCTAssertEqual(result.beats, 31)
+        XCTAssertEqual(result.rejectedBeats, 1)
+        XCTAssertEqual(first[0].rrIntervalsMS, [800])
+    }
+
     /// Two clusters of 15 beats each separated by a 30-second gap.
     /// Cluster 1 has 800 ms RR; Cluster 2 has 850 ms RR.
     /// Flattening across the gap would yield a false (850 - 800)^2 = 2500 delta,
