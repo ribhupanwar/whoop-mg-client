@@ -2,6 +2,16 @@ import XCTest
 @testable import Strap
 
 final class AICoachTests: XCTestCase {
+    func testVO2MaxMeaningWorksWithoutPrivateData() {
+        let answer = CoachKnowledge.answer("Or vo2 max ka kya use hai")
+        XCTAssertNotNil(answer)
+        XCTAssertTrue(answer?.contains("aerobic fitness") == true)
+        XCTAssertTrue(answer?.contains("mL/kg/min") == true)
+        XCTAssertFalse(answer?.contains("data nahi") == true)
+        XCTAssertNil(CoachKnowledge.answer("Mera VO2 max kitna hai?"))
+        XCTAssertNil(CoachKnowledge.answer("How is my recovery today?"))
+    }
+
     func testSnapshotBuilderIncludesTodayYesterdayAndBaseline() {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
