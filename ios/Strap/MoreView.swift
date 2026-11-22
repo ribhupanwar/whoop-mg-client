@@ -7,6 +7,7 @@ import SwiftUI
 struct MoreView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage(ProfileView.nameKey) private var displayName = ""
+    @AppStorage(DailyLocalBackup.enabledKey) private var dailyBackupEnabled = false
 
     var body: some View {
         Screen {
@@ -75,6 +76,16 @@ struct MoreView: View {
                     }
                     .buttonStyle(.plain)
 
+                    Divider().background(Color.appLine)
+
+                    Toggle(isOn: $dailyBackupEnabled) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Daily Local Backup").font(StrapTypography.body(13.5, weight: .semibold))
+                            Text("Optional · retain last 3 local copies")
+                                .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                        }
+                    }
+                    .accessibilityIdentifier("more.dailyBackup")
                     Divider().background(Color.appLine)
 
                     NavigationLink { SettingsView() } label: {
