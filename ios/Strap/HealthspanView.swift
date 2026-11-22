@@ -17,6 +17,15 @@ struct HealthspanView: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var points: [HealthspanPoint] = []
     @State private var window = 30
+    @State private var weekOffset = 0
+    @State private var insights: HealthspanInsights?
+    @State private var showsMethod = false
+    private var selectedEnd: Date {
+        Calendar.current.date(byAdding: .day, value: weekOffset * 7, to: day) ?? day
+    }
+    private var selectedStart: Date {
+        Calendar.current.date(byAdding: .day, value: -6, to: selectedEnd) ?? selectedEnd
+    }
     @State private var snapshot: FitnessAgeSnapshot?
     @State private var day = Calendar.current.startOfDay(for: Date())
     @State private var baselineCoverage = (restingNights: 0, stepDays: 0)
@@ -26,39 +35,59 @@ struct HealthspanView: View {
                 physicalActivityIndex: 7.5, restingNights: 6, capturedDays: 7,
                 exerciseDays: 4, confidenceNote: "Design preview sample")
         }
-        return store.fitnessSnapshot
+        return weekOffset == 0 ? store.fitnessSnapshot : nil
     }
-    private var refreshKey: String {
-        let days = store.band.days.map { "\($0.dateKey):\($0.state):\($0.restingHR ?? -1):\($0.steps ?? -1)" }.joined(separator: "|")
-        return "\(day.timeIntervalSince1970):\(store.fitnessSnapshot?.years ?? -1):\(window):\(store.isPreview):\(store.settings.age):\(store.settings.sex):\(store.settings.ageConfirmed):\(store.liveActivities.count):\(store.detectedBandActivities.count):" + days
+    private struct Inputs: Equatable {
+        let date: Date
+        let count: Int
+        let days: [DayMetrics]
+        let detected: [ActivitySession]
+        let live: [LiveActivityRecord]
+        let manual: [ManualActivity]
+        let settings: AppSettings
+        let currentSnapshot: FitnessAgeSnapshot?
+    }
+
+    private var inputs: Inputs {
+        Inputs(date: selectedEnd, count: window, days: store.band.days, detected: store.detectedBandActivities,
+               live: store.liveActivities, manual: store.manualActivities, settings: store.settings,
+               currentSnapshot: store.fitnessSnapshot)
     }
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Your fitness age").font(StrapTypography.body(26, weight: .bold))
-                        Text("The bigger picture, over time.").font(StrapTypography.body(14)).foregroundStyle(Color.appMuted)
-                    }
-                    Spacer()
-                    Image(systemName: "leaf.fill").font(.system(size: 26, weight: .light)).foregroundStyle(healthspanMint)
-                }.padding(.top, 12)
+                weekPicker
                 HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.chronologicalYears)
                     .frame(height: 300)
                     .padding(.vertical, 10)
                 ageCard
+                readiness
+                paceCard
+                if let insights {
+                    contributionSection("Sleep", readings: insights.sleep)
+                    contributionSection("Activity", readings: insights.activity)
+                    contributionSection("Fitness", readings: insights.fitness)
+                }
                 trendCard
-                factors
-                if snapshot == nil { readiness }
-                DisclosureGroup("How this estimate works") {
-                    Text("Strap compares measured resting heart rate and recent exercise using its independent Nes/HUNT-inspired fitness model. This is an exploratory fitness comparison; it does not measure biological age or lifespan.")
-                    Text("The ±5-year display band is part of the presentation, not a validated confidence interval. Trend points are reconstructed from saved observations and your current confirmed profile; missing dates remain gaps.")
-                }.font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).tint(healthspanMint)
-                    .padding(.vertical, 14)
-            }.foregroundStyle(Color.appFG)
+                milestones
+                improvementPlan
+            }
+            .padding(.bottom, 72)
+            .foregroundStyle(Color.appFG)
         }
         .navigationTitle("HEALTHSPAN").navigationBarTitleDisplayMode(.inline)
-        .task(id: refreshKey) { await rebuildTrend() }
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { showsMethod = true } label: { Image(systemName: "info.circle") }
+                    .accessibilityLabel("About Healthspan")
+            }
+        }
+        .alert("About Healthspan", isPresented: $showsMethod) {
+            Button("Done", role: .cancel) {}
+        } message: {
+            Text("Fitness Age compares measured resting heart rate and recent exercise using STRAP’s HUNT-inspired model. Historical values are reconstructed from saved observations and the current confirmed profile. The display band is illustrative.")
+        }
+        .task(id: inputs) { await rebuildTrend(inputs) }
         .onReceive(NotificationCenter.default.publisher(for: UIApplication.significantTimeChangeNotification)) { _ in
             day = Calendar.current.startOfDay(for: Date())
         }
@@ -66,6 +95,38 @@ struct HealthspanView: View {
             if phase == .active { day = Calendar.current.startOfDay(for: Date()) }
         }
     }
+
+    private var weekPicker: some View {
+        VStack(spacing: 6) {
+            HStack {
+                Button { weekOffset -= 1 } label: {
+                    Image(systemName: "chevron.left").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Previous week")
+                .disabled(weekOffset <= -51)
+                Spacer()
+                Text(DateInterval(start: selectedStart, end: selectedEnd)
+                    .formatted(.interval.month(.abbreviated).day()))
+                    .font(StrapTypography.body(17, weight: .bold))
+                Spacer()
+                Button { weekOffset += 1 } label: {
+                    Image(systemName: "chevron.right").frame(width: 44, height: 44)
+                }
+                .accessibilityLabel("Next week")
+                .disabled(weekOffset == 0)
+            }
+            .buttonStyle(.plain)
+            if weekOffset == 0, let next = Calendar.current.date(byAdding: .day, value: 1, to: day) {
+                HStack(spacing: 4) {
+                    Text("Next window in")
+                    Text(next, style: .relative)
+                }
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+            }
+        }
+    }
+
     private var ageCard: some View {
         Panel {
             CardHead(title: "Fitness age")
@@ -116,41 +177,99 @@ struct HealthspanView: View {
             Text(title).font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
         }
     }
-    private var factors: some View {
+    private var paceCard: some View {
         Panel {
-            CardHead(title: "What's moving it")
-            factor("Resting heart rate", symbol: "heart", value: snapshot.map { String(format: "%.0f bpm", $0.restingHeartRate) } ?? "—",
-                   detail: "Median of your recorded resting nights")
-            Divider().overlay(Color.appLine).padding(.vertical, 14)
-            factor("Recent exercise", symbol: "figure.run", value: snapshot.map { "\($0.exerciseDays) days" } ?? "—",
-                   detail: "Recorded sessions in the last seven days")
-            Divider().overlay(Color.appLine).padding(.vertical, 14)
-            factor("Data coverage", symbol: "checkmark.shield", value: snapshot.map { "\($0.capturedDays)/7 days" } ?? "—",
-                   detail: "Observed days with saved step counts")
+            CardHead(title: "Pace of Aging", trailing: "Pending validation")
+            Hint(HealthspanInsights.paceExplanation)
         }
     }
-    private func factor(_ title: String, symbol: String, value: String, detail: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol).font(.system(size: 22, weight: .light)).foregroundStyle(healthspanMint)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(StrapTypography.body(14, weight: .semibold))
-                Text(detail).font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
+
+    private func contributionSection(_ title: String, readings: [HealthspanInsights.Reading]) -> some View {
+        Panel {
+            CardHead(title: title, trailing: "7-day window")
+            ForEach(readings) { reading in
+                DisclosureGroup {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text(reading.source)
+                        Text("Coverage · \(reading.observed) of 7 days")
+                        Text("Previous 7 days · \(display(reading.prior, unit: reading.unit))")
+                        if let range = reading.observedReference {
+                            Text("Observed range · \(display(range.lowerBound, unit: reading.unit)) to \(display(range.upperBound, unit: reading.unit))")
+                        }
+                    }
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                    .padding(.vertical, 6)
+                } label: {
+                    HStack {
+                        Text(reading.id)
+                        Spacer()
+                        Text(display(reading.value, unit: reading.unit))
+                            .font(StrapTypography.metric(17, weight: .medium))
+                    }
+                }
+                .padding(.vertical, 7)
             }
-            Spacer()
-            Text(value).font(StrapTypography.metric(17))
         }
     }
+
+    private func display(_ value: Double?, unit: String) -> String {
+        guard let value else { return "Unavailable" }
+        let precision = unit == "h" || unit == "ml/kg/min" ? 1 : 0
+        let number = value.formatted(.number.precision(.fractionLength(precision)))
+        return unit == "%" ? number + unit : number + " " + unit
+    }
+
+    private var milestones: some View {
+        Panel {
+            CardHead(title: "Milestones")
+            if store.isPreview {
+                Hint("Recorded milestones appear in live mode.")
+            } else if let snapshot {
+                Label("Fitness Age estimate available", systemImage: "checkmark.circle")
+                if snapshot.capturedDays == 7 {
+                    Label("7 days with recorded steps", systemImage: "checkmark.circle")
+                }
+            } else {
+                Hint("Your first estimate appears once this period has enough recorded data.")
+            }
+        }
+    }
+
+    private var improvementPlan: some View {
+        Panel {
+            CardHead(title: "Where to focus")
+            if let impact = snapshot?.impact {
+                if impact.activity > 0 {
+                    Hint("Recent recorded exercise is below the model’s activity reference. Review missing exercise logs and plan activity that fits your current ability.")
+                } else if impact.restingHeartRate > 0 {
+                    Hint("Resting heart rate is above the model’s comparison reference. Review the trend across nights before interpreting a change.")
+                } else {
+                    Hint("Both model inputs are at or below their reference age contribution.")
+                }
+            } else {
+                Hint("The estimate needs more measured data before STRAP can identify model inputs to review.")
+            }
+        }
+    }
+
     private var readiness: some View {
         Panel {
-            CardHead(title: "Build your baseline")
+            CardHead(title: "Fitness Age coverage", trailing: snapshot == nil ? "Collecting data" : "Estimate available")
             Text("Rolling seven-day window")
                 .font(StrapTypography.body(13, weight: .semibold))
             baselineRow("Resting heart rate nights", observed: baselineCoverage.restingNights,
                         required: FitnessAgeModel.minRestingNights)
             baselineRow("Days with steps", observed: baselineCoverage.stepDays,
                         required: FitnessAgeModel.minCapturedDays)
-            Text("The estimate also requires a confirmed profile and an eligible workout of at least 10 minutes with recorded heart rate.")
+            if let estimate = snapshot, let impact = estimate.impact {
+                Text("Model reference · 65 bpm and activity index 5")
+                Text(String(format: "RHR %+.1f years · Exercise %+.1f years", impact.restingHeartRate, impact.activity))
+                if abs(impact.boundaryAdjustment) > 0.01 {
+                    Text(String(format: "Model bounds %+.1f years", impact.boundaryAdjustment))
+                }
+            }
+            Text("The estimate requires a confirmed age and sex and a workout of at least 10 minutes with recorded heart rate.")
                 .font(StrapTypography.body(13)).foregroundStyle(Color.appMuted)
             NavigationLink(value: Route.settings) {
                 Label("Review your profile", systemImage: "person.crop.circle")
@@ -169,34 +288,35 @@ struct HealthspanView: View {
         .padding(.vertical, 4)
     }
 
-    @MainActor private func rebuildTrend() async {
+    @MainActor private func rebuildTrend(_ input: Inputs) async {
         snapshot = makeSnapshot()
-        let days = store.band.days
-        let endDate = day
-        baselineCoverage = FitnessAgeModel.baselineCoverage(days: days, asOf: endDate)
-        let live = store.liveActivities
-        let detected = store.detectedBandActivities
-        let age = store.settings.age
-        let sex = store.settings.sex
-        let confirmed = store.settings.ageConfirmed
-        let demo = store.isPreview
-        let count = window
+        insights = nil
+        let calendar = Calendar.current
+        baselineCoverage = FitnessAgeModel.baselineCoverage(days: input.days, asOf: input.date)
         let result = await Task.detached(priority: .utility) {
-            let calendar = Calendar.current
-            return (0..<count).compactMap { index -> HealthspanPoint? in
-                guard let date = calendar.date(byAdding: .day, value: index - count + 1, to: endDate) else { return nil }
-                if demo {
-                    return HealthspanPoint(date: date, years: index % 13 == 5 ? nil
-                        : 27 - Double(index) / Double(count) * 2 + sin(Double(index) * 0.35) * 0.35)
-                }
-                let value = FitnessAgeModel.snapshot(age: age, sex: sex, ageConfirmed: confirmed,
-                    days: days, detected: detected, live: live, asOf: date)
+            let series = (0..<input.count).compactMap { index -> HealthspanPoint? in
+                guard let date = calendar.date(byAdding: .day, value: index - input.count + 1, to: input.date) else { return nil }
+                let value = FitnessAgeModel.snapshot(age: input.settings.age, sex: input.settings.sex,
+                    ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
+                    live: input.live, asOf: date)
                 return HealthspanPoint(date: date, years: value?.years)
             }
+            let days = MetricTimeline.make(days: input.days, live: input.live, manual: input.manual,
+                caloriesByDay: [:], ending: input.date, count: 14, sleepNeedHours: input.settings.sleepNeedHours,
+                maxHR: input.settings.ageConfirmed
+                    ? input.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: input.settings.age) : nil,
+                calendar: calendar)
+            let latest = FitnessAgeModel.snapshot(age: input.settings.age, sex: input.settings.sex,
+                ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
+                live: input.live, asOf: input.date)
+            return (series, HealthspanInsights(days: days), latest)
         }.value
         guard !Task.isCancelled else { return }
-        points = result
+        points = input.settings.designPreview ? [] : result.0
+        insights = input.settings.designPreview ? nil : result.1
+        if weekOffset != 0, !input.settings.designPreview { snapshot = result.2 }
     }
+
 }
 
 struct HealthspanOrb: View {
@@ -316,6 +436,7 @@ private struct HealthspanAgeScale: View {
 private struct HealthspanTrendChart: View {
     let points: [HealthspanPoint]
     let actualAge: Int?
+    @State private var selection: Int?
     private var low: Double { max(15, (points.compactMap(\.years).min() ?? Double(actualAge ?? 30)) - 6) }
     private var high: Double { max(Double(actualAge ?? 0) + 2, (points.compactMap(\.years).max() ?? low + 10) + 6) }
     var body: some View {
@@ -359,7 +480,23 @@ private struct HealthspanTrendChart: View {
                     Text(last.date.formatted(.dateTime.month(.abbreviated).day()))
                         .position(x: left + width - 16, y: height + 18)
                 }
-            }.font(StrapTypography.body(9)).foregroundStyle(Color.appMuted)
+                if let selection, points.indices.contains(selection) {
+                    let selected = points[selection]
+                    Text(selected.date.formatted(.dateTime.month(.abbreviated).day()) + " · "
+                         + (selected.years.map { String(format: "%.1f years", $0) } ?? "Unavailable"))
+                        .padding(5)
+                        .background(Color.appSurface, in: Capsule())
+                        .position(x: geometry.size.width / 2, y: 9)
+                }
+            }
+            .font(StrapTypography.body(9)).foregroundStyle(Color.appMuted)
+            .contentShape(Rectangle())
+            .onTapGesture(coordinateSpace: .local) { location in
+                guard !points.isEmpty else { return }
+                let fraction = max(0, min(1, (location.x - left) / width))
+                selection = Int((fraction * CGFloat(points.count - 1)).rounded())
+            }
+            .onChange(of: points.last?.date) { _, _ in selection = nil }
         }.frame(height: 185)
         .accessibilityLabel("Fitness-age trend with gaps for dates without enough measured data")
     }
