@@ -344,3 +344,12 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 - #6 concerns originally labeled activities and requires a user-authorized export or official integration. Raw BLE history is sensor evidence for local detection.
 - #5 remains the controlled scientific-metric verification batch. PR #81 combines a stale Home presentation with workout export and analysis tools. Split the independent diagnostics before rebasing those changes.
 - Main run [44751970075](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44751970075) failed on the former 84 pt Python expectation. Main repaired it in `2de7794`. Native run [44751970073](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/44751970073) failed on the separate Swift 84 pt assertion. PR #91 updates that test with the geometry change.
+
+## Cross-repository reliability follow-up
+
+- **FIXED in PR #141:** History RR coverage counts distinct device seconds, including replay and out-of-order fixtures. The diagnostic separates received coverage from persisted progress and ACKs.
+- **IMPLEMENTED:** Existing production-path regression coverage includes persistence before ACK, history replay/reopen, SWS-first overnight HRV, activity exertion and cutoff, and Healthspan calendar windows.
+- **DEVICE-VERIFY:** Real Gen5/MG reconnect and notification restoration, same-band interrupted sync, optical quality and paired overnight HRV, MG ECG waveform and SideStore re-sign/upgrade.
+- **DEFERRED:** Active ECG commands and persistence, new artifact-correction algorithms, and new device-dependent or substantial UX features pending evidence and review.
+
+[Cross-repository source and feature matrix](engineering/cross-repository-reliability-audit.md)

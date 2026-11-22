@@ -18,6 +18,24 @@ private func historySample(_ unix: Int, hr: Int = 60, rr: [Int] = [900], temp: D
 }
 
 final class HistoryDatabaseTests: XCTestCase {
+    func testHistoryCoverageCountsChannelsBySecondAcrossReplayAndOutOfOrderRecords() {
+        let rows = [
+            historySample(1003),
+            historySample(1000, hr: 0, rr: [900], motion: nil),
+            historySample(1000, rr: [], motion: 0.02),
+            historySample(1003)
+        ]
+        let coverage = HistoryCoverage(rows)
+        XCTAssertEqual(coverage.observedSeconds, 2)
+        XCTAssertEqual(coverage.heartRateSeconds, 2)
+        XCTAssertEqual(coverage.rrSeconds, 2)
+        XCTAssertEqual(coverage.motionSeconds, 2)
+        XCTAssertEqual(coverage.missingSeconds, 2)
+        XCTAssertEqual(coverage.repeatedSecondRecords, 2)
+        XCTAssertEqual(coverage.backwardsTransitions, 1)
+        XCTAssertEqual(HistoryCoverage([]).missingSeconds, 0)
+    }
+
     func testNightTemperatureRequiresMeasuredCoverageAndDoesNotCountReplays() {
         let rows = (1000..<1300).map { historySample($0) }
         let session = SleepSession.make(samples: rows, period: SleepPeriod(startUnix: 1000, endUnix: 1299,

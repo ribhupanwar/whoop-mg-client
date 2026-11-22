@@ -2156,16 +2156,7 @@ final class BandLink: NSObject, ObservableObject {
             let report = "Research only · \(samples.count) v18 records · \(values.count) candidate readings · mean \(average) · \(sentinelCount) sentinels · \(diagnosticCount) diagnostic codes. Not calibrated SpO₂."
             UserDefaults.standard.set(report, forKey: "strap.spo2ResearchReport")
         }
-        let rrSeconds = samples.filter { !$0.rrIntervalsMS.isEmpty }.count
-        let rrBeats = samples.reduce(0) { $0 + $1.rrIntervalsMS.count }
-        let uniqueSeconds = Set(samples.map(\.unix))
-        let missingSeconds: Int
-        if let maxSec = uniqueSeconds.max(), let minSec = uniqueSeconds.min() {
-            missingSeconds = maxSec - minSec + 1 - uniqueSeconds.count
-        } else {
-            missingSeconds = 0
-        }
-        let historyQuality = "R-R: \(rrBeats) beats / \(rrSeconds) seconds; gaps: \(missingSeconds)s"
+        let historyQuality = HistoryCoverage(samples).summary
         let completed = reason == "explicit completion" && !historyPersistenceStalled
             && historyUndecodableFrames == 0 && lastChunkCount == samples.count
         let timedOut = reason.hasPrefix("idle timeout")
