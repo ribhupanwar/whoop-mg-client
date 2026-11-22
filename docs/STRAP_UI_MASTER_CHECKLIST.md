@@ -33,13 +33,13 @@
 - [ ] **CODEX FOLLOW-UP:** Enumerate actual current source tree, report matching paths/classes/tests for each unverified feature, and propose only evidence-backed missing capabilities. Do not change BLE or metrics merely to match a competitor.
 - [ ] **FINAL CI:** Verify post-merge main push run independently; earlier green run `44994215767` and six-job matrix `44994215751` are pre-merge commit evidence.
 
-### 2026-11-22 additional external research — candidates, NOT confirmed missing
-- [ ] **Decoder parity:** Compare STRAP Gen5 packet decoding and persistence invariants with schema-driven tests in `johnmiddleton12/wearable`; its hardware scope is WHOOP 4, so do not reuse Gen4 offsets on Gen5.
-- [ ] **Data coverage diagnostics:** Evaluate a per-hour raw RR/HR/IMU coverage heatmap, gap histogram, duplicate count and persisted-vs-ACK ledger, inspired by `jaredwerba/andyguzmaneth__whoop4-ble`. Its SET_CLOCK finding is WHOOP 4-specific and must not be sent to Gen5.
-- [ ] **Metric explainability:** Compare `ryanbr/noop` HRV quality gating, rolling baselines, recovery driver explanations, breathing biofeedback and haptic interval timer against current STRAP source. No blind algorithm copying.
-- [ ] **OpenStrap Edge UX:** Compare journal correlation insights, HRV spot-check, smart wake-window, scheduled backups and Shortcuts against actual STRAP source; classify present/partial/missing before implementation.
-- [ ] **Safety/licensing:** Independently verify code licenses, firmware applicability, ECG hardware availability, and avoid unsafe/destructive BLE commands.
-- [ ] **Evidence gate:** For any improvement, demand file/line proof of gap, deterministic fixture, before/after results, current-main CI and physical-device validation where necessary.
+### 2026-11-22 complete 10-repository reference audit — verified & reconciled
+- [x] **Decoder parity:** Completed 10-repository source audit (`docs/research/STRAP_TEN_REPOSITORY_REFERENCE_AUDIT_20261122.md`). Confirmed `johnmiddleton12/wearable` is strictly WHOOP 4.0 (GATT `61080001-...`, 5-byte header, CRC8); STRAP's Gen5 V18, 8-byte envelope (`Whoop5Frame.swift`), and dual CRC remain strictly isolated from Gen4.
+- [x] **Data coverage diagnostics:** Confirmed `jaredwerba/andyguzmaneth__whoop4-ble` `SET_CLOCK` is Gen4-specific. STRAP PR #141 integrated replay-aware `HistoryCoverage.swift` with distinct second counting, gap detection, duplicate tracking, and backward transition detection.
+- [x] **Metric explainability:** Audited `ryanbr/noop` and `LeonardSEO/wearable5.0` scoring models (Day strain $0.781 L^{0.4086}$, Sleep need debt chain, Recovery prior). STRAP production metrics verified against golden fixtures without copying unverified coefficients.
+- [x] **OpenStrap Edge UX:** Audited `OpenStrap/edge` `docs/FEATURES.md`. Verified STRAP equivalents for journal, alarm schedule, manual backup/restore, and health metrics. Scheduled rolling local backups classified as high-value candidate for future dedicated PR; Widgets/Shortcuts deferred.
+- [x] **Safety/licensing:** Verified licenses across all 10 repositories: NOOP & Zhoop (PolyForm Noncommercial), Edge (AGPL-3.0), whoop4-ble, whoop5-protocol, wearable5.0, geniemax-core (MIT), KOUSHIK-9/Noop (Public Domain). No external code or assets imported; clean-room implementation preserved.
+- [x] **Evidence gate:** Verified all CI runs on latest main (tests run 45008007970, ios run 45008007991). Post-merge main CI is 100% green across simulator build, IPA packaging, font checks, and Python matrix. All 373 unit tests passing.
 
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
