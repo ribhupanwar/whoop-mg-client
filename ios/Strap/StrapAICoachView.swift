@@ -220,6 +220,35 @@ struct StrapAICoachView: View {
                             groqKeyInput = ""
                         }
                     }
+                    Section("Gemini key (optional)") {
+                        SecureField("Gemini API key", text: $geminiKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Gemini key") {
+                            if !CoachServiceKey.save(geminiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "gemini") {
+                                notice = "Could not save Gemini key."
+                            }
+                        }
+                        Button("Delete Gemini key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "gemini")
+                            geminiKeyInput = ""
+                        }
+                    }
+                    Section("Live internet search (optional)") {
+                        Toggle("Enable web search", isOn: $useLiveSearch)
+                        SecureField("Tavily API key", text: $tavilyKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Tavily key") {
+                            if !CoachServiceKey.save(tavilyKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "tavily") {
+                                notice = "Could not save Tavily key."
+                            }
+                        }
+                        Button("Delete Tavily key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "tavily")
+                            tavilyKeyInput = ""
+                        }
+                        Text("Search sends only the current question, never private health data. Requires a cloud model and your own Tavily key.")
+                            .font(.footnote)
+                    }
                     Section("Privacy") {
                         Toggle("Share STRAP health snapshot with cloud", isOn: $shareHealthWithCloud)
                         Text("Off by default. Cloud questions and recent chat go to Groq. Health measurements are sent only when enabled. Attachments are not uploaded.").font(.footnote)
