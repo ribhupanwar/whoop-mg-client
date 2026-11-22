@@ -27,7 +27,7 @@ struct HealthHubView: View {
                     .font(StrapTypography.body(11))
                     .foregroundStyle(Color.appMuted)
                     .padding(.top, 22)
-                    .padding(.bottom, 18)
+                    .padding(.bottom, 72)
             }
         }
         .strapTabTypography("Health")
@@ -71,11 +71,11 @@ struct HealthHubView: View {
                           chronologicalYears: demo ? 30 : fitnessSnapshot?.chronologicalYears)
                 .frame(height: 310)
                 .padding(.top, 4)
-            if !store.hasRecoveryBaseline {
+            if !demo, fitnessSnapshot == nil {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "hourglass")
                         .foregroundStyle(Color(hex: 0x70BDE4))
-                    Text("Your fitness age is calibrating. As STRAP collects more resting and activity data, this estimate may stabilize.")
+                    Text("Fitness Age needs your confirmed profile, four resting nights, four days with recorded steps and a qualifying workout.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color(hex: 0x8FC6E7))
                     Spacer(minLength: 0)
@@ -117,6 +117,7 @@ struct HealthHubView: View {
                 }
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
+                Hint(HealthspanInsights.paceExplanation)
                 NavigationLink { HealthspanView() } label: {
                     Text("GO TO HEALTHSPAN")
                         .font(StrapTypography.body(12, weight: .bold))
@@ -125,6 +126,7 @@ struct HealthHubView: View {
                         .padding(.vertical, 15)
                         .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.10)))
                 }
+                .accessibilityIdentifier("healthspan.open")
                 .buttonStyle(.plain)
             }
             .padding(17)

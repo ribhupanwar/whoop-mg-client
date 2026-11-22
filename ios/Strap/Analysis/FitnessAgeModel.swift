@@ -17,6 +17,7 @@ struct FitnessAgeSnapshot: Equatable {
     let capturedDays: Int
     let exerciseDays: Int
     let confidenceNote: String
+    var impact: FitnessAgeModel.Impact? = nil
 }
 
 enum FitnessAgeModel {
@@ -27,8 +28,19 @@ enum FitnessAgeModel {
     static let referenceRHR = 65.0
     static let referencePA = 5.0
 
+    struct Impact: Equatable {
+        let restingHeartRate: Double
+        let activity: Double
+        let boundaryAdjustment: Double
+    }
+
     static func calculate(age: Int, sex: Sex, restingHR: Double,
                           activityIndex: Double) -> Double? {
+        impact(age: age, sex: sex, restingHR: restingHR, activityIndex: activityIndex)
+            .map { Double(age) + $0.restingHeartRate + $0.activity + $0.boundaryAdjustment }
+    }
+
+    static func impact(age: Int, sex: Sex, restingHR: Double, activityIndex: Double) -> Impact? {
         guard (20...80).contains(age), restingHR.isFinite,
               (35...110).contains(restingHR), activityIndex.isFinite,
               (0...15).contains(activityIndex) else { return nil }
@@ -47,10 +59,11 @@ enum FitnessAgeModel {
         case .unspecified:
             return nil
         }
-        let estimate = Double(age)
-            + (rhrCoeff * (restingHR - referenceRHR)
-               - activityCoeff * (activityIndex - referencePA)) / ageCoeff
-        return max(20, min(80, estimate))
+        let heartRateYears = rhrCoeff * (restingHR - referenceRHR) / ageCoeff
+        let activityYears = -activityCoeff * (activityIndex - referencePA) / ageCoeff
+        let estimate = Double(age) + heartRateYears + activityYears
+        return Impact(restingHeartRate: heartRateYears, activity: activityYears,
+                      boundaryAdjustment: max(20, min(80, estimate)) - estimate)
     }
 
     /// HUNT-like frequency × intensity × duration buckets derived from
@@ -86,13 +99,15 @@ enum FitnessAgeModel {
 
     private static func measuredCoverage(days: [DayMetrics], from startKey: String, through endKey: String)
         -> (resting: [Double], stepDays: Int) {
-        let captured = days.filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
+        let inWindow = days.filter { $0.dateKey >= startKey && $0.dateKey <= endKey }
+        let captured = Dictionary(inWindow.map { ($0.dateKey, $0) },
+                                  uniquingKeysWith: { _, latest in latest }).values
         let resting = captured.compactMap { day -> Double? in
             guard day.state == "sleep", let hr = day.restingHR,
                   hr.isFinite, (35...110).contains(hr) else { return nil }
             return hr
         }
-        return (resting, captured.filter { $0.steps != nil }.count)
+        return (resting, captured.filter { $0.steps.map { $0 >= 0 } == true }.count)
     }
 
     private static func measurementWindow(ending asOf: Date)
@@ -187,7 +202,8 @@ enum FitnessAgeModel {
             restingNights: resting.count,
             capturedDays: capturedSteps,
             exerciseDays: exerciseDays,
-            confidenceNote: "Exploratory fitness comparison · ±5 years is a display band, not a validated confidence interval."
+            confidenceNote: "Exploratory fitness comparison · ±5 years is a display band, not a validated confidence interval.",
+            impact: impact(age: age, sex: sex, restingHR: medianRHR, activityIndex: pa)
         )
     }
 }
