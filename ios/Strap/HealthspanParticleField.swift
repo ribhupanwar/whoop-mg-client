@@ -8,11 +8,13 @@ struct HealthspanOrbParticle: Equatable {
     let startRadius: Double
     let size: Double
 
-    static let field: [Self] = {
-        var seed: UInt64 = 0x8C42C0DE
+    static let field = makeField(seed: 0x8C42C0DE)
+
+    static func makeField(seed: UInt64) -> [Self] {
+        var state = seed
         func next() -> Double {
-            seed = seed &* 6364136223846793005 &+ 1442695040888963407
-            return Double(seed >> 40) / 16_777_216
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            return Double(state >> 40) / 16_777_216
         }
         return (0..<288).map { index in
             let angle = next() * 2 * .pi
@@ -22,7 +24,7 @@ struct HealthspanOrbParticle: Equatable {
                         startRadius: 0.29 + 0.41 * depth,
                         size: (index.isMultiple(of: 10) ? 2.9 : 0.65) + depth * 1.4)
         }
-    }()
+    }
 
     func position(at elapsed: Double) -> (angle: Double, radius: Double, opacity: Double) {
         let lifetime = phase + elapsed / period
