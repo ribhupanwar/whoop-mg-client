@@ -25,6 +25,14 @@
 - [ ] **KNOWN HARDWARE RISK:** OpenStrap documents reports of data withheld despite BLE connection on some firmware 50.43.x versions. Diagnose with real band; a connected flag is not proof of data readiness.
 - [ ] **LICENSE GATE:** NOOP README lists PolyForm Noncommercial 1.0.0; check source-file licensing and OpenStrap Edge licensing before reuse. Prefer independent implementation from documented behavior.
 
+### 2026-11-22 source-level feature verification (limited, not a whole-tree audit)
+- [x] **SOURCE FETCHED:** `ios/Strap/HealthspanView.swift` and `ios/Strap/ActivityStore.swift` exist on default branch; `.github/workflows/ios.yml` includes macOS/Xcode simulator and IPA packaging gates. Their presence does not prove full feature accuracy.
+- [x] **EXISTING IMPLEMENTATION EVIDENCE:** Backup/restore regression coverage is documented in this checklist (see existing backup section); weekly alarm scheduling and band-confirmation tracking were integrated in PR #70. Do not request duplicate implementations.
+- [ ] **NOT YET VERIFIED IN CURRENT STRAP TREE:** Journal correlations, standalone HRV spot-check, live breathing coherence, smart wake-window, Siri Shortcuts, widgets/Live Activities, and scheduled local backups. A lack of matches in the checklist is not proof of absent source code.
+- [x] **COMPETITOR DOCUMENTATION CHECKED:** OpenStrap Edge `docs/FEATURES.md` explicitly lists these capabilities; NOOP `docs/PROTOCOL.md` is version-bounded and cautions that documented protocol commands do not establish device validation.
+- [ ] **CODEX FOLLOW-UP:** Enumerate actual current source tree, report matching paths/classes/tests for each unverified feature, and propose only evidence-backed missing capabilities. Do not change BLE or metrics merely to match a competitor.
+- [ ] **FINAL CI:** Verify post-merge main push run independently; earlier green run `44994215767` and six-job matrix `44994215751` are pre-merge commit evidence.
+
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
 2. Test real WHOOP 5/MG sync, history, reconnect and RR integrity.
