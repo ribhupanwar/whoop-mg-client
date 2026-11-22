@@ -23,6 +23,10 @@ struct StrapAICoachView: View {
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var attachmentSummary: String?
     @State private var conversationContext: [String] = []
+    @State private var selectedEngine = "Apple (offline)"
+    @State private var shareHealthWithCloud = false
+    @State private var showAISettings = false
+    @State private var groqKeyInput = ""
     @FocusState private var composerFocused: Bool
 
     private var measuredContext: String {
@@ -55,15 +59,23 @@ struct StrapAICoachView: View {
                     .overlay(Circle().stroke(Color(hex: 0x8B88EA), lineWidth: 1.4))
                 VStack(alignment: .leading, spacing: 2) {
                     Text("STRAP Coach").font(.system(size: 15, weight: .bold))
-                    Text("Private · On-device beta").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text(selectedEngine == "Apple (offline)" ? "Private · On-device" : "Cloud AI · optional").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true } label: {
+                    Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
+                }.accessibilityLabel("AI model settings")
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
                         .frame(width: 30, height: 30).background(.white.opacity(0.08), in: Circle())
                 }.accessibilityLabel("Close coach")
             }.padding(.horizontal, 20).padding(.vertical, 15)
 
+            HStack {
+                Text(selectedEngine).font(.caption)
+                Spacer()
+                Button("Change model") { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true }.font(.caption)
+            }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 15) {
@@ -92,7 +104,7 @@ struct StrapAICoachView: View {
                         if busy { ProgressView("Thinking on device…").font(.footnote) }
                         if let notice { Text(notice).font(.footnote).foregroundStyle(.orange) }
                         if let elapsedSeconds {
-                            Text(String(format: "Last response: %.1f s · on-device", elapsedSeconds))
+                            Text(String(format: "Last response: %.1f s · %@", elapsedSeconds, selectedEngine == "Apple (offline)" ? "on-device" : "cloud"))
                                 .font(.caption2).foregroundStyle(.secondary)
                         }
                     }.padding(.horizontal, 20).padding(.bottom, 15)
@@ -159,6 +171,42 @@ struct StrapAICoachView: View {
         }
         .foregroundStyle(.white)
         .background(Color(hex: 0x0C1319).ignoresSafeArea())
+        .sheet(isPresented: $showAISettings) {
+            NavigationStack {
+                Form {
+                    Section("AI model") {
+                        Picker("Model", selection: $selectedEngine) {
+                            Text("Apple (offline)").tag("Apple (offline)")
+                            Text("Groq Llama 70B").tag("Groq Llama 70B")
+                            Text("Groq Llama 8B fast").tag("Groq Llama 8B fast")
+                        }
+                        Text("Groq requires internet, your own API key and is subject to free-tier limits.").font(.footnote)
+                    }
+                    Section("Groq key") {
+                        SecureField("API key", text: $groqKeyInput)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        Button("Save key in iPhone Keychain") {
+                            if CoachCloudAI.saveKey(groqKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                                showAISettings = false
+                            } else {
+                                notice = "Could not save API key."
+                            }
+                        }
+                        Button("Delete saved key", role: .destructive) {
+                            _ = CoachCloudAI.saveKey("")
+                            groqKeyInput = ""
+                        }
+                    }
+                    Section("Privacy") {
+                        Toggle("Share STRAP health snapshot with cloud", isOn: $shareHealthWithCloud)
+                        Text("Off by default. Cloud questions and recent chat go to Groq. Health measurements are sent only when enabled. Attachments are not uploaded.").font(.footnote)
+                    }
+                }
+                .navigationTitle("Coach AI")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { showAISettings = false } } }
+            }
+        }
         .sheet(isPresented: $showCamera) {
             CoachCameraPicker { image in
                 if image != nil {
@@ -200,6 +248,27 @@ struct StrapAICoachView: View {
         busy = true
         defer { busy = false }
         notice = nil
+        if selectedEngine != "Apple (offline)" {
+            let started = ContinuousClock.now
+            let modelName = selectedEngine == "Groq Llama 70B"
+                ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant"
+            do {
+                let response = try await CoachCloudAI.answer(
+                    question: prompt,
+                    history: conversationContext.suffix(6).joined(separator: "\\n"),
+                    context: shareHealthWithCloud ? measuredContext : nil,
+                    model: modelName
+                )
+                let duration = started.duration(to: ContinuousClock.now)
+                elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
+                messages.append(CoachMessage(text: response, fromUser: false))
+                conversationContext.append("User: " + prompt)
+                conversationContext.append("Assistant: " + response)
+            } catch {
+                notice = error.localizedDescription
+            }
+            return
+        }
         #if canImport(FoundationModels)
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
