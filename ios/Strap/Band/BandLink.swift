@@ -2079,7 +2079,7 @@ final class BandLink: NSObject, ObservableObject {
             drainSignpostID = nil
         }
         // Begin new drain signpost
-        drainSignpostID = os_signpost_id_generate(drainSignpostLog)
+        drainSignpostID = OSSignpostID(log: drainSignpostLog)
         os_signpost(.begin, log: drainSignpostLog, name: "History Drain", signpostID: drainSignpostID!)
 
         historySyncGeneration += 1
