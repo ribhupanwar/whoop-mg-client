@@ -1,8 +1,8 @@
 # WHOOP Official BLE HELLO Protocol — Forensic Investigation Report
 
-**Document ID:** `WHOOP_OFFICIAL_HELLO_FORENSICS.md`  
-**Investigation Date:** November 22, 2026  
-**Target Repository:** `ribhupanwar/whoop-mg-client` (STRAP)  
+**Document ID:** `WHOOP_OFFICIAL_HELLO_FORENSICS.md`
+**Investigation Date:** November 22, 2026
+**Target Repository:** `ribhupanwar/whoop-mg-client` (STRAP)
 **Branch:** `research/hello-forensics`
 
 ---
@@ -16,11 +16,10 @@
 | Primary (Ghidra) | 5.78.0 | 772673 | `ebcf159f-2cf1-3c41-9075-62430d06e07c` | `0DC7B082103E7FEFD03FBD466E45E8D23B65780C28A18134F9039E83F204C638` | Loaded in Ghidra |
 | Reference | 5.75.0 | 738478 | `589a48d9-edcf-3d2c-8e58-7f9272624455` | `04013F93E469C304A15A33BE6BFE58D690E8D7F7D2B7BD843CBEBEA279B113B9` | Available |
 
-**Note:** WHOOP 5.80.2 binary (209,853,712 bytes) referenced in `docs/research/whoop_5802/BLE_SYNC_FORENSICS.md` at `C:\Users\ribhu\Downloads\WHOOP_5.80.2_Ghidra\Payload\Whoop.app\Whoop` — **not yet loaded in Ghidra project for HELLO-specific analysis**.
+**Note:** WHOOP 5.80.2 binary (209,853,712 bytes) referenced in `docs/research/whoop_5802/BLE_SYNC_FORENSICS.md` — **not yet loaded in Ghidra project for HELLO-specific analysis**.
 
 ### 1.2 Analysis Environment
 - **Ghidra Version:** 12.2_PUBLIC
-- **Active Project:** `C:\Users\ribhu\Documents\WHOOP_Analysis.gpr` (`WHOOP_Analysis.rep`)
 - **Architecture:** ARM64 (AArch64) Mach-O 64-bit executable
 
 ---
@@ -207,7 +206,7 @@ From `BluetoothPairingConnectingViewModel`:
 | GATT Characteristic (RX) | `fd4b0003` (commandFrom) | `fd4b0003` | `BINARY_VERIFIED` |
 | Response parser | `processCommandDidGetHelloPacket:` → `processCommandDidGetHelloInfoWithSerial:signature:boardId:` | `BandHelloExchange.receive()` (minimal) | `PARTIAL` |
 | Sequence validation | `SharedSequencer` echo | `frame[3] == sequence` | `BINARY_VERIFIED` |
-| Auth verification | Signature + serial + boardId validation | Only sequence + status byte `== 1` | `PARTIAL` |
+| Auth verification | Signature, serial and board ID appear as handler parameters | Existing response handling | Validation behavior unverified |
 | Retry/timeout | **Not fully traced** (ViewModel likely handles) | 30s timeout, 3 retries, then disconnect | `HYPOTHESIS` |
 | Rev3 vs Rev4 | **Symbols not found** | Not implemented | `NOT FOUND` |
 
@@ -254,7 +253,7 @@ Without a captured HELLO handshake (TX + RX), we cannot:
 
 | Missing Item | Required For | Next Step |
 |--------------|--------------|-----------|
-| **5.80.2 binary loaded in Ghidra** | Version-parity verification; Rev3/Rev4 may exist only in newer version | Load `C:\Users\ribhu\Downloads\WHOOP_5.80.2_Ghidra\Payload\Whoop.app\Whoop` into Ghidra project |
+| **5.80.2 binary loaded in Ghidra** | Version-parity verification; Rev3/Rev4 may exist only in newer version | Inspect the 5.80.2 executable in Ghidra |
 | **Forward call graph: HELLO construction → write** | Exact request payload bytes | Trace from `BluetoothPairingConnectingViewModel` connection logic → `FUN_1003cd110` |
 | **Response payload parsing in `processCommandDidGetHelloInfoWithSerial:signature:boardId:`** | Serial/signature/boardId extraction, signature verification | Decompile `0x1003ce124` fully |
 | **HelloPacketRev3/Rev4 symbols or resources** | Protocol version differences | Search 5.80.2 binary for these symbols |
@@ -274,10 +273,10 @@ Without a captured HELLO handshake (TX + RX), we cannot:
 | Sequence handling | ✅ Yes | High (`BINARY_VERIFIED`) |
 | **Request payload** | ❓ **Unknown** | **Low** — not verified |
 | **Response parsing** | ❌ **Incomplete** | **Low** — STRAP only checks sequence + status byte |
-| **Auth verification** | ❌ **Missing** | **Low** — STRAP has no signature/serial/boardId validation |
+| **Auth verification** | ❌ **Unknown** | Official verification behavior is unresolved |
 | **Rev3/Rev4 handling** | ❌ **Not implemented** | **N/A** — not found in binary |
 
-**Overall:** STRAP's HELLO implementation **partially matches** the confirmed wire protocol (opcode, framing, characteristic, sequence) but **diverges critically on authentication** (no signature verification, no serial/boardId validation) and **request payload is unverified**.
+Static observations suggest overlap in opcode, framing, characteristic and sequence handling. Request payload, response layout and authentication behavior require wire evidence.
 
 ---
 
