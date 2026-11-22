@@ -285,6 +285,15 @@ struct StrapAICoachView: View {
             activeTask = nil
         }
         notice = nil
+        // Educational questions should not fail because the private snapshot
+        // lacks the corresponding personal measurement. Answer directly.
+        if let educationalAnswer = CoachKnowledge.answer(prompt) {
+            elapsedSeconds = 0
+            messages.append(CoachMessage(text: educationalAnswer, fromUser: false))
+            conversationContext.append("User: " + prompt)
+            conversationContext.append("Assistant: " + educationalAnswer)
+            return
+        }
         if selectedEngine != "Apple (offline)" {
             let started = ContinuousClock.now
             let modelName = selectedEngine == "Groq Llama 70B"
@@ -323,7 +332,7 @@ struct StrapAICoachView: View {
             let session = LanguageModelSession(instructions: """
             You are STRAP Coach, an expert, encouraging athletic coach and recovery advisor.
             Answer in the user's language (including Hinglish).
-            Always leverage the grounded STRAP data snapshot provided.
+            Use STRAP measurements only when relevant to the current question. General knowledge questions must be answered even when personal data is unavailable.\n            Prioritize the latest user question. Never repeat unrelated advice from previous turns.
             When asked about recovery, sleep, or training:
             - Interpret metrics in context (e.g. explain why HRV changed, or why recovery is green/yellow/red).
             - Compare today's in-progress values against yesterday and 7-day baselines.
