@@ -15,6 +15,18 @@ struct HealthspanInsights {
     let activity: [Reading]
     let fitness: [Reading]
 
+    /// Include seven local dates through the selected day, excluding future timestamps.
+    static func recentLeanMass(_ measurement: ProfileBodyMeasurement?,
+                               endingOn date: Date, now: Date,
+                               calendar: Calendar = .current) -> ProfileBodyMeasurement? {
+        let day = calendar.startOfDay(for: date)
+        guard let measurement, measurement.date <= now,
+              let first = calendar.date(byAdding: .day, value: -6, to: day),
+              let end = calendar.date(byAdding: .day, value: 1, to: day),
+              (first..<end).contains(measurement.date) else { return nil }
+        return measurement
+    }
+
     static let paceExplanation = "A validated rate needs independent long-term measurements and a calibrated trend model. Rolling fitness-age estimates overlap and cannot establish an aging rate."
 
     init(days: [MetricDay], leanMass: ProfileBodyMeasurement? = nil) {
