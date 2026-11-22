@@ -1,20 +1,20 @@
 import Foundation
 
 /// Tri-state wearing/contact status of the strap.
-public enum WristContactState: String, Equatable, Codable {
+enum WristContactState: String, Equatable, Codable {
     case unknown
     case onWrist
     case offWrist
 }
 
 /// Decoded hardware event from Gen5 / MG events characteristic (fd4b0004).
-public struct BandHardwareEventPacket: Equatable {
-    public let rawOpcode: UInt8
-    public let event: BandHardwareEvent?
-    public let timestamp: UInt32?
-    public let payload: [UInt8]
+struct BandHardwareEventPacket: Equatable {
+    let rawOpcode: UInt8
+    let event: BandHardwareEvent?
+    let timestamp: UInt32?
+    let payload: [UInt8]
 
-    public init(rawOpcode: UInt8, event: BandHardwareEvent?, timestamp: UInt32?, payload: [UInt8]) {
+    init(rawOpcode: UInt8, event: BandHardwareEvent?, timestamp: UInt32?, payload: [UInt8]) {
         self.rawOpcode = rawOpcode
         self.event = event
         self.timestamp = timestamp
@@ -30,7 +30,7 @@ public struct BandHardwareEventPacket: Equatable {
     /// - inner[3] == status / secondary byte
     /// - inner[4..7] == 4-byte real Unix timestamp (little-endian)
     /// - inner[8...] == optional payload (e.g. battery percent, mV)
-    public static func decode(_ inner: [UInt8]) -> BandHardwareEventPacket? {
+    static func decode(_ inner: [UInt8]) -> BandHardwareEventPacket? {
         guard !inner.isEmpty else { return nil }
         if inner[0] == 0x30 {
             guard inner.count >= 3 else { return nil }
