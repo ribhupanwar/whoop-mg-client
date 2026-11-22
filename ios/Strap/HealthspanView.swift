@@ -266,6 +266,8 @@ struct HealthspanView: View {
             baselineRow("Days with steps", observed: baselineCoverage.stepDays,
                         required: FitnessAgeModel.minCapturedDays)
             if let estimate = snapshot, let impact = estimate.impact {
+                Text(String(format: "Measured median %.1f bpm · Activity index %.2f",
+                            estimate.restingHeartRate, estimate.physicalActivityIndex))
                 Text("Model reference · 65 bpm and activity index 5")
                 Text(String(format: "RHR %+.1f years · Exercise %+.1f years", impact.restingHeartRate, impact.activity))
                 if abs(impact.boundaryAdjustment) > 0.01 {
@@ -445,7 +447,7 @@ private struct HealthspanAgeScale: View {
 private struct HealthspanTrendChart: View {
     let points: [HealthspanPoint]
     let actualAge: Double?
-    @State private var selection: Int?
+    @State private var selectedDate: Date?
     private var low: Double { max(15, (points.compactMap(\.years).min() ?? Double(actualAge ?? 30)) - 6) }
     private var high: Double { max(Double(actualAge ?? 0) + 2, (points.compactMap(\.years).max() ?? low + 10) + 6) }
     var body: some View {
@@ -501,8 +503,7 @@ private struct HealthspanTrendChart: View {
                     Text(last.date.formatted(.dateTime.month(.abbreviated).day()))
                         .position(x: left + width - 16, y: height + 18)
                 }
-                if let selection, points.indices.contains(selection) {
-                    let selected = points[selection]
+                if let selected = points.first(where: { $0.date == selectedDate }) {
                     Text(selected.date.formatted(.dateTime.month(.abbreviated).day()) + " · "
                          + (selected.years.map { String(format: "%.1f years", $0) } ?? "Unavailable"))
                         .padding(5)
@@ -515,9 +516,10 @@ private struct HealthspanTrendChart: View {
             .onTapGesture(coordinateSpace: .local) { location in
                 guard !points.isEmpty else { return }
                 let fraction = max(0, min(1, (location.x - left) / width))
-                selection = Int((fraction * CGFloat(points.count - 1)).rounded())
+                let index = Int((fraction * CGFloat(points.count - 1)).rounded())
+                selectedDate = points[index].date
             }
-            .onChange(of: points.last?.date) { _, _ in selection = nil }
+            .onChange(of: points.last?.date) { _, _ in selectedDate = nil }
         }.frame(height: 185)
         .accessibilityLabel("Fitness-age trend with gaps for dates without enough measured data")
     }
