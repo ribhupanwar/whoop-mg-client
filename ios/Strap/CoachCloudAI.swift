@@ -6,7 +6,7 @@ import Security
 @available(iOS 26.0, *)
 enum CoachCloudAI {
     static let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
-    static let models = ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    static let models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
 
     static func readKey() -> String {
         let query: [String: Any] = [
@@ -122,7 +122,7 @@ enum CoachCloudError: LocalizedError {
             switch status {
             case 400: return "Groq rejected this request (HTTP 400). Check selected model."
             case 401, 403: return "Groq authentication failed (HTTP \(status)). Verify your GroqCloud API key."
-            case 404: return "Groq model or API route not found (HTTP 404). Try Llama 8B; check model availability."
+            case 404: return "Groq model or API route unavailable (HTTP 404). Check supported models in GroqCloud."
             case 429: return "Groq free-tier rate limit reached (HTTP 429). Try again later or select Gemini."
             case 500...599: return "Groq service temporarily unavailable (HTTP \(status)). Try Gemini fallback."
             default: return "Groq request failed (HTTP \(status))."
