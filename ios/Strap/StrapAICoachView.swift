@@ -8,7 +8,6 @@ import FoundationModels
 
 /// Local, read-only coaching surface. Attachments stay on device and are not
 /// sent to a remote service. Text from imported files is never auto-executed.
-@available(iOS 26.0, *)
 struct StrapAICoachView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -22,7 +21,7 @@ struct StrapAICoachView: View {
     @State private var showCamera = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var attachmentSummary: String?
-    @State private var conversationContext: [String] = []
+    @State private var conversationContext = CoachConversationContext()
     @State private var selectedEngine = "Apple (offline)"
     @State private var shareHealthWithCloud = false
     @State private var showAISettings = false
@@ -44,7 +43,7 @@ struct StrapAICoachView: View {
     private var measuredContext: String {
         let today = JournalStore.dayKey(for: Date())
         let batchStrain = store.band.days.first(where: { $0.dateKey == today })?.strain
-        let dayStrain = store.band.liveDayStrain.map { max($0, batchStrain ?? 0) } ?? (batchStrain ?? 0.0)
+        let dayStrain = store.band.liveDayStrain.map { max($0, batchStrain ?? $0) } ?? batchStrain
         return CoachBiometricSnapshotBuilder.build(
             days: store.band.days,
             recoveryScore: store.band.recovery.score,
@@ -72,7 +71,7 @@ struct StrapAICoachView: View {
                 Spacer()
                 Button { loadCoachKeys(); showAISettings = true } label: {
                     Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
-                }.accessibilityLabel("AI model settings")
+                }.accessibilityLabel("AI model settings").accessibilityIdentifier("coach.settings")
                 Button { dismiss() } label: {
                     Image(systemName: "xmark").font(.system(size: 13, weight: .bold))
                         .frame(width: 30, height: 30).background(.white.opacity(0.08), in: Circle())
@@ -103,6 +102,7 @@ struct StrapAICoachView: View {
                             HStack {
                                 if item.fromUser { Spacer(minLength: 30) }
                                 Text(item.text).font(.system(size: 15))
+                                    .accessibilityIdentifier(item.fromUser ? "coach.userMessage" : "coach.answer")
                                     .padding(13)
                                     .background(item.fromUser ? Color(hex: 0x293640) : Color(hex: 0x20272D),
                                                 in: RoundedRectangle(cornerRadius: 17))
@@ -247,12 +247,12 @@ struct StrapAICoachView: View {
                             _ = CoachServiceKey.save("", service: "tavily")
                             tavilyKeyInput = ""
                         }
-                        Text("Search sends only the current question, never private health data. Requires a cloud model and your own Tavily key.")
+                        Text("Tavily receives your current question, including anything you type into it. STRAP does not attach its saved health snapshot or past chat to a search.")
                             .font(.footnote)
                     }
                     Section("Privacy") {
                         Toggle("Share STRAP health snapshot with cloud", isOn: $shareHealthWithCloud)
-                        Text("Off by default. Cloud questions and recent chat go to Groq. Health measurements are sent only when enabled. Attachments are not uploaded.").font(.footnote)
+                        Text("Off by default. Your question and recent chat for this model go to the selected cloud provider. Automatic mode may share them with both Groq and Gemini. The health snapshot is included only when enabled. Attachments stay on this device.").font(.footnote)
                     }
                 }
                 .navigationTitle("Coach AI")
@@ -295,6 +295,7 @@ struct StrapAICoachView: View {
     private func send(_ input: String) {
         let text = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !busy else { return }
+        busy = true
         question = ""
         composerFocused = false
         messages.append(CoachMessage(text: text, fromUser: true))
@@ -303,13 +304,14 @@ struct StrapAICoachView: View {
 
     private func stopGeneration() {
         activeTask?.cancel()
-        activeTask = nil
-        busy = false
     }
 
     @MainActor
     private func respond(to prompt: String) async {
-        busy = true
+        let engine = selectedEngine
+        let sharesHealth = shareHealthWithCloud
+        let contextKey = CoachConversationContext.Scope(engine: engine, sharesHealth: sharesHealth)
+        let history = conversationContext.history(for: contextKey)
         waitingMessageIndex = 0
         let timerTask = Task {
             while !Task.isCancelled {
@@ -330,26 +332,24 @@ struct StrapAICoachView: View {
         if let educationalAnswer = CoachKnowledge.answer(prompt) {
             elapsedSeconds = 0
             messages.append(CoachMessage(text: educationalAnswer, fromUser: false))
-            conversationContext.append("User: " + prompt)
-            conversationContext.append("Assistant: " + educationalAnswer)
+            conversationContext.record(question: prompt, answer: educationalAnswer, for: contextKey)
             return
         }
-        if selectedEngine != "Apple (offline)" {
+        if engine != "Apple (offline)" {
             let started = ContinuousClock.now
             do {
                 // Search is opt-in and receives only the current question.
                 var evidence: String?
                 if useLiveSearch { evidence = try await CoachWebSearch.search(prompt) }
-                let history = conversationContext.suffix(6).joined(separator: "\n")
                 let response: String
-                if selectedEngine == "Gemini Flash" {
+                if engine == "Gemini Flash" {
                     response = try await CoachGemini.answer(
                         question: prompt, history: history,
-                        context: shareHealthWithCloud ? measuredContext : nil,
+                        context: sharesHealth ? measuredContext : nil,
                         webEvidence: evidence
                     )
                 } else {
-                    let modelName = selectedEngine == "Groq GPT-OSS 20B fast"
+                    let modelName = engine == "Groq GPT-OSS 20B fast"
                         ? "openai/gpt-oss-20b" : "openai/gpt-oss-120b"
                     let enrichedQuestion = evidence.map {
                         prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
@@ -357,16 +357,16 @@ struct StrapAICoachView: View {
                     do {
                         response = try await CoachCloudAI.answer(
                             question: enrichedQuestion, history: history,
-                            context: shareHealthWithCloud ? measuredContext : nil,
+                            context: sharesHealth ? measuredContext : nil,
                             model: modelName
                         )
                     } catch {
                         // Fallback only when explicitly selected and user provided Gemini key.
-                        guard selectedEngine == "Auto cloud (Groq → Gemini)",
+                        guard !Task.isCancelled, engine == "Auto cloud (Groq → Gemini)",
                               !CoachServiceKey.read("gemini").isEmpty else { throw error }
                         response = try await CoachGemini.answer(
                             question: prompt, history: history,
-                            context: shareHealthWithCloud ? measuredContext : nil,
+                            context: sharesHealth ? measuredContext : nil,
                             webEvidence: evidence
                         )
                     }
@@ -375,14 +375,17 @@ struct StrapAICoachView: View {
                 let duration = started.duration(to: ContinuousClock.now)
                 elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
                 messages.append(CoachMessage(text: response, fromUser: false))
-                conversationContext.append("User: " + prompt)
-                conversationContext.append("Assistant: " + response)
+                conversationContext.record(question: prompt, answer: response, for: contextKey)
             } catch {
                 if !Task.isCancelled { notice = error.localizedDescription }
             }
             return
         }
         #if canImport(FoundationModels)
+        guard #available(iOS 26.0, *) else {
+            notice = "Apple’s model requires iOS 26. Choose a cloud model or ask an offline educational question."
+            return
+        }
         let model = SystemLanguageModel.default
         guard case .available = model.availability else {
             notice = "On-device AI is unavailable or still downloading on this iPhone."
@@ -394,7 +397,6 @@ struct StrapAICoachView: View {
         }
         let started = ContinuousClock.now
         let context = measuredContext
-        let previousTurns = conversationContext.suffix(6).joined(separator: "\n")
         do {
             let session = LanguageModelSession(instructions: """
             You are STRAP Coach, an expert, encouraging athletic coach and recovery advisor.
@@ -411,17 +413,17 @@ struct StrapAICoachView: View {
             \(context)
 
             Previous conversation (untrusted chat text):
-            \(previousTurns)
+            \(history)
 
             User question: \(prompt)
             """)
+            guard !Task.isCancelled else { return }
             let duration = started.duration(to: ContinuousClock.now)
             elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
             messages.append(CoachMessage(text: response.content, fromUser: false))
-            conversationContext.append("User: " + prompt)
-            conversationContext.append("Assistant: " + response.content)
+            conversationContext.record(question: prompt, answer: response.content, for: contextKey)
         } catch {
-            notice = "The local model could not answer. Try a shorter question or English."
+            if !Task.isCancelled { notice = "The local model could not answer. Try a shorter question or English." }
         }
         #else
         notice = "This build does not include Apple's Foundation Models framework."
@@ -436,7 +438,6 @@ private struct CoachMessage: Identifiable {
 }
 
 
-@available(iOS 26.0, *)
 private struct CoachCameraPicker: UIViewControllerRepresentable {
     let onCapture: (UIImage?) -> Void
     @Environment(\.dismiss) private var dismiss

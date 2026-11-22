@@ -163,7 +163,11 @@ class V18Sample:
 
     @property
     def wearing(self) -> bool:
-        return self.heart_rate > 0
+        if self.heart_rate <= 0:
+            return False
+        if self.skin_temp_c is not None and self.skin_temp_c < 25.0 and (self.dynamic_accel_g or 0) < 0.005:
+            return False
+        return True
 
 
 def decode_spo2_candidate(raw: int | None) -> tuple[int | None, str | None]:

@@ -3,7 +3,6 @@ import Security
 
 /// Optional user-configured cloud model. No service key is bundled with STRAP.
 /// This service is called only after the user explicitly selects Cloud AI.
-@available(iOS 26.0, *)
 enum CoachCloudAI {
     static let endpoint = URL(string: "https://api.groq.com/openai/v1/chat/completions")!
     static let models = ["openai/gpt-oss-120b", "openai/gpt-oss-20b"]
@@ -111,7 +110,6 @@ enum CoachCloudAI {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachCloudError: LocalizedError {
     case invalidModel, missingKey, http(Int), emptyResponse
     var errorDescription: String? {

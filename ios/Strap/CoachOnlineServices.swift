@@ -2,7 +2,6 @@ import Foundation
 import Security
 
 /// User-owned API credentials. No bundled secrets, proxy, or telemetry.
-@available(iOS 26.0, *)
 enum CoachServiceKey {
     static func read(_ service: String) -> String {
         let query: [String: Any] = [
@@ -34,7 +33,6 @@ enum CoachServiceKey {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachGemini {
     // Model availability and free-tier quotas are provider-controlled.
     static let model = "gemini-2.5-flash"
@@ -95,7 +93,6 @@ enum CoachGemini {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachWebSearch {
     static func search(_ question: String) async throws -> String {
         let key = CoachServiceKey.read("tavily")
@@ -130,7 +127,6 @@ enum CoachWebSearch {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachOnlineError: LocalizedError {
     case missingKey(String), http(Int), empty
     var errorDescription: String? {

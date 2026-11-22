@@ -7,40 +7,45 @@ struct CoachBiometricSnapshotBuilder {
     static func build(
         days: [DayMetrics],
         recoveryScore: Double?,
-        dayStrain: Double,
+        dayStrain: Double?,
         lastCaptureHRV: Double?,
         measuredRHR: Double?,
         recordedNights: [RecordedNight],
         detectedActivities: [ActivitySession],
         manualActivities: [ManualActivity] = [],
-        healthMonitor: HealthMonitorSnapshot? = nil
+        healthMonitor: HealthMonitorSnapshot? = nil,
+        now: Date = Date(),
+        calendar: Calendar = .current
     ) -> String {
-        let calendar = Calendar.current
-        let todayKey = JournalStore.dayKey(for: Date(), calendar: calendar)
+        let todayKey = JournalStore.dayKey(for: now, calendar: calendar)
+        let yesterdayKey = calendar.date(byAdding: .day, value: -1, to: now)
+            .map { JournalStore.dayKey(for: $0, calendar: calendar) }
+        let historyStartKey = calendar.date(byAdding: .day, value: -7, to: now)
+            .map { JournalStore.dayKey(for: $0, calendar: calendar) } ?? todayKey
         let sortedDays = days.sorted { $0.dateKey < $1.dateKey }
-        
+
         var sections: [String] = []
-        
+
         // 1. TODAY's In-Progress Metrics
         let recText = recoveryScore.map { "\(Int($0.rounded()))%" } ?? "Pending"
-        let strainText = String(format: "%.1f", dayStrain)
+        let strainText = dayStrain.map { String(format: "%.1f / 21.0", $0) } ?? "Unavailable"
         let hrvText = lastCaptureHRV.map { String(format: "%.0f ms", $0) } ?? "Unavailable"
         let rhrText = measuredRHR.map { String(format: "%.0f bpm", $0) } ?? "Unavailable"
-        
+
         var todayLines = [
             "• TODAY (\(todayKey)):",
             "  - Recovery: \(recText)",
-            "  - Live Day Strain: \(strainText) / 21.0",
-            "  - Current SWS HRV: \(hrvText)",
+            "  - Live Day Strain: \(strainText)",
+            "  - Latest recorded HRV: \(hrvText)",
             "  - Current Resting HR: \(rhrText)"
         ]
-        if let lastNight = recordedNights.last {
+        if let lastNight = recordedNights.last(where: { $0.dateKey == todayKey }) {
             todayLines.append("  - Last Night's Sleep: \(String(format: "%.1f", lastNight.actualHours))h actual vs \(String(format: "%.1f", lastNight.neededHours))h needed")
         }
         sections.append(todayLines.joined(separator: "\n"))
-        
+
         // 2. YESTERDAY's Finalized Metrics
-        if let yesterday = sortedDays.suffix(2).first, yesterday.dateKey != todayKey {
+        if let yesterday = sortedDays.last(where: { $0.dateKey == yesterdayKey }) {
             var yLines = ["• YESTERDAY (\(yesterday.dateKey)):"]
             if let yStrain = yesterday.strain {
                 yLines.append("  - Final Day Strain: \(String(format: "%.1f", yStrain))")
@@ -54,17 +59,17 @@ struct CoachBiometricSnapshotBuilder {
             }
             sections.append(yLines.joined(separator: "\n"))
         }
-        
+
         // 3. 7-DAY BASELINE TRENDS
-        let last7 = Array(sortedDays.suffix(7))
+        let last7 = sortedDays.filter { $0.dateKey >= historyStartKey && $0.dateKey < todayKey }
         if !last7.isEmpty {
             let validHRVs = last7.compactMap { $0.lnRMSSD.map { exp($0) } }
             let validRHRs = last7.compactMap { $0.restingHR }
             let validStrains = last7.compactMap { $0.strain }
-            
+    
             var trendLines = [
                 "• 7-DAY BASELINE TRENDS:",
-                "  - Qualifying Nights: \(last7.count) of 7"
+                "  - Recorded days: \(last7.count) of 7"
             ]
             if let minH = validHRVs.min(), let maxH = validHRVs.max() {
                 trendLines.append("  - Typical HRV Range: \(Int(round(minH)))–\(Int(round(maxH))) ms")
@@ -78,7 +83,7 @@ struct CoachBiometricSnapshotBuilder {
             }
             sections.append(trendLines.joined(separator: "\n"))
         }
-        
+
         // 4. RECENT WORKOUTS
         var workoutLines = ["• RECENT WORKOUTS:"]
         var renderedWorkouts = 0
@@ -99,7 +104,7 @@ struct CoachBiometricSnapshotBuilder {
             workoutLines.append("  - None recorded in recent window.")
         }
         sections.append(workoutLines.joined(separator: "\n"))
-        
+
         // 5. HEALTH MONITOR VITALS
         if let hm = healthMonitor {
             let vLines = [
@@ -112,7 +117,7 @@ struct CoachBiometricSnapshotBuilder {
             ]
             sections.append(vLines.joined(separator: "\n"))
         }
-        
+
         return sections.joined(separator: "\n\n")
     }
 }
