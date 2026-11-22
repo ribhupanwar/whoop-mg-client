@@ -354,6 +354,14 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 
 [Cross-repository source and feature matrix](engineering/cross-repository-reliability-audit.md)
 
+## Sensor reliability and HELLO research
+
+- **IMPLEMENTED** in #154. Typed hardware events, four-state wrist contact, debounce, tabletop artifact rejection and background restoration supersede #153.
+- **IMPLEMENTED** in #155. Durable history progress, duplicate handling and bounded ACK retries.
+- **IMPLEMENTED** in #156. Debug-only Instruments timing for durable history commits. The reconciled head passed [iOS packaging and tests](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059748) and the [six-job protocol matrix](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059739).
+- **DEVICE-VERIFY.** Test wrist transitions, notification restoration and interrupted history sync on Gen5 and MG hardware.
+- **DEFERRED.** The HELLO forensic notes distinguish static observations from hypotheses. Request bytes, response layout and firmware-specific behavior still need matched captures before any production change.
+
 ## STRAP AI Coach
 
 - Open the Coach button next to the bottom tabs. Daily Insights remains on Home.
