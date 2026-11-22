@@ -79,6 +79,8 @@ struct AppSettings: Codable, Equatable {
     var age: Int = 30
     /// Default age is only a placeholder until the wearer confirms it.
     var ageConfirmed: Bool = false
+    var birthDate: ProfileBirthDate? = nil
+    var leanMass: ProfileBodyMeasurement? = nil
     var sex: Sex = .unspecified
     /// Body mass and height only price the calorie estimate (Mifflin–St Jeor
     /// basal + Keytel active). Nil means the app shows "—" and names the gap.
@@ -100,7 +102,7 @@ struct AppSettings: Codable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case age, ageConfirmed, sex, restingHROverride, maxHROverride
-        case weightKG, heightCM
+        case weightKG, heightCM, birthDate, leanMass
         case sleepNeedHours, wakeTimeMinutes, sleepIntent, designPreview
         case healthKitEnabled
         case dashboardOrder, hiddenDashboardRows
@@ -115,6 +117,8 @@ struct AppSettings: Codable, Equatable {
         age = try container.decodeIfPresent(Int.self, forKey: .age) ?? 30
         ageConfirmed = try container.decodeIfPresent(Bool.self, forKey: .ageConfirmed) ?? false
         sex = try container.decodeIfPresent(Sex.self, forKey: .sex) ?? .unspecified
+        birthDate = try container.decodeIfPresent(ProfileBirthDate.self, forKey: .birthDate)
+        leanMass = try container.decodeIfPresent(ProfileBodyMeasurement.self, forKey: .leanMass)
         weightKG = try container.decodeIfPresent(Double.self, forKey: .weightKG)
         heightCM = try container.decodeIfPresent(Double.self, forKey: .heightCM)
         restingHROverride = try container.decodeIfPresent(Double.self, forKey: .restingHROverride)

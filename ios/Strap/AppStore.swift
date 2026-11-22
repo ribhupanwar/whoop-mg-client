@@ -43,6 +43,7 @@ final class AppStore: ObservableObject {
         let age: Int
         let sex: Sex
         let confirmed: Bool
+        let birthDate: ProfileBirthDate?
         let days: [DayMetrics]
         let detected: [ActivitySession]
         let live: [LiveActivityRecord]
@@ -103,13 +104,17 @@ final class AppStore: ObservableObject {
         fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
             .map { settings, days, detected, live in
                 FitnessInputs(age: settings.age, sex: settings.sex, confirmed: settings.ageConfirmed,
+                              birthDate: settings.birthDate,
                               days: days, detected: detected, live: live)
             }
             .removeDuplicates()
+            .combineLatest(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
+                .merge(with: NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange))
+                .map { _ in () }.prepend(()))
             .debounce(for: .milliseconds(200), scheduler: fitnessQueue)
-            .map { input in
+            .map { input, _ in
                 FitnessAgeModel.snapshot(age: input.age, sex: input.sex, ageConfirmed: input.confirmed,
-                    days: input.days, detected: input.detected, live: input.live)
+                    days: input.days, detected: input.detected, live: input.live, birthDate: input.birthDate)
             }
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
@@ -148,7 +153,7 @@ final class AppStore: ObservableObject {
     var isPreview: Bool { settings.designPreview }
 
     var maxHeartRate: Double {
-        settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: settings.age)
+        settings.profileMaxHeartRate() ?? Karvonen.agePredictedMaxHR(age: settings.age)
     }
 
     /// Detected nights from captured history. Empty until a capture lands, so
@@ -395,11 +400,9 @@ final class AppStore: ObservableObject {
     /// set; otherwise the documented 208 − 0.7 × age estimate, labelled as
     /// such. Needs a measured resting HR — the ratio means nothing without it.
     var vo2Estimate: Double? {
-        // Never turn an unconfirmed default age or a short daytime capture
-        // into an apparently precise fitness estimate.
-        guard settings.ageConfirmed,
+        // Require a confirmed age or explicit maximum and an overnight anchor.
+        guard let maxHR = settings.profileMaxHeartRate(),
               let resting = settings.restingHROverride ?? latestOvernightRestingHR else { return nil }
-        let maxHR = settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: settings.age)
         return Hrv.vo2Max(maxHR: maxHR, restingHR: resting)
     }
 
@@ -432,7 +435,7 @@ final class AppStore: ObservableObject {
     /// the body data or a resting HR is missing — `caloriesDetail` names the gap.
     var captureActiveKcal: Double? {
         guard let summary = band.summary, !summary.heartRateSeries.isEmpty,
-              let weight = settings.weightKG, let height = settings.heightCM,
+              let weight = settings.weightKG, let height = settings.heightCM, let age = settings.profileAge(),
               settings.sex != .unspecified,
               let resting = measuredRestingHR else { return nil }
         return Calories.activeKcal(
@@ -441,7 +444,7 @@ final class AppStore: ObservableObject {
             maxHR: maxHeartRate,
             weightKg: weight,
             heightCm: height,
-            age: Double(settings.age),
+            age: age,
             sex: settings.sex
         )
     }
@@ -454,6 +457,7 @@ final class AppStore: ObservableObject {
         if settings.sex == .unspecified {
             return "needs sex selection (Settings) for Keytel estimate"
         }
+        if settings.profileAge() == nil { return "needs confirmed age (Settings)" }
         guard let summary = band.summary, !summary.heartRateSeries.isEmpty else {
             return "needs a capture"
         }
@@ -465,7 +469,7 @@ final class AppStore: ObservableObject {
     /// session never rose above the HR gate and had no measured walking cadence.
     func activeKcal(for session: ActivitySession) -> Double? {
         guard let weight = settings.weightKG, let height = settings.heightCM,
-              let resting = measuredRestingHR else { return nil }
+              let age = settings.profileAge(), let resting = measuredRestingHR else { return nil }
         return Calories.sessionActiveKcal(
             meanHR: session.meanHR,
             steps: session.steps,
@@ -474,14 +478,14 @@ final class AppStore: ObservableObject {
             maxHR: maxHeartRate,
             weightKg: weight,
             heightCm: height,
-            age: Double(settings.age),
+            age: age,
             sex: settings.sex
         )
     }
 
     func activeKcal(for record: LiveActivityRecord) -> Double? {
         guard let weight = settings.weightKG, let height = settings.heightCM,
-              let resting = measuredRestingHR else { return nil }
+              let age = settings.profileAge(), let resting = measuredRestingHR else { return nil }
         return Calories.sessionActiveKcal(
             meanHR: record.meanHR,
             steps: 0,
@@ -490,7 +494,7 @@ final class AppStore: ObservableObject {
             maxHR: maxHeartRate,
             weightKg: weight,
             heightCm: height,
-            age: Double(settings.age),
+            age: age,
             sex: settings.sex
         )
     }

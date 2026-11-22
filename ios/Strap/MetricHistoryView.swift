@@ -49,7 +49,7 @@ struct MetricHistoryView: View {
             ending: ending,
             count: window,
             sleepNeedHours: store.settings.sleepNeedHours,
-            maxHR: store.settings.ageConfirmed ? (store.settings.maxHROverride ?? Karvonen.agePredictedMaxHR(age: store.settings.age)) : nil,
+            maxHR: store.settings.profileMaxHeartRate(on: ending),
             imported: store.whoopImportedDays
         )
     }

@@ -68,7 +68,7 @@ struct HealthHubView: View {
     private var healthspanHero: some View {
         VStack(spacing: 14) {
             HealthspanOrb(years: demo ? 25 : fitnessSnapshot?.years,
-                          chronologicalYears: demo ? 30 : fitnessSnapshot?.chronologicalYears)
+                          chronologicalYears: demo ? 30 : fitnessSnapshot?.comparisonAge)
                 .frame(height: 310)
                 .padding(.top, 4)
             if !demo, fitnessSnapshot == nil {
