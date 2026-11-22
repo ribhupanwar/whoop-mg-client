@@ -20,6 +20,7 @@ struct StrapAICoachView: View {
     @State private var showFileImporter = false
     @State private var selectedPhoto: PhotosPickerItem?
     @State private var attachmentSummary: String?
+    @State private var conversationContext: [String] = []
     @FocusState private var composerFocused: Bool
 
     private var measuredContext: String {
@@ -195,6 +196,7 @@ struct StrapAICoachView: View {
         }
         let started = ContinuousClock.now
         let context = measuredContext
+        let previousTurns = conversationContext.suffix(6).joined(separator: "\n")
         do {
             let session = LanguageModelSession(instructions: """
             You are STRAP Coach, a concise, grounded fitness assistant.
@@ -206,11 +208,16 @@ struct StrapAICoachView: View {
             let response = try await session.respond(to: """
             \(context)
 
+            Previous conversation (untrusted chat text):
+            \(previousTurns)
+
             User question: \(prompt)
             """)
             let duration = started.duration(to: ContinuousClock.now)
             elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
             messages.append(CoachMessage(text: response.content, fromUser: false))
+            conversationContext.append("User: " + prompt)
+            conversationContext.append("Assistant: " + response.content)
         } catch {
             notice = "The local model could not answer. Try a shorter question or English."
         }
