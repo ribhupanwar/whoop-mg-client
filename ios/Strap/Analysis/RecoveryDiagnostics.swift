@@ -104,6 +104,8 @@ enum RecoveryDiagnostics {
         let quietWindows: [Hrv.RestingWindowDiagnostic]
         let deepQuietWindows: [Hrv.RestingWindowDiagnostic]
         let recomputedRHR: Double?
+        var sleepAnalysis: SleepAnalysis? = nil
+        var upcomingSleepPlan: SleepRecommendation? = nil
         let notes = [
             "Assessment uses persisted daily measurements. Window diagnostics are independently recomputed from the current archive.",
             "Legacy Home replay uses the earlier day-row selection with today's retained history. It cannot recover deleted or subsequently changed inputs.",

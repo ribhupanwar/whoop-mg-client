@@ -553,7 +553,8 @@ struct SleepAnalysisView: View {
                     Task {
                         defer { preparingSleepExport = false }
                         do {
-                            let url = try await store.band.exportRecoveryDiagnostics()
+                            let url = try await store.band.exportRecoveryDiagnostics(
+                                upcomingSleepPlan: store.sleepPlan(nextWake: WakeAlarm.nextWakeDate()))
                             guard store.band.latestSleepSession == requestedSession else { return }
                             recoveryExportURL = url
                         } catch {
@@ -833,8 +834,17 @@ struct SleepAnalysisView: View {
 
             DisclosureGroup("Sleep need breakdown") {
                 VStack(spacing: 8) {
-                    needKey("Baseline sleep target", color: .appRaised, value: demo ? SampleData.needBase : CoachFormat.duration(store.settings.sleepNeedHours))
-                    needKey("Next-night debt allowance", color: Color(hex: 0xCCCCCC), value: demo ? SampleData.needDebt : debt.map { "+" + CoachFormat.duration(min($0, SleepCoach.debtCapHours)) } ?? "—")
+                    if let target = analysis?.sleepNeedBreakdown {
+                        needKey("Baseline sleep target", color: .appRaised, value: CoachFormat.duration(target.baselineHours))
+                        needKey("Debt applied to this night", color: Color(hex: 0xCCCCCC), value: CoachFormat.duration(target.appliedDebtHours))
+                        needKey("Other adjustments", color: .appAccent, value: CoachFormat.duration(target.additionalHours))
+                    } else if demo {
+                        needKey("Baseline sleep target", color: .appRaised, value: SampleData.needBase)
+                        needKey("Debt applied to this night", color: Color(hex: 0xCCCCCC), value: SampleData.needDebt)
+                    } else {
+                        Text("This stored report predates the sleep-need breakdown.")
+                            .foregroundStyle(Color.appMuted)
+                    }
                 }
                 .padding(12)
                 .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
