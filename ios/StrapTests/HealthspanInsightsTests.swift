@@ -2,6 +2,21 @@ import XCTest
 @testable import Strap
 
 final class HealthspanInsightsTests: XCTestCase {
+    func testLeanMassIncludesWholeSeventhCalendarDayAndExcludesFutureAndOlderDays() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+        func date(_ day: Int, _ hour: Int) throws -> Date {
+            try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: day, hour: hour)))
+        }
+        let now = try date(22, 10)
+        let seventhDay = ProfileBodyMeasurement(kilograms: 48, date: try date(16, 9), source: "Test")
+        XCTAssertEqual(HealthspanInsights.recentLeanMass(seventhDay, asOf: now, calendar: calendar), seventhDay)
+        let previousDay = ProfileBodyMeasurement(kilograms: 48, date: try date(15, 23), source: "Test")
+        XCTAssertNil(HealthspanInsights.recentLeanMass(previousDay, asOf: now, calendar: calendar))
+        let future = ProfileBodyMeasurement(kilograms: 48, date: try date(22, 12), source: "Test")
+        XCTAssertNil(HealthspanInsights.recentLeanMass(future, asOf: now, calendar: calendar))
+    }
+
     func testScreenshotAgeReplayUsesOnlySupportedImpacts() throws {
         let activity = try XCTUnwrap(FitnessAgeModel.activityIndex(activeDays: 2, averageMinutes: 23, highIntensityFraction: 0))
         let impact = try XCTUnwrap(FitnessAgeModel.impact(age: 38, sex: .male, restingHR: 65, activityIndex: activity))
