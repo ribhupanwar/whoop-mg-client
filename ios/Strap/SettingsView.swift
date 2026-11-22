@@ -12,6 +12,10 @@ struct SettingsView: View {
     @FocusState private var profileEditing: Bool
     @State private var weightText = ""
     @State private var heightText = ""
+    @State private var editsBirthDate = false
+    @State private var draftBirthDate = Date()
+    @State private var profileImportStatus: String?
+    @State private var importingProfile = false
     @State private var showWhoopImporter = false
     @State private var importingWhoop = false
     @State private var limitWhoopDates = false
@@ -154,7 +158,75 @@ struct SettingsView: View {
                 profileOK { }
                 }
             }
+            healthspanProfileFields
             Hint("Age feeds the default max-HR estimate (208 − 0.7 × age). Sex selects the Banister TRIMP coefficients, which drive strain, and the Keytel calorie coefficients. Weight and height only price the calorie estimate — leave them blank and the app shows an em dash rather than a number built on a guess.")
+        }
+    }
+
+    @ViewBuilder
+    private var healthspanProfileFields: some View {
+            if let birth = store.settings.birthDate?.date() {
+                fieldRow(label: "Date of birth") {
+                    Text(birth.formatted(date: .abbreviated, time: .omitted))
+                }
+            }
+            HStack {
+                Button(store.settings.birthDate == nil ? "Add date of birth" : "Edit date of birth") {
+                    draftBirthDate = store.settings.birthDate?.date() ?? Date()
+                    editsBirthDate = true
+                }
+                if store.settings.birthDate != nil {
+                    Button("Remove", role: .destructive) { store.settings.birthDate = nil }
+                }
+            }
+            .sheet(isPresented: $editsBirthDate) {
+                NavigationStack {
+                    Form {
+                        DatePicker("Date of birth", selection: $draftBirthDate, in: ...Date(),
+                                   displayedComponents: .date)
+                    }
+                    .navigationTitle("Date of birth")
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Cancel") { editsBirthDate = false }
+                        }
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Save") {
+                                store.settings.birthDate = ProfileBirthDate(draftBirthDate)
+                                editsBirthDate = false
+                            }
+                        }
+                    }
+                }
+            }
+            Button("Import profile from Apple Health") {
+                Task { await importAppleHealthProfile() }
+            }
+            .disabled(importingProfile)
+            if let profileImportStatus { Hint(profileImportStatus) }
+            if let lean = store.settings.leanMass {
+                Text("Lean body mass · " + lean.kilograms.formatted(.number.precision(.fractionLength(1))) + " kg")
+            }
+    }
+
+    @MainActor
+    private func importAppleHealthProfile() async {
+        importingProfile = true
+        defer { importingProfile = false }
+        do {
+            let result = try await store.health.importProfile()
+            var settings = store.settings
+            result.fillMissing(in: &settings)
+            guard settings != store.settings else {
+                profileImportStatus = "No new values were available to import."
+                return
+            }
+            store.settings = settings
+            weightText = settings.weightKG.map { String(format: "%g", $0) } ?? ""
+            heightText = settings.heightCM.map { String(format: "%g", $0) } ?? ""
+            profileImportStatus = "Imported available values. Existing profile entries were kept."
+        } catch {
+            profileImportStatus = "Apple Health could not be read."
         }
     }
 

@@ -2,10 +2,10 @@ import Combine
 import Foundation
 import HealthKit
 
-/// Optional, write-only export to Apple Health.
+/// Optional Apple Health workout export and user-initiated profile import.
 ///
 /// Currently only sessions the band actually measured are written, as workouts with
-/// their real start and end. Nothing is read back, no estimate (VO2 max,
+/// their real start and end. No estimate (VO2 max,
 /// SpO2 candidate, calories) is written, and every workout carries an
 /// external UUID built from its start second so a replayed drain cannot
 /// duplicate it in Health.
@@ -61,6 +61,48 @@ final class HealthKitBridge: ObservableObject {
 
     private var readTypes: Set<HKObjectType> {
         Set(shareTypes.map { $0 as HKObjectType })
+    }
+
+    @MainActor
+    func importProfile() async throws -> AppleHealthProfile {
+        guard HKHealthStore.isHealthDataAvailable() else { return AppleHealthProfile() }
+        let quantities = [.height, .bodyMass, .leanBodyMass] as [HKQuantityTypeIdentifier]
+        let metrics = quantities.compactMap { HKObjectType.quantityType(forIdentifier: $0) }
+        let characteristics = [HKCharacteristicTypeIdentifier.dateOfBirth, .biologicalSex]
+            .compactMap { HKObjectType.characteristicType(forIdentifier: $0) }
+        var read = Set<HKObjectType>()
+        metrics.forEach { read.insert($0) }
+        characteristics.forEach { read.insert($0) }
+        try await store.requestAuthorization(toShare: [], read: read)
+
+        let biological = try? store.biologicalSex().biologicalSex
+        let sex: Sex? = biological == .male ? .male : (biological == .female ? .female : nil)
+        let birth = (try? store.dateOfBirthComponents()).map { ProfileBirthDate($0) }
+        let height = await latestProfileSample(.height)?.quantity.doubleValue(for: .meterUnit(with: .centi))
+        let weight = await latestProfileSample(.bodyMass)?.quantity.doubleValue(for: .gramUnit(with: .kilo))
+        let lean = await latestProfileSample(.leanBodyMass).flatMap { sample -> ProfileBodyMeasurement? in
+            let kilograms = sample.quantity.doubleValue(for: .gramUnit(with: .kilo))
+            guard kilograms.isFinite, kilograms > 0 else { return nil }
+            return ProfileBodyMeasurement(kilograms: kilograms, date: sample.endDate,
+                                          source: sample.sourceRevision.source.name)
+        }
+        return AppleHealthProfile(
+            birthDate: birth.flatMap { $0.age(on: Date()) == nil ? nil : $0 }, sex: sex,
+            heightCM: height.flatMap { (100...250).contains($0) ? $0 : nil },
+            weightKG: weight.flatMap { (30...300).contains($0) ? $0 : nil }, leanMass: lean)
+    }
+
+    private func latestProfileSample(_ identifier: HKQuantityTypeIdentifier) async -> HKQuantitySample? {
+        guard let type = HKObjectType.quantityType(forIdentifier: identifier) else { return nil }
+        let date = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let predicate = HKQuery.predicateForSamples(withStart: nil, end: Date(), options: .strictEndDate)
+        return await withCheckedContinuation { continuation in
+            let query = HKSampleQuery(sampleType: type, predicate: predicate, limit: 1, sortDescriptors: [date]) {
+                _, samples, _ in
+                continuation.resume(returning: samples?.first as? HKQuantitySample)
+            }
+            store.execute(query)
+        }
     }
 
     /// Stable across drains and relaunches: the session's first second.

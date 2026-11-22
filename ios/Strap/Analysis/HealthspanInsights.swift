@@ -17,7 +17,7 @@ struct HealthspanInsights {
 
     static let paceExplanation = "A validated rate needs independent long-term measurements and a calibrated trend model. Rolling fitness-age estimates overlap and cannot establish an aging rate."
 
-    init(days: [MetricDay]) {
+    init(days: [MetricDay], leanMass: ProfileBodyMeasurement? = nil) {
         let current = Array(days.suffix(7))
         let prior = Array(days.dropLast(min(7, days.count)).suffix(7))
         func reading(_ name: String, _ unit: String, _ source: String, sum: Bool = false,
@@ -60,8 +60,10 @@ struct HealthspanInsights {
             reading("Resting heart rate", "bpm", "Mean of STRAP overnight measurements") {
                 $0.recorded?.state == "sleep" && !$0.usesWHOOP(.rhr) ? $0.value(.rhr) : nil
             },
-            Reading(id: "Lean body mass", unit: "kg", value: nil, prior: nil, observed: 0,
-                    source: "Needs a sourced lean-mass measurement")
+            Reading(id: "Lean body mass", unit: "kg", value: leanMass?.kilograms, prior: nil,
+                    observed: leanMass == nil ? 0 : 1, source: leanMass.map {
+                        "Apple Health · " + $0.source + " · " + $0.date.formatted(date: .abbreviated, time: .omitted)
+                    } ?? "Needs a sourced lean-mass measurement")
         ]
     }
 }

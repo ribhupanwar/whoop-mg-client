@@ -18,6 +18,8 @@ struct FitnessAgeSnapshot: Equatable {
     let exerciseDays: Int
     let confidenceNote: String
     var impact: FitnessAgeModel.Impact? = nil
+    var fractionalChronologicalAge: Double? = nil
+    var comparisonAge: Double { fractionalChronologicalAge ?? Double(chronologicalYears) }
 }
 
 enum FitnessAgeModel {
@@ -41,7 +43,11 @@ enum FitnessAgeModel {
     }
 
     static func impact(age: Int, sex: Sex, restingHR: Double, activityIndex: Double) -> Impact? {
-        guard (20...80).contains(age), restingHR.isFinite,
+        impact(continuousAge: Double(age), sex: sex, restingHR: restingHR, activityIndex: activityIndex)
+    }
+
+    private static func impact(continuousAge age: Double, sex: Sex, restingHR: Double, activityIndex: Double) -> Impact? {
+        guard age.isFinite, (20..<81).contains(age), restingHR.isFinite,
               (35...110).contains(restingHR), activityIndex.isFinite,
               (0...15).contains(activityIndex) else { return nil }
         let ageCoeff: Double
@@ -132,9 +138,12 @@ enum FitnessAgeModel {
         days: [DayMetrics],
         detected: [ActivitySession],
         live: [LiveActivityRecord],
-        asOf: Date = Date()
+        asOf: Date = Date(),
+        birthDate: ProfileBirthDate? = nil
     ) -> FitnessAgeSnapshot? {
-        guard ageConfirmed, sex != .unspecified else { return nil }
+        let fractionalAge = birthDate?.age(on: asOf)
+        guard (ageConfirmed || fractionalAge != nil), sex != .unspecified else { return nil }
+        let comparisonAge = fractionalAge ?? Double(age)
         guard let window = measurementWindow(ending: asOf) else { return nil }
         let coverage = measuredCoverage(days: days, from: window.startKey, through: window.endKey)
         let resting = coverage.resting
@@ -143,7 +152,7 @@ enum FitnessAgeModel {
             return nil
         }
         let medianRHR = Stats.median(resting)
-        let predictedMaxHR = 208.0 - 0.7 * Double(age)
+        let predictedMaxHR = 208.0 - 0.7 * comparisonAge
         guard predictedMaxHR > medianRHR + 30 else { return nil }
         let cutoff = Int(window.firstDay.timeIntervalSince1970)
         let end = Int((Calendar.current.date(byAdding: .day, value: 1, to: window.today)
@@ -190,20 +199,21 @@ enum FitnessAgeModel {
             activeDays: exerciseDays,
             averageMinutes: totalMinutes / Double(exerciseDays),
             highIntensityFraction: min(1, highMinutes / totalMinutes)
-        ), let years = calculate(age: age, sex: sex,
-                                 restingHR: medianRHR, activityIndex: pa) else {
+        ), let impact = impact(continuousAge: comparisonAge, sex: sex,
+                              restingHR: medianRHR, activityIndex: pa) else {
             return nil
         }
         return FitnessAgeSnapshot(
-            years: years,
-            chronologicalYears: age,
+            years: comparisonAge + impact.restingHeartRate + impact.activity + impact.boundaryAdjustment,
+            chronologicalYears: Int(comparisonAge),
             restingHeartRate: medianRHR,
             physicalActivityIndex: pa,
             restingNights: resting.count,
             capturedDays: capturedSteps,
             exerciseDays: exerciseDays,
             confidenceNote: "Exploratory fitness comparison · ±5 years is a display band, not a validated confidence interval.",
-            impact: impact(age: age, sex: sex, restingHR: medianRHR, activityIndex: pa)
+            impact: impact,
+            fractionalChronologicalAge: fractionalAge
         )
     }
 }

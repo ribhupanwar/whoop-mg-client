@@ -7,6 +7,7 @@ private let healthspanMint = Color(hex: 0x54D7E9)
 struct HealthspanPoint: Identifiable, Sendable {
     let date: Date
     let years: Double?
+    var comparisonAge: Double? = nil
     var id: Date { date }
 }
 
@@ -57,7 +58,7 @@ struct HealthspanView: View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
                 weekPicker
-                HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.chronologicalYears)
+                HealthspanOrb(years: snapshot?.years, chronologicalYears: snapshot?.comparisonAge)
                     .frame(height: 300)
                     .padding(.vertical, 10)
                 ageCard
@@ -136,11 +137,11 @@ struct HealthspanView: View {
                 Text("years").font(StrapTypography.body(13)).foregroundStyle(Color.appMuted)
             }
             if let snapshot {
-                let gap = snapshot.years - Double(snapshot.chronologicalYears)
+                let gap = snapshot.years - snapshot.comparisonAge
                 Text(String(format: "%.1f years %@ than your age", abs(gap), gap <= 0 ? "younger" : "older"))
                     .font(StrapTypography.body(14, weight: .semibold)).foregroundStyle(gap <= 0 ? healthspanMint : Color.appWarn)
                     .padding(.bottom, 18)
-                HealthspanAgeScale(years: snapshot.years, actualAge: snapshot.chronologicalYears)
+                HealthspanAgeScale(years: snapshot.years, actualAge: snapshot.comparisonAge)
                 Text("±5-year display band").font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                     .frame(maxWidth: .infinity).padding(.top, 6)
             } else {
@@ -163,8 +164,8 @@ struct HealthspanView: View {
                 legend("Fitness age", color: healthspanMint)
                 legend("Your age", color: .appMuted)
             }.padding(.bottom, 16)
-            HealthspanTrendChart(points: points, actualAge: snapshot?.chronologicalYears
-                ?? (store.settings.ageConfirmed ? store.settings.age : nil))
+            HealthspanTrendChart(points: points, actualAge: snapshot?.comparisonAge
+                ?? (store.settings.ageConfirmed ? Double(store.settings.age) : nil))
             if points.allSatisfy({ $0.years == nil }) {
                 Text("Your trend appears as enough recorded nights and exercise accumulate.")
                     .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).padding(.top, 12)
@@ -191,7 +192,9 @@ struct HealthspanView: View {
                 DisclosureGroup {
                     VStack(alignment: .leading, spacing: 5) {
                         Text(reading.source)
-                        Text("Coverage · \(reading.observed) of 7 days")
+                        if reading.id != "Lean body mass" {
+                            Text("Coverage · \(reading.observed) of 7 days")
+                        }
                         Text("Previous 7 days · \(display(reading.prior, unit: reading.unit))")
                         if let range = reading.observedReference {
                             Text("Observed range · \(display(range.lowerBound, unit: reading.unit)) to \(display(range.upperBound, unit: reading.unit))")
@@ -298,8 +301,9 @@ struct HealthspanView: View {
                 guard let date = calendar.date(byAdding: .day, value: index - input.count + 1, to: input.date) else { return nil }
                 let value = FitnessAgeModel.snapshot(age: input.settings.age, sex: input.settings.sex,
                     ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
-                    live: input.live, asOf: date)
-                return HealthspanPoint(date: date, years: value?.years)
+                    live: input.live, asOf: date, birthDate: input.settings.birthDate)
+                return HealthspanPoint(date: date, years: value?.years,
+                    comparisonAge: input.settings.birthDate?.age(on: date))
             }
             let days = MetricTimeline.make(days: input.days, live: input.live, manual: input.manual,
                 caloriesByDay: [:], ending: input.date, count: 14, sleepNeedHours: input.settings.sleepNeedHours,
@@ -308,8 +312,13 @@ struct HealthspanView: View {
                 calendar: calendar)
             let latest = FitnessAgeModel.snapshot(age: input.settings.age, sex: input.settings.sex,
                 ageConfirmed: input.settings.ageConfirmed, days: input.days, detected: input.detected,
-                live: input.live, asOf: input.date)
-            return (series, HealthspanInsights(days: days), latest)
+                live: input.live, asOf: input.date, birthDate: input.settings.birthDate)
+            let leanMass = input.settings.leanMass.flatMap { sample in
+                let comparison = calendar.startOfDay(for: sample.date)
+                let first = calendar.date(byAdding: .day, value: -6, to: input.date) ?? input.date
+                return (first...input.date).contains(comparison) ? sample : nil
+            }
+            return (series, HealthspanInsights(days: days, leanMass: leanMass), latest)
         }.value
         guard !Task.isCancelled else { return }
         points = input.settings.designPreview ? [] : result.0
@@ -321,7 +330,7 @@ struct HealthspanView: View {
 
 struct HealthspanOrb: View {
     let years: Double?
-    var chronologicalYears: Int? = nil
+    var chronologicalYears: Double? = nil
 
     private let cyan = Color(hex: 0x54D7E9)
 
@@ -409,7 +418,7 @@ private struct LiquidAgeMembrane: Shape {
 
 private struct HealthspanAgeScale: View {
     let years: Double
-    let actualAge: Int
+    let actualAge: Double
     private var low: Double { min(years - 7, Double(actualAge) - 2) }
     private var high: Double { max(years + 7, Double(actualAge) + 2) }
     var body: some View {
@@ -427,7 +436,7 @@ private struct HealthspanAgeScale: View {
                 Rectangle().fill(Color.appMuted).frame(width: 1.5, height: 12)
                     .offset(x: width * CGFloat((Double(actualAge) - low) / span))
             }.frame(height: 30)
-            Text("You are \(actualAge)").font(StrapTypography.body(9)).foregroundStyle(Color.appMuted)
+            Text("You are \(actualAge.formatted(.number.precision(.fractionLength(0...1))))").font(StrapTypography.body(9)).foregroundStyle(Color.appMuted)
                 .position(x: min(width - 30, max(30, width * CGFloat((Double(actualAge) - low) / span))), y: -4)
         }.frame(height: 34)
     }
@@ -435,7 +444,7 @@ private struct HealthspanAgeScale: View {
 
 private struct HealthspanTrendChart: View {
     let points: [HealthspanPoint]
-    let actualAge: Int?
+    let actualAge: Double?
     @State private var selection: Int?
     private var low: Double { max(15, (points.compactMap(\.years).min() ?? Double(actualAge ?? 30)) - 6) }
     private var high: Double { max(Double(actualAge ?? 0) + 2, (points.compactMap(\.years).max() ?? low + 10) + 6) }
@@ -452,10 +461,22 @@ private struct HealthspanTrendChart: View {
                     Text(String(format: "%.0f", high - Double(tick) / 3 * (high - low)))
                         .font(StrapTypography.metric(9, weight: .regular)).foregroundStyle(Color.appMuted).position(x: 9, y: y)
                 }
-                if let actualAge {
-                    let y = ordinate(Double(actualAge), height: height)
-                    Path { p in p.move(to: CGPoint(x: left, y: y)); p.addLine(to: CGPoint(x: left + width, y: y)) }
-                        .stroke(Color.appMuted.opacity(0.65), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
+                if actualAge != nil || points.contains(where: { $0.comparisonAge != nil }) {
+                    Path { path in
+                        var connected = false
+                        for (index, point) in points.enumerated() {
+                            guard let comparisonAge = point.comparisonAge ?? actualAge else {
+                                connected = false
+                                continue
+                            }
+                            let x = left + width * CGFloat(index) / CGFloat(max(1, points.count - 1))
+                            let y = ordinate(comparisonAge, height: height)
+                            if connected { path.addLine(to: CGPoint(x: x, y: y)) }
+                            else { path.move(to: CGPoint(x: x, y: y)) }
+                            connected = true
+                        }
+                    }
+                    .stroke(Color.appMuted.opacity(0.65), style: StrokeStyle(lineWidth: 1, dash: [4, 4]))
                 }
                 if let latest = points.last?.years {
                     let y = ordinate(latest + 5, height: height)

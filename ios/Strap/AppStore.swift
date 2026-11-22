@@ -43,6 +43,7 @@ final class AppStore: ObservableObject {
         let age: Int
         let sex: Sex
         let confirmed: Bool
+        let birthDate: ProfileBirthDate?
         let days: [DayMetrics]
         let detected: [ActivitySession]
         let live: [LiveActivityRecord]
@@ -103,13 +104,17 @@ final class AppStore: ObservableObject {
         fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
             .map { settings, days, detected, live in
                 FitnessInputs(age: settings.age, sex: settings.sex, confirmed: settings.ageConfirmed,
+                              birthDate: settings.birthDate,
                               days: days, detected: detected, live: live)
             }
             .removeDuplicates()
+            .combineLatest(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
+                .merge(with: NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange))
+                .map { _ in () }.prepend(()))
             .debounce(for: .milliseconds(200), scheduler: fitnessQueue)
-            .map { input in
+            .map { input, _ in
                 FitnessAgeModel.snapshot(age: input.age, sex: input.sex, ageConfirmed: input.confirmed,
-                    days: input.days, detected: input.detected, live: input.live)
+                    days: input.days, detected: input.detected, live: input.live, birthDate: input.birthDate)
             }
             .receive(on: RunLoop.main)
             .sink { [weak self] value in
