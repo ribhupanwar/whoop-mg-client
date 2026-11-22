@@ -66,7 +66,7 @@ struct CoachBiometricSnapshotBuilder {
             let validHRVs = last7.compactMap { $0.lnRMSSD.map { exp($0) } }
             let validRHRs = last7.compactMap { $0.restingHR }
             let validStrains = last7.compactMap { $0.strain }
-    
+
             var trendLines = [
                 "• 7-DAY BASELINE TRENDS:",
                 "  - Recorded days: \(last7.count) of 7"
