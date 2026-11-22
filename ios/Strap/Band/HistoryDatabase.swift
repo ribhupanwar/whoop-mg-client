@@ -48,7 +48,7 @@ final class HistoryDatabase {
 
     func commitReportingProgress(_ rows: [V18Sample], token: String?) throws -> CommitProgress {
         let batchSize = rows.count
-        try transactionWithBatchSize(batchSize) {
+        return try transactionWithBatchSize(batchSize) {
             let progress = try insert(rows)
             if let token { try setMetadata("last_history_chunk", value: token) }
             return progress
