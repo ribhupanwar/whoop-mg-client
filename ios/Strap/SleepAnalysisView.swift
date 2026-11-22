@@ -43,12 +43,20 @@ struct SleepAnalysisView: View {
     private var typicalRestorativeMinutes: Double? { nil }
 
     private var typicalHoursVsNeededPct: Double? {
-        let ratios = nights.sorted { $0.dateKey < $1.dateKey }.suffix(30)
-            .compactMap { night -> Double? in
-                guard night.neededHours.isFinite, night.neededHours > 0,
-                      night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
-                return min(100.0, max(0.0, 100.0 * night.actualHours / night.neededHours))
-            }
+        let recorded = nights
+        let calendar = Calendar.current
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.dateFormat = "yyyy-MM-dd"
+        let ratios = recorded.suffix(30).compactMap { night -> Double? in
+            guard let wake = formatter.date(from: night.dateKey),
+                  night.actualHours.isFinite, night.actualHours >= 0 else { return nil }
+            let target = SleepCoach.scoredNightNeed(baseNeedHours: night.neededHours,
+                priorNights: recorded, wakeDate: wake, calendar: calendar)
+            return min(100, 100 * night.actualHours / target.totalHours)
+        }
         guard ratios.count >= 3 else { return nil }
         return (ratios.reduce(0, +) / Double(ratios.count)).rounded()
     }
@@ -1182,8 +1190,12 @@ struct SleepAnalysisView: View {
         }
     }
     private var weekNeed: [Double?] {
-        demo ? SampleData.weeklyHoursNeeded.map(Optional.some) : weekDates.map { date in
-            nights.first { $0.dateKey == dayKey(date) }?.neededHours
+        if demo { return SampleData.weeklyHoursNeeded.map(Optional.some) }
+        let recorded = nights
+        return weekDates.map { date in
+            guard let night = recorded.first(where: { $0.dateKey == dayKey(date) }) else { return nil }
+            return SleepCoach.scoredNightNeed(baseNeedHours: night.neededHours,
+                priorNights: recorded, wakeDate: date).totalHours
         }
     }
     private var weekPerformance: [Double?] {
