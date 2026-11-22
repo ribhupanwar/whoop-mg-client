@@ -52,7 +52,17 @@ struct V18Sample: Equatable, Codable {
     let psnrA: Int?
 
     var unix: Int { Int(header.unix) }
-    var wearing: Bool { heartRate > 0 }
+    var wearing: Bool {
+        if heartRate <= 0 { return false }
+        // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness
+        if let temp = skinTempC, temp < 25.0, (dynamicAccelG ?? 0) < 0.005 {
+            return false
+        }
+        return true
+    }
+    var wristContactState: WristContactState {
+        wearing ? .onWrist : .offWrist
+    }
 }
 
 /// Stable choice when replayed history contains multiple records in one second.
