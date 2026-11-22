@@ -117,12 +117,12 @@ final class PerformanceProfiler {
 
     func beginBLEPacketInterval(name: String) -> OSSignpostID {
         let id = OSSignpostID(log: log)
-        os_signpost(.begin, log: log, name: name, signpostID: id)
+        os_signpost(.begin, log: log, name: "BLE Packet", signpostID: id, "%{public}s", name)
         return id
     }
 
     func endBLEPacketInterval(name: String, id: OSSignpostID) {
-        os_signpost(.end, log: log, name: name, signpostID: id)
+        os_signpost(.end, log: log, name: "BLE Packet", signpostID: id, "%{public}s", name)
     }
 
     func beginSQLiteTransaction() -> OSSignpostID {
