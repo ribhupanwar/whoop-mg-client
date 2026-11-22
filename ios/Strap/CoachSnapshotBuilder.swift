@@ -40,7 +40,8 @@ struct CoachBiometricSnapshotBuilder {
         sections.append(todayLines.joined(separator: "\n"))
         
         // 2. YESTERDAY's Finalized Metrics
-        if let yesterday = sortedDays.suffix(2).first, yesterday.dateKey != todayKey {
+        let yesterdayKey = JournalStore.dayKey(for: calendar.date(byAdding: .day, value: -1, to: Date())!, calendar: calendar)
+        if let yesterday = sortedDays.last(where: { $0.dateKey == yesterdayKey }) {
             var yLines = ["• YESTERDAY (\(yesterday.dateKey)):"]
             if let yStrain = yesterday.strain {
                 yLines.append("  - Final Day Strain: \(String(format: "%.1f", yStrain))")
