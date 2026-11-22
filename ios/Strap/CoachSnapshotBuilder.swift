@@ -50,7 +50,9 @@ struct CoachBiometricSnapshotBuilder {
             if let yStrain = yesterday.strain {
                 yLines.append("  - Final Day Strain: \(String(format: "%.1f", yStrain))")
             }
-            yLines.append("  - Sleep Duration: \(String(format: "%.1f", yesterday.sleepHours)) hrs")
+            if let duration = yesterday.reliableSleepHours {
+                yLines.append("  - Sleep Duration: \(String(format: "%.1f", duration)) hrs")
+            }
             if let yRHR = yesterday.restingHR {
                 yLines.append("  - Resting HR: \(String(format: "%.0f bpm", yRHR))")
             }
@@ -87,7 +89,13 @@ struct CoachBiometricSnapshotBuilder {
         // 4. RECENT WORKOUTS
         var workoutLines = ["• RECENT WORKOUTS:"]
         var renderedWorkouts = 0
-        for w in detectedActivities.sorted(by: { $0.startUnix > $1.startUnix }).prefix(4) {
+        let nowUnix = now.timeIntervalSince1970
+        let earliestWorkout = calendar.date(byAdding: .day, value: -7, to: calendar.startOfDay(for: now))?
+            .timeIntervalSince1970 ?? nowUnix
+        let recentDetected = detectedActivities.filter {
+            Double($0.startUnix) >= earliestWorkout && Double($0.startUnix) <= nowUnix
+        }.sorted { $0.startUnix > $1.startUnix }
+        for w in recentDetected.prefix(4) {
             let dur = Int(round(w.minutes))
             let s = w.strain.map { String(format: "Strain %.1f", $0) } ?? "No strain"
             let hr = w.meanHR.map { String(format: "Avg HR %.0f bpm", $0) } ?? ""
@@ -95,7 +103,9 @@ struct CoachBiometricSnapshotBuilder {
             workoutLines.append("  - \(w.kind.capitalized): \(dur) min (\(details))")
             renderedWorkouts += 1
         }
-        for m in manualActivities.prefix(max(0, 4 - renderedWorkouts)) {
+        let recentManual = manualActivities.filter { $0.dateKey >= historyStartKey && $0.dateKey <= todayKey }
+            .sorted { $0.dateKey > $1.dateKey }
+        for m in recentManual.prefix(max(0, 4 - renderedWorkouts)) {
             let label = m.name.isEmpty ? m.kind.label : m.name
             workoutLines.append("  - \(label): \(m.minutes) min (Manual log)")
             renderedWorkouts += 1

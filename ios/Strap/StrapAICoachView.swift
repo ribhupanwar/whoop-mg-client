@@ -342,7 +342,14 @@ struct StrapAICoachView: View {
                 try Task.checkCancellation()
                 // Search is opt-in and receives only the current question.
                 var evidence: String?
-                if useLiveSearch { evidence = try await CoachWebSearch.search(prompt) }
+                if useLiveSearch {
+                    do {
+                        evidence = try await CoachWebSearch.search(prompt)
+                    } catch {
+                        try Task.checkCancellation()
+                        notice = "Web search was unavailable. Coach will answer without search results."
+                    }
+                }
                 let response: String
                 if engine == "Gemini Flash" {
                     response = try await CoachGemini.answer(

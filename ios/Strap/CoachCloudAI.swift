@@ -70,7 +70,8 @@ enum CoachCloudAI {
         let body: [String: Any] = [
             "model": model,
             "temperature": 0.4,
-            "max_tokens": 450,
+            "max_completion_tokens": 2_048,
+            "reasoning_effort": "low",
             "messages": messagesPayload
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)

@@ -62,7 +62,7 @@ enum CoachGemini {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "systemInstruction": ["parts": [["text": instructions]]],
             "contents": contents,
-            "generationConfig": ["temperature": 0.3, "maxOutputTokens": 600]
+            "generationConfig": ["temperature": 0.3, "maxOutputTokens": 800, "thinkingConfig": ["thinkingBudget": 0]]
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
