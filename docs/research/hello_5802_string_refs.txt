@@ -1,0 +1,33 @@
+=== HELLO STRING REFERENCES ===
+
+=== String @ 0x109AAE6A3 ===
+  0x10B4CC260 type=DATA
+
+=== String @ 0x109AAE668 ===
+  0x10B4CC258 type=DATA
+
+=== String @ 0x109ABAFF8 ===
+  0x10B4D8B08 type=DATA
+
+=== String @ 0x109A79FF0 ===
+  0x10B396A00 type=DATA
+
+=== String @ 0x109781892 ===
+  0x10ACA74B8 type=DATA
+
+
+=== KEY STRING SEARCH ===
+
+'helloResponse' NOT FOUND
+
+'helloResponseTask' NOT FOUND
+
+'strap_signature' NOT FOUND
+
+'strapSerial' NOT FOUND
+
+'boardId' NOT FOUND
+
+'lastConnectedStrapSerial' NOT FOUND
+
+'lastConnectedStrapSignature' NOT FOUND
