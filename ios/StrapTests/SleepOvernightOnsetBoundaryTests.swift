@@ -253,8 +253,8 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 0, startMinute: 59,
             elevatedHRMinutes: 44,
-            confirmedSleepMinutes: 75,  // Ensure >=60 min of physiologically confirmed sleep
-            sleepState: 1
+            sleepState: 1,
+            confirmedSleepMinutes: 75  // Ensure >=60 min of physiologically confirmed sleep
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
         XCTAssertEqual(night.startUnix, start + 44 * 60,
@@ -266,8 +266,8 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 14,
-            confirmedSleepMinutes: 50,  // 14 + 50 = 64 min > 60 min minimum
-            sleepState: 1
+            sleepState: 1,
+            confirmedSleepMinutes: 50  // 14 + 50 = 64 min > 60 min minimum
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
         XCTAssertEqual(night.startUnix, start,
@@ -456,8 +456,8 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 23, startMinute: 45,
             elevatedHRMinutes: 44,
-            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
-            sleepState: 1
+            sleepState: 1,
+            confirmedSleepMinutes: 20  // 44 + 20 = 64 min > 60 min minimum
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
         XCTAssertEqual(night.startUnix, start,
@@ -506,8 +506,8 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 20,
-            confirmedSleepMinutes: 45,  // 20 + 45 = 65 min > 60 min minimum
-            sleepState: 1
+            sleepState: 1,
+            confirmedSleepMinutes: 45  // 20 + 45 = 65 min > 60 min minimum
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
         // Should NOT refine because hintStart - start < minimumDelay (30 min)
