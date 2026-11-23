@@ -5,7 +5,7 @@ Verifies:
 2. Record deduplication and out-of-order reassembly
 3. Missing record index gap detection
 4. Hardware RTC rollover and clock-step isolation
-5. RR interval boundary clamping and invalid padding rejection
+5. RR interval bounds and preservation of declared beats despite opaque unused bytes
 6. Contiguous quiet run splitting and non-bridged RMSSD calculation
 7. Real sensor archive provenance verification
 """
@@ -83,14 +83,16 @@ class SensorTruthAndDataIntegrityTests(unittest.TestCase):
         self.assertEqual(rec.sleep_state, 2)
         self.assertAlmostEqual(rec.skin_temp_c, 33.5, places=1)
 
-    def test_rr_invalid_padding_rejected(self):
-        """Verifies non-zero padding after declared RR count rejects intervals."""
-        corrupted = bytearray(self.canonical_v18_bytes)
-        corrupted[15] = 1  # 1 declared RR (offsets 16..18)
-        corrupted[18] = 0xFF  # padding offset 18 must be 0x00
-        rec = decode_v18(bytes(corrupted))
+    def test_rr_nonzero_unused_bytes_preserve_declared_intervals(self):
+        """Non-zero unused RR bytes must not erase a valid declared beat (issue #171)."""
+        sample = bytearray(self.canonical_v18_bytes)
+        sample[15] = 1  # One declared RR at offsets 16..18.
+        sample[18] = 0xFF  # Opaque unused byte, not a declared RR slot.
+        rec = decode_v18(bytes(sample))
         self.assertIsNotNone(rec)
-        self.assertEqual(list(rec.rr_intervals_ms), [], "Non-zero padding must zero out RR intervals")
+        self.assertEqual(list(rec.rr_intervals_ms), [920])
+        # The decoder must not interpret undeclared bytes as additional beats.
+        self.assertEqual(len(rec.rr_intervals_ms), 1)
 
     def test_rr_out_of_range_dropped(self):
         """Verifies RR values outside 200..3000ms are dropped."""
