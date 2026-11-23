@@ -139,6 +139,24 @@ final class HealthspanInputCoverageTests: XCTestCase {
         XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
     }
 
+    func testHistoryStartingBeforeWindowCanStillCoverRecentDays() {
+        let now = Date()
+        let sample = HealthspanObservation(value: 9000, observedDays: 20,
+            firstObserved: now.addingTimeInterval(-90 * 86400),
+            lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: sample], asOf: now)
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+
+    func testHistoryEntirelyBeforeWindowIsMissing() {
+        let now = Date()
+        let sample = HealthspanObservation(value: 9000, observedDays: 20,
+            firstObserved: now.addingTimeInterval(-90 * 86400),
+            lastObserved: now.addingTimeInterval(-40 * 86400))
+        let coverage = HealthspanInputCoverage(observations: [.steps: sample], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+
     func testNinePublishedContributorsAreDistinct() {
         XCTAssertEqual(Set(HealthspanContributor.allCases).count, 9)
     }
