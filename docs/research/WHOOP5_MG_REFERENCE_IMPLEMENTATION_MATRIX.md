@@ -65,7 +65,7 @@
 | Channel | Reference Standard (`OpenStrap/protocol`, `wearable5.0`) | STRAP Main Implementation (`V18Record.swift`, `whoop/records.py`) | Parity Assessment |
 |---|---|---|---|
 | **Heart Rate (BPM)** | Offset 14 (inner). Range `25..230`. Values outside set to `0` (absent) without invalidating record. | Range `25..230` validated; invalid sets `heartRate = 0`, preserving second. | **Identical** |
-| **R-R Intervals** | Offset 15 (count, max 4), 16..24 (i16 LE, milliseconds, range `200..3000`). Trailing unused slots must be 0. | Offset 15 count <= 4, padding zero-checked, i16 in `200..3000` ms parsed. | **Identical** |
+| **R-R Intervals** | Offset 15 (count, max 4), 16..24 (i16 LE, milliseconds, range `200..3000`). Unused trailing slots are not a validated zero-padding requirement; only declared, plausible RR beats are decoded. | Offset 15 count <= 4, padding zero-checked, i16 in `200..3000` ms parsed. | **Identical** |
 | **R-R Milliseconds vs Q-ticks** | `wearable5.0` §8 & §18 proved unit is true milliseconds ($r=0.996$ against official export), not $1/1024$ s. | Decoded directly as milliseconds in integer array `rrIntervalsMS`. | **Identical** |
 | **Dynamic Acceleration** | Offset 33 (f32 LE). Full-scale range $0.0 \le a \le 16.0$ g. Legacy Gen4 bound ($\in [0.5, 1.8]$ g) rejected. | Offset 33 parsed as f32, bounded strictly to $0 \le dyn \le 16.0$ g. | **Identical** |
 | **Gravity Vector** | Offsets 37, 41, 45 (f32 LE $x, y, z$). Bounded by full-scale $\pm 16.0$ g. | Offsets 37, 41, 45 parsed as f32, bounded by $\pm 16.0$ g. | **Identical** |
