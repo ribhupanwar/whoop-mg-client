@@ -44,6 +44,13 @@ class V18DeclaredRRTests(unittest.TestCase):
         result = decode_v18(self.sample(5, (800, 820)))
         self.assertEqual(result.rr_intervals_ms, [])
 
+    def test_crc_corruption_is_rejected_before_rr_decode(self):
+        record = self.sample(1, (800,), {18: 0xAA})
+        frame = bytearray(build_frame(record))
+        self.assertEqual(decode_v18(parse_frame(bytes(frame))).rr_intervals_ms, [800])
+        frame[8 + 16] ^= 0x01
+        self.assertIsNone(parse_frame(bytes(frame)))
+
     def test_truncated_v18_is_rejected(self):
         self.assertIsNone(decode_v18(self.sample()[:60]))
 
