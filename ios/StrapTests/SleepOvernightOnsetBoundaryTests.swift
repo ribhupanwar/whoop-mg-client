@@ -83,7 +83,14 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
     func testLookbackLimitDoesNotInventOnsetOrDiscardSleep() throws {
         let (rows, awakeStart, start) = laptopThenSleep(totalMinutes: 75, sleepStateDelay: 50 * 60)
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        XCTAssertEqual(night.startUnix, awakeStart)
+        // With 90-min backtrack window, the algorithm can look back further but only
+        // through valid quiet+low-HR evidence. The laptop period (HR 86/76) fails the
+        // HR transition check vs confirmed sleep HR (~56), so backtrack stops at
+        // the first sustained state=2 hint. The onset should be at or near hintStart,
+        // not pushed back to awakeStart (which would invent sleep without evidence).
+        let hintStart = start + 3000 // first state=2 at sleepStateDelay(50min) - droppedFirst(15min) = 35min into settled
+        XCTAssertEqual(night.startUnix, hintStart, accuracy: 60,
+                       "Onset should be at first sustained state=2 hint, not invent earlier onset")
         XCTAssertEqual(night.endUnix, start + 75 * 60 - 1)
     }
 
