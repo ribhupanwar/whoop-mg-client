@@ -88,6 +88,7 @@ struct HomeView: View {
                     .rotationEffect(.degrees(angle))
 
                 WhoopWGlyph(color: indicatorColor)
+                    .equatable()
                     .accessibilityHidden(true)
             }
             .frame(width: HomeRefreshConstants.diameter, height: HomeRefreshConstants.diameter)
@@ -365,7 +366,7 @@ struct HomeView: View {
             }.buttonStyle(.plain).accessibilityLabel("Profile")
             NavigationLink(value: Route.dayStreak) {
                 HStack(spacing: 4) {
-                    Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                    Image("health_strain").resizable().aspectRatio(contentMode: .fit).frame(width: 14, height: 14).foregroundStyle(Color.orange)
                     Text(appStreak.formatted()).font(StrapTypography.metric(14, weight: .bold))
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
@@ -418,7 +419,8 @@ struct HomeView: View {
                         .monospacedDigit()
                     WhoopBandBatteryIcon(
                         charge: displayedBattery,
-                        connected: store.band.isConnected
+                        connected: store.band.isConnected,
+                        isCharging: store.band.isCharging
                     )
                 }
             }
@@ -1134,7 +1136,7 @@ struct HomeView: View {
 
                 VStack(spacing: 7) {
                     HStack(spacing: 7) {
-                        Image(systemName: "applewatch")
+                        Image("device_strap_idle").resizable().aspectRatio(contentMode: .fit).frame(width: 20, height: 20)
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
                         Text(demo || nextWake != nil ? CoachFormat.localClock(plan.wakeMinutes) : "—")
@@ -1369,7 +1371,7 @@ struct HomeView: View {
                 Panel { discoveryRow("Understand your health", detail: "Explore recorded measurements and their quality.", icon: "heart.text.square") }
             }.buttonStyle(.plain)
             NavigationLink(value: Route.settings) {
-                Panel { discoveryRow("Your band & data", detail: "Manage history sync, your profile and recorded sources.", icon: "applewatch") }
+                Panel { discoveryRow("Your band & data", detail: "Manage history sync, your profile and recorded sources.", icon: StrapIcon.Device.bandSensor) }
             }.buttonStyle(.plain)
             NavigationLink(value: Route.sleepAnalysis) {
                 Panel { discoveryRow("Explore your sleep data", detail: "Review a night and export its recorded sensor channels.", icon: "moon.stars") }
@@ -1488,6 +1490,14 @@ enum AppOpenDayTracker {
 private struct WhoopBandBatteryIcon: View {
     let charge: Int?
     let connected: Bool
+    var isCharging: Bool = false
+
+    private var strokeColor: Color {
+        if let charge = charge, charge < 20, !isCharging {
+            return Color.appWarn
+        }
+        return Color.appFG
+    }
 
     var body: some View {
         // Traced from the user's WHOOP battery reference. The right shoulder
@@ -1507,7 +1517,7 @@ private struct WhoopBandBatteryIcon: View {
                 p.addCurve(to: CGPoint(x: 19.4, y: 14.0),
                            control1: CGPoint(x: 18.3, y: 26.6), control2: CGPoint(x: 19.4, y: 20.2))
             }
-            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
+            .stroke(strokeColor, style: StrokeStyle(lineWidth: 1.25, lineCap: .round, lineJoin: .round))
 
             Path { p in
                 p.move(to: CGPoint(x: 16.9, y: 1.4))
@@ -1518,7 +1528,21 @@ private struct WhoopBandBatteryIcon: View {
                 p.move(to: CGPoint(x: 3.8, y: 20.6))
                 p.addLine(to: CGPoint(x: 9.6, y: 20.6))
             }
-            .stroke(Color.appFG, style: StrokeStyle(lineWidth: 1.15, lineCap: .round, lineJoin: .round))
+            .stroke(strokeColor, style: StrokeStyle(lineWidth: 1.15, lineCap: .round, lineJoin: .round))
+
+            if isCharging {
+                // Charging lightning bolt indicator centered in cavity
+                Path { p in
+                    p.move(to: CGPoint(x: 8.5, y: 4.0))
+                    p.addLine(to: CGPoint(x: 5.5, y: 11.5))
+                    p.addLine(to: CGPoint(x: 8.5, y: 11.5))
+                    p.addLine(to: CGPoint(x: 6.5, y: 19.0))
+                    p.addLine(to: CGPoint(x: 11.5, y: 10.0))
+                    p.addLine(to: CGPoint(x: 8.5, y: 10.0))
+                    p.closeSubpath()
+                }
+                .fill(Color(hex: 0x24E7A5))
+            }
 
             if connected {
                 Circle()
@@ -1732,7 +1756,7 @@ private struct HomeBandDeviceSettingsView: View {
     private var advancedContent: some View {
         VStack(spacing: 0) {
             HStack(spacing: 24) {
-                metadata("DEVICE ID", value: store.band.serialNumber ?? "UNAVAILABLE", icon: "applewatch")
+                metadata("DEVICE ID", value: store.band.serialNumber ?? "UNAVAILABLE", icon: StrapIcon.Device.bandSensor)
                 metadata("FIRMWARE", value: store.band.firmwareRevision ?? "UNVERIFIED", icon: "cpu")
             }
             .frame(maxWidth: .infinity)
@@ -1874,7 +1898,7 @@ enum HomeRefreshConstants {
     static let titleToRingsGap: CGFloat = 14.0
 }
 
-struct WhoopWGlyph: View {
+struct WhoopWGlyph: View, Equatable {
     var color: Color = Color.appMuted.opacity(0.85)
 
     static let pathPoints: [(start: CGPoint, end: CGPoint)] = [

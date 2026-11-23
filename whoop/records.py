@@ -163,7 +163,11 @@ class V18Sample:
 
     @property
     def wearing(self) -> bool:
-        return self.heart_rate > 0
+        if self.heart_rate <= 0:
+            return False
+        if self.skin_temp_c is not None and self.skin_temp_c < 25.0 and (self.dynamic_accel_g or 0) < 0.005:
+            return False
+        return True
 
 
 def decode_spo2_candidate(raw: int | None) -> tuple[int | None, str | None]:
@@ -205,13 +209,13 @@ def decode_v18(inner: bytes) -> V18Sample | None:
 
     rr: list[int] = []
     declared = inner[15]
+    # Unused slots may contain firmware-specific data. Frame integrity is
+    # checked by the framing layer; decode only declared, plausible RR beats.
     if declared <= MAX_RR_COUNT:
-        padding_valid = all(inner[offset] == 0 for offset in range(16 + 2 * declared, 24))
-        if padding_valid:
-            for i in range(declared):
-                value = _i16(inner, 16 + 2 * i)
-                if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
-                    rr.append(value)
+        for i in range(declared):
+            value = _i16(inner, 16 + 2 * i)
+            if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
+                rr.append(value)
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):

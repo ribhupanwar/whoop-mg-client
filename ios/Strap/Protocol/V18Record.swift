@@ -52,15 +52,25 @@ struct V18Sample: Equatable, Codable {
     let psnrA: Int?
 
     var unix: Int { Int(header.unix) }
-    var wearing: Bool { heartRate > 0 }
+    var wearing: Bool {
+        if heartRate <= 0 { return false }
+        // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness
+        if let temp = skinTempC, temp < 25.0, (dynamicAccelG ?? 0) < 0.005 {
+            return false
+        }
+        return true
+    }
+    var wristContactState: WristContactState {
+        wearing ? .onWrist : .offWrist
+    }
 }
 
 /// Stable choice when replayed history contains multiple records in one second.
 /// Preserve a usable HR value before preferring richer auxiliary channels.
 enum HistoricalRecordSelection {
     static func prefers(_ candidate: V18Sample, over current: V18Sample) -> Bool {
-        let candidateHRValid = (35...220).contains(candidate.heartRate)
-        let currentHRValid = (35...220).contains(current.heartRate)
+        let candidateHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(candidate.heartRate)
+        let currentHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(current.heartRate)
         if candidateHRValid != currentHRValid { return candidateHRValid }
         if candidate.rrIntervalsMS.count != current.rrIntervalsMS.count {
             return candidate.rrIntervalsMS.count > current.rrIntervalsMS.count
@@ -113,20 +123,15 @@ enum V18Decoder {
 
         var rr: [Int] = []
         let declared = Int(inner[15])
+        // Only the declared RR slots are beats. Unused trailing bytes are not
+        // independently verified as zero padding on every firmware revision.
+        // Frame checksums are validated by Gen5Frame before this decoder runs;
+        // do not discard valid declared beats because of opaque unused bytes.
         if declared <= maxRRCount {
-            var paddingValid = true
-            for paddingOffset in (16 + 2 * declared)..<24 {
-                if inner[paddingOffset] != 0 {
-                    paddingValid = false
-                    break
-                }
-            }
-            if paddingValid {
-                for index in 0..<declared {
-                    if let value = i16(inner, 16 + 2 * index),
-                       (minRRMS...maxRRMS).contains(value) {
-                        rr.append(value)
-                    }
+            for index in 0..<declared {
+                if let value = i16(inner, 16 + 2 * index),
+                   (minRRMS...maxRRMS).contains(value) {
+                    rr.append(value)
                 }
             }
         }

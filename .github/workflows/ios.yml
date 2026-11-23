@@ -25,8 +25,8 @@ jobs:
   build-test-ipa:
     # Native Liquid Glass requires the iOS 26 SDK (Xcode 26+).
     runs-on: macos-15
-    # Allow slower macOS runner queues, simulator tests and release archiving.
-    # Keep a finite cap to avoid indefinitely billed hung jobs.
+    # Xcode 26 simulator tests and IPA archive can exceed 25 minutes on busy
+    # macOS runners; retain a bounded limit while allowing packaging to finish.
     timeout-minutes: 45
     env:
       HOMEBREW_NO_AUTO_UPDATE: 1

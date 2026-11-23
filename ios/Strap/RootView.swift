@@ -18,7 +18,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .humans: return "person.2.fill"
         case .train: return "dumbbell.fill"
         case .plan: return "calendar"
-        case .more: return "line.3.horizontal"
+        case .more: return StrapIcon.Navigation.moreSelected
         }
     }
 
@@ -29,7 +29,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .humans: return "person.2"
         case .train: return "dumbbell"
         case .plan: return "calendar"
-        case .more: return "line.3.horizontal"
+        case .more: return StrapIcon.Navigation.more
         }
     }
 }
@@ -50,6 +50,7 @@ enum Route: Hashable {
     case dayStreak
     case dataQuality
     case healthspan
+    case iconGallery
     case metricHistory(DetailMetric)
 }
 
@@ -108,16 +109,11 @@ struct RootView: View {
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
         .sheet(isPresented: $showPlan) { NavigationStack { PlanView().strapDestinations() }.environmentObject(store) }
         .sheet(isPresented: $showCoach) {
-            if #available(iOS 26.0, *) {
-                StrapAICoachView()
-                    .environmentObject(store)
-                    .presentationDetents([.fraction(0.72), .large])
-                    .presentationDragIndicator(.hidden)
-                    .presentationCornerRadius(25)
-            } else {
-                Text("STRAP Coach requires iOS 26 or later.")
-                    .padding()
-            }
+            StrapAICoachView()
+                .environmentObject(store)
+                .presentationDetents([.fraction(0.72), .large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(25)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
@@ -142,6 +138,7 @@ struct RootView: View {
             else if args.contains("--preview-humans") { tab = .humans }
             else if args.contains("--preview-train") { showPlan = true }
             else if args.contains("--preview-plan") { showPlan = true }
+            else if args.contains("--preview-icons") { homePath = [.iconGallery] }
             else if args.contains("--preview-more") { tab = .more }
             #endif
         }
@@ -207,7 +204,7 @@ struct RootView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("STRAP AI Coach")
-            .accessibilityHint("Open the private on-device fitness coach")
+            .accessibilityHint("Open coaching chat and model settings")
             .accessibilityIdentifier("nav.aiCoach")
         }
         .padding(.horizontal, 10)
@@ -264,6 +261,7 @@ extension View {
             case .dayStreak: DayStreakView()
             case .dataQuality: DataQualityView()
             case .healthspan: HealthspanView()
+            case .iconGallery: IconGalleryView()
             case .metricHistory(let metric):
                 MetricHistoryView(metric: metric)
             }

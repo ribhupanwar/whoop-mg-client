@@ -294,15 +294,44 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [700, 710, 720, 730])
     }
 
-    func testRRNonZeroPaddingRejectsIntervals() {
+    func testRRNonZeroUnusedSlotsPreserveDeclaredBeats() {
         var inner = bytes(realV18Hex)
         inner[15] = 2
         inner[16] = 0x20
         inner[17] = 0x03  // 800
         inner[18] = 0x34
         inner[19] = 0x03  // 820
-        inner[22] = 0xAA  // Non-zero padding byte in tail (bytes 20..<24)
-        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [], "Non-zero padding byte must invalidate RR buffer")
+        inner[22] = 0xAA  // Opaque unused byte, not a declared beat
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800, 820])
+    }
+
+    func testRRSingleDeclaredBeatSurvivesNonZeroUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 1
+        inner[16] = 0x20
+        inner[17] = 0x03  // 800
+        inner[18] = 0xFF
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
+    }
+
+    func testRRZeroDeclaredBeatsIgnoreUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 0
+        inner[16] = 0x20
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [])
+    }
+
+    func testRRInvalidDeclaredBeatDoesNotDiscardValidNeighbor() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 2
+        inner[16] = 0x64
+        inner[17] = 0x00  // 100ms, implausible
+        inner[18] = 0x20
+        inner[19] = 0x03  // 800ms, plausible
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
     }
 
     func testWrongVersionRejected() {
@@ -400,6 +429,64 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample?.psnrA, -128)
         XCTAssertEqual(sample?.rrIntervalsMS, [800])
         XCTAssertEqual(sample?.heartRate, 94)
+    }
+
+    func testHistoricalRecordSelectionPrefersValidHR() {
+        let baseHeader = BandRecordHeader(version: 18, flags: 0, recordIndex: 100, unix: 1700000000, subsecQ15: 0)
+        let sampleBradycardia = V18Sample(
+            header: baseHeader,
+            heartRate: 28, // Valid HR within 25...230
+            rrIntervalsMS: [],
+            dynamicAccelG: nil,
+            gravityXG: nil,
+            gravityYG: nil,
+            gravityZG: nil,
+            stepCounter: nil,
+            stepCadence: nil,
+            activityClass: nil,
+            skinTempC: nil,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        let sampleZeroHR = V18Sample(
+            header: baseHeader,
+            heartRate: 0, // Invalid/absent HR
+            rrIntervalsMS: [800],
+            dynamicAccelG: 0.05,
+            gravityXG: nil,
+            gravityYG: nil,
+            gravityZG: nil,
+            stepCounter: nil,
+            stepCadence: nil,
+            activityClass: nil,
+            skinTempC: nil,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+
+        // Valid resting bradycardia HR (28 bpm) is preferred over zero HR
+        XCTAssertTrue(HistoricalRecordSelection.prefers(sampleBradycardia, over: sampleZeroHR))
+        XCTAssertFalse(HistoricalRecordSelection.prefers(sampleZeroHR, over: sampleBradycardia))
     }
 }
 
