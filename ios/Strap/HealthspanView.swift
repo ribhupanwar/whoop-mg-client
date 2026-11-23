@@ -396,8 +396,8 @@ private struct HealthspanMorphShape: Shape {
                 + 0.036 * sin(5.0 * theta - phase * 0.17 + 1.2)
                 + 0.018 * sin(8.0 * theta + phase * 0.13 + 0.7)
             let point = CGPoint(
-                x: center.x + radius * wobble * cos(theta),
-                y: center.y + radius * wobble * sin(theta)
+                x: center.x + radius * CGFloat(wobble * cos(theta)),
+                y: center.y + radius * CGFloat(wobble * sin(theta))
             )
             if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
         }
