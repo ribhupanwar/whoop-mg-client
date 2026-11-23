@@ -40,6 +40,7 @@
 - [x] **OpenStrap Edge UX & Backup:** Evaluated scheduled local rolling backups (PR #146) and activity icon catalogs (PR #149); established non-duplication barriers with active PRs.
 - [x] **Safety & licensing:** Verified PolyForm Noncommercial and AGPL boundaries; confirmed strict prohibition on destructive commands (`FORCE_TRIM` 25, `REBOOT_STRAP` 29, `POWER_CYCLE_STRAP` 32, `SET_READ_POINTER` 33).
 - [x] **Evidence gate & test plan:** Delivered formal regression architecture, golden vectors, and hardware-in-the-loop gates in `docs/research/STRAP_SYNC_AND_SENSOR_TEST_PLAN.md`. Aligned `HistoricalRecordSelection` HR bounds to `25...230` in `V18Record.swift`.
+- [x] **WHOOP 5.80.2 Complete Icon Forensics & Mapping Matrix:** Decoded 40 asset catalogs across `Whoop.app` and modular SPM bundles (768 first-party assets cataloged). Proved binary architecture of `ActivitiesManager` dynamic icon pipeline (`getActivityIcon`). Confirmed 100% SF Symbol coverage across all 272 WHOOP sports in `ActivityStore.swift` and `ActivityIconRegistryTests.swift`. Cataloged in `docs/research/WHOOP_ICON_INVENTORY.md` and `docs/research/WHOOP_TO_STRAP_ICON_MAPPING.csv`.
 
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
