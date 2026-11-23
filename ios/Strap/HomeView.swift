@@ -1902,9 +1902,9 @@ struct WhoopWGlyph: View, Equatable {
     var color: Color = Color.appMuted.opacity(0.85)
 
     static let pathPoints: [(start: CGPoint, end: CGPoint)] = [
-        (start: CGPoint(x: 1.0, y: 0.5), end: CGPoint(x: 3.5, y: 8.6)),
-        (start: CGPoint(x: 7.0, y: 0.5), end: CGPoint(x: 3.5, y: 13.5)),
-        (start: CGPoint(x: 10.5, y: 5.5), end: CGPoint(x: 12.8, y: 13.5))
+        (start: CGPoint(x: 1.2, y: 0.4), end: CGPoint(x: 3.4, y: 8.2)),
+        (start: CGPoint(x: 9.4, y: 0.4), end: CGPoint(x: 5.1, y: 13.8)),
+        (start: CGPoint(x: 10.8, y: 5.6), end: CGPoint(x: 13.6, y: 11.2))
     ]
 
     var body: some View {
