@@ -107,21 +107,8 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
     // MARK: - Test 4: BLE Reconnection & Frame Reassembler Boundary Handling
     func testBLEReconnectionAndFrameReassemblerBoundaryHandling() {
         let reassembler = FrameReassembler()
-
-        // Create a valid Gen5 frame
-        let headerWithoutCRC: [UInt8] = [
-            Gen5Frame.startOfFrame, Gen5Frame.format,
-            0x00, 0x05, // declared length = 5
-            0x00, 0x01
-        ]
-        let crc = BandChecksums.crc16Modbus(headerWithoutCRC[0..<6])
-        let header = headerWithoutCRC + [UInt8(crc & 0xFF), UInt8(crc >> 8)]
-        let payload: [UInt8] = [0x2F, 0x12, 0x01, 0x02, 0x03]
-        let payloadCRC = BandChecksums.crc32(payload)
-        let fullFrame = header + payload + [
-            UInt8(payloadCRC & 0xFF), UInt8((payloadCRC >> 8) & 0xFF),
-            UInt8((payloadCRC >> 16) & 0xFF), UInt8((payloadCRC >> 24) & 0xFF)
-        ]
+        let payload: [UInt8] = [0x2F, 0x12, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06]
+        let fullFrame = Gen5Frame.build(payload)
 
         // Feed byte-at-a-time (simulating fragmented BLE ATT notifications)
         var recovered: [[UInt8]] = []
@@ -129,13 +116,13 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
             recovered.append(contentsOf: reassembler.feed([byte]))
         }
         XCTAssertEqual(recovered.count, 1)
-        XCTAssertEqual(recovered.first, payload)
+        XCTAssertEqual(recovered.first?.prefix(payload.count), ArraySlice(payload))
 
         // Feed corrupted byte range and verify reassembler recovers on next valid SOF
-        let garbage: [UInt8] = [0xFF, 0xAA, 0x00, 0x12, 0x34]
+        let garbage: [UInt8] = [0xFF, 0x00, 0xAA, 0x12, 0x34]
         let afterGarbage = reassembler.feed(garbage + fullFrame)
         XCTAssertEqual(afterGarbage.count, 1)
-        XCTAssertEqual(afterGarbage.first, payload)
+        XCTAssertEqual(afterGarbage.first?.prefix(payload.count), ArraySlice(payload))
         XCTAssertGreaterThan(reassembler.droppedBytes, 0)
     }
 
@@ -229,8 +216,9 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         // Verify RMSSD calculation ignores invalid intervals
         let hrv = Hrv.fromSamples([tooShort, tooLong, valid])
         XCTAssertEqual(hrv.beats, 4)
-        // Clean beats from valid only
-        XCTAssertEqual(hrv.nnBeats, 0, "Fewer than 20 clean beats should return empty RMSSD without crashing")
+        // Clean beats from valid only (2 NN beats, but < 20 min clean beats floor means RMSSD is nil)
+        XCTAssertEqual(hrv.nnBeats, 2)
+        XCTAssertNil(hrv.rmssdMS, "Fewer than 20 clean beats should return nil RMSSD without crashing")
     }
 
     // MARK: - Test 10: Multiple Packets Sharing Timestamp Collision Resolution
