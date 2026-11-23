@@ -4,102 +4,102 @@ import SwiftUI
 ///
 /// Provides a unified, high-fidelity iconography system based on the WHOOP 5.80.2 forensic inventory.
 /// Maps all supported domain concepts to licensed, accessible SF Symbols and clean-room vector artwork.
-public enum StrapIcon {
+enum StrapIcon {
 
     // MARK: - Health & Biometric Metrics
-    public enum Metric {
-        public static let heartRate = "heart.fill"
-        public static let restingHeartRate = "heart"
-        public static let hrv = "waveform.path.ecg"
-        public static let respiration = "lungs.fill"
+    enum Metric {
+        static let heartRate = "heart.fill"
+        static let restingHeartRate = "heart"
+        static let hrv = "waveform.path.ecg"
+        static let respiration = "lungs.fill"
         /// Accurate blood oxygen saturation badge, avoiding hydration/water droplet confusion.
-        public static let bloodOxygen = "o.circle"
-        public static let skinTemp = "thermometer.medium"
-        public static let recovery = "arrow.triangle.2.circlepath.circle.fill"
-        public static let strain = "flame.fill"
-        public static let stress = "waveform.path"
-        public static let sleep = "moon.fill"
-        public static let nap = "moon.zzz.fill"
-        public static let calories = "flame"
-        public static let steps = "figure.walk"
-        public static let distance = "figure.run"
-        public static let ecg = "waveform.path.ecg.rectangle"
+        static let bloodOxygen = "o.circle"
+        static let skinTemp = "thermometer.medium"
+        static let recovery = "arrow.triangle.2.circlepath.circle.fill"
+        static let strain = "flame.fill"
+        static let stress = "waveform.path"
+        static let sleep = "moon.fill"
+        static let nap = "moon.zzz.fill"
+        static let calories = "flame"
+        static let steps = "figure.walk"
+        static let distance = "figure.run"
+        static let ecg = "waveform.path.ecg.rectangle"
     }
 
     // MARK: - Device & Battery
-    public enum Device {
-        public static let bandHardware = "WhoopBandHardware"
+    enum Device {
+        static let bandHardware = "WhoopBandHardware"
         /// Screenless wrist sensor glyph, replacing mismatched Apple Watch icon.
-        public static let bandSensor = "sensor.fill"
-        public static let bluetoothConnected = "antenna.radiowaves.left.and.right"
-        public static let bluetoothConnecting = "dot.radiowaves.left.and.right"
-        public static let bluetoothDisconnected = "antenna.radiowaves.left.and.right.slash"
-        public static let syncCatchingUp = "arrow.triangle.2.circlepath"
-        public static let syncCaughtUp = "checkmark.circle.fill"
-        public static let hapticAlarm = "alarm.waves.left.and.right"
+        static let bandSensor = "sensor.fill"
+        static let bluetoothConnected = "antenna.radiowaves.left.and.right"
+        static let bluetoothConnecting = "dot.radiowaves.left.and.right"
+        static let bluetoothDisconnected = "antenna.radiowaves.left.and.right.slash"
+        static let syncCatchingUp = "arrow.triangle.2.circlepath"
+        static let syncCaughtUp = "checkmark.circle.fill"
+        static let hapticAlarm = "alarm.waves.left.and.right"
         /// Mechanical wrist vibration impulse glyph, replacing generic audio waveform.
-        public static let vibrationBuzz = "iphone.radiowaves.left.and.right"
-        public static let chargingBolt = "bolt.fill"
-        public static let batteryFull = "battery.100"
-        public static let batteryHalf = "battery.50"
-        public static let batteryLow = "battery.25"
-        public static let batteryCharging = "battery.100.bolt"
+        static let vibrationBuzz = "iphone.radiowaves.left.and.right"
+        static let chargingBolt = "bolt.fill"
+        static let batteryFull = "battery.100"
+        static let batteryHalf = "battery.50"
+        static let batteryLow = "battery.25"
+        static let batteryCharging = "battery.100.bolt"
     }
 
     // MARK: - Navigation & Settings
-    public enum Navigation {
-        public static let home = "house"
-        public static let homeSelected = "house.fill"
-        public static let health = "heart"
-        public static let healthSelected = "heart.fill"
-        public static let community = "person.2"
-        public static let communitySelected = "person.2.fill"
+    enum Navigation {
+        static let home = "house"
+        static let homeSelected = "house.fill"
+        static let health = "heart"
+        static let healthSelected = "heart.fill"
+        static let community = "person.2"
+        static let communitySelected = "person.2.fill"
         /// Segmented hub glyph, replacing three-line drawer hamburger menu.
-        public static let more = "ellipsis.circle"
-        public static let moreSelected = "ellipsis.circle.fill"
-        public static let settings = "gearshape"
-        public static let chevronRight = "chevron.right"
-        public static let chevronLeft = "chevron.left"
-        public static let chevronDown = "chevron.down"
-        public static let chevronUp = "chevron.up"
-        public static let close = "xmark"
-        public static let info = "info.circle"
-        public static let link = "link"
-        public static let externalDrive = "externaldrive"
-        public static let bell = "bell"
-        public static let diagnostics = "wrench.and.screwdriver"
-        public static let trash = "trash"
-        public static let pencil = "pencil"
-        public static let share = "square.and.arrow.up"
-        public static let calendar = "calendar"
-        public static let gallery = "square.grid.3x3.fill"
+        static let more = "ellipsis.circle"
+        static let moreSelected = "ellipsis.circle.fill"
+        static let settings = "gearshape"
+        static let chevronRight = "chevron.right"
+        static let chevronLeft = "chevron.left"
+        static let chevronDown = "chevron.down"
+        static let chevronUp = "chevron.up"
+        static let close = "xmark"
+        static let info = "info.circle"
+        static let link = "link"
+        static let externalDrive = "externaldrive"
+        static let bell = "bell"
+        static let diagnostics = "wrench.and.screwdriver"
+        static let trash = "trash"
+        static let pencil = "pencil"
+        static let share = "square.and.arrow.up"
+        static let calendar = "calendar"
+        static let gallery = "square.grid.3x3.fill"
     }
 
     // MARK: - Charts & States
-    public enum State {
-        public static let checkmark = "checkmark"
-        public static let checkmarkCircle = "checkmark.circle.fill"
-        public static let warning = "exclamationmark.triangle.fill"
-        public static let error = "xmark.circle.fill"
-        public static let trendUp = "arrowtriangle.up.fill"
-        public static let trendDown = "arrowtriangle.down.fill"
-        public static let trendNeutral = "minus"
-        public static let flame = "flame.fill"
-        public static let locked = "lock.fill"
-        public static let unlocked = "lock.open.fill"
+    enum State {
+        static let checkmark = "checkmark"
+        static let checkmarkCircle = "checkmark.circle.fill"
+        static let warning = "exclamationmark.triangle.fill"
+        static let error = "xmark.circle.fill"
+        static let trendUp = "arrowtriangle.up.fill"
+        static let trendDown = "arrowtriangle.down.fill"
+        static let trendNeutral = "minus"
+        static let flame = "flame.fill"
+        static let locked = "lock.fill"
+        static let unlocked = "lock.open.fill"
     }
 }
 
 /// Standardized STRAP Icon view with consistent frame, optical alignment, and accessibility.
-public struct StrapIconView: View {
-    public let systemName: String
-    public var size: CGFloat = 16
-    public var weight: Font.Weight = .medium
-    public var frameWidth: CGFloat = 24
-    public var color: Color = Color.appFG
-    public var accessibilityLabel: String? = nil
+struct StrapIconView: View {
+    let systemName: String
+    var size: CGFloat = 16
+    var weight: Font.Weight = .medium
+    var frameWidth: CGFloat = 24
+    var color: Color = Color.appFG
+    var accessibilityLabel: String? = nil
 
-    public init(
+    init(
         _ systemName: String,
         size: CGFloat = 16,
         weight: Font.Weight = .medium,
@@ -115,7 +115,7 @@ public struct StrapIconView: View {
         self.accessibilityLabel = accessibilityLabel
     }
 
-    public var body: some View {
+    var body: some View {
         Image(systemName: systemName)
             .font(.system(size: size, weight: weight))
             .frame(width: frameWidth)

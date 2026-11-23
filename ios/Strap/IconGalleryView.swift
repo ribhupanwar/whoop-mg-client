@@ -5,7 +5,7 @@ import SwiftUI
 /// Surfaces the complete iconography portfolio across all 137 supported sports,
 /// biometric vitals, battery/charging states, device/BLE connection indicators,
 /// and navigation elements to verify visual consistency without scraping proprietary WHOOP assets.
-public struct IconGalleryView: View {
+struct IconGalleryView: View {
     @State private var selectedCategory: CategoryFilter = .all
     @State private var searchQuery: String = ""
 
@@ -107,7 +107,7 @@ public struct IconGalleryView: View {
         }
     }
 
-    public var body: some View {
+    var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 14) {
                 Text("Icon Gallery & Contact Sheet")
