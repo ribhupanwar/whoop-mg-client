@@ -1,0 +1,31 @@
+=== BINARY INFO ===
+Name: Whoop
+SHA256: A82E252BDF11D1AB45C106F26702D1292E301B3FB6AE82D37E15E9F7CE7871B9
+Size: 209853712
+Architecture: AARCH64/little/64/AppleSilicon
+Image Base: 100000000
+
+=== SELECTOR TABLE AND OBJC_MSGSEND ANALYSIS ===
+
+=== TRACING CODE REFS TO SELECTOR TABLE ENTRY: sendGetHelloPacketWithCompletion: @ 10b4d8b08 ===
+  No code references found (only data refs)
+
+=== TRACING CODE REFS TO SELECTOR TABLE ENTRY: processCommandDidGetHelloPacket: @ 10b4cc260 ===
+  No code references found (only data refs)
+
+=== TRACING CODE REFS TO SELECTOR TABLE ENTRY: processCommandDidGetHelloInfoWithSerial:signature:boardId: @ 10b4cc258 ===
+  No code references found (only data refs)
+
+=== TRACING CODE REFS TO SELECTOR TABLE ENTRY: didCallSendGetHelloPacket: @ 10b396a00 ===
+  No code references found (only data refs)
+
+=== TRACING CODE REFS TO SELECTOR TABLE ENTRY: GetHelloPacket @ 10aca74b8 ===
+  No code references found (only data refs)
+
+=== TRACING CODE REFS TO: FD4B at 10978f2f0 @ 10978f2f0 ===
+  No code references found
+
+=== TRACING CODE REFS TO: B4FD at 1099f51ed @ 1099f51ed ===
+  No code references found
+
+=== SEARCHING FOR objc_msgSend CALLS ===

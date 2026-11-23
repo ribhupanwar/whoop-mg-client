@@ -166,4 +166,78 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(records).isEmpty,
                       "Lying awake with low motion but without HR drop must not be detected as sleep")
     }
+
+    func testAutonomicOnsetGateAdvancesStartWhenHRSettles() {
+        // WHOOP parity: HR must settle ≤ activeMedian + 5 for ≥10 min sustained stillness
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let start = Int(calendar.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 23, minute: 0
+        ))!.timeIntervalSince1970)
+
+        var records: [V18Sample] = []
+        // 30 min active baseline: HR 90, moving (activeMedian ≈ 90)
+        for second in 0..<1800 {
+            records.append(V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80,
+                    recordIndex: UInt32(second), unix: UInt32(start - 1800 + second), subsecQ15: 0),
+                heartRate: 90, rrIntervalsMS: [],
+                dynamicAccelG: 0.3, gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: 0, sleepState: 0,
+                cardiacFlags: nil, hrQualityFlags: nil,
+                spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent,
+                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            ))
+        }
+        // 15 min transition: HR gradually drops from 90 to 60, motion decreases
+        for second in 0..<900 {
+            let progress = Double(second) / 900.0
+            let hr = Int(90 - 30 * progress) // 90 → 60
+            let accel = 0.3 - 0.28 * progress // 0.3 → 0.02
+            records.append(V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80,
+                    recordIndex: UInt32(1800 + second), unix: UInt32(start + second), subsecQ15: 0),
+                heartRate: hr, rrIntervalsMS: [],
+                dynamicAccelG: accel, gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: 0x10, sleepState: 1, // still
+                cardiacFlags: nil, hrQualityFlags: nil,
+                spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent,
+                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            ))
+        }
+        // 60 min confirmed sleep: HR 55, still, band state=2
+        for second in 0..<3600 {
+            records.append(V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80,
+                    recordIndex: UInt32(2700 + second), unix: UInt32(start + 900 + second), subsecQ15: 0),
+                heartRate: 55, rrIntervalsMS: [],
+                dynamicAccelG: 0.01, gravityXG: 0, gravityYG: 0, gravityZG: 1,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: 0x20, sleepState: 2, // sleep
+                cardiacFlags: nil, hrQualityFlags: nil,
+                spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent,
+                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+            ))
+        }
+
+        let periods = SleepDetect.detect(records)
+        XCTAssertFalse(periods.isEmpty)
+        let night = periods[0]
+        // Autonomic gate should advance onset to when HR ≤ activeMedian + 5 (≤95) for 10 min
+        // With activeMedian=90, threshold=95. HR drops below 95 within first few minutes of transition.
+        // The gate should backtrack from band state=2 confirmation (at start+900) to ~start-300
+        // This is a regression test - exact value depends on implementation details
+        XCTAssertLessThanOrEqual(night.startUnix, start,
+                                 "Autonomic onset gate should not delay onset past physiological settling")
+        XCTAssertGreaterThanOrEqual(night.startUnix, start - 1800,
+                                    "Autonomic onset gate should not backtrack more than 30 min")
+    }
 }

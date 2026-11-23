@@ -1,0 +1,64 @@
+=== BINARY INFO ===
+Name: Whoop
+SHA256: A82E252BDF11D1AB45C106F26702D1292E301B3FB6AE82D37E15E9F7CE7871B9
+Size: 209853712
+Architecture: AARCH64/little/64/AppleSilicon
+Image Base: 100000000
+
+=== DISASSEMBLY AND CROSS-REFERENCE TRACE ===
+
+=== References to string at 109abaff8 (109abaff8) ===
+  Data reference from 10b4d8b08 (type: DATA)
+
+=== References to string at 109aae6a3 (109aae6a3) ===
+  Data reference from 10b4cc260 (type: DATA)
+
+=== References to string at 109aae668 (109aae668) ===
+  Data reference from 10b4cc258 (type: DATA)
+
+=== References to string at 109a79ff0 (109a79ff0) ===
+  Data reference from 10b396a00 (type: DATA)
+
+=== References to string at 109781892 (109781892) ===
+  Data reference from 10aca74b8 (type: DATA)
+
+=== References to string at 109a88926 (109a88926) ===
+  Data reference from 10b36ac78 (type: DATA)
+
+=== References to string at 109a88940 (109a88940) ===
+  Data reference from 10b3524c8 (type: DATA)
+
+=== References to string at 109a2c151 (109a2c151) ===
+  Data reference from 10b356eb8 (type: DATA)
+
+=== References to string at 1097b1e0e (1097b1e0e) ===
+  Data reference from 10ad1b6e0 (type: DATA)
+  Data reference from 10ad1b718 (type: DATA)
+
+=== References to string at 1098550e4 (1098550e4) ===
+  Data reference from 10af28510 (type: DATA)
+
+=== References to string at 109a98a40 (109a98a40) ===
+  Data reference from 10b4c9f80 (type: DATA)
+  Data reference from 10b38abe8 (type: DATA)
+  Data reference from 10b345cb0 (type: DATA)
+  Data reference from 10b4640a8 (type: DATA)
+  Data reference from 10b402c00 (type: DATA)
+
+=== References to string at 109a98a60 (109a98a60) ===
+  Data reference from 10b4c9f88 (type: DATA)
+  Data reference from 10b38abf8 (type: DATA)
+  Data reference from 10b345cc0 (type: DATA)
+
+=== References to string at 109a46aad (109a46aad) ===
+  Data reference from 10b4cf798 (type: DATA)
+
+--- FUNCTION: _$ss20TextOutputStreamableP5write2toyqd__z_ts0aB6StreamRd__lFTj @ 10908844c (CoreBluetooth write candidate) ---
+  Address range: 10908844c - 10908844c
+  Size: 1 bytes
+
+
+--- FUNCTION: _$ss22_writeBackMutableSlice_6bounds5sliceyxz_Sny5IndexQzGq_tSMRzSlR_7ElementQy_AGRtzADQy_AERSr0_lF @ 1090887f4 (CoreBluetooth write candidate) ---
+  Address range: 1090887f4 - 1090887f4
+  Size: 1 bytes
+

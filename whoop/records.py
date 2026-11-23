@@ -131,6 +131,10 @@ class V18Sample:
     header: RecordHeader
     heart_rate: int  # 0 means absent / off-skin, not bradycardia
     rr_intervals_ms: list[int] = field(default_factory=list)
+    # True when declared RR count matches parsed count AND all unused padding bytes are zero.
+    # False means padding contained non-zero bytes; RR intervals are preserved for analysis
+    # but should be treated as lower confidence.
+    rr_padding_valid: bool = True
     dynamic_accel_g: float | None = None
     gravity_g: tuple[float, float, float] | None = None
     step_motion_counter: int | None = None
@@ -208,14 +212,17 @@ def decode_v18(inner: bytes) -> V18Sample | None:
     hr = hr_raw if MIN_HR <= hr_raw <= MAX_HR else 0
 
     rr: list[int] = []
+    rr_padding_valid = True
     declared = inner[15]
     if declared <= MAX_RR_COUNT:
-        padding_valid = all(inner[offset] == 0 for offset in range(16 + 2 * declared, 24))
-        if padding_valid:
-            for i in range(declared):
-                value = _i16(inner, 16 + 2 * i)
-                if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
-                    rr.append(value)
+        for offset in range(16 + 2 * declared, 24):
+            if inner[offset] != 0:
+                rr_padding_valid = False
+                break
+        for i in range(declared):
+            value = _i16(inner, 16 + 2 * i)
+            if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
+                rr.append(value)
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
@@ -239,6 +246,7 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         header=header,
         heart_rate=hr,
         rr_intervals_ms=rr,
+        rr_padding_valid=rr_padding_valid,
         dynamic_accel_g=round(dyn, 4) if dyn is not None else None,
         gravity_g=gravity,
         step_motion_counter=_u16(inner, 49),

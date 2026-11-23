@@ -1,0 +1,101 @@
+=== BINARY INFO ===
+Name: Whoop
+SHA256: A82E252BDF11D1AB45C106F26702D1292E301B3FB6AE82D37E15E9F7CE7871B9
+Size: 209853712
+Architecture: AARCH64/little/64/AppleSilicon
+Image Base: 100000000
+
+=== CALL CHAIN ANALYSIS ===
+
+=== TRACING SELECTOR: sendGetHelloPacketWithCompletion: @ 109abaff8 ===
+  Data ref from 10b4d8b08
+
+=== TRACING SELECTOR: processCommandDidGetHelloPacket: @ 109aae6a3 ===
+  Data ref from 10b4cc260
+
+=== TRACING SELECTOR: processCommandDidGetHelloInfoWithSerial:signature:boardId: @ 109aae668 ===
+  Data ref from 10b4cc258
+
+=== TRACING SELECTOR: didCallSendGetHelloPacket: @ 109a79ff0 ===
+  Data ref from 10b396a00
+
+=== TRACING SELECTOR: GetHelloPacket @ 109781892 ===
+  Data ref from 10aca74b8
+
+=== TRACING CALLERS OF: setLastConnectedStrapSignature: @ 1000594b4 ===
+  Function: setLastConnectedStrapSignature: @ 1000594b4
+    LOAD: 1000594e4: ldr x0,[x20, #0x8]
+    LOAD: 1000594e8: adrp x3,0x10b2e4000
+    LOAD: 1000594f4: ldr x0,[x20, #0x8]
+    LOAD: 1000594fc: ldr x0,[sp, #0x8]
+    LOAD: 10005953c: ldr x0,[x20, #0x8]
+    LOAD: 100059540: adrp x3,0x10b2e4000
+    LOAD: 100059550: ldr x0,[x20, #0x8]
+    LOAD: 100059558: adrp x8,0x10b32b000
+    LOAD: 10005955c: ldr x0,[x8, #0xbb0]
+    LOAD: 100059570: adrp x8,0x10ac78000
+    LOAD: 100059578: ldr x2,[x8]
+    LOAD: 10005957c: ldr x0,[sp, #0x8]
+    LOAD: 100059588: ldr x0,[sp, #0x8]
+    LOAD: 1000595cc: ldr x0,[x20, #0x8]
+    LOAD: 1000595d0: adrp x3,0x10b2e4000
+    LOAD: 1000595dc: ldr x0,[x20, #0x8]
+    LOAD: 1000595e4: adrp x8,0x10b507000
+    LOAD: 1000595ec: ldr x2,[x20, #0x88]
+    LOAD: 1000595f4: ldr x0,[sp, #0x8]
+    LOAD: 100059628: ldr x8,[x20, #0x90]!
+    LOAD: 100059634: ldr x0,[sp, #0x8]
+    LOAD: 100059640: ldr x0,[x20]
+    LOAD: 100059648: ldr x0,[sp, #0x8]
+    LOAD: 100059660: ldr x0,[sp, #0x8]
+    LOAD: 100059698: ldr x2,[x19, #0x48]
+    LOAD: 1000596a0: ldr x0,[x19, #0x8]
+    LOAD: 1000596a4: adrp x3,0x10b2e4000
+    LOAD: 1000596b0: ldr x0,[sp, #0x8]
+    LOAD: 1000596b8: ldr x8,[x19, #0x48]
+    LOAD: 1000596c4: ldr x0,[x19, #0x8]
+    LOAD: 1000596c8: adrp x2,0x10b2e4000
+    LOAD: 1000596d4: ldr x8,[x19, #0x48]
+    LOAD: 1000596e0: adrp x8,0x10b32b000
+    LOAD: 1000596e4: ldr x0,[x8, #0xbb0]
+    LOAD: 1000596f4: adrp x8,0x10ac78000
+    LOAD: 1000596fc: ldr x2,[x8]
+
+=== TRACING CALLERS OF: lastConnectedStrapSignature @ 10005a6c0 ===
+  Function: lastConnectedStrapSignature @ 10005a6c0
+    LOAD: 10005a6c0: ldr x0,[x0, #0x78]
+    LOAD: 10005a6c8: ldr x0,[x0, #0x80]
+    LOAD: 10005a6d0: ldr x0,[x0, #0x88]
+    LOAD: 10005a6d8: ldr x0,[x0, #0x90]
+    LOAD: 10005a6e0: ldr x0,[x0, #0x98]
+    LOAD: 10005a6e8: ldr x0,[x0, #0xa0]
+    LOAD: 10005a6f0: ldr x0,[x0, #0xa8]
+    LOAD: 10005a6f8: ldr x0,[x0, #0xb0]
+    LOAD: 10005a710: ldr x0,[x0, #0xb8]
+    LOAD: 10005a718: ldr x0,[x0, #0xc0]
+    LOAD: 10005a81c: adrp x8,0x10b309000
+    LOAD: 10005a820: ldr x8,[x8, #0x520]
+    LOAD: 10005a828: adrp x8,0x10b4c7000
+    LOAD: 10005a82c: ldr x1,[x8, #0xfa0]
+    LOAD: 10005a840: adrp x8,0x10b333000
+    LOAD: 10005a844: ldr x0,[x8, #0xb88]
+    LOAD: 10005a850: ldr x8,[x19, #0x8]
+    LOAD: 10005a898: adrp x8,0x10b331000
+    LOAD: 10005a89c: ldr x8,[x8, #0xf60]
+    LOAD: 10005a8a0: ldr x8,[x8]
+    LOAD: 10005a8a8: ldr x19,[x0, #0x8]
+    LOAD: 10005a8ac: adrp x8,0x10b2e4000
+    LOAD: 10005a8b4: adrp x9,0x10b309000
+    LOAD: 10005a8bc: adrp x10,0x10b2e4000
+    LOAD: 10005a8c8: adrp x8,0x10b30a000
+    LOAD: 10005a8d4: adrp x8,0x10b2e4000
+    LOAD: 10005a8e4: adrp x8,0x10b333000
+    LOAD: 10005a8e8: ldr x0,[x8, #0xaf0]
+
+=== SEARCHING FOR CoreBluetooth writeValue CALLS ===
+
+=== SEARCHING FOR CLIENT_HELLO OPCODE 0x91 ===
+
+=== SEARCHING FOR FD4B UUID ===
+  Pattern 'FD4B' found at 10978f2f0
+  Pattern 'B4FD' found at 1099f51ed

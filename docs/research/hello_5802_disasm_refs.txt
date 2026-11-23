@@ -1,0 +1,37 @@
+=== HELLO SELECTOR REFERENCE DISASSEMBLY ===
+
+=== Reference at 0x1091229D4 ===
+  Estimated function start: 0x1091227D4
+
+=== Reference at 0x10910D3E4 ===
+  Estimated function start: 0x10910D1E4
+
+=== Reference at 0x109111D58 ===
+  Estimated function start: 0x109111B58
+
+=== Reference at 0x109122A24 ===
+  Estimated function start: 0x109122824
+
+=== Reference at 0x1091229E0 ===
+  Estimated function start: 0x1091227E0
+
+=== Reference at 0x109111D64 ===
+  Estimated function start: 0x109111B64
+
+=== Reference at 0x109122A30 ===
+  Estimated function start: 0x109122830
+
+=== Reference at 0x109124DA0 ===
+  Estimated function start: 0x109124BA0
+
+=== Reference at 0x1090E4914 ===
+  Estimated function start: 0x1090E4714
+
+=== Reference at 0x109124E30 ===
+  Estimated function start: 0x109124C30
+
+=== Reference at 0x1090E03CC ===
+  Estimated function start: 0x1090E01CC
+
+=== Reference at 0x109124EC0 ===
+  Estimated function start: 0x109124CC0

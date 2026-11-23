@@ -1,0 +1,45 @@
+=== BINARY INFO ===
+Name: Whoop
+SHA256: A82E252BDF11D1AB45C106F26702D1292E301B3FB6AE82D37E15E9F7CE7871B9
+Size: 209853712
+Architecture: AARCH64/little/64/AppleSilicon
+Image Base: 100000000
+
+=== CLASS METADATA AND SIGNATURE VERIFICATION ANALYSIS ===
+
+=== ANALYZING CLASS: WHPBLEStrapManager ===
+  Class name 'WHPBLEStrapManager' NOT found
+
+=== ANALYZING CLASS: PuffinDeviceSerialProvider ===
+  Class name 'PuffinDeviceSerialProvider' NOT found
+
+=== ANALYZING CLASS: WhoopDeviceAPIs ===
+  Class name 'WhoopDeviceAPIs' NOT found
+
+=== ANALYZING CLASS: BluetoothPairingConnectingViewModel ===
+  Class name 'BluetoothPairingConnectingViewModel' NOT found
+
+=== ANALYZING CLASS: BluetoothPairingFeature ===
+  Class name 'BluetoothPairingFeature' NOT found
+
+=== ANALYZING CLASS: WHPBand ===
+  Class name 'WHPBand' NOT found
+
+=== ANALYZING CLASS: WHPStrap ===
+  Class name 'WHPStrap' NOT found
+
+=== SEARCHING SWIFT METADATA FOR HELLO ===
+
+=== TRACING SIGNATURE VERIFICATION PATH ===
+
+--- CRYPTO FUNCTION: _SecKeyCreateSignature @ 10908a798 ---
+
+--- CRYPTO FUNCTION: _SecKeyVerifySignature @ 10908a7b0 ---
+
+  Signature term 'strap_signature' found at 1097b1e0e
+
+  Signature term 'signature' found at 1091b8644
+
+  Signature term 'verify' found at 1097b8010
+
+  Signature term 'SecKeyVerify' found at 10c13d5fb

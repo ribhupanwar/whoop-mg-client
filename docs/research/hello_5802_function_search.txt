@@ -1,0 +1,112 @@
+=== BINARY INFO ===
+Name: Whoop
+SHA256: A82E252BDF11D1AB45C106F26702D1292E301B3FB6AE82D37E15E9F7CE7871B9
+Size: 209853712
+Architecture: AARCH64/little/64/AppleSilicon
+Image Base: 100000000
+
+=== FUNCTION SEARCH RESULTS ===
+FUNCTION: name=_$sSS18_fromUTF8RepairingySS6result_Sb11repairsMadetSRys5UInt8VGFZ addr=109085c20
+
+void __sSS18_fromUTF8RepairingySS6result_Sb11repairsMadetSRys5UInt8VGFZ(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x000109085c28. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR___sSS18_fromUTF8RepairingySS6result_Sb11repairsMadetSRys5UInt8VGFZ_10b335008)();
+  return;
+}
+
+
+
+FUNCTION: name=_$ss13KeyValuePairsV8endIndexSivg addr=109087cd8
+
+void __ss13KeyValuePairsV8endIndexSivg(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x000109087ce0. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR___ss13KeyValuePairsV8endIndexSivg_10b3360f8)();
+  return;
+}
+
+
+
+FUNCTION: name=_$ss13KeyValuePairsVMa addr=109087ce4
+
+void __ss13KeyValuePairsVMa(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x000109087cec. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR___ss13KeyValuePairsVMa_10b336100)();
+  return;
+}
+
+
+
+FUNCTION: name=_$ss13KeyValuePairsVyx3key_q_5valuetSicig addr=109087cf0
+
+void __ss13KeyValuePairsVyx3key_q_5valuetSicig(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x000109087cf8. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR___ss13KeyValuePairsVyx3key_q_5valuetSicig_10b336110)();
+  return;
+}
+
+
+
+FUNCTION: name=_$ss6MirrorV_8children12displayStyle22ancestorRepresentationABx_s13KeyValuePairsVySSypGAB07DisplayD0OSgAB08AncestorF0OtclufC addr=1090891e4
+
+void __ss6MirrorV_8children12displayStyle22ancestorRepresentationABx_s13KeyValuePairsVySSypGAB07DisplayD0OSgAB08AncestorF0OtclufC
+               (void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x0001090891ec. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)
+    PTR___ss6MirrorV_8children12displayStyle22ancestorRepresentationABx_s13KeyValuePairsVySSypGAB07DisplayD0OSgAB08AncestorF0OtclufC_10b3373c0
+  )();
+  return;
+}
+
+
+
+FUNCTION: name=_CFStreamCreatePairWithSocket addr=1090897b4
+
+void _CFStreamCreatePairWithSocket(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x0001090897bc. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR__CFStreamCreatePairWithSocket_10b333980)();
+  return;
+}
+
+
+
+FUNCTION: name=_SSLHandshake addr=10908a6a8
+
+void _SSLHandshake(void)
+
+{
+                    /* WARNING: Could not recover jumptable at 0x00010908a6b0. Too many branches */
+                    /* WARNING: Treating indirect jump as call */
+  (*(code *)PTR__SSLHandshake_10b32c0c8)();
+  return;
+}
+
+
+
+SYMBOL: name=s_GetHelloPacket_109781892 addr=109781892 type=Label
+
+SYMBOL: name=s_didCallSendGetHelloPacket_109a79ff0 addr=109a79ff0 type=Label
+
+SYMBOL: name=s_processCommandDidGetHelloInfoWit_109aae668 addr=109aae668 type=Label
+
+SYMBOL: name=s_processCommandDidGetHelloPacket:_109aae6a3 addr=109aae6a3 type=Label
+
+SYMBOL: name=s_sendGetHelloPacketWithCompletion_109abaff8 addr=109abaff8 type=Label
+

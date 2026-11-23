@@ -291,10 +291,13 @@ final class ProtocolTests: XCTestCase {
             inner[16 + 2 * i] = UInt8(val & 0xFF)
             inner[17 + 2 * i] = UInt8((val >> 8) & 0xFF)
         }
-        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [700, 710, 720, 730])
+        // Padding bytes 20..<24 remain zero from realV18Hex
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.rrIntervalsMS, [700, 710, 720, 730])
+        XCTAssertTrue(sample?.rrPaddingValid ?? false, "rrPaddingValid must be true when all padding bytes are zero")
     }
 
-    func testRRNonZeroPaddingRejectsIntervals() {
+    func testRRNonZeroPaddingPreservesIntervalsButFlagsInvalid() {
         var inner = bytes(realV18Hex)
         inner[15] = 2
         inner[16] = 0x20
@@ -302,7 +305,9 @@ final class ProtocolTests: XCTestCase {
         inner[18] = 0x34
         inner[19] = 0x03  // 820
         inner[22] = 0xAA  // Non-zero padding byte in tail (bytes 20..<24)
-        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [], "Non-zero padding byte must invalidate RR buffer")
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.rrIntervalsMS, [800, 820], "RR intervals preserved despite non-zero padding")
+        XCTAssertFalse(sample?.rrPaddingValid ?? true, "rrPaddingValid must be false when padding contains non-zero bytes")
     }
 
     func testWrongVersionRejected() {

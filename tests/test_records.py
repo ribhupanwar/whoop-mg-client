@@ -148,15 +148,17 @@ class TestV18(unittest.TestCase):
             good[16 + 2 * i : 18 + 2 * i] = (700 + i * 10).to_bytes(2, "little", signed=True)
         sample = decode_v18(bytes(good))
         self.assertEqual(sample.rr_intervals_ms, [700, 710, 720, 730])
+        self.assertTrue(sample.rr_padding_valid, "rr_padding_valid must be True when all padding bytes are zero")
 
-    def test_rr_nonzero_padding_rejects_intervals(self):
+    def test_rr_nonzero_padding_preserves_intervals_but_flags_invalid(self):
         corrupted = bytearray(REAL_V18)
         corrupted[15] = 2
         corrupted[16:18] = (800).to_bytes(2, "little", signed=True)
         corrupted[18:20] = (820).to_bytes(2, "little", signed=True)
         corrupted[22] = 0xAA  # Non-zero in padding area (bytes 20..<24)
         sample = decode_v18(bytes(corrupted))
-        self.assertEqual(sample.rr_intervals_ms, [], "Non-zero padding bytes must reject corrupted RR block")
+        self.assertEqual(sample.rr_intervals_ms, [800, 820], "RR intervals preserved despite non-zero padding")
+        self.assertFalse(sample.rr_padding_valid, "rr_padding_valid must be False when padding contains non-zero bytes")
 
     def test_rr_count_above_four_is_ignored(self):
         bad = bytearray(REAL_V18)

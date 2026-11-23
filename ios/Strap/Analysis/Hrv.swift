@@ -121,12 +121,21 @@ enum Hrv {
         // Offload may replay a second after reconnect. Count its R-R beats once.
         // Prefer the copy with more beat intervals rather than duplicating data.
         var uniqueBySecond: [Int: V18Sample] = [:]
+        var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
                previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                duplicateCount += 1
+                if !sample.rrIntervalsMS.isEmpty {
+                    // Diagnostic: two records for same second both have RR data
+                    print("[HRV] Duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
+                }
                 continue
             }
             uniqueBySecond[sample.unix] = sample
+        }
+        if duplicateCount > 0 {
+            print("[HRV] Deduplicated \(duplicateCount) duplicate seconds from \(samples.count) input samples")
         }
         let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
@@ -141,12 +150,21 @@ enum Hrv {
         // Match historical processing: count one record per second, keeping
         // the one with the most RR intervals instead of duplicating beats.
         var uniqueBySecond: [Int: LiveSample] = [:]
+        var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
                previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                duplicateCount += 1
+                if !sample.rrIntervalsMS.isEmpty {
+                    // Diagnostic: two records for same second both have RR data
+                    print("[HRV] Live duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
+                }
                 continue
             }
             uniqueBySecond[sample.unix] = sample
+        }
+        if duplicateCount > 0 {
+            print("[HRV] Live deduplicated \(duplicateCount) duplicate seconds from \(samples.count) input samples")
         }
         let runs = contiguousLiveRuns(Array(uniqueBySecond.values))
         return evaluateRuns(runs) { $0.rrIntervalsMS }

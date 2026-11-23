@@ -1,0 +1,437 @@
+{
+  "hello_msgSend_calls": [
+  ],
+  "crypto_callers": {
+    "SecKeyCreateSignature": {"address": "0x10908a798", "callers": [
+    ]},
+    "SecKeyVerifySignature": {"address": "0x10908a7b0", "callers": [
+    ]}
+  },
+  "class_metadata": [
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10913e950",
+      "block": "__const"
+    },
+    {
+      "pattern": "PuffinDeviceSerialProvider",
+      "address": "0x10914d360",
+      "block": "__const"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109158380",
+      "block": "__const"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10915ad50",
+      "block": "__const"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10915bdc0",
+      "block": "__const"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10915c070",
+      "block": "__const"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10915c090",
+      "block": "__const"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x10912b360",
+      "block": "__const"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x10912db10",
+      "block": "__const"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x10912db90",
+      "block": "__const"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10977a325",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10977a481",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10977a4c1",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10977a9e0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x10977ac76",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10978f5e0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10978f6c0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10978f730",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x10978f800",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109790820",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109790cf0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109790f40",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109791040",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109791360",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766bc0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766bf0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766c40",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766c80",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766cc0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766d10",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766d50",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109766d90",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109768cd6",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109783f66",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109783feb",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x10975d065",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x10976e0b0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x10976e0d0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x1097879e0",
+      "block": "__cstring"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x1099ea6bc",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "PuffinDeviceSerialProvider",
+      "address": "0x1099ec18c",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edc86",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edcb6",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edcf6",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edd26",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edd56",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edd96",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099eddd6",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099ede16",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099ede46",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099ede76",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edea6",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099eded6",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x1099edee7",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x1099e77ac",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x1099e5880",
+      "block": "__objc_classname"
+    },
+    {
+      "pattern": "WHPBLEStrapManager",
+      "address": "0x109a4d36f",
+      "block": "__objc_methname"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x109a54110",
+      "block": "__objc_methname"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b14038",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b141d8",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b1440c",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b145e2",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b1478a",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b147b6",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b147fc",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b14e64",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b14fa4",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b15126",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b15196",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b151cc",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b15242",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b1527a",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b152c6",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b1584a",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b16938",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b16986",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b16dfe",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b16e26",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b18a08",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b18a6a",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WhoopDeviceAPIs",
+      "address": "0x109b18b2e",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "BluetoothPairingConnectingViewModel",
+      "address": "0x109b06112",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x109b119eb",
+      "block": "__swift5_typeref"
+    },
+    {
+      "pattern": "PuffinDeviceSerialProvider",
+      "address": "0x10c92de21",
+      "block": "__LINKEDIT"
+    },
+    {
+      "pattern": "WHPStrap",
+      "address": "0x10c81cf42",
+      "block": "__LINKEDIT"
+    }
+  ]
+}

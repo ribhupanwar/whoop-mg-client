@@ -25,6 +25,10 @@ struct V18Sample: Equatable, Codable {
     let header: BandRecordHeader
     let heartRate: Int
     let rrIntervalsMS: [Int]
+    /// True when declared RR count matches parsed count AND all unused padding bytes are zero.
+    /// False means padding contained non-zero bytes; RR intervals are preserved for analysis
+    /// but should be treated as lower confidence.
+    var rrPaddingValid: Bool = true
     let dynamicAccelG: Double?
     let gravityXG: Double?
     let gravityYG: Double?
@@ -122,21 +126,19 @@ enum V18Decoder {
         let hr = (minHR...maxHR).contains(hrRaw) ? hrRaw : 0
 
         var rr: [Int] = []
+        var rrPaddingValid = true
         let declared = Int(inner[15])
         if declared <= maxRRCount {
-            var paddingValid = true
             for paddingOffset in (16 + 2 * declared)..<24 {
                 if inner[paddingOffset] != 0 {
-                    paddingValid = false
+                    rrPaddingValid = false
                     break
                 }
             }
-            if paddingValid {
-                for index in 0..<declared {
-                    if let value = i16(inner, 16 + 2 * index),
-                       (minRRMS...maxRRMS).contains(value) {
-                        rr.append(value)
-                    }
+            for index in 0..<declared {
+                if let value = i16(inner, 16 + 2 * index),
+                   (minRRMS...maxRRMS).contains(value) {
+                    rr.append(value)
                 }
             }
         }
@@ -161,6 +163,7 @@ enum V18Decoder {
             header: header,
             heartRate: hr,
             rrIntervalsMS: rr,
+            rrPaddingValid: rrPaddingValid,
             dynamicAccelG: dyn.map { round4($0) },
             gravityXG: gravity?.0,
             gravityYG: gravity?.1,

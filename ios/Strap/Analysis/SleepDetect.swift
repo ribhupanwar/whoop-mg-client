@@ -9,6 +9,9 @@ enum SleepDetect {
     static let maxSleepS = 12 * 3600 // WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.swift)
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
+    /// Autonomic onset gate: HR must settle ≤ awakeMedian + 5 for ≥10 min sustained stillness.
+    static let autonomicOnsetThresholdBPM = 5.0
+    static let autonomicOnsetWindowS = 10 * 60
 
     /// Sustained-quiet periods confirmed by a heart-rate drop.
     ///
@@ -175,6 +178,40 @@ enum SleepDetect {
                 }
                 if leadingUpSeconds >= 300, let leadingAwakeEnd {
                     verifiedStart = max(verifiedStart, leadingAwakeEnd + 1)
+                }
+            }
+
+            // Autonomic onset gate (WHOOP parity): HR must settle ≤ activeMedian + 5 for ≥10 min sustained stillness.
+            // This finds the true physiological sleep onset independent of band state lag.
+            let autonomicThreshold = activeMedian + SleepDetect.autonomicOnsetThresholdBPM
+            let autonomicWindow = SleepDetect.autonomicOnsetWindowS
+            var autonomicCursor = verifiedStart
+            let runStart = run[0].unix
+            let searchFloor = max(runStart, verifiedStart - 60 * 60) // Search up to 1 hour before verifiedStart
+            while autonomicCursor - 60 >= searchFloor {
+                let minute = run.filter { autonomicCursor - 60 <= $0.unix && $0.unix < autonomicCursor }
+                let valid = minute.filter {
+                    $0.wearing && (35...220).contains($0.heartRate)
+                        && $0.sleepState != 3
+                        && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= quietAccelG } ?? false)
+                        && Double($0.heartRate) <= autonomicThreshold
+                }
+                // At least 50 distinct observed seconds per minute (≥83% coverage)
+                guard Set(valid.map(\.unix)).count >= 50 else { break }
+                autonomicCursor -= 60
+            }
+            // Only apply autonomic backtrack if it extends ≥5 min and shows a settling transition
+            let autonomicBacktrack = verifiedStart - autonomicCursor
+            if autonomicBacktrack >= 5 * 60 {
+                let earlier = run.filter {
+                    autonomicCursor - 5 * 60 <= $0.unix && $0.unix < autonomicCursor
+                        && $0.wearing && (35...220).contains($0.heartRate)
+                }
+                let transitionObserved = earlier.count >= 180
+                    && Stats.median(earlier.map { Double($0.heartRate) }) >= autonomicThreshold + 3
+                if transitionObserved {
+                    verifiedStart = autonomicCursor
+                    print("[SleepDetect] Autonomic onset gate advanced start by \(autonomicBacktrack / 60) min to \(Date(timeIntervalSince1970: TimeInterval(verifiedStart)))")
                 }
             }
             // A trimmed onset must still leave a real sleep-length window.
