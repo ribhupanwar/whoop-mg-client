@@ -401,7 +401,7 @@ struct BandAlarmsView: View {
                             store.band.testBuzz()
                         } label: {
                             HStack(spacing: 8) {
-                                Image(systemName: "waveform")
+                                Image(systemName: StrapIcon.Device.vibrationBuzz)
                                 Text(store.band.testingBuzz ? "Sending buzz…" : "Test Band Vibration Buzz")
                                     .font(StrapTypography.body(13, weight: .semibold))
                             }
@@ -949,6 +949,23 @@ struct AppInfoView: View {
                         Spacer()
                     }
                     .padding(.vertical, 4)
+                }
+
+                Panel {
+                    SectionTitle("DEVELOPER ICON REGISTRY")
+                    NavigationLink {
+                        IconGalleryView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.grid.3x3.fill")
+                            Text("Developer Icon Gallery & Contact Sheet")
+                                .font(StrapTypography.body(13.5, weight: .semibold))
+                            Spacer()
+                            Image(systemName: "chevron.right").font(.system(size: 11, weight: .bold))
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.vertical, 6)
+                    }
                 }
 
                 Panel {
