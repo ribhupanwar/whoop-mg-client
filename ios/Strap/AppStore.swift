@@ -516,3 +516,72 @@ final class AppStore: ObservableObject {
         journalEntries[JournalStore.dayKey(for: Date())]
     }
 }
+
+
+/// Issue #160: persistent sleep presentation lifecycle. This is deliberately
+/// independent of the detector: a quiet period alone must never activate UI.
+enum SleepLifecyclePhase: String, Codable, Equatable {
+    case idle
+    case detected
+    case processing
+    case journalPending
+    case completed
+}
+
+struct SleepLifecycleSnapshot: Codable, Equatable {
+    var phase: SleepLifecyclePhase = .idle
+    var sessionID: String?
+    var confirmedStartUnix: Int?
+    var endedAtUnix: Int?
+    var journalPresented: Bool = false
+
+    /// Only a detector-confirmed session can start a pending sleep card.
+    mutating func confirm(sessionID: String, startUnix: Int) {
+        guard !sessionID.isEmpty, startUnix > 0 else { return }
+        guard phase == .idle || phase == .completed else { return }
+        self.sessionID = sessionID
+        confirmedStartUnix = startUnix
+        endedAtUnix = nil
+        journalPresented = false
+        phase = .detected
+    }
+
+    /// Both automatic and manual End Sleep use this idempotent transition.
+    mutating func end(sessionID: String, at unix: Int) {
+        guard phase == .detected, self.sessionID == sessionID,
+              let start = confirmedStartUnix, unix > start else { return }
+        endedAtUnix = unix
+        phase = .processing
+    }
+
+    /// Called only after the production sleep report has been persisted.
+    mutating func finishProcessing(sessionID: String, hasJournalQuestions: Bool) {
+        guard phase == .processing, self.sessionID == sessionID else { return }
+        phase = hasJournalQuestions ? .journalPending : .completed
+    }
+
+    /// Prevent repeated journal prompts after app restart or refresh.
+    mutating func acknowledgeJournal(sessionID: String) {
+        guard phase == .journalPending, self.sessionID == sessionID else { return }
+        journalPresented = true
+        phase = .completed
+    }
+}
+
+/// Small persistence boundary; no health data or sleep estimates are fabricated.
+struct SleepLifecyclePersistence {
+    static let key = "strap.sleep.lifecycle.v1"
+    let defaults: UserDefaults
+
+    func load() -> SleepLifecycleSnapshot {
+        guard let data = defaults.data(forKey: Self.key),
+              let snapshot = try? JSONDecoder().decode(SleepLifecycleSnapshot.self, from: data)
+        else { return SleepLifecycleSnapshot() }
+        return snapshot
+    }
+
+    func save(_ snapshot: SleepLifecycleSnapshot) {
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        defaults.set(data, forKey: Self.key)
+    }
+}
