@@ -176,6 +176,7 @@ enum SleepDetect {
                 if leadingUpSeconds >= 300, let leadingAwakeEnd {
                     verifiedStart = max(verifiedStart, leadingAwakeEnd + 1)
                 }
+                verifiedStart = refineOvernightOnset(run, start: verifiedStart, quietAccelG: quietAccelG)
             }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes
@@ -349,6 +350,51 @@ enum SleepDetect {
             )
         }
         return mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
+    }
+
+    /// The full-run HR median can hide a prolonged elevated-HR lead-in.
+    /// Refine only when a later, sustained band hint corroborates a distinct
+    /// lower-HR portion of the run. A brief lag or missing hint keeps the
+    /// original actigraphy onset.
+    private static func refineOvernightOnset(
+        _ run: [V18Sample], start: Int, quietAccelG: Double
+    ) -> Int {
+        let lookback = 30 * 60
+        let observed = run.filter { $0.unix >= start && $0.wearing && (35...220).contains($0.heartRate) }
+        let sleepHints = observed.filter { $0.sleepState == 2 }
+        guard let confirmation = Hrv.contiguousRuns(sleepHints).first(where: { $0.count >= 300 }),
+              let hintStart = confirmation.first?.unix, hintStart - start >= lookback else { return start }
+
+        let anchor = Array(confirmation.prefix(300))
+        guard anchor.filter({ sample in
+            sample.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= quietAccelG } ?? false
+        }).count >= 270 else { return start }
+        let confirmedHR = Stats.median(anchor.map { Double($0.heartRate) })
+
+        // Use one observation per second. The same relative HR margin used
+        // for daytime backtracking keeps stable, delayed-hint sleep intact.
+        let prefix = observed.prefix { $0.unix < start + lookback }
+        var prefixHR: [Int: Int] = [:]
+        for sample in prefix { prefixHR[sample.unix] = sample.heartRate }
+        guard prefixHR.count >= lookback * 4 / 5,
+              Stats.median(prefixHR.values.map(Double.init)) > confirmedHR + 8 else { return start }
+
+        let lowerBound = max(start, hintStart - lookback)
+        var quietHRBySecond: [Int: Int] = [:]
+        for sample in observed where lowerBound <= sample.unix && sample.unix < hintStart {
+            guard sample.sleepState != 3, let motion = sample.dynamicAccelG,
+                  motion.isFinite, motion >= 0, motion <= quietAccelG else { continue }
+            quietHRBySecond[sample.unix] = sample.heartRate
+        }
+
+        var onset = hintStart
+        while onset - 60 >= lowerBound {
+            let minuteHR = ((onset - 60)..<onset).compactMap { quietHRBySecond[$0] }
+            guard minuteHR.count >= 40,
+                  Stats.median(minuteHR.map(Double.init)) <= confirmedHR + 8 else { break }
+            onset -= 60
+        }
+        return onset
     }
 
     private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {
