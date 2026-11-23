@@ -128,14 +128,20 @@ enum SleepStager {
         // and should not be smoothed into deep/light by the physiological model.
         // Short bathroom/movement intervals remain part of the same night and
         // are left to the normal stage classifier.
-        let upEpochs = epochs.map { epoch -> Bool in
+        // One pass through the worn seconds instead of a full-night scan
+        // for each epoch; preserve the existing 80% up-state wake gate.
+        var upSecondsByEpoch: [Int: Int] = [:]
+        for sample in records.values where sample.sleepState == 3 {
+            let index = (sample.unix - start) / epochS
+            guard index >= 0, index < epochs.count,
+                  epochs[index].start <= sample.unix,
+                  sample.unix < epochs[index].end else { continue }
+            upSecondsByEpoch[index, default: 0] += 1
+        }
+        let upEpochs = epochs.enumerated().map { index, epoch -> Bool in
             let duration = epoch.end - epoch.start
             guard duration > 0 else { return false }
-            let upSeconds = records.values.reduce(into: 0) { count, sample in
-                if epoch.start <= sample.unix, sample.unix < epoch.end,
-                   sample.sleepState == 3 { count += 1 }
-            }
-            return Double(upSeconds) / Double(duration) >= 0.8
+            return Double(upSecondsByEpoch[index, default: 0]) / Double(duration) >= 0.8
         }
         var runStart: Int?
         for index in 0...upEpochs.count {
