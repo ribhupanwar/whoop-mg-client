@@ -186,32 +186,44 @@ struct HealthspanView: View {
     }
 
     private func contributionSection(_ title: String, readings: [HealthspanInsights.Reading]) -> some View {
-        Panel {
-            CardHead(title: title, trailing: "7-day window")
-            ForEach(readings) { reading in
-                DisclosureGroup {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(reading.source)
-                        if reading.id != "Lean body mass" {
-                            Text("Coverage · \(reading.observed) of 7 days")
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(StrapTypography.body(24, weight: .bold))
+                .padding(.top, 16)
+            Panel {
+                ForEach(readings) { reading in
+                    DisclosureGroup {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(reading.source)
+                            if reading.id != "Lean body mass" {
+                                Text("Coverage · \\(reading.observed) of 7 days")
+                            }
+                            Text("Previous 7 days · \\(display(reading.prior, unit: reading.unit))")
+                            if let range = reading.observedReference {
+                                Text("Observed range · \\(display(range.lowerBound, unit: reading.unit)) to \\(display(range.upperBound, unit: reading.unit))")
+                            }
+                            Text("Observed range only — not a calibrated Fitness Age contribution.")
                         }
-                        Text("Previous 7 days · \(display(reading.prior, unit: reading.unit))")
-                        if let range = reading.observedReference {
-                            Text("Observed range · \(display(range.lowerBound, unit: reading.unit)) to \(display(range.upperBound, unit: reading.unit))")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.vertical, 6)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text(reading.id.uppercased())
+                                    .font(StrapTypography.body(12, weight: .bold))
+                                    .tracking(1)
+                                Spacer()
+                                Text(display(reading.value, unit: reading.unit))
+                                    .font(StrapTypography.metric(17, weight: .medium))
+                            }
+                            HealthspanObservedRangeBar(value: reading.value,
+                                                       reference: reading.observedReference)
                         }
+                        .padding(.vertical, 10)
                     }
-                    .font(StrapTypography.body(12))
-                    .foregroundStyle(Color.appMuted)
-                    .padding(.vertical, 6)
-                } label: {
-                    HStack {
-                        Text(reading.id)
-                        Spacer()
-                        Text(display(reading.value, unit: reading.unit))
-                            .font(StrapTypography.metric(17, weight: .medium))
-                    }
+                    Divider().overlay(Color.appLine)
                 }
-                .padding(.vertical, 7)
             }
         }
     }
@@ -491,5 +503,43 @@ private struct HealthspanTrendChart: View {
                 connected = true
             }
         }
+    }
+}
+
+private struct HealthspanObservedRangeBar: View {
+    let value: Double?
+    let reference: ClosedRange<Double>?
+
+    var body: some View {
+        GeometryReader { geometry in
+            let count = 10
+            let spacing: CGFloat = 2
+            let segmentWidth = max(1, (geometry.size.width - CGFloat(count - 1) * spacing) / CGFloat(count))
+            ZStack(alignment: .leading) {
+                HStack(spacing: spacing) {
+                    ForEach(0..<count, id: \.self) { index in
+                        Rectangle()
+                            .fill(index < 4 ? Color(hex: 0xD78D32) :
+                                  index < 6 ? Color.appMuted : Color(hex: 0x25C99C))
+                            .opacity(value == nil || reference == nil ? 0.25 : 0.85)
+                            .frame(width: segmentWidth, height: 7)
+                    }
+                }
+                if let value, let reference, reference.upperBound > reference.lowerBound {
+                    let fraction = min(1, max(0, (value - reference.lowerBound) /
+                                                  (reference.upperBound - reference.lowerBound)))
+                    Image(systemName: "triangle.fill")
+                        .font(.system(size: 10))
+                        .rotationEffect(.degrees(180))
+                        .foregroundStyle(Color.appFG)
+                        .offset(x: max(0, min(geometry.size.width - 10,
+                                             geometry.size.width * CGFloat(fraction) - 5)), y: -10)
+                }
+            }
+        }
+        .frame(height: 15)
+        .accessibilityLabel(value == nil || reference == nil
+            ? "Observed range unavailable"
+            : "Value positioned within observed range; not a calibrated health contribution")
     }
 }
