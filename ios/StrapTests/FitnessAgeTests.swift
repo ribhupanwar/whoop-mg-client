@@ -177,6 +177,15 @@ final class RRBeatDurationAuditTests: XCTestCase {
         XCTAssertEqual(result.totalRRDurationMS, 12_000)
     }
 
+    func testNonpositiveRRIntervalsAreDiagnosedWithoutDiscardingHistory() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [800, 0, -5]),
+            (second: 101, intervalsMS: [790])
+        ])
+        XCTAssertEqual(result.invalidIntervals, 2)
+        XCTAssertEqual(result.totalRRDurationMS, 1_590)
+    }
+
     func testEmptyAndNormalRRWindowsAreSafe() {
         XCTAssertFalse(HistoryCoverage.beatDurationAudit([]).exceedsObservedSpan)
         XCTAssertFalse(HistoryCoverage.beatDurationAudit([
