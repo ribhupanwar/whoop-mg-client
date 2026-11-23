@@ -18,7 +18,13 @@ struct GPSRunView: View {
         }
     }
 
+    @State private var workoutStarted = false
+
     var body: some View {
+        Group {
+        if !workoutStarted && !gps.recording {
+            runningPrestart
+        } else {
         Screen {
             VStack(alignment: .leading, spacing: 12) {
                 Panel {
@@ -127,6 +133,74 @@ struct GPSRunView: View {
             }
         }
         .onReceive(ticker) { _ in gps.refreshElapsed() }
+        }
+        }
+    }
 
+    private var runningPrestart: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 16) {
+                Image(systemName: "figure.run").font(.system(size: 28))
+                Text("RUNNING").font(.system(size: 19, weight: .bold)).tracking(2)
+                Spacer()
+                Image(systemName: "chevron.down")
+            }
+            .foregroundStyle(.white)
+            .padding(24)
+            .background(.black)
+
+            ZStack {
+                Map(initialPosition: .userLocation(fallback: .automatic)) {
+                    UserAnnotation()
+                }
+                .mapControls { MapCompass() }
+                VStack {
+                    HStack {
+                        Spacer()
+                        Text("TRACK ROUTE")
+                            .font(.system(size: 12, weight: .semibold))
+                            .padding(12)
+                            .background(.regularMaterial, in: Capsule())
+                    }
+                    .padding(12)
+                    Spacer()
+                    Circle()
+                        .fill(Color(red: 0.07, green: 0.58, blue: 0.92))
+                        .frame(width: 220, height: 220)
+                        .overlay {
+                            VStack(spacing: 10) {
+                                Image(systemName: "heart.fill").font(.system(size: 30))
+                                Text("READY").font(.system(size: 38, weight: .bold))
+                                Text("GPS RUN").font(.system(size: 13, weight: .semibold))
+                            }
+                            .foregroundStyle(.white)
+                        }
+                    Spacer()
+                }
+            }
+            .frame(maxHeight: .infinity)
+            HStack {
+                Text("STRAIN TARGET").font(.system(size: 15, weight: .bold)).tracking(1)
+                Spacer()
+                Text("Not configured").font(.system(size: 12))
+            }
+            .padding(20)
+            Button {
+                gps.start()
+                if gps.recording { workoutStarted = true }
+            } label: {
+                Text("START ACTIVITY")
+                    .font(.system(size: 17, weight: .bold))
+                    .tracking(2)
+                    .frame(maxWidth: .infinity)
+                    .padding(18)
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
+            .clipShape(Capsule())
+            .padding(18)
+            Text(gps.status).font(.caption).padding(.bottom, 10)
+        }
+        .background(Color(.systemBackground))
     }
 }
