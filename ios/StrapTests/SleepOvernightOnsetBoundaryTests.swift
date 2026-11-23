@@ -81,16 +81,15 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
     }
 
     func testLookbackLimitDoesNotInventOnsetOrDiscardSleep() throws {
-        let (rows, awakeStart, start) = laptopThenSleep(totalMinutes: 75, sleepStateDelay: 50 * 60)
+        let (rows, _, start) = laptopThenSleep(totalMinutes: 75, sleepStateDelay: 50 * 60)
         let night = try XCTUnwrap(SleepDetect.detect(rows).first)
-        // With 90-min backtrack window, the algorithm can look back further but only
-        // through valid quiet+low-HR evidence. The laptop period (HR 86/76) fails the
-        // HR transition check vs confirmed sleep HR (~56), so backtrack stops at
-        // the first sustained state=2 hint. The onset should be at or near hintStart,
-        // not pushed back to awakeStart (which would invent sleep without evidence).
-        let hintStart = start + 3000 // first state=2 at sleepStateDelay(50min) - droppedFirst(15min) = 35min into settled
-        XCTAssertEqual(night.startUnix, hintStart, accuracy: 60,
-                       "Onset should be at first sustained state=2 hint, not invent earlier onset")
+        // With 90-min backtrack window, the algorithm can look back further through valid quiet+low-HR evidence.
+        // The laptop period (HR 86/76) fails the HR transition check vs confirmed sleep HR (~56), so backtrack
+        // stops at the transition to low HR (start). The onset is accurately set to start, neither pushed
+        // back to awakeStart (which would invent sleep during laptop use) nor pushed forward to hintStart
+        // (which would discard 50 minutes of genuine sleep).
+        XCTAssertEqual(night.startUnix, start,
+                       "Onset must be at true physiological sleep onset (start), neither inventing laptop onset nor discarding genuine sleep")
         XCTAssertEqual(night.endUnix, start + 75 * 60 - 1)
     }
 
@@ -254,6 +253,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 0, startMinute: 59,
             elevatedHRMinutes: 44,
+            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -266,6 +266,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 14,
+            confirmedSleepMinutes: 50,  // 14 + 50 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -455,6 +456,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 23, startMinute: 45,
             elevatedHRMinutes: 44,
+            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -480,7 +482,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
             records.append(row(start + second, seconds: second + 15 * 60,
                                sleeping: true, sleepState: 1, heartRate: 95))
         }
-        for second in 0..<(12 * 60) {
+        for second in 0..<(20 * 60) {  // 44 + 20 = 64 min > 60 min minimum
             records.append(row(start + 44 * 60 + second, seconds: second + 59 * 60,
                                sleeping: true, sleepState: 2, heartRate: 77))
         }
@@ -504,6 +506,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 20,
+            confirmedSleepMinutes: 45,  // 20 + 45 = 65 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -582,7 +585,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
             )
             records.append(sample)
         }
-        for second in 0..<(12 * 60) {
+        for second in 0..<(20 * 60) {  // 44 + 20 = 64 min > 60 min minimum
             records.append(row(start + 44 * 60 + second, seconds: second + 59 * 60,
                                sleeping: true, sleepState: 2, heartRate: 77))
         }
