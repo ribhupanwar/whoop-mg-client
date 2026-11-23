@@ -70,11 +70,11 @@ struct HealthspanParticleField: View {
             let diameter = min(size.width, size.height)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
             let cyan = Color(hex: 0x54D7E9)
-            let base = diameter * 0.456 * (1 + 0.011 * sin(elapsed * 0.5))
+            let base = diameter * 0.456 * (1 + 0.009 * sin(elapsed * 1.0))
             func membrane(_ angle: Double) -> Double {
-                1 + 0.035 * sin(3 * angle - elapsed * 0.16)
-                    + 0.019 * cos(5 * angle + elapsed * 0.12)
-                    + 0.012 * sin(8 * angle - elapsed * 0.19)
+                1 + 0.055 * sin(3 * angle - elapsed * 0.68)
+                    + 0.028 * cos(5 * angle + elapsed * 0.51)
+                    + 0.014 * sin(8 * angle - elapsed * 0.39)
             }
             func point(angle: Double, radius: Double) -> CGPoint {
                 CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
