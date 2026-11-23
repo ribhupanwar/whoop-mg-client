@@ -227,18 +227,37 @@ def _min_rolling_mean(values: list[float], window: int) -> float | None:
     return best / window
 
 
+def _median_rolling_mean(values: list[float], window: int) -> float | None:
+    """Median of rolling window means (matches Swift Hrv.restingHeartRate)."""
+    if len(values) < window or window <= 0:
+        return None
+    total = sum(values[:window])
+    window_means = [total / window]
+    for i in range(window, len(values)):
+        total += values[i] - values[i - window]
+        window_means.append(total / window)
+    window_means.sort()
+    n = len(window_means)
+    if n % 2 == 1:
+        return window_means[n // 2]
+    return (window_means[n // 2 - 1] + window_means[n // 2]) / 2
+
+
 def resting_heart_rate(
     samples: list[V18Sample],
     window_s: int = 60,
     quiet_accel_g: float = 0.10,
 ) -> float | None:
-    """Lowest sustained heart rate across a quiet window, in bpm.
+    """Median of rolling window means during quiet periods (matches Swift Hrv.restingHeartRate).
 
-    Resting HR is the lowest sustained rate during sleep or sustained quiet,
+    Resting HR is the median sustained rate during sleep or sustained quiet,
     not the single lowest instantaneous reading - one artefact beat must not
     set the value. Seconds must be contiguous so a gap cannot masquerade as a
     sustained window, and motion must be measured, not assumed: a sample with
     no accelerometer reading is excluded rather than treated as quiet.
+
+    This matches the Swift implementation which reduced MAE vs WHOOP export
+    from 8.1 bpm (minimum) to 1.5 bpm (median) over 5 paired nights.
     """
     eligible = [
         s
@@ -248,12 +267,22 @@ def resting_heart_rate(
         and s.dynamic_accel_g <= quiet_accel_g
     ]
     eligible.sort(key=lambda s: s.unix)
-    best: float | None = None
+    window_means: list[float] = []
     for run in _contiguous_runs(eligible):
-        value = _min_rolling_mean([float(s.heart_rate) for s in run], window_s)
-        if value is not None and (best is None or value < best):
-            best = value
-    return best
+        if len(run) >= window_s:
+            values = [float(s.heart_rate) for s in run]
+            total = sum(values[:window_s])
+            window_means.append(total / window_s)
+            for i in range(window_s, len(values)):
+                total += values[i] - values[i - window_s]
+                window_means.append(total / window_s)
+    if not window_means:
+        return None
+    window_means.sort()
+    n = len(window_means)
+    if n % 2 == 1:
+        return window_means[n // 2]
+    return (window_means[n // 2 - 1] + window_means[n // 2]) / 2
 
 
 def hr_reserve_ratio(hr: float, resting_hr: float, max_hr: float) -> float:
