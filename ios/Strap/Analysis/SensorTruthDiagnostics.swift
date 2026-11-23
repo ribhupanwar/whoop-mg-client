@@ -6,71 +6,71 @@ import CryptoKit
 /// WHOOP sensor data with complete mathematical fidelity.
 ///
 /// Designed to provide privacy-preserving diagnostics without exporting raw biometric PII.
-public struct SensorTruthReport: Codable, Equatable {
-    public struct TransmissionStats: Codable, Equatable {
-        public let rawPacketsReceived: Int
-        public let rawBytesReceived: Int
-        public let framingChecksumFailures: Int
+struct SensorTruthReport: Codable, Equatable {
+    struct TransmissionStats: Codable, Equatable {
+        let rawPacketsReceived: Int
+        let rawBytesReceived: Int
+        let framingChecksumFailures: Int
     }
 
-    public struct DecodingStats: Codable, Equatable {
-        public let framesReassembled: Int
-        public let samplesDecoded: Int
-        public let undecodableFrames: Int
-        public let droppedBytes: Int
-        public let declaredRRBeats: Int
-        public let validRRBeats: Int
-        public let rejectedRRBeats: Int
-        public let rejectedRRReasons: [String: Int]
+    struct DecodingStats: Codable, Equatable {
+        let framesReassembled: Int
+        let samplesDecoded: Int
+        let undecodableFrames: Int
+        let droppedBytes: Int
+        let declaredRRBeats: Int
+        let validRRBeats: Int
+        let rejectedRRBeats: Int
+        let rejectedRRReasons: [String: Int]
     }
 
-    public struct PersistenceStats: Codable, Equatable {
-        public let uniqueRecordsPersisted: Int
-        public let duplicateRecordsFiltered: Int
-        public let timestampCollisionsResolved: Int
-        public let missingRecordIndexGaps: Int
-        public let missingRecordIndexCount: Int
-        public let timestampGaps: Int
-        public let rtcDiscontinuities: Int
+    struct PersistenceStats: Codable, Equatable {
+        let uniqueRecordsPersisted: Int
+        let duplicateRecordsFiltered: Int
+        let timestampCollisionsResolved: Int
+        let missingRecordIndexGaps: Int
+        let missingRecordIndexCount: Int
+        let timestampGaps: Int
+        let rtcDiscontinuities: Int
     }
 
-    public struct AnalysisStats: Codable, Equatable {
-        public let recordsQueried: Int
-        public let wearingSamples: Int
-        public let offWristSamples: Int
-        public let quietMotionSamples: Int
-        public let swsDeepSleepSamples: Int
-        public let acceptedNNBeats: Int
-        public let rejectedEctopicBeats: Int
-        public let rejectedSeedBeats: Int
-        public let consecutiveNNPairs: Int
-        public let calculatedRMSSD: Double?
-        public let calculatedRHR: Double?
+    struct AnalysisStats: Codable, Equatable {
+        let recordsQueried: Int
+        let wearingSamples: Int
+        let offWristSamples: Int
+        let quietMotionSamples: Int
+        let swsDeepSleepSamples: Int
+        let acceptedNNBeats: Int
+        let rejectedEctopicBeats: Int
+        let rejectedSeedBeats: Int
+        let consecutiveNNPairs: Int
+        let calculatedRMSSD: Double?
+        let calculatedRHR: Double?
     }
 
-    public struct QualityMetrics: Codable, Equatable {
-        public let decodeSuccessRate: Double
-        public let recordContiguityRate: Double
-        public let rrAcceptanceRate: Double
-        public let wearingQualityRate: Double
+    struct QualityMetrics: Codable, Equatable {
+        let decodeSuccessRate: Double
+        let recordContiguityRate: Double
+        let rrAcceptanceRate: Double
+        let wearingQualityRate: Double
     }
 
-    public let generatedAt: Date
-    public let windowStartUnix: Int?
-    public let windowEndUnix: Int?
-    public let durationSeconds: Int
-    public let transmission: TransmissionStats
-    public let decoding: DecodingStats
-    public let persistence: PersistenceStats
-    public let analysis: AnalysisStats
-    public let quality: QualityMetrics
-    public let provenanceDigest: String
+    let generatedAt: Date
+    let windowStartUnix: Int?
+    let windowEndUnix: Int?
+    let durationSeconds: Int
+    let transmission: TransmissionStats
+    let decoding: DecodingStats
+    let persistence: PersistenceStats
+    let analysis: AnalysisStats
+    let quality: QualityMetrics
+    let provenanceDigest: String
 }
 
-public enum SensorTruthDiagnostics {
+enum SensorTruthDiagnostics {
     /// Audits a collection of decoded samples and pipeline telemetry to generate
     /// an end-to-end Sensor Truth and Data Integrity Report.
-    public static func audit(
+    static func audit(
         samples: [V18Sample],
         rawPacketsCount: Int = 0,
         rawBytesCount: Int = 0,
@@ -323,7 +323,7 @@ public enum SensorTruthDiagnostics {
 
     /// Serializes the SensorTruthReport into a privacy-preserving JSON export.
     /// Excludes raw biometric measurements, location, or user credentials.
-    public static func generatePrivacyPreservingExport(report: SensorTruthReport) throws -> Data {
+    static func generatePrivacyPreservingExport(report: SensorTruthReport) throws -> Data {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         encoder.dateEncodingStrategy = .iso8601
