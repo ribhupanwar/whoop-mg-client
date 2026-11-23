@@ -365,7 +365,7 @@ struct HomeView: View {
             }.buttonStyle(.plain).accessibilityLabel("Profile")
             NavigationLink(value: Route.dayStreak) {
                 HStack(spacing: 4) {
-                    Image(systemName: "flame.fill").foregroundStyle(Color.orange)
+                    Image("health_strain").resizable().aspectRatio(contentMode: .fit).frame(width: 14, height: 14).foregroundStyle(Color.orange)
                     Text(appStreak.formatted()).font(StrapTypography.metric(14, weight: .bold))
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
@@ -1134,7 +1134,7 @@ struct HomeView: View {
 
                 VStack(spacing: 7) {
                     HStack(spacing: 7) {
-                        Image(systemName: "applewatch")
+                        Image("device_strap_idle").resizable().aspectRatio(contentMode: .fit).frame(width: 20, height: 20)
                             .font(.system(size: 19))
                             .foregroundStyle(Color.appMuted)
                         Text(demo || nextWake != nil ? CoachFormat.localClock(plan.wakeMinutes) : "—")
