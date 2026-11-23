@@ -55,10 +55,12 @@ struct HealthView: View {
         .padding(.bottom, 18)
     }
 
-    // No validated relative-to-baseline temperature is available yet.
-    // Show the WHOOP-style tile without inventing a +°C delta from raw skin ADC.
+    // Show a baseline-relative *candidate* only after seven qualifying prior
+    // nights. Raw v18 skin temperature is not clinically calibrated.
     private var skinTemperatureCard: some View {
-        VStack(alignment: .leading, spacing: 15) {
+        let reading = monitor[.temperature]
+        let hasDelta = reading.value != nil
+        return VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "thermometer")
                     .font(.system(size: 16, weight: .light))
@@ -71,14 +73,14 @@ struct HealthView: View {
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            Text("—")
+            Text(hasDelta ? String(format: "%+.1f°C", reading.value!) : "—")
                 .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
-            Text("BUILDING BASELINE")
+            Text(hasDelta ? "UNVALIDATED CANDIDATE" : reading.statusText)
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(Color.appMuted)
-            Text("No validated temperature delta")
+                .foregroundStyle(hasDelta ? Color.appWarn : Color.appMuted)
+            Text(hasDelta ? reading.referenceText : "No validated temperature delta · \\(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
