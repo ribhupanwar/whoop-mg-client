@@ -229,17 +229,17 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         ))!.timeIntervalSince1970)
 
         var records: [V18Sample] = []
-        // Active awake baseline before onset
+        // Active awake baseline before onset (high motion, high HR)
         for second in 0..<(preSleepMinutes * 60) {
             records.append(row(start - preSleepMinutes * 60 + second, seconds: second,
-                               sleeping: false, sleepState: 0, heartRate: 95))
+                               sleeping: false, sleepState: 0, heartRate: elevatedHR + 10, dynamicAccelG: 0.23))
         }
-        // Elevated HR quiet period (lying awake, state=0/1)
+        // Elevated HR quiet period (lying awake, state=0/1) - HR drops slightly but not enough
         for second in 0..<(elevatedHRMinutes * 60) {
             records.append(row(start + second, seconds: second + preSleepMinutes * 60,
                                sleeping: true, sleepState: sleepState, heartRate: elevatedHR))
         }
-        // Sustained state=2 with lower HR
+        // Sustained state=2 with lower HR (true sleep)
         for second in 0..<(confirmedSleepMinutes * 60) {
             records.append(row(start + elevatedHRMinutes * 60 + second, seconds: second + (preSleepMinutes + elevatedHRMinutes) * 60,
                                sleeping: true, sleepState: confirmedSleepState, heartRate: confirmedHR))

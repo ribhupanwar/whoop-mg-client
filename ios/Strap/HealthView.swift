@@ -42,13 +42,13 @@ struct HealthView: View {
 
     private var fiveMetricGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            healthMetric("RESPIRATORY RATE", symbol: "lungs", value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
+            healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
-            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: "drop", value: demo ? "95" : ActivityFormat.whole(monitor[.oxygen].value) ?? "—",
+            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen, value: demo ? "95" : ActivityFormat.whole(monitor[.oxygen].value) ?? "—",
                          unit: "%", reading: monitor[.oxygen])
-            healthMetric("RHR", symbol: "heart", value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
+            healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
                          unit: "bpm", reading: monitor[.rhr])
-            healthMetric("HRV", symbol: "waveform.path.ecg", value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
+            healthMetric("HRV", symbol: StrapIcon.Metric.hrv, value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
                          unit: "ms", reading: monitor[.hrv])
             skinTemperatureCard
         }
