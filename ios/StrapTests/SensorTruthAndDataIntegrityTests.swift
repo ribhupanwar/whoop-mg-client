@@ -53,17 +53,17 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         let samples = (1700000000..<1700000100).map { makeSample(unix: $0) }
 
         // First insertion
-        _ = try db.saveSamples(samples)
-        XCTAssertEqual(try db.sampleCount(), 100)
+        _ = try db.commit(samples)
+        XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 100)
 
         // Duplicate replay of the exact same records
-        _ = try db.saveSamples(samples)
-        XCTAssertEqual(try db.sampleCount(), 100, "Duplicate replayed packets must not inflate database count")
+        _ = try db.commit(samples)
+        XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 100, "Duplicate replayed packets must not inflate database count")
 
         // Interleaved duplicate replay
         let interleaved = samples.flatMap { [$0, $0] }
-        _ = try db.saveSamples(interleaved)
-        XCTAssertEqual(try db.sampleCount(), 100, "Interleaved duplicates must be deduplicated idempotently")
+        _ = try db.commit(interleaved)
+        XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 100, "Interleaved duplicates must be deduplicated idempotently")
     }
 
     // MARK: - Test 2: Missing Record Ranges
@@ -91,7 +91,7 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         let reversedSamples = Array(samples.reversed())
 
         // Insert in reversed order
-        _ = try db.saveSamples(reversedSamples)
+        _ = try db.commit(reversedSamples)
 
         let retrieved = try db.samples(from: 1700000000, through: 1700000049)
         XCTAssertEqual(retrieved.count, 50)
@@ -146,19 +146,19 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         let token1 = "token_checkpoint_001"
 
         // Persist chunk 1
-        let progress1 = try db.persistChunk(chunk1, token: token1)
+        let progress1 = try db.commitReportingProgress(chunk1, token: token1)
         XCTAssertEqual(progress1.inserted, 30)
         XCTAssertEqual(progress1.newestInserted, 1700000029)
-        XCTAssertEqual(try db.persistedContinuationToken(), token1)
+        XCTAssertEqual(try db.metadata("last_history_chunk"), token1)
 
         // Simulate resume: chunk 2 overlapping by 5 seconds (replay)
         let chunk2 = (1700000025..<1700000060).map { makeSample(unix: $0) }
         let token2 = "token_checkpoint_002"
-        let progress2 = try db.persistChunk(chunk2, token: token2)
+        let progress2 = try db.commitReportingProgress(chunk2, token: token2)
         XCTAssertEqual(progress2.inserted, 30, "Should only insert the 30 genuinely new seconds (1700000030..1700000059)")
         XCTAssertEqual(progress2.newestInserted, 1700000059)
-        XCTAssertEqual(try db.persistedContinuationToken(), token2)
-        XCTAssertEqual(try db.sampleCount(), 60)
+        XCTAssertEqual(try db.metadata("last_history_chunk"), token2)
+        XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 60)
     }
 
     // MARK: - Test 6: Repeated Sync Idempotency
@@ -166,11 +166,11 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         let db = try HistoryDatabase(url: databaseURL)
         let samples = (1700000000..<1700000300).map { makeSample(unix: $0, hr: 60, rr: [1000], motion: 0.01) }
 
-        _ = try db.saveSamples(samples)
+        _ = try db.commit(samples)
         let summary1 = CaptureSummary.make(samples: try db.samples(from: 1700000000, through: 1700000299), sex: .male, maxHR: 190)
 
         // Repeat sync with same records
-        _ = try db.saveSamples(samples)
+        _ = try db.commit(samples)
         let summary2 = CaptureSummary.make(samples: try db.samples(from: 1700000000, through: 1700000299), sex: .male, maxHR: 190)
 
         XCTAssertEqual(summary1.sampleCount, summary2.sampleCount)
@@ -247,14 +247,14 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         XCTAssertFalse(HistoricalRecordSelection.prefers(sparse, over: rich))
 
         // Save sparse first, then upgrade with rich
-        _ = try db.saveSamples([sparse])
+        _ = try db.commit([sparse])
         var retrieved = try db.samples(from: 1000, through: 1000)
         XCTAssertEqual(retrieved.first?.heartRate, 0)
 
-        _ = try db.saveSamples([rich])
+        _ = try db.commit([rich])
         retrieved = try db.samples(from: 1000, through: 1000)
         XCTAssertEqual(retrieved.first?.heartRate, 68, "Richer sample must upgrade sparse sample on collision")
-        XCTAssertEqual(try db.sampleCount(), 1, "Must maintain exactly 1 record per unix second")
+        XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 1, "Must maintain exactly 1 record per unix second")
     }
 
     // MARK: - Test 11: Persistence Across Simulated App Restart
@@ -263,19 +263,19 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         do {
             let db1 = try HistoryDatabase(url: databaseURL)
             let samples = (1700000000..<1700000100).map { makeSample(unix: $0) }
-            _ = try db1.saveSamples(samples)
-            try db1.setCheckpoint(key: "daily:2026-11-23", fingerprint: "fp123", result: Data([0xDE, 0xAD, 0xBE, 0xEF]))
+            _ = try db1.commit(samples)
+            try db1.cache(Data([0xDE, 0xAD, 0xBE, 0xEF]), key: "daily:2026-11-23", fingerprint: "fp123")
         }
 
         // Open fresh DB instance 2 from same SQLite file
         let db2 = try HistoryDatabase(url: databaseURL)
-        XCTAssertEqual(try db2.sampleCount(), 100)
-        let checkpoint = try db2.checkpoint(key: "daily:2026-11-23", fingerprint: "fp123")
+        XCTAssertEqual(try db2.samples(from: 0, through: 2_000_000_000).count, 100)
+        let checkpoint = try db2.cached(Data.self, key: "daily:2026-11-23", fingerprint: "fp123")
         XCTAssertEqual(checkpoint, Data([0xDE, 0xAD, 0xBE, 0xEF]), "Checkpoints and samples must survive app process restart")
     }
 
     // MARK: - Test 12: Partial Archive Recovery & Non-Contiguous Gap Splitting
-    func testPartialArchiveRecoveryAndNonContiguousGapSplitting() {
+    func testPartialArchiveRecoveryAndNonContiguousGapSplitting() throws {
         // Run 1: 300 seconds quiet sleep
         let run1 = (1700000000..<1700000300).map { makeSample(unix: $0, hr: 60, rr: [1000]) }
         // 60-second gap
@@ -290,8 +290,8 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
 
         // Verify RMSSD does NOT bridge across the 60-second gap
         let hrv = Hrv.fromSamples(allSamples)
-        XCTAssertNotNil(hrv.rmssdMS)
-        XCTAssertEqual(hrv.rmssdMS, 0.0, accuracy: 0.001, "Constant 1000ms intervals within runs must yield 0ms RMSSD, not inflate across gap")
+        let rmssd = try XCTUnwrap(hrv.rmssdMS)
+        XCTAssertEqual(rmssd, 0.0, accuracy: 0.001, "Constant 1000ms intervals within runs must yield 0ms RMSSD, not inflate across gap")
     }
 
     // MARK: - Test 13: Sensor Truth Diagnostic Report & Privacy Export
