@@ -3,6 +3,7 @@ import MapKit
 
 struct GPSRunView: View {
     @ObservedObject private var gps = GPSRunRecorder.shared
+    @EnvironmentObject private var store: AppStore
     @State private var selectedRun: GPSRunRecord?
     @State private var exportURL: URL?
     @State private var exportError: String?
@@ -19,6 +20,11 @@ struct GPSRunView: View {
     }
 
     @State private var workoutStarted = false
+
+    private func liveBPM(at date: Date) -> Int? {
+        LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
+                                 connected: store.band.isConnected, now: date)
+    }
 
     var body: some View {
         Group {
@@ -39,6 +45,16 @@ struct GPSRunView: View {
                         Text(String(format: "Average pace %d:%02d /km", Int(pace) / 60, Int(pace) % 60))
                             .foregroundStyle(Color.appFG)
                     }
+                    HStack(spacing: 12) {
+                        Image(systemName: "heart.fill").foregroundStyle(.red)
+                        Text(liveBPM(at: Date()).map { "\($0) BPM" } ?? "HR —")
+                            .font(StrapTypography.metric(25, weight: .bold))
+                        Spacer()
+                        Text(store.band.isConnected ? "WHOOP BAND" : "BAND DISCONNECTED")
+                            .font(StrapTypography.body(10, weight: .medium))
+                    }
+                    Text("LIVE STRAIN · unavailable until measured activity strain is connected")
+                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                     Text(gps.status)
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
@@ -171,7 +187,8 @@ struct GPSRunView: View {
                             VStack(spacing: 10) {
                                 Image(systemName: "heart.fill").font(.system(size: 30))
                                 Text("READY").font(.system(size: 38, weight: .bold))
-                                Text("GPS RUN").font(.system(size: 13, weight: .semibold))
+                                Text(liveBPM(at: Date()).map { "\($0) BPM" } ?? "HR WAITING")
+                    .font(.system(size: 15, weight: .semibold))
                             }
                             .foregroundStyle(.white)
                         }
