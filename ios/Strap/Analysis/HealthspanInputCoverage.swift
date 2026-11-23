@@ -41,9 +41,12 @@ struct HealthspanInputCoverage {
               let observation = observations[metric], observation.isValid,
               let start = calendar.date(byAdding: .day, value: -(windowDays - 1),
                                         to: calendar.startOfDay(for: asOf)) else { return true }
+        // Historical records may legitimately begin before the requested window.
+        // Only observations entirely outside the window are unusable; callers
+        // must compute observedDays from unique dates *inside* that window.
         return observation.observedDays < minimumDays
-            || observation.firstObserved < start
-            || observation.lastObserved > asOf
+            || observation.lastObserved < start
+            || observation.firstObserved > asOf
     }
 
     var availableContributors: Set<HealthspanContributor> {
