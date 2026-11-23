@@ -260,7 +260,10 @@ struct DeviceSettingsView: View {
 
                     if let battery = store.band.batteryPercent, battery < 20 {
                         HStack(spacing: 4) {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                            Image("device_battery_critical")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 14, height: 14)
                             Text("CHARGE YOUR WHOOP")
                         }
                         .font(StrapTypography.metric(9, weight: .bold))

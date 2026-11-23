@@ -71,6 +71,24 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         XCTAssertGreaterThan(staging.asleepMinutes, 300, "Asleep minutes must combine both sleep segments")
     }
 
+    func testInterruptedArchiveDoesNotMergeTwoSleepPeriods() {
+        let start = 1795039200 + 3600
+        let gapStart = start + 7200
+        let gapEnd = gapStart + 12 * 60
+        let first = (start..<gapStart).map { makeV18Sample(unix: $0, hr: 55, accel: 0.01) }
+        let second = (gapEnd..<(gapEnd + 7200)).map { makeV18Sample(unix: $0, hr: 54, accel: 0.01) }
+        let baseline = ((start - 3600)..<start).map {
+            makeV18Sample(unix: $0, hr: 85, accel: 0.15, state: 0)
+        }
+        let replay = Array(repeating: makeV18Sample(unix: gapStart + 360, hr: 80, accel: 0.2), count: 720)
+
+        for gap in [[V18Sample](), replay] {
+            let detected = SleepDetect.detect(baseline + first + gap + second)
+            XCTAssertEqual(detected.map(\.startUnix), [start, gapEnd])
+            XCTAssertEqual(detected.map(\.endUnix), [gapStart - 1, gapEnd + 7199])
+        }
+    }
+
     func testLongAwakeningDoesNotMergeIntoSingleSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200

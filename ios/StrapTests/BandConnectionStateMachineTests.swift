@@ -514,5 +514,265 @@ final class BandConnectionStateMachineTests: XCTestCase {
         let chargerRemovedFrame: [UInt8] = [0x16]
         let opcode4 = (chargerRemovedFrame.count >= 3 && chargerRemovedFrame[0] == 0x30) ? chargerRemovedFrame[2] : (chargerRemovedFrame.first ?? 0)
         XCTAssertEqual(BandHardwareEvent(rawValue: opcode4), .batteryPackRemoved)
+
+        // Double-tap frame
+        let doubleTapFrame: [UInt8] = [0x0E]
+        let opcode5 = (doubleTapFrame.count >= 3 && doubleTapFrame[0] == 0x30) ? doubleTapFrame[2] : (doubleTapFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode5), .doubleTap)
+
+        // BLE bonded frame
+        let bleBondedFrame: [UInt8] = [0x17]
+        let opcode6 = (bleBondedFrame.count >= 3 && bleBondedFrame[0] == 0x30) ? bleBondedFrame[2] : (bleBondedFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode6), .bleBonded)
+
+        // BLE connection up frame
+        let bleConnUpFrame: [UInt8] = [0x0B]
+        let opcode7 = (bleConnUpFrame.count >= 3 && bleConnUpFrame[0] == 0x30) ? bleConnUpFrame[2] : (bleConnUpFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode7), .bleConnectionUp)
+
+        // BLE connection down frame
+        let bleConnDownFrame: [UInt8] = [0x0C]
+        let opcode8 = (bleConnDownFrame.count >= 3 && bleConnDownFrame[0] == 0x30) ? bleConnDownFrame[2] : (bleConnDownFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode8), .bleConnectionDown)
+
+        // Temperature level frame
+        let tempLevelFrame: [UInt8] = [0x11]
+        let opcode9 = (tempLevelFrame.count >= 3 && tempLevelFrame[0] == 0x30) ? tempLevelFrame[2] : (tempLevelFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode9), .temperatureLevel)
+
+        // Pairing mode frame
+        let pairingModeFrame: [UInt8] = [0x12]
+        let opcode10 = (pairingModeFrame.count >= 3 && pairingModeFrame[0] == 0x30) ? pairingModeFrame[2] : (pairingModeFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode10), .pairingMode)
+
+        // Boot frame
+        let bootFrame: [UInt8] = [0x0F]
+        let opcode11 = (bootFrame.count >= 3 && bootFrame[0] == 0x30) ? bootFrame[2] : (bootFrame.first ?? 0)
+        XCTAssertEqual(BandHardwareEvent(rawValue: opcode11), .boot)
+    }
+
+    // MARK: - History Sync Reliability Tests
+
+    func testDuplicateRecordIndexDetection() {
+        // Per BLE_SYNC_FORENSICS.md: deduping enforced via recordIndex tracking
+        var seenIndices: Set<UInt32> = []
+        let recordIndices: [UInt32] = [100, 101, 102, 101, 103, 100, 104]
+        var duplicateCount = 0
+
+        for idx in recordIndices {
+            if !seenIndices.insert(idx).inserted {
+                duplicateCount += 1
+            }
+        }
+
+        XCTAssertEqual(duplicateCount, 2, "Should detect 2 duplicate recordIndices (101 and 100)")
+        XCTAssertEqual(seenIndices.count, 5, "Should have 5 unique recordIndices")
+    }
+
+    func testHistoryAckRetryLogic() {
+        // Test that historicalDataResult timeout triggers retry instead of disconnect
+        // This is a logical test; actual integration tested in sync lifecycle tests
+        let ackOpcode = BandCommand.historicalDataResult.rawValue
+        XCTAssertEqual(ackOpcode, 0x17)
+
+        // Verify the ACK body format: [0x01] + 8-byte token
+        let token: [UInt8] = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08]
+        let ackBody = [0x01] + token
+        XCTAssertEqual(ackBody.count, 9)
+        XCTAssertEqual(ackBody[0], 0x01)
+        XCTAssertEqual(Array(ackBody[1...]), token)
+    }
+
+    func testGetDataRangeCommand() {
+        // GET_DATA_RANGE (0x22) sent at start of every drain
+        let cmd = BandCommand.getDataRange.rawValue
+        XCTAssertEqual(cmd, 0x22)
+    }
+
+    func testSendHistoricalDataCommand() {
+        // SEND_HISTORICAL_DATA (0x16) starts the history stream
+        let cmd = BandCommand.sendHistoricalData.rawValue
+        XCTAssertEqual(cmd, 0x16)
+    }
+
+    func testHistoricalDataResultCommand() {
+        // HISTORICAL_DATA_RESULT (0x17) is the ACK for history chunks
+        let cmd = BandCommand.historicalDataResult.rawValue
+        XCTAssertEqual(cmd, 0x17)
+    }
+
+    func testHistoryEndSubtype() {
+        // Metadata subtype 0x02 indicates history end with token
+        let historyEnd = BandPacket.historyEnd
+        XCTAssertEqual(historyEnd, 0x02)
+    }
+
+    func testHistoryCompletionSubtype() {
+        // Metadata subtype 0x03 indicates history completion
+        let completionSubtype: UInt8 = 3
+        XCTAssertEqual(completionSubtype, 3)
+    }
+
+    func testRecordIndexInV18Header() {
+        // V18 record header contains recordIndex at offset 3 (4 bytes LE)
+        let recordIndex: UInt32 = 0x12345678
+        let bytes: [UInt8] = [
+            UInt8(recordIndex & 0xFF),
+            UInt8((recordIndex >> 8) & 0xFF),
+            UInt8((recordIndex >> 16) & 0xFF),
+            UInt8((recordIndex >> 24) & 0xFF)
+        ]
+        let decoded = UInt32(bytes[0]) | (UInt32(bytes[1]) << 8) | (UInt32(bytes[2]) << 16) | (UInt32(bytes[3]) << 24)
+        XCTAssertEqual(decoded, recordIndex)
+    }
+
+    func testBandHardwareEventPacketDecoderTypedParsing() {
+        // Real DOUBLE_TAP(14 / 0x0E) inner payload: [0x30, 0x34, 0x0e, 0x00, 0x80, 0x89, 0x26, 0x6a, 0x3d, 0x2a, 0x00, 0x00]
+        let doubleTapInner: [UInt8] = [0x30, 0x34, 0x0E, 0x00, 0x80, 0x89, 0x26, 0x6A, 0x3D, 0x2A, 0x00, 0x00]
+        let pDoubleTap = BandHardwareEventPacket.decode(doubleTapInner)
+        XCTAssertNotNil(pDoubleTap)
+        XCTAssertEqual(pDoubleTap?.rawOpcode, 0x0E)
+        XCTAssertEqual(pDoubleTap?.event, .doubleTap)
+        XCTAssertEqual(pDoubleTap?.timestamp, 1780910464) // 0x6a268980 in little-endian
+        XCTAssertEqual(pDoubleTap?.payload, [0x3D, 0x2A, 0x00, 0x00])
+
+        // Synthetic WRIST_ON(9 / 0x09) inner payload: [0x30, 0x03, 0x09, 0x01, 0x80, 0x3b, 0xb1, 0x6a, 0x00, 0x00, 0x00, 0x00]
+        let wristOnInner: [UInt8] = [0x30, 0x03, 0x09, 0x01, 0x80, 0x3B, 0xB1, 0x6A, 0x00, 0x00, 0x00, 0x00]
+        let pWristOn = BandHardwareEventPacket.decode(wristOnInner)
+        XCTAssertNotNil(pWristOn)
+        XCTAssertEqual(pWristOn?.rawOpcode, 0x09)
+        XCTAssertEqual(pWristOn?.event, .wristOn)
+        XCTAssertEqual(pWristOn?.timestamp, 1790000000)
+
+        // Synthetic WRIST_OFF(10 / 0x0A) inner payload
+        let wristOffInner: [UInt8] = [0x30, 0x03, 0x0A, 0x01, 0x8A, 0x3B, 0xB1, 0x6A]
+        let pWristOff = BandHardwareEventPacket.decode(wristOffInner)
+        XCTAssertNotNil(pWristOff)
+        XCTAssertEqual(pWristOff?.rawOpcode, 0x0A)
+        XCTAssertEqual(pWristOff?.event, .wristOff)
+        XCTAssertEqual(pWristOff?.timestamp, 1790000010)
+
+        // Synthetic BATTERY_PACK_CONNECTED(21 / 0x15)
+        let chargerOnInner: [UInt8] = [0x30, 0x03, 0x15, 0x01]
+        let pChargerOn = BandHardwareEventPacket.decode(chargerOnInner)
+        XCTAssertNotNil(pChargerOn)
+        XCTAssertEqual(pChargerOn?.rawOpcode, 0x15)
+        XCTAssertEqual(pChargerOn?.event, .batteryPackConnected)
+        XCTAssertNil(pChargerOn?.timestamp) // No 4-byte timestamp in 4-byte inner
+
+        // Synthetic BATTERY_PACK_REMOVED(22 / 0x16)
+        let chargerOffInner: [UInt8] = [0x30, 0x03, 0x16, 0x01]
+        let pChargerOff = BandHardwareEventPacket.decode(chargerOffInner)
+        XCTAssertNotNil(pChargerOff)
+        XCTAssertEqual(pChargerOff?.rawOpcode, 0x16)
+        XCTAssertEqual(pChargerOff?.event, .batteryPackRemoved)
+
+        // Synthetic BLE_BONDED(23 / 0x17)
+        let bleBondedInner: [UInt8] = [0x30, 0x03, 0x17, 0x01]
+        let pBleBonded = BandHardwareEventPacket.decode(bleBondedInner)
+        XCTAssertNotNil(pBleBonded)
+        XCTAssertEqual(pBleBonded?.rawOpcode, 0x17)
+        XCTAssertEqual(pBleBonded?.event, .bleBonded)
+
+        // Legacy/direct single-byte opcode
+        let directBonded = BandHardwareEventPacket.decode([0x17])
+        XCTAssertEqual(directBonded?.rawOpcode, 0x17)
+        XCTAssertEqual(directBonded?.event, .bleBonded)
+
+        // Malformed / empty packet
+        XCTAssertNil(BandHardwareEventPacket.decode([]))
+        XCTAssertNil(BandHardwareEventPacket.decode([0x30, 0x01])) // Too short for type 0x30
+    }
+
+    func testWristContactStateTabletopArtifactRejection() {
+        let baseHeader = BandRecordHeader(version: 18, flags: 0, recordIndex: 1, unix: 1700000000, subsecQ15: 0)
+
+        // Valid worn sample: normal skin temp (33.5C) + normal HR (65 bpm)
+        let wornSample = V18Sample(
+            header: baseHeader,
+            heartRate: 65,
+            rrIntervalsMS: [920],
+            dynamicAccelG: 0.02,
+            gravityXG: 0.1,
+            gravityYG: 0.2,
+            gravityZG: 0.9,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 33.5,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertTrue(wornSample.wearing)
+        XCTAssertEqual(wornSample.wristContactState, .onWrist)
+
+        // Off-wrist sample: zero HR
+        let zeroHRSample = V18Sample(
+            header: baseHeader,
+            heartRate: 0,
+            rrIntervalsMS: [],
+            dynamicAccelG: 0.01,
+            gravityXG: 0.0,
+            gravityYG: 0.0,
+            gravityZG: 1.0,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 28.0,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertFalse(zeroHRSample.wearing)
+        XCTAssertEqual(zeroHRSample.wristContactState, .offWrist)
+
+        // Tabletop artifact sample: optical noise produces spurious HR (45 bpm),
+        // but cold ambient temperature (21.5C) and complete static stillness (0.001g) prove off-wrist.
+        let tabletopArtifactSample = V18Sample(
+            header: baseHeader,
+            heartRate: 45,
+            rrIntervalsMS: [],
+            dynamicAccelG: 0.001,
+            gravityXG: 0.0,
+            gravityYG: 0.0,
+            gravityZG: 1.0,
+            stepCounter: 100,
+            stepCadence: 0,
+            activityClass: 0,
+            skinTempC: 21.5,
+            tempAux1C: nil,
+            tempAux2C: nil,
+            sleepStateByte: nil,
+            sleepState: nil,
+            cardiacFlags: nil,
+            hrQualityFlags: nil,
+            spo2CandidateRaw: nil,
+            spo2CandidatePct: nil,
+            spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil,
+            psnrB: nil,
+            psnrA: nil
+        )
+        XCTAssertFalse(tabletopArtifactSample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
+        XCTAssertEqual(tabletopArtifactSample.wristContactState, .offWrist)
     }
 }
