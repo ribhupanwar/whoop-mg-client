@@ -52,7 +52,36 @@ struct HistoryCoverage: Equatable {
         backwardsTransitions = backwards
     }
 
+    /// RR totals are computed once per observed second, not by blindly
+    /// concatenating retransmitted records. A duration greater than wall-clock
+    /// coverage is a diagnostic warning, not proof of a specific bad packet.
+    var rrCoverageAudit: RRCoverageAudit {
+        RRCoverageAudit(rrSeconds: rrSeconds,
+                        observedSeconds: observedSeconds,
+                        repeatedSecondRecords: repeatedSecondRecords)
+    }
+
     var summary: String {
         "Received seconds: \(observedSeconds), HR: \(heartRateSeconds), RR: \(rrSeconds), motion: \(motionSeconds), gaps: \(missingSeconds)s, repeated-second records: \(repeatedSecondRecords), backwards transitions: \(backwardsTransitions)"
+    }
+}
+
+struct RRCoverageAudit: Equatable {
+    let rrSeconds: Int
+    let observedSeconds: Int
+    let repeatedSecondRecords: Int
+
+    var rrFraction: Double {
+        guard observedSeconds > 0 else { return 0 }
+        return Double(rrSeconds) / Double(observedSeconds)
+    }
+
+    var hasRepeatedSeconds: Bool { repeatedSecondRecords > 0 }
+
+    /// Per-second RR channel presence must not exceed the number of unique
+    /// seconds. Raw beat-duration overflow needs a separate packet-level audit.
+    var isValid: Bool {
+        rrSeconds >= 0 && observedSeconds >= 0
+            && rrSeconds <= observedSeconds && repeatedSecondRecords >= 0
     }
 }
