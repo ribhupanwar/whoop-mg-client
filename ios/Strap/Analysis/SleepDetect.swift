@@ -385,22 +385,25 @@ enum SleepDetect {
 
             let isNocturnal = isNocturnalPeriod(current) && isNocturnalPeriod(next)
 
-            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
-            let wornDuringGap: Bool
-            if gapSamples.isEmpty {
-                wornDuringGap = true
-            } else {
-                let wornCount = gapSamples.filter { $0.wearing }.count
-                wornDuringGap = Double(wornCount) / Double(gapSamples.count) >= 0.60
+            guard isNocturnal, gap <= maxAwakeningGapS, combinedSpan <= maxCombinedSleepS else {
+                merged.append(current)
+                current = next
+                continue
             }
+            let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
+            // A short bathroom break still requires positive on-wrist coverage.
+            // Use elapsed seconds so missing records and replays cannot pass the gate.
+            let wornSeconds = Set(gapSamples.lazy.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+            }.map(\.unix)).count
+            let wornDuringGap = gap <= 0 || wornSeconds * 5 >= gap * 3
 
-            // A sustained active workout (e.g. >= 180s of HR >= 90 and accel >= 0.15g) is not
-            // an in-bed nocturnal awakening or bathroom break.
-            let activeWorkoutDuringGap = gapSamples.filter {
-                ($0.dynamicAccelG ?? 0) >= 0.15 && Double($0.heartRate) >= 90
-            }.count >= 180
+            // A sustained active workout is not an in-bed awakening.
+            let activeWorkoutDuringGap = Set(gapSamples.lazy.filter {
+                $0.wearing && ($0.dynamicAccelG ?? 0) >= 0.15 && $0.heartRate >= 90
+            }.map(\.unix)).count >= 180
 
-            if isNocturnal && gap <= maxAwakeningGapS && combinedSpan <= maxCombinedSleepS && wornDuringGap && !activeWorkoutDuringGap {
+            if wornDuringGap && !activeWorkoutDuringGap {
                 let allIndices = samples.filter { current.startUnix <= $0.unix && $0.unix <= combinedEnd }
                 let quietCount = allIndices.filter { sample in
                     guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
