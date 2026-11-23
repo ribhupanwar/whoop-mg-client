@@ -119,5 +119,3 @@ struct IconView: View {
         }
     }
 }
-EOF
-echo "Created IconAsset registry"
