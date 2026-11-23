@@ -131,3 +131,26 @@ final class FitnessAgeModelTests: XCTestCase {
                        alone?.physicalActivityIndex)
     }
 }
+
+final class HealthspanInputCoverageTests: XCTestCase {
+    func testMissingMetricsAreNotInterpretedAsZero() {
+        let coverage = HealthspanInputCoverage(observations: [:], asOf: Date())
+        XCTAssertEqual(coverage.missingContributors.count, 9)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+
+    func testNinePublishedContributorsAreDistinct() {
+        XCTAssertEqual(Set(HealthspanContributor.allCases).count, 9)
+    }
+
+    func testValidObservationIsPresentButDoesNotImplySixMonthCoverage() {
+        let now = Date()
+        let sample = HealthspanObservation(value: 9000, observedDays: 7,
+                                            firstObserved: now.addingTimeInterval(-6 * 86400),
+                                            lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: sample], asOf: now)
+        XCTAssertTrue(coverage.availableContributors.contains(.steps))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 180))
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+}
