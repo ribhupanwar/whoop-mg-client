@@ -214,7 +214,11 @@ def decode_v18(inner: bytes) -> V18Sample | None:
     rr: list[int] = []
     rr_padding_valid = True
     declared = inner[15]
+    # Unused slots may contain firmware-specific data. Frame integrity is
+    # checked by the framing layer; decode only declared, plausible RR beats.
     if declared <= MAX_RR_COUNT:
+        # Check padding bytes (offsets 16 + 2*declared ..< 24) for non-zero values.
+        # Non-zero padding doesn't invalidate declared beats but flags lower confidence.
         for offset in range(16 + 2 * declared, 24):
             if inner[offset] != 0:
                 rr_padding_valid = False

@@ -128,7 +128,13 @@ enum V18Decoder {
         var rr: [Int] = []
         var rrPaddingValid = true
         let declared = Int(inner[15])
-        if declared <= maxRRCount {
+        // Only the declared RR slots are beats. Unused trailing bytes are not
+        // independently verified as zero padding on every firmware revision.
+        // Frame checksums are validated by Gen5Frame before this decoder runs;
+        // do not discard valid declared beats because of opaque unused bytes.
+if declared <= maxRRCount {
+            // Check padding bytes (offsets 16 + 2*declared ..< 24) for non-zero values.
+            // Non-zero padding doesn't invalidate declared beats but flags lower confidence.
             for paddingOffset in (16 + 2 * declared)..<24 {
                 if inner[paddingOffset] != 0 {
                     rrPaddingValid = false

@@ -40,6 +40,10 @@
 - [x] **OpenStrap Edge UX & Backup:** Evaluated scheduled local rolling backups (PR #146) and activity icon catalogs (PR #149); established non-duplication barriers with active PRs.
 - [x] **Safety & licensing:** Verified PolyForm Noncommercial and AGPL boundaries; confirmed strict prohibition on destructive commands (`FORCE_TRIM` 25, `REBOOT_STRAP` 29, `POWER_CYCLE_STRAP` 32, `SET_READ_POINTER` 33).
 - [x] **Evidence gate & test plan:** Delivered formal regression architecture, golden vectors, and hardware-in-the-loop gates in `docs/research/STRAP_SYNC_AND_SENSOR_TEST_PLAN.md`. Aligned `HistoricalRecordSelection` HR bounds to `25...230` in `V18Record.swift`.
+- [x] **WHOOP 5.80.2 Complete Icon Forensics & Mapping Matrix (PR #163):** Decoded 40 asset catalogs across `Whoop.app` and modular SPM bundles (768 first-party assets cataloged). Proved binary architecture of `ActivitiesManager` dynamic icon pipeline (`getActivityIcon`). Confirmed 100% SF Symbol coverage across all 272 WHOOP sports in `ActivityStore.swift` and `ActivityIconRegistryTests.swift`. Cataloged in `docs/research/WHOOP_ICON_INVENTORY.md` and `docs/research/WHOOP_TO_STRAP_ICON_MAPPING.csv`.
+- [x] **WHOOP 5.80.2 Ghidra Forensic Handoff (PR #139):** Complete reverse-engineering research on WHOOP iOS 5.80.2 (ARM64 Mach-O) delivered in `docs/research/CODEX_HANDOFF.md`. Established three-tier epistemic classification (`VERIFIED`, `INFERRED`, `UNKNOWN`) and confirmed strict architectural boundaries across firmware, client, and cloud.
+- [x] **Original Icon Assets & Type-Safe Registry (PR #165):** Shipped 27 clean-room custom icon imagesets with 1x/2x/3x assets in `Assets.xcassets`, type-safe `IconAsset.swift` registry with semantic SF Symbol fallbacks, and 9 automated unit tests in `IconAssetRegistryTests.swift`.
+- [x] **UI Parity, Icon Coverage & Performance Benchmarks (PR #166):** Delivered exact pull-to-refresh stationary `WhoopWGlyph` and rotating arc, dynamic battery charging lightning bolt and low-battery amber alert, screenless band sensor glyph (`sensor.fill`), blood oxygen saturation badge (`o.circle`), mechanical haptic vibration glyph (`iphone.radiowaves.left.and.right`), segmented More tab hub (`ellipsis.circle`), pre-computed `IconGalleryView` contact sheet, and automated benchmarks in `docs/research/STRAP_UI_PERFORMANCE_AUDIT.md` and `UIPerformanceBenchmarkTests.swift`. Issue #164 remains open for continued asset coverage tracking.
 
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
@@ -361,3 +365,10 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 - **IMPLEMENTED** in #156. Debug-only Instruments timing for durable history commits. The reconciled head passed [iOS packaging and tests](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059748) and the [six-job protocol matrix](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059739).
 - **DEVICE-VERIFY.** Test wrist transitions, notification restoration and interrupted history sync on Gen5 and MG hardware.
 - **DEFERRED.** The HELLO forensic notes distinguish static observations from hypotheses. Request bytes, response layout and firmware-specific behavior still need matched captures before any production change.
+
+## STRAP AI Coach
+
+- Open the Coach button next to the bottom tabs. Daily Insights remains on Home.
+- The local educational path works without a provider key. General on-device conversations use Apple's model on supported iOS 26 devices.
+- Select **AI model settings** to configure Groq or Gemini with your own API key. Optional Tavily search sends the current question. Cloud health-snapshot sharing is off by default.
+- **DEVICE-VERIFY.** Validate Apple model availability and Keychain behavior on a SideStore-installed device. Verify external provider calls with user-owned keys.

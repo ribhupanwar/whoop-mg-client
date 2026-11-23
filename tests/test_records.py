@@ -150,6 +150,18 @@ class TestV18(unittest.TestCase):
         self.assertEqual(sample.rr_intervals_ms, [700, 710, 720, 730])
         self.assertTrue(sample.rr_padding_valid, "rr_padding_valid must be True when all padding bytes are zero")
 
+    def test_rr_nonzero_unused_bytes_preserve_declared_intervals(self):
+        # Issue #171: bytes beyond the declared count are not declared beats.
+        # The framing layer validates the CRC; opaque trailing bytes must not
+        # cause valid 800ms and 820ms intervals to be discarded.
+        record = bytearray(REAL_V18)
+        record[15] = 2
+        record[16:18] = (800).to_bytes(2, "little", signed=True)
+        record[18:20] = (820).to_bytes(2, "little", signed=True)
+        record[22] = 0xAA  # Undeclared slot (bytes 20..<24)
+        sample = decode_v18(bytes(record))
+        self.assertEqual(sample.rr_intervals_ms, [800, 820])
+
     def test_rr_nonzero_padding_preserves_intervals_but_flags_invalid(self):
         corrupted = bytearray(REAL_V18)
         corrupted[15] = 2

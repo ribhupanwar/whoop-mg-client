@@ -297,6 +297,46 @@ final class ProtocolTests: XCTestCase {
         XCTAssertTrue(sample?.rrPaddingValid ?? false, "rrPaddingValid must be true when all padding bytes are zero")
     }
 
+    func testRRNonZeroUnusedSlotsPreserveDeclaredBeats() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 2
+        inner[16] = 0x20
+        inner[17] = 0x03  // 800
+        inner[18] = 0x34
+        inner[19] = 0x03  // 820
+        inner[22] = 0xAA  // Opaque unused byte, not a declared beat
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800, 820])
+    }
+
+    func testRRSingleDeclaredBeatSurvivesNonZeroUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 1
+        inner[16] = 0x20
+        inner[17] = 0x03  // 800
+        inner[18] = 0xFF
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
+    }
+
+    func testRRZeroDeclaredBeatsIgnoreUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 0
+        inner[16] = 0x20
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [])
+    }
+
+    func testRRInvalidDeclaredBeatDoesNotDiscardValidNeighbor() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 2
+        inner[16] = 0x64
+        inner[17] = 0x00  // 100ms, implausible
+        inner[18] = 0x20
+        inner[19] = 0x03  // 800ms, plausible
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
+    }
+
     func testRRNonZeroPaddingPreservesIntervalsButFlagsInvalid() {
         var inner = bytes(realV18Hex)
         inner[15] = 2
