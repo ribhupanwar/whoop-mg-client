@@ -84,6 +84,32 @@ struct StrapAICoachView: View {
                 Spacer()
                 Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption).disabled(busy)
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
+            if selectedEngine != "Apple (offline)" && !shareHealthWithCloud {
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: "lock.shield")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Personal metrics are not shared")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("Cloud Coach cannot read your saved HRV, RHR, recovery, sleep or strain until you opt in. General coaching still works.")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                        Button("Review health sharing") {
+                            loadCoachKeys()
+                            showAISettings = true
+                        }
+                        .font(.system(size: 12, weight: .semibold))
+                        .padding(.top, 3)
+                        .accessibilityIdentifier("coach.healthSharingSettings")
+                    }
+                    Spacer(minLength: 0)
+                }
+                .padding(12)
+                .background(Color(hex: 0x20272D), in: RoundedRectangle(cornerRadius: 14))
+                .padding(.horizontal, 20)
+                .padding(.bottom, 8)
+                .accessibilityIdentifier("coach.healthSharingNotice")
+            }
             ScrollViewReader { proxy in
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 15) {
