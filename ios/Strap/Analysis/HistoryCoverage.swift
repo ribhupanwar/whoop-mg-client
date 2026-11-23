@@ -78,10 +78,15 @@ struct HistoryCoverage: Equatable {
             sum + intervals.reduce(Int64(0)) { $0 + Int64(max(0, $1)) }
         }
         let seconds = unique.count
+        // Negative/zero RR values must never silently look like valid beats.
+        let invalidIntervals = unique.values.reduce(0) { count, intervals in
+            count + intervals.filter { $0 <= 0 }.count
+        }
         // Two seconds of boundary slack prevents flagging a beat that
         // started before the first record or ended after the last.
         let allowance = Int64(seconds) * 1_000 + 2_000
         return RRBeatDurationAudit(uniqueSeconds: seconds,
+                                   invalidIntervals: invalidIntervals,
                                    totalRRDurationMS: total,
                                    exceedsObservedSpan: total > allowance)
     }
@@ -117,6 +122,7 @@ struct RRCoverageAudit: Equatable {
 
 struct RRBeatDurationAudit: Equatable {
     let uniqueSeconds: Int
+    let invalidIntervals: Int
     let totalRRDurationMS: Int64
     /// Warning only; packet timing must be validated before excluding beats.
     let exceedsObservedSpan: Bool
