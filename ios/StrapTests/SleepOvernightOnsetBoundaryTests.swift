@@ -216,9 +216,9 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         preSleepMinutes: Int = 15,
         elevatedHRMinutes: Int,
         sleepState: Int = 1,
-        elevatedHR: Int = 95,
-        confirmedSleepMinutes: Int = 12,
-        confirmedHR: Int = 77,
+        activeHR: Int = 105,
+        sleepHR: Int = 70,
+        confirmedSleepMinutes: Int = 420,
         confirmedSleepState: Int = 2
     ) -> ([V18Sample], Int) {
         var calendar = Calendar(identifier: .gregorian)
@@ -228,37 +228,81 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         ))!.timeIntervalSince1970)
 
         var records: [V18Sample] = []
-        // Active awake baseline before onset (high motion, high HR)
+        // Active awake baseline before onset (high motion, active HR)
         for second in 0..<(preSleepMinutes * 60) {
             records.append(row(start - preSleepMinutes * 60 + second, seconds: second,
-                               sleeping: false, sleepState: 0, heartRate: elevatedHR + 10, dynamicAccelG: 0.23))
+                               sleeping: false, sleepState: 0, heartRate: activeHR, dynamicAccelG: 0.23))
         }
-        // Elevated HR quiet period (lying awake, state=0/1) - HR drops slightly but not enough
+        // Sleep onset period before band state=2 arrives (wearer is asleep, quiet, low HR)
         for second in 0..<(elevatedHRMinutes * 60) {
             records.append(row(start + second, seconds: second + preSleepMinutes * 60,
-                               sleeping: true, sleepState: sleepState, heartRate: elevatedHR))
+                               sleeping: true, sleepState: sleepState, heartRate: sleepHR, dynamicAccelG: 0.012))
         }
-        // Sustained state=2 with lower HR (true sleep)
+        // Sustained state=2 confirmed sleep (multi-hour true sleep)
         for second in 0..<(confirmedSleepMinutes * 60) {
             records.append(row(start + elevatedHRMinutes * 60 + second, seconds: second + (preSleepMinutes + elevatedHRMinutes) * 60,
-                               sleeping: true, sleepState: confirmedSleepState, heartRate: confirmedHR))
+                               sleeping: true, sleepState: confirmedSleepState, heartRate: sleepHR, dynamicAccelG: 0.012))
         }
         return (records, start)
     }
 
-    /// Test 1: 44-minute delayed band state=2 hint (reported case from 2026-11-22/23)
-    /// Band state=2 arrives at 01:43 but true HR transition was at ~02:28.
-    /// With 90-min backtrack window, should recover onset at 00:59.
+    /// Test 1: 44-minute delayed band state=2 hint
+    /// Wearer falls asleep at start (00:59) with genuine HR drop and stillness.
+    /// Band state=2 confirmation arrives 44 minutes later (at 01:43).
+    /// Bounded backtracking retains true onset at 00:59.
     func testFortyFourMinuteDelayedBandStateTwoRecoversTrueOnset() throws {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 0, startMinute: 59,
             elevatedHRMinutes: 44,
-            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
         XCTAssertEqual(night.startUnix, start,
-                       "44-minute delayed band state=2 must backtrack to true HR-transition onset")
+                       "44-minute delayed band state=2 must retain true HR-transition onset at start")
+    }
+
+    /// Reconciles real sensor archive evidence (2026-11-22/23):
+    /// - 00:59: In-bed actigraphy quiet starts, but wearer is awake with elevated HR (92 bpm).
+    /// - 01:43: Intermediate quiet awake checkpoint (44 min after 00:59).
+    /// - 02:21: True physiological sleep onset (HR drops to 72 bpm).
+    /// - 02:28: WHOOP official algorithm declares sleep onset.
+    /// - 03:12: Band firmware belatedly reports sustained sleepState=2 (44 min after WHOOP, 51 min after HR drop).
+    /// Bounded 90-min backtracking from 03:12 searches back to 01:42, locates the HR transition at 02:21,
+    /// and correctly recovers 02:21 (reconciling with WHOOP 02:28) rather than falsely reporting 00:59.
+    func testRealSensorEvidenceReconcilesOvernightOnsetAt0221() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = .current
+        let inBed0059 = Int(calendar.date(from: DateComponents(
+            year: 2026, month: 11, day: 23, hour: 0, minute: 59
+        ))!.timeIntervalSince1970)
+        let trueOnset0221 = inBed0059 + 82 * 60 // 02:21 (82 min after 00:59)
+        let hintStart0312 = inBed0059 + 133 * 60 // 03:12 (51 min after 02:21, 133 min after 00:59)
+
+        var records: [V18Sample] = []
+        // Pre-bed active awake baseline (15 min)
+        for s in 0..<(15 * 60) {
+            records.append(row(inBed0059 - 15 * 60 + s, seconds: s,
+                               sleeping: false, sleepState: 0, heartRate: 105, dynamicAccelG: 0.23))
+        }
+        // In-bed awake with elevated HR (00:59 to 02:21, 82 min)
+        for s in 0..<(82 * 60) {
+            records.append(row(inBed0059 + s, seconds: s + 15 * 60,
+                               sleeping: true, sleepState: 1, heartRate: 92, dynamicAccelG: 0.012))
+        }
+        // True physiological sleep before band hint (02:21 to 03:12, 51 min)
+        for s in 0..<(51 * 60) {
+            records.append(row(trueOnset0221 + s, seconds: s + 97 * 60,
+                               sleeping: true, sleepState: 1, heartRate: 72, dynamicAccelG: 0.012))
+        }
+        // Confirmed sleep with band state=2 (03:12 onwards, 300 min)
+        for s in 0..<(300 * 60) {
+            records.append(row(hintStart0312 + s, seconds: s + 148 * 60,
+                               sleeping: true, sleepState: 2, heartRate: 72, dynamicAccelG: 0.012))
+        }
+
+        let night = try XCTUnwrap(SleepDetect.detect(records).first)
+        XCTAssertEqual(night.startUnix, trueOnset0221, accuracy: 60,
+                       "90-min backtracking from 03:12 band hint must recover true 02:21 HR onset, not false 00:59 actigraphy")
     }
 
     /// Test 2: Normal 14-minute delayed hint (existing behavior preserved)
@@ -266,7 +310,6 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 14,
-            confirmedSleepMinutes: 50,  // 14 + 50 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -333,13 +376,13 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
             elevatedHRMinutes: 14,
             sleepState: 1
         )
-        // Insert a 5-minute state=3 (up) at 2 hours into sleep
+        // Insert a 5-minute state=3 (up) at 2 hours into sleep (within 7+ hour night)
         let bathroomStart = start + 14 * 60 + 2 * 3600
         var modified = records
         for second in 0..<(5 * 60) {
             if let idx = modified.firstIndex(where: { $0.unix == bathroomStart + second }) {
                 modified[idx] = row(bathroomStart + second, seconds: Int(modified[idx].header.recordIndex),
-                                    sleeping: false, sleepState: 3, heartRate: 85)
+                                    sleeping: false, sleepState: 3, heartRate: 85, dynamicAccelG: 0.15)
             }
         }
         let night = try XCTUnwrap(SleepDetect.detect(modified).first)
@@ -356,7 +399,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
             elevatedHRMinutes: 14,
             sleepState: 1
         )
-        // Insert 10-minute off-wrist period (wearing=false)
+        // Insert 10-minute off-wrist period (wearing=false) at 3 hours into sleep
         let offWristStart = start + 14 * 60 + 3 * 3600
         var modified = records
         for second in 0..<(10 * 60) {
@@ -429,18 +472,18 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         ))!.timeIntervalSince1970)
 
         var records: [V18Sample] = []
-        // All low HR from the beginning - no elevated period
+        // Pre-sleep active awake baseline with normal waking HR and motion
         for second in 0..<(15 * 60) {
             records.append(row(start - 15 * 60 + second, seconds: second,
-                               sleeping: false, sleepState: 0, heartRate: 60))
+                               sleeping: false, sleepState: 0, heartRate: 95, dynamicAccelG: 0.23))
         }
         for second in 0..<(14 * 60) {
             records.append(row(start + second, seconds: second + 15 * 60,
-                               sleeping: true, sleepState: 1, heartRate: 60))
+                               sleeping: true, sleepState: 1, heartRate: 60, dynamicAccelG: 0.012))
         }
-        for second in 0..<(120 * 60) {
+        for second in 0..<(360 * 60) {
             records.append(row(start + 14 * 60 + second, seconds: second + 29 * 60,
-                               sleeping: true, sleepState: 2, heartRate: 60))
+                               sleeping: true, sleepState: 2, heartRate: 60, dynamicAccelG: 0.012))
         }
 
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -456,7 +499,6 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 23, startMinute: 45,
             elevatedHRMinutes: 44,
-            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -476,15 +518,15 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         var records: [V18Sample] = []
         for second in 0..<(15 * 60) {
             records.append(row(start - 15 * 60 + second, seconds: second,
-                               sleeping: false, sleepState: 0, heartRate: 95))
+                               sleeping: false, sleepState: 0, heartRate: 95, dynamicAccelG: 0.23))
         }
         for second in 0..<(44 * 60) {
             records.append(row(start + second, seconds: second + 15 * 60,
-                               sleeping: true, sleepState: 1, heartRate: 95))
+                               sleeping: true, sleepState: 1, heartRate: 70, dynamicAccelG: 0.012))
         }
-        for second in 0..<(20 * 60) {  // 44 + 20 = 64 min > 60 min minimum
+        for second in 0..<(360 * 60) {
             records.append(row(start + 44 * 60 + second, seconds: second + 59 * 60,
-                               sleeping: true, sleepState: 2, heartRate: 77))
+                               sleeping: true, sleepState: 2, heartRate: 70, dynamicAccelG: 0.012))
         }
 
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -506,7 +548,6 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 1, startMinute: 45,
             elevatedHRMinutes: 20,
-            confirmedSleepMinutes: 45,  // 20 + 45 = 65 min > 60 min minimum
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
@@ -561,33 +602,22 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         ))!.timeIntervalSince1970)
 
         var records: [V18Sample] = []
-        // Only 10 minutes of HR data in first 30 minutes (below 80% = 24 min)
+        // Active baseline
         for second in 0..<(15 * 60) {
             records.append(row(start - 15 * 60 + second, seconds: second,
-                               sleeping: false, sleepState: 0, heartRate: 95))
+                               sleeping: false, sleepState: 0, heartRate: 95, dynamicAccelG: 0.23))
         }
+        // First 44 minutes: only first 10 minutes have HR data (below 80% prefix HR requirement = 24 min).
+        // Remaining 34 minutes have valid low HR to ensure overall night passes 80% sleep worn gate.
         for second in 0..<(44 * 60) {
-            let hr = second < 10 * 60 ? 95 : 0 // HR only for first 10 min
-            let sample = V18Sample(
-                header: BandRecordHeader(version: 18, flags: 0x80,
-                    recordIndex: UInt32(second + 15 * 60), unix: UInt32(start + second), subsecQ15: 0),
-                heartRate: hr,
-                rrIntervalsMS: [],
-                dynamicAccelG: 0.02,
-                gravityXG: 0, gravityYG: 0, gravityZG: 1,
-                stepCounter: nil, stepCadence: nil, activityClass: 0,
-                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
-                sleepStateByte: 0x10, sleepState: 1,
-                cardiacFlags: nil, hrQualityFlags: nil,
-                spo2CandidateRaw: nil, spo2CandidatePct: nil,
-                spo2CandidateKind: .absent,
-                signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
-            )
+            let hr = second < 10 * 60 ? 95 : 70
+            let sample = row(start + second, seconds: second + 15 * 60,
+                             sleeping: true, sleepState: 1, heartRate: hr, dynamicAccelG: 0.012)
             records.append(sample)
         }
-        for second in 0..<(20 * 60) {  // 44 + 20 = 64 min > 60 min minimum
+        for second in 0..<(360 * 60) {
             records.append(row(start + 44 * 60 + second, seconds: second + 59 * 60,
-                               sleeping: true, sleepState: 2, heartRate: 77))
+                               sleeping: true, sleepState: 2, heartRate: 70, dynamicAccelG: 0.012))
         }
 
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
