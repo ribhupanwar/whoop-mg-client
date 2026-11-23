@@ -263,10 +263,10 @@ struct HealthHubView: View {
                             value: bpm.map(Double.init), status: bpm == nil ? .unavailable : .calibrating,
                             baselineDays: 0, reference: nil), status: bpm == nil ? "UNAVAILABLE" : "LIVE")
                     }
-                    monitorCheck("RESP", icon: "lungs.fill", reading: store.healthMonitor[.respiration])
-                    monitorCheck("SPO₂", icon: "drop", reading: store.healthMonitor[.oxygen])
-                    monitorCheck("RHR", icon: "heart", reading: store.healthMonitor[.rhr])
-                    monitorCheck("HRV", icon: "waveform.path.ecg", reading: store.healthMonitor[.hrv])
+                    monitorCheck("RESP", icon: StrapIcon.Metric.respiration, reading: store.healthMonitor[.respiration])
+                    monitorCheck("SPO₂", icon: StrapIcon.Metric.bloodOxygen, reading: store.healthMonitor[.oxygen])
+                    monitorCheck("RHR", icon: StrapIcon.Metric.restingHeartRate, reading: store.healthMonitor[.rhr])
+                    monitorCheck("HRV", icon: StrapIcon.Metric.hrv, reading: store.healthMonitor[.hrv])
                 }
                 HStack(spacing: 10) {
                     Image(systemName: monitorCount == 4 ? "checkmark.square.fill" : "exclamationmark.square")
