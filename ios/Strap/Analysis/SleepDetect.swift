@@ -176,7 +176,10 @@ enum SleepDetect {
                 if leadingUpSeconds >= 300, let leadingAwakeEnd {
                     verifiedStart = max(verifiedStart, leadingAwakeEnd + 1)
                 }
-                verifiedStart = refineOvernightOnset(run, start: verifiedStart, quietAccelG: quietAccelG)
+                let refinedStart = refineOvernightOnset(run, start: verifiedStart, quietAccelG: quietAccelG)
+                if run[run.count - 1].unix - refinedStart + 1 >= minSleepS {
+                    verifiedStart = refinedStart
+                }
             }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes
@@ -390,11 +393,14 @@ enum SleepDetect {
         var onset = hintStart
         while onset - 60 >= lowerBound {
             let minuteHR = ((onset - 60)..<onset).compactMap { quietHRBySecond[$0] }
-            guard minuteHR.count >= 40,
-                  Stats.median(minuteHR.map(Double.init)) <= confirmedHR + 8 else { break }
+            // Missing observations and the search limit cannot locate an onset.
+            guard minuteHR.count >= 40 else { return start }
+            if Stats.median(minuteHR.map(Double.init)) > confirmedHR + 8 {
+                return onset
+            }
             onset -= 60
         }
-        return onset
+        return start
     }
 
     private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {
