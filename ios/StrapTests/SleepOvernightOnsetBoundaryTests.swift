@@ -9,11 +9,11 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         XCTAssertGreaterThan(SleepSession.algorithmVersion, 5)
     }
 
-    private func row(_ unix: Int, seconds: Int, sleeping: Bool, sleepState: Int?) -> V18Sample {
+    private func row(_ unix: Int, seconds: Int, sleeping: Bool, sleepState: Int?, heartRate: Int? = nil) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80,
                 recordIndex: UInt32(seconds), unix: UInt32(unix), subsecQ15: 0),
-            heartRate: sleeping ? 56 : 91, rrIntervalsMS: [],
+            heartRate: heartRate ?? (sleeping ? 56 : 91), rrIntervalsMS: [],
             dynamicAccelG: sleeping ? 0.012 : 0.23,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: nil, stepCadence: nil, activityClass: 0,
@@ -55,6 +55,42 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         XCTAssertEqual(night.startUnix, start,
                        "The coarse state=2 hint may lag recorded nighttime onset")
         XCTAssertEqual(night.endUnix, start + 75 * 60 - 1)
+    }
+
+    private func laptopThenSleep(totalMinutes: Int, sleepStateDelay: Int) -> ([V18Sample], Int, Int) {
+        let (settled, start) = capture(startHour: 1, startMinute: 45, totalMinutes: totalMinutes,
+                                       sleepStateDelay: sleepStateDelay)
+        let awakeStart = start - 50 * 60
+        let active = (0..<600).map { row(awakeStart - 600 + $0, seconds: $0,
+                                        sleeping: false, sleepState: 0) }
+        // Low motion persists through both activities. The independent HR
+        // transition and delayed state hint distinguish the settled portion.
+        let laptop = (0..<(50 * 60)).map { second in
+            row(awakeStart + second, seconds: second + 600,
+                sleeping: true, sleepState: second % 120 < 60 ? 0 : 1,
+                heartRate: second < 30 * 60 ? 86 : 76)
+        }
+        return (active + laptop + Array(settled.dropFirst(900)), awakeStart, start)
+    }
+
+    func testMotionlessLaptopUseBeforeSleepDoesNotSetOvernightOnset() throws {
+        let (rows, _, start) = laptopThenSleep(totalMinutes: 130, sleepStateDelay: 14 * 60)
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, start)
+        XCTAssertEqual(night.endUnix, start + 130 * 60 - 1)
+    }
+
+    func testLookbackLimitDoesNotInventOnsetOrDiscardSleep() throws {
+        let (rows, awakeStart, start) = laptopThenSleep(totalMinutes: 75, sleepStateDelay: 50 * 60)
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, awakeStart)
+        XCTAssertEqual(night.endUnix, start + 75 * 60 - 1)
+    }
+
+    func testDelayedBandHintDoesNotTrimAStableLowHROvernightPrefix() throws {
+        let (rows, start) = capture(startHour: 1, startMinute: 45, totalMinutes: 130, sleepStateDelay: 50 * 60)
+        let night = try XCTUnwrap(SleepDetect.detect(rows).first)
+        XCTAssertEqual(night.startUnix, start)
     }
 
     func testLateEveningBefore2200StillTrimsUnconfirmedRest() throws {
