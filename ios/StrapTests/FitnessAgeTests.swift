@@ -187,7 +187,8 @@ final class RRBeatDurationAuditTests: XCTestCase {
     }
 
     func testEmptyAndNormalRRWindowsAreSafe() {
-        XCTAssertFalse(HistoryCoverage.beatDurationAudit([]).exceedsObservedSpan)
+        let emptyRecords: [(second: Int, intervalsMS: [Int])] = []
+        XCTAssertFalse(HistoryCoverage.beatDurationAudit(emptyRecords).exceedsObservedSpan)
         XCTAssertFalse(HistoryCoverage.beatDurationAudit([
             (second: 100, intervalsMS: [900]),
             (second: 101, intervalsMS: [900])
