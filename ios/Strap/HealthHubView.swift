@@ -183,7 +183,7 @@ struct HealthHubView: View {
                         .font(StrapTypography.metric(30, weight: .bold))
                 }
                 Spacer()
-                Image(systemName: "waveform.path")
+                Image("health_hrv")
                     .font(.system(size: 40, weight: .ultraLight))
                     .foregroundStyle(Color.appMuted)
             }

@@ -1,0 +1,60 @@
+=== KNOWN STRING ADDRESSES ===
+
+--- Address 0x109A88926 ---
+  String: "helloResponse"
+  Ref: 0x10B36AC78 type=DATA
+
+--- Address 0x109A88940 ---
+  String: "helloResponseTask"
+  Ref: 0x10B3524C8 type=DATA
+
+--- Address 0x1097B1E0E ---
+  String: "strap_signature"
+  Ref: 0x10AD1B6E0 type=DATA
+  Ref: 0x10AD1B718 type=DATA
+
+--- Address 0x1098550E4 ---
+  String: "strapSerial"
+  Ref: 0x10AF28510 type=DATA
+
+--- Address 0x109A2C151 ---
+  String: "boardId"
+  Ref: 0x10B356EB8 type=DATA
+
+--- Address 0x109A98A40 ---
+  String: "lastConnectedStrapSerial"
+  Ref: 0x10B4C9F80 type=DATA
+  Ref: 0x10B345CB0 type=DATA
+  Ref: 0x10B38ABE8 type=DATA
+  Ref: 0x10B402C00 type=DATA
+  Ref: 0x10B4640A8 type=DATA
+
+--- Address 0x109A98A60 ---
+  String: "lastConnectedStrapSignature"
+  Ref: 0x10B4C9F88 type=DATA
+  Ref: 0x10B345CC0 type=DATA
+  Ref: 0x10B38ABF8 type=DATA
+
+--- Address 0x109A46AAD ---
+  String: "setLastConnectedStrapSignature:"
+  Ref: 0x10B4CF798 type=DATA
+
+--- Address 0x109AAE6A3 ---
+  String: "processCommandDidGetHelloPacket:"
+  Ref: 0x10B4CC260 type=DATA
+
+--- Address 0x109AAE668 ---
+  String: "processCommandDidGetHelloInfoWithSerial:signature:boardId:"
+  Ref: 0x10B4CC258 type=DATA
+
+--- Address 0x109ABAFF8 ---
+  String: "sendGetHelloPacketWithCompletionHandler:"
+  Ref: 0x10B4D8B08 type=DATA
+
+--- Address 0x109A79FF0 ---
+  String: "didCallSendGetHelloPacket"
+  Ref: 0x10B396A00 type=DATA
+
+--- Address 0x109781892 ---
+  String: "GetHelloPacket"
+  Ref: 0x10ACA74B8 type=DATA
