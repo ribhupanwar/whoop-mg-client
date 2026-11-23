@@ -1,6 +1,7 @@
 # Personal biometric captures and device identifiers - never commit.
 *.jsonl
 *.csv
+!docs/research/*.csv
 capture*.json
 session*.json
 *dashboard*.html
