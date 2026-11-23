@@ -337,7 +337,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         var modified = records
         for second in 0..<(5 * 60) {
             if let idx = modified.firstIndex(where: { $0.unix == bathroomStart + second }) {
-                modified[idx] = row(bathroomStart + second, seconds: modified[idx].header.recordIndex,
+                modified[idx] = row(bathroomStart + second, seconds: Int(modified[idx].header.recordIndex),
                                     sleeping: false, sleepState: 3, heartRate: 85)
             }
         }
@@ -360,7 +360,7 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         var modified = records
         for second in 0..<(10 * 60) {
             if let idx = modified.firstIndex(where: { $0.unix == offWristStart + second }) {
-                var sample = modified[idx]
+                let sample = modified[idx]
                 modified[idx] = V18Sample(
                     header: sample.header,
                     heartRate: 0,
