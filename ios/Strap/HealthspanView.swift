@@ -337,25 +337,16 @@ struct HealthspanOrb: View {
         return String(format: "%.1f years %@", abs(gap), gap <= 0 ? "younger" : "older")
     }
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         GeometryReader { geometry in
             let diameter = min(geometry.size.width, geometry.size.height)
-            TimelineView(.animation(minimumInterval: 1.0 / 24.0, paused: reduceMotion)) { timeline in
-                let phase = reduceMotion ? 0.0 : timeline.date.timeIntervalSinceReferenceDate
-                let shape = HealthspanMorphShape(phase: phase)
-                ZStack {
-                    HealthspanParticleField()
-                        .clipShape(shape)
-                        .overlay {
-                            shape.stroke(
-                                Color(hex: 0x54D7E9).opacity(0.42),
-                                lineWidth: 1.6
-                            )
-                        }
-                        .accessibilityHidden(true)
-                    VStack(spacing: 6) {
+            ZStack {
+                // The particle canvas owns both the animated membrane and its
+                // clipping path. A second animated clip created conflicting
+                // silhouettes and hid the changing edge.
+                HealthspanParticleField()
+                    .accessibilityHidden(true)
+                VStack(spacing: 6) {
                     Text(years.map { String(format: "%.1f", $0) } ?? "—")
                         .font(StrapTypography.metric(47, weight: .bold))
                         .foregroundStyle(.white)
@@ -368,41 +359,13 @@ struct HealthspanOrb: View {
                         .foregroundStyle(Color(hex: 0x9DE5F0))
                         .padding(.top, 7)
                 }
-                    .multilineTextAlignment(.center)
-                }
-                .frame(width: diameter, height: diameter)
+                .multilineTextAlignment(.center)
             }
+            .frame(width: diameter, height: diameter)
             .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
         }
         .accessibilityLabel(years.map { String(format: "Fitness age %.1f years. %@", $0, ageGapText) }
                             ?? "Fitness age needs more data")
-    }
-}
-
-/// A clean-room, continuously changing silhouette; independent of the age model.
-/// Frequencies are intentionally slow so the boundary never visibly jitters.
-private struct HealthspanMorphShape: Shape {
-    let phase: TimeInterval
-
-    func path(in rect: CGRect) -> Path {
-        let center = CGPoint(x: rect.midX, y: rect.midY)
-        let radius = min(rect.width, rect.height) * 0.465
-        let steps = 180
-        var path = Path()
-        for index in 0...steps {
-            let theta = Double(index) * 2.0 * .pi / Double(steps)
-            let wobble = 1.0
-                + 0.052 * sin(3.0 * theta + phase * 0.23)
-                + 0.036 * sin(5.0 * theta - phase * 0.17 + 1.2)
-                + 0.018 * sin(8.0 * theta + phase * 0.13 + 0.7)
-            let point = CGPoint(
-                x: center.x + radius * CGFloat(wobble * cos(theta)),
-                y: center.y + radius * CGFloat(wobble * sin(theta))
-            )
-            if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
-        }
-        path.closeSubpath()
-        return path
     }
 }
 
