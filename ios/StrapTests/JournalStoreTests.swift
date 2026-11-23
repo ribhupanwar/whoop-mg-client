@@ -122,4 +122,45 @@ final class JournalStoreTests: XCTestCase {
         store.save(entry)
         XCTAssertEqual(store.entry(on: date), entry)
     }
+
+    func testSleepLifecyclePersistsAndDoesNotRepeatJournal() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = persistence.load()
+        XCTAssertEqual(state.phase, .idle)
+        state.confirm(sessionID: "night-1", startUnix: 1000)
+        state.confirm(sessionID: "night-2", startUnix: 1200)
+        XCTAssertEqual(state.sessionID, "night-1")
+        state.end(sessionID: "night-2", at: 2000)
+        XCTAssertEqual(state.phase, .detected)
+        state.end(sessionID: "night-1", at: 2000)
+        state.end(sessionID: "night-1", at: 3000)
+        XCTAssertEqual(state.endedAtUnix, 2000)
+        state.finishProcessing(sessionID: "night-1", hasJournalQuestions: true)
+        persistence.save(state)
+        var restored = persistence.load()
+        XCTAssertEqual(restored.phase, .journalPending)
+        restored.acknowledgeJournal(sessionID: "night-1")
+        restored.acknowledgeJournal(sessionID: "night-1")
+        XCTAssertEqual(restored.phase, .completed)
+        XCTAssertTrue(restored.journalPresented)
+        persistence.save(restored)
+        XCTAssertEqual(persistence.load(), restored)
+    }
+
+    func testSleepLifecycleRejectsUnconfirmedAndInvalidTransitions() {
+        var state = SleepLifecycleSnapshot()
+        state.end(sessionID: "unknown", at: 2000)
+        XCTAssertEqual(state.phase, .idle)
+        state.confirm(sessionID: "", startUnix: 1000)
+        XCTAssertEqual(state.phase, .idle)
+        state.confirm(sessionID: "night", startUnix: 1000)
+        state.end(sessionID: "night", at: 1000)
+        XCTAssertEqual(state.phase, .detected)
+        state.finishProcessing(sessionID: "night", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .detected)
+        state.end(sessionID: "night", at: 1500)
+        state.finishProcessing(sessionID: "night", hasJournalQuestions: false)
+        XCTAssertEqual(state.phase, .completed)
+    }
+
 }
