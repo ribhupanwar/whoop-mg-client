@@ -170,7 +170,7 @@ struct GPSRunView: View {
                         .overlay {
                             VStack(spacing: 10) {
                                 Image(systemName: "heart.fill").font(.system(size: 30))
-                                Text(gps.status.isEmpty ? "READY" : "READY").font(.system(size: 38, weight: .bold))
+                                Text("READY").font(.system(size: 38, weight: .bold))
                                 Text("GPS RUN").font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(.white)
