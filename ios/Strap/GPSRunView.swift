@@ -22,7 +22,7 @@ struct GPSRunView: View {
 
     var body: some View {
         Group {
-        if !workoutStarted && !gps.recording {
+        if !gps.recording && !workoutStarted {
             runningPrestart
         } else {
         Screen {
@@ -44,12 +44,12 @@ struct GPSRunView: View {
                         .foregroundStyle(Color.appMuted)
                     HStack(spacing: 14) {
                         if !gps.recording {
-                            Button("Start GPS") { gps.start() }
+                            Button("Start GPS") { gps.start(); workoutStarted = gps.recording }
                         } else {
                             Button(gps.paused ? "Resume" : "Pause") {
                                 if gps.paused { gps.resume() } else { gps.pause() }
                             }
-                            Button("Finish") { gps.stop() }
+                            Button("Finish") { gps.stop(); workoutStarted = false }
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -170,7 +170,7 @@ struct GPSRunView: View {
                         .overlay {
                             VStack(spacing: 10) {
                                 Image(systemName: "heart.fill").font(.system(size: 30))
-                                Text("READY").font(.system(size: 38, weight: .bold))
+                                Text(gps.status.isEmpty ? "READY" : "READY").font(.system(size: 38, weight: .bold))
                                 Text("GPS RUN").font(.system(size: 13, weight: .semibold))
                             }
                             .foregroundStyle(.white)
@@ -199,7 +199,7 @@ struct GPSRunView: View {
             .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
             .clipShape(Capsule())
             .padding(18)
-            Text(gps.status).font(.caption).padding(.bottom, 10)
+            Text(gps.status).font(.caption).foregroundStyle(.secondary).padding(.bottom, 10)
         }
         .background(Color(.systemBackground))
     }
