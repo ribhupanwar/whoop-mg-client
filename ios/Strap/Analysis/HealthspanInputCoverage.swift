@@ -41,7 +41,15 @@ struct HealthspanInputCoverage {
               let observation = observations[metric], observation.isValid,
               let start = calendar.date(byAdding: .day, value: -(windowDays - 1),
                                         to: calendar.startOfDay(for: asOf)) else { return true }
+        let firstDay = calendar.startOfDay(for: observation.firstObserved)
+        let lastDay = calendar.startOfDay(for: observation.lastObserved)
+        let inclusiveSpanDays = (calendar.dateComponents([.day], from: firstDay, to: lastDay).day ?? -1) + 1
+        // A summary cannot claim more distinct observed days than the date
+        // span or requested window. Reject impossible coverage instead of
+        // treating it as evidence of sufficient Healthspan history.
         return observation.observedDays < minimumDays
+            || observation.observedDays > windowDays
+            || observation.observedDays > inclusiveSpanDays
             || observation.firstObserved < start
             || observation.lastObserved > asOf
     }
