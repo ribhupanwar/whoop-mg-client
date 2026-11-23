@@ -3,8 +3,7 @@ import SwiftUI
 /// Centralized Icon Registry for STRAP.
 ///
 /// Provides a unified, high-fidelity iconography system based on the WHOOP 5.80.2 forensic inventory.
-/// Maps all supported domain concepts to licensed, accessible SF Symbols, clean-room vector artwork,
-/// and bundled original Assets.xcassets image sets.
+/// Maps all supported domain concepts to licensed, accessible SF Symbols and clean-room vector artwork.
 enum StrapIcon {
 
     // MARK: - Health & Biometric Metrics
@@ -25,21 +24,6 @@ enum StrapIcon {
         static let steps = "figure.walk"
         static let distance = "figure.run"
         static let ecg = "waveform.path.ecg.rectangle"
-        static let vo2Max = "figure.run.circle"
-        static let healthspan = "leaf.circle.fill"
-    }
-
-    // MARK: - Sleep & Sleep Stages
-    enum Sleep {
-        static let sleep = "moon.fill"
-        static let nap = "moon.zzz.fill"
-        static let awake = "sun.max.fill"
-        static let light = "moon.stars.fill"
-        static let deep = "moon.fill"
-        static let rem = "brain.head.profile"
-        static let restorative = "sparkles"
-        static let debt = "hourglass"
-        static let consistency = "chart.bar.xaxis"
     }
 
     // MARK: - Device & Battery
@@ -59,13 +43,7 @@ enum StrapIcon {
         static let batteryFull = "battery.100"
         static let batteryHalf = "battery.50"
         static let batteryLow = "battery.25"
-        static let batteryCritical = "battery.0"
         static let batteryCharging = "battery.100.bolt"
-        static let wristOn = "hand.raised.fill"
-        static let wristOff = "hand.raised.slash.fill"
-        static let strapConnected = "checkmark.circle.fill"
-        static let strapDisconnected = "xmark.circle.fill"
-        static let strapIdle = "clock.fill"
     }
 
     // MARK: - Navigation & Settings
@@ -79,14 +57,7 @@ enum StrapIcon {
         /// Segmented hub glyph, replacing three-line drawer hamburger menu.
         static let more = "ellipsis.circle"
         static let moreSelected = "ellipsis.circle.fill"
-        static let profile = "person.crop.circle"
-        static let profileSelected = "person.crop.circle.fill"
-        static let journal = "book.closed"
-        static let journalSelected = "book.closed.fill"
-        static let insights = "chart.xyaxis.line"
-        static let plans = "list.bullet.clipboard"
         static let settings = "gearshape"
-        static let settingsSelected = "gearshape.fill"
         static let chevronRight = "chevron.right"
         static let chevronLeft = "chevron.left"
         static let chevronDown = "chevron.down"
@@ -104,23 +75,6 @@ enum StrapIcon {
         static let gallery = "square.grid.3x3.fill"
     }
 
-    // MARK: - Activity & UI Controls
-    enum Action {
-        static let edit = "pencil"
-        static let delete = "trash"
-        static let merge = "arrow.triangle.merge"
-        static let share = "square.and.arrow.up"
-        static let calendar = "calendar"
-        static let gps = "location.fill"
-        static let play = "play.fill"
-        static let pause = "pause.fill"
-        static let stop = "stop.fill"
-        static let add = "plus"
-        static let minus = "minus"
-        static let search = "magnifyingglass"
-        static let filter = "line.3.horizontal.decrease.circle"
-    }
-
     // MARK: - Charts & States
     enum State {
         static let checkmark = "checkmark"
@@ -136,10 +90,9 @@ enum StrapIcon {
     }
 }
 
-/// Standardized STRAP Icon view with consistent frame, optical alignment, asset catalog support, and accessibility.
+/// Standardized STRAP Icon view with consistent frame, optical alignment, and accessibility.
 struct StrapIconView: View {
     let systemName: String
-    var asset: IconAsset? = nil
     var size: CGFloat = 16
     var weight: Font.Weight = .medium
     var frameWidth: CGFloat = 24
@@ -148,7 +101,6 @@ struct StrapIconView: View {
 
     init(
         _ systemName: String,
-        asset: IconAsset? = nil,
         size: CGFloat = 16,
         weight: Font.Weight = .medium,
         frameWidth: CGFloat = 24,
@@ -156,24 +108,6 @@ struct StrapIconView: View {
         accessibilityLabel: String? = nil
     ) {
         self.systemName = systemName
-        self.asset = asset
-        self.size = size
-        self.weight = weight
-        self.frameWidth = frameWidth
-        self.color = color
-        self.accessibilityLabel = accessibilityLabel
-    }
-
-    init(
-        asset: IconAsset,
-        size: CGFloat = 16,
-        weight: Font.Weight = .medium,
-        frameWidth: CGFloat = 24,
-        color: Color = Color.appFG,
-        accessibilityLabel: String? = nil
-    ) {
-        self.systemName = asset.sfSymbolFallback
-        self.asset = asset
         self.size = size
         self.weight = weight
         self.frameWidth = frameWidth
@@ -182,20 +116,10 @@ struct StrapIconView: View {
     }
 
     var body: some View {
-        Group {
-            if let asset = asset, UIImage(named: asset.rawValue) != nil {
-                asset.image
-                    .resizable()
-                    .renderingMode(.template)
-                    .scaledToFit()
-                    .frame(width: size, height: size)
-            } else {
-                Image(systemName: systemName)
-                    .font(.system(size: size, weight: weight))
-            }
-        }
-        .frame(width: frameWidth)
-        .foregroundStyle(color)
-        .accessibilityLabel(Text(accessibilityLabel ?? systemName))
+        Image(systemName: systemName)
+            .font(.system(size: size, weight: weight))
+            .frame(width: frameWidth)
+            .foregroundStyle(color)
+            .accessibilityLabel(Text(accessibilityLabel ?? systemName))
     }
 }

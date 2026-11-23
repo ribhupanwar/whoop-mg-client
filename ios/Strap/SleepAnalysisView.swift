@@ -686,15 +686,9 @@ struct SleepAnalysisView: View {
                 let fraction = min(1.0, max(0.0, value / total))
                 VStack(alignment: .leading, spacing: 7) {
                     HStack(spacing: 8) {
-                        ZStack {
-                            Circle()
-                                .strokeBorder(stage.color, lineWidth: 1.5)
-                                .background(Circle().fill(stage.color.opacity(0.12)))
-                            Image(systemName: stage.icon)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(stage.color)
-                        }
-                        .frame(width: 23, height: 23)
+                        Circle()
+                            .strokeBorder(stage.color, lineWidth: 2)
+                            .frame(width: 23, height: 23)
                         Text(stage == .deep ? "SWS (DEEP)" : stage.title.uppercased())
                             .font(StrapTypography.body(12, weight: .bold))
                             .tracking(0.5)

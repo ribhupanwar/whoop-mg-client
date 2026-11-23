@@ -132,7 +132,7 @@ final class UIPerformanceBenchmarkTests: XCTestCase {
         XCTAssertLessThan(elapsed, 0.005, "Cached static allItems access across 100 iterations must take <5ms")
     }
 
-    // MARK: - 5. StrapIcon Registry Completeness & Category Coverage
+    // MARK: - 5. StrapIcon Registry Completeness
 
     func testStrapIconRegistryCategoryCoverage() {
         // Health metrics
@@ -141,46 +141,13 @@ final class UIPerformanceBenchmarkTests: XCTestCase {
         XCTAssertEqual(StrapIcon.Metric.bloodOxygen, "o.circle", "Blood Oxygen must use oxygen saturation badge")
         XCTAssertFalse(StrapIcon.Metric.respiration.isEmpty)
         XCTAssertFalse(StrapIcon.Metric.hrv.isEmpty)
-        XCTAssertFalse(StrapIcon.Metric.vo2Max.isEmpty)
-        XCTAssertFalse(StrapIcon.Metric.healthspan.isEmpty)
-
-        // Sleep & Sleep Stages
-        XCTAssertEqual(StrapIcon.Sleep.awake, "sun.max.fill")
-        XCTAssertEqual(StrapIcon.Sleep.light, "moon.stars.fill")
-        XCTAssertEqual(StrapIcon.Sleep.deep, "moon.fill")
-        XCTAssertEqual(StrapIcon.Sleep.rem, "brain.head.profile")
-        for stage in SleepStage.allCases {
-            XCTAssertFalse(stage.icon.isEmpty, "SleepStage \(stage) icon is empty")
-        }
 
         // Device & Battery
         XCTAssertEqual(StrapIcon.Device.bandSensor, "sensor.fill", "Screenless band must use sensor glyph")
         XCTAssertEqual(StrapIcon.Device.vibrationBuzz, "iphone.radiowaves.left.and.right", "Wrist vibration must use haptic glyph")
-        XCTAssertEqual(StrapIcon.Device.wristOn, "hand.raised.fill")
-        XCTAssertEqual(StrapIcon.Device.wristOff, "hand.raised.slash.fill")
 
         // Navigation
         XCTAssertEqual(StrapIcon.Navigation.more, "ellipsis.circle", "More tab must use segmented hub glyph")
         XCTAssertEqual(StrapIcon.Navigation.moreSelected, "ellipsis.circle.fill")
-        XCTAssertFalse(StrapIcon.Navigation.journal.isEmpty)
-        XCTAssertFalse(StrapIcon.Navigation.profile.isEmpty)
-
-        // Actions & Controls
-        XCTAssertFalse(StrapIcon.Action.edit.isEmpty)
-        XCTAssertFalse(StrapIcon.Action.delete.isEmpty)
-        XCTAssertFalse(StrapIcon.Action.play.isEmpty)
-        XCTAssertFalse(StrapIcon.Action.gps.isEmpty)
-    }
-
-    // MARK: - 6. StrapIconView Integration & Fallbacks
-
-    func testStrapIconViewInitializers() {
-        let viewFromSymbol = StrapIconView("heart.fill", size: 16)
-        XCTAssertEqual(viewFromSymbol.systemName, "heart.fill")
-        XCTAssertNil(viewFromSymbol.asset)
-
-        let viewFromAsset = StrapIconView(asset: .healthHeartRate, size: 20)
-        XCTAssertEqual(viewFromAsset.asset, .healthHeartRate)
-        XCTAssertEqual(viewFromAsset.systemName, IconAsset.healthHeartRate.sfSymbolFallback)
     }
 }

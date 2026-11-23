@@ -103,15 +103,6 @@ enum SleepStage: String, Codable, CaseIterable, Identifiable {
         case .rem: return "REM"
         }
     }
-
-    var icon: String {
-        switch self {
-        case .wake: return "sun.max.fill"
-        case .light: return "moon.stars.fill"
-        case .deep: return "moon.fill"
-        case .rem: return "brain.head.profile"
-        }
-    }
 }
 
 /// A staged span. The end is EXCLUSIVE, unlike SleepPeriod's inclusive end, so
