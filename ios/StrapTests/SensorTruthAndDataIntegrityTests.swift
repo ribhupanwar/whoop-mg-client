@@ -147,7 +147,7 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
 
         // Persist chunk 1
         let progress1 = try db.commitReportingProgress(chunk1, token: token1)
-        XCTAssertEqual(progress1.inserted, 30)
+        XCTAssertEqual(progress1.changed, 30)
         XCTAssertEqual(progress1.newestInserted, 1700000029)
         XCTAssertEqual(try db.metadata("last_history_chunk"), token1)
 
@@ -155,7 +155,7 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         let chunk2 = (1700000025..<1700000060).map { makeSample(unix: $0) }
         let token2 = "token_checkpoint_002"
         let progress2 = try db.commitReportingProgress(chunk2, token: token2)
-        XCTAssertEqual(progress2.inserted, 30, "Should only insert the 30 genuinely new seconds (1700000030..1700000059)")
+        XCTAssertEqual(progress2.changed, 30, "Should only insert the 30 genuinely new seconds (1700000030..1700000059)")
         XCTAssertEqual(progress2.newestInserted, 1700000059)
         XCTAssertEqual(try db.metadata("last_history_chunk"), token2)
         XCTAssertEqual(try db.samples(from: 0, through: 2_000_000_000).count, 60)
