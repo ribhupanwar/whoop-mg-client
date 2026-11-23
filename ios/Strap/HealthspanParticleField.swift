@@ -69,12 +69,12 @@ struct HealthspanParticleField: View {
         Canvas(opaque: false, rendersAsynchronously: true) { context, size in
             let diameter = min(size.width, size.height)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let cyan = Color(hex: 0x54D7E9)
-            let base = diameter * 0.456 * (1 + 0.009 * sin(elapsed * 1.0))
+            let cyan = Color(hex: 0x69DBF0)
+            let base = diameter * 0.456 * (1 + 0.006 * sin(elapsed * 1.2))
             func membrane(_ angle: Double) -> Double {
-                1 + 0.055 * sin(3 * angle - elapsed * 0.68)
-                    + 0.028 * cos(5 * angle + elapsed * 0.51)
-                    + 0.014 * sin(8 * angle - elapsed * 0.39)
+                1 + 0.075 * sin(3 * angle - elapsed * 1.15)
+                    + 0.041 * cos(5 * angle + elapsed * 0.83)
+                    + 0.019 * sin(8 * angle - elapsed * 0.61)
             }
             func point(angle: Double, radius: Double) -> CGPoint {
                 CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
@@ -89,9 +89,9 @@ struct HealthspanParticleField: View {
             edge.closeSubpath()
             context.fill(edge, with: .radialGradient(
                 Gradient(stops: [.init(color: .black, location: 0.32),
-                                 .init(color: Color(hex: 0x06232F), location: 0.62),
-                                 .init(color: Color(hex: 0x167487), location: 0.9),
-                                 .init(color: Color(hex: 0x0D5366), location: 1)]),
+                                 .init(color: Color(hex: 0x082C38), location: 0.62),
+                                 .init(color: Color(hex: 0x1D91A6), location: 0.9),
+                                 .init(color: Color(hex: 0x14768B), location: 1)]),
                 center: center, startRadius: 0, endRadius: base))
             var clipped = context
             clipped.clip(to: edge)
@@ -114,10 +114,10 @@ struct HealthspanParticleField: View {
             }
             clipped.drawLayer { glow in
                 glow.addFilter(.blur(radius: max(0.5, 2 * scale)))
-                glow.fill(glows, with: .color(cyan.opacity(0.42)))
+                glow.fill(glows, with: .color(cyan.opacity(0.57)))
             }
             for level in 1..<dust.count {
-                clipped.fill(dust[level], with: .color(cyan.opacity(Double(level) * 0.19)))
+                clipped.fill(dust[level], with: .color(cyan.opacity(Double(level) * 0.22)))
             }
             context.stroke(edge, with: .linearGradient(
                 Gradient(colors: [cyan.opacity(0.75), Color(hex: 0x4581BB).opacity(0.35), cyan.opacity(0.7)]),
