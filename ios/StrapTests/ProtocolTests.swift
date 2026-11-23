@@ -545,3 +545,33 @@ final class StandardHeartRateTests: XCTestCase {
         XCTAssertEqual(reading?.rrMS, [1000])
     }
 }
+
+
+final class HistoricalOpticalK21DecoderTests: XCTestCase {
+    func testRejectsTruncatedOrOversizedBodies() {
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: []))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1243)))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1245)))
+    }
+
+    func testSixChannelsDecodeIndependentlyWithSignedLittleEndian() {
+        var body = [UInt8](repeating: 0, count: 1244)
+        let offsets = [20, 220, 420, 632, 832, 1032]
+        for (channel, offset) in offsets.enumerated() {
+            let value = Int16(channel % 2 == 0 ? -(channel + 1) : channel + 1)
+            let bits = UInt16(bitPattern: value)
+            body[offset] = UInt8(truncatingIfNeeded: bits)
+            body[offset + 1] = UInt8(truncatingIfNeeded: bits >> 8)
+        }
+        let decoded = HistoricalOpticalK21Decoder.decode(body: body)
+        XCTAssertEqual(decoded?.green.count, 3)
+        XCTAssertEqual(decoded?.infrared.count, 3)
+        XCTAssertEqual(decoded?.green[0][0], -1)
+        XCTAssertEqual(decoded?.green[1][0], 2)
+        XCTAssertEqual(decoded?.green[2][0], -3)
+        XCTAssertEqual(decoded?.infrared[0][0], 4)
+        XCTAssertEqual(decoded?.infrared[1][0], -5)
+        XCTAssertEqual(decoded?.infrared[2][0], 6)
+        XCTAssertEqual(decoded?.infrared[2][99], 0)
+    }
+}
