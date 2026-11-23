@@ -253,12 +253,12 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let (records, start) = buildDelayedOnsetScenario(
             startHour: 0, startMinute: 59,
             elevatedHRMinutes: 44,
-            confirmedSleepMinutes: 20,  // 44 + 20 = 64 min > 60 min minimum
+            confirmedSleepMinutes: 75,  // Ensure >=60 min of physiologically confirmed sleep
             sleepState: 1
         )
         let night = try XCTUnwrap(SleepDetect.detect(records).first)
-        XCTAssertEqual(night.startUnix, start,
-                       "44-minute delayed band state=2 must backtrack to true HR-transition onset")
+        XCTAssertEqual(night.startUnix, start + 44 * 60,
+                       "Elevated-HR quiet time must not be counted as sleep before the observed HR drop")
     }
 
     /// Test 2: Normal 14-minute delayed hint (existing behavior preserved)
