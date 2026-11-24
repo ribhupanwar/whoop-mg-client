@@ -52,7 +52,7 @@ Every external repository evaluated below was inspected from local clones and of
   - Bytes 24–31: 4 $\times$ 16-bit RR intervals in true integer milliseconds ($1.0\text{ ms}$ per LSB).
   - Byte 41: Dynamic acceleration in $G$ units ($Q8.8$ or scaled float).
   - Byte 63: Physical activity / gait classifier.
-- **STRAP Parity:** `ios/Strap/Protocol/V18Record.swift` and `whoop/records.py` match 100%. PR #173 and PR #203 resolved the trailing padding edge case (`rrPaddingValid`).
+- **STRAP Parity:** `ios/Strap/Protocol/V18Record.swift` and `whoop/records.py` implement identical record field layouts and byte extraction offsets. PR #173 and PR #203 resolved the trailing padding edge case (`rrPaddingValid`).
 
 ### C. Commit-Before-ACK Flash Durability
 - **Wire Contract:** Offloaded historical blocks contain an 8-byte token at offsets 17–24. Sending command `0x17` (`ACK_BLOCK`) causes the band to advance its flash read pointer and permanently mark those sectors for overwrite.
