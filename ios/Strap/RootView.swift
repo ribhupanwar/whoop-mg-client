@@ -119,6 +119,12 @@ struct RootView: View {
             if phase == .active {
                 // Count app launches even when returning to Health, Train, Plan or More.
                 AppOpenDayTracker.recordOpen()
+            if UserDefaults.standard.bool(forKey: DailyLocalBackup.enabledKey) {
+                let preferences = UserDefaults.standard.dictionaryRepresentation()
+                Task.detached(priority: .utility) {
+                    await DailyLocalBackup.shared.runIfDue(preferences: preferences)
+                }
+            }
                 store.band.resumeHistoryProcessing()
                 store.band.autoConnectIfNeeded()
             }
@@ -126,6 +132,12 @@ struct RootView: View {
         }
         .onAppear {
             AppOpenDayTracker.recordOpen()
+            if UserDefaults.standard.bool(forKey: DailyLocalBackup.enabledKey) {
+                let preferences = UserDefaults.standard.dictionaryRepresentation()
+                Task.detached(priority: .utility) {
+                    await DailyLocalBackup.shared.runIfDue(preferences: preferences)
+                }
+            }
             store.band.autoConnectIfNeeded()
             #if DEBUG
             let args = ProcessInfo.processInfo.arguments
