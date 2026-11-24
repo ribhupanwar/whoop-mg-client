@@ -24,6 +24,14 @@ struct GPSRunView: View {
     @State private var search = ""
     @State private var selectedActivity: ActivityKind = ActivityKind.run
     @State private var showStrain = false
+    @State private var trackRoute = true
+    @State private var mapPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    private var canRecordGPS: Bool {
+        switch selectedActivity {
+        case .run, .outdoorRun, .trailRun, .intervalRun, .walk, .hiking, .cycling, .mountainBiking: return true
+        default: return false
+        }
+    }
     private var dayStrain: Double? {
         let key = JournalStore.dayKey(for: Date())
         let saved = store.band.days.first(where: { $0.dateKey == key })?.strain
@@ -224,20 +232,30 @@ struct GPSRunView: View {
                 .foregroundStyle(.white)
             } else {
             ZStack {
-                Map(initialPosition: .userLocation(fallback: .automatic)) {
+                Map(position: $mapPosition) {
                     UserAnnotation()
                 }
                 .mapControls { MapCompass() }
                 VStack {
                     HStack {
                         Spacer()
-                        Text("TRACK ROUTE")
+                        Toggle("TRACK ROUTE", isOn: $trackRoute)
                             .font(.system(size: 12, weight: .semibold))
+                            .fixedSize()
                             .padding(12)
                             .background(.regularMaterial, in: Capsule())
+                            .accessibilityIdentifier("running.trackRouteToggle")
                     }
                     .padding(12)
                     Spacer()
+                    Button {
+                        mapPosition = .userLocation(fallback: .automatic)
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .padding(12)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                    .accessibilityIdentifier("running.recenterMap")
                     Circle()
                         .fill(Color(red: 0.07, green: 0.58, blue: 0.92))
                         .frame(width: 220, height: 220)
@@ -275,7 +293,19 @@ struct GPSRunView: View {
                 .padding()
                 .presentationDetents([.medium, .large])
             }
+            if !canRecordGPS {
+                Text("This activity needs a dedicated recording workflow. GPS run will not start.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+            } else if !trackRoute {
+                Text("Enable Track Route to record an outdoor GPS activity.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+            }
             Button {
+                guard canRecordGPS && trackRoute else { return }
                 gps.start()
                 if gps.recording { workoutStarted = true }
             } label: {
@@ -286,6 +316,7 @@ struct GPSRunView: View {
                     .padding(18)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(!canRecordGPS || !trackRoute)
             .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
             .clipShape(Capsule())
             .padding(18)
