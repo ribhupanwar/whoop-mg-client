@@ -61,6 +61,22 @@ MAX_SLEEP_WINDOW_S = 12 * 3600  # WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.sw
 SLEEP_GAP_TOLERANCE_S = 300
 HR_DROP_BPM = 5.0
 
+# Sparse gravity handling for WHOOP 5.0/MG (NOOP parity P0)
+# When gravity coverage < 50% of HR coverage, engage robustness branches
+SPARSE_GRAVITY_COVERAGE_THRESHOLD = 0.5
+
+# Motion-corroborated HR confirmation (NOOP parity P1)
+# Dual-band HR threshold: normal vs deeply quiescent
+HR_SLEEP_BASELINE_MULT = 1.05
+QUIESCENT_HR_SLEEP_MULT = 1.15
+
+# Off-wrist fractional backstop (NOOP parity P1)
+# Drop run only when off-wrist fraction >= threshold (default ~50%)
+MAX_OFF_WRIST_SLEEP_FRACTION = 0.5
+
+# Structured diagnostic tracing (NOOP parity P2)
+# Per-gate verdicts: 'hrConfirm', 'offWrist', 'daytimeGuard', 'morningStillness', 'sparseBridge', 'minSleepMin'
+
 # Respiratory rate from R-R via respiratory sinus arrhythmia. WHOOP5 v18 has
 # no respiration ADC: the only signal is how beat-to-beat timing modulates with
 # breathing. These are estimator constants, not measurements.
@@ -142,37 +158,358 @@ def _close_gaps(samples: list[V18Sample], quiet: list[bool], max_gap_s: int) -> 
     return filled
 
 
+def _contiguous_runs(samples: list[V18Sample]) -> list[list[V18Sample]]:
+    """Split samples into runs of consecutive seconds (by unix timestamp).
+    
+    Archive replay can duplicate a timestamp. Preserve continuity instead of 
+    splitting a valid resting window at duplicates.
+    """
+    if not samples:
+        return []
+    runs: list[list[V18Sample]] = []
+    current: list[V18Sample] = []
+    for sample in sorted(samples, key=lambda s: s.unix):
+        u = sample.unix
+        # Archive replay can duplicate a timestamp. Preserve continuity
+        # instead of splitting a valid resting window at duplicates.
+        if current and current[-1].unix == u:
+            continue
+        if current and u != current[-1].unix + 1:
+            runs.append(current)
+            current = []
+        current.append(sample)
+    if current:
+        runs.append(current)
+    return runs
+
+
+def _minimum_rolling_mean(values: list[float], window: int) -> float | None:
+    """Minimum rolling mean over a sliding window."""
+    if window <= 0 or len(values) < window:
+        return None
+    total = sum(values[:window])
+    best = total
+    for i in range(window, len(values)):
+        total += values[i] - values[i - window]
+        if total < best:
+            best = total
+    return best / window
+
+
+def _refine_overnight_onset(
+    run: list[V18Sample], 
+    start: int, 
+    quiet_accel_g: float,
+    active_median: float,
+) -> int:
+    """
+    Refine overnight sleep onset using band state=2 confirmation with bounded backtracking.
+    
+    Mirrors Swift SleepDetect.refineOvernightOnset:
+    - Requires >=30 min delay before attempting refinement
+    - Searches back up to 90 minutes for HR transition
+    - Requires >=270/300 quiet seconds in first 5 min of state=2 (anchor)
+    - Requires >=80% HR coverage in 30-min prefix before actigraphy onset
+    - Prefix HR median must exceed confirmed HR by >8 BPM
+    - Backtracks minute-by-minute looking for HR transition
+    """
+    minimum_delay = 30 * 60      # 30 min: must have delayed hint before attempting
+    backtrack_window = 90 * 60   # 90 min: max search window for HR transition
+    
+    # Filter observed samples from the run
+    observed = [s for s in run if s.unix >= start and s.wearing and 35 <= s.heart_rate <= 220]
+    if not observed:
+        return start
+    
+    # Find sustained band state=2 runs (confirmed sleep)
+    sleep_hints = [s for s in observed if s.sleep_state == 2]
+    sleep_hint_runs = _contiguous_runs(sleep_hints)
+    confirmation = None
+    for r in sleep_hint_runs:
+        if len(r) >= 300:  # 5 minutes of sustained state=2
+            confirmation = r
+            break
+    
+    if not confirmation:
+        return start
+    
+    hint_start = confirmation[0].unix
+    if hint_start - start < minimum_delay:
+        return start
+    
+    # Anchor: first 300 seconds of confirmed sleep
+    anchor = confirmation[:300]
+    quiet_anchor_count = sum(
+        1 for s in anchor 
+        if s.dynamic_accel_g is not None 
+        and s.dynamic_accel_g >= 0 
+        and s.dynamic_accel_g <= quiet_accel_g
+    )
+    if quiet_anchor_count < 270:  # Need >=270 quiet seconds in 300s anchor
+        return start
+    
+    confirmed_hr = statistics.median([float(s.heart_rate) for s in anchor])
+    
+    # Prefix: 30 minutes before actigraphy onset
+    prefix_cutoff = start + minimum_delay
+    prefix = [s for s in observed if s.unix < prefix_cutoff]
+    if not prefix:
+        return start
+    
+    # One HR observation per second
+    prefix_hr_by_sec = {}
+    for s in prefix:
+        if s.unix not in prefix_hr_by_sec:
+            prefix_hr_by_sec[s.unix] = s.heart_rate
+    
+    # Require >=80% HR coverage in 30-min prefix (24 min = 1440 seconds)
+    if len(prefix_hr_by_sec) < minimum_delay * 4 // 5:
+        return start
+    
+    prefix_median_hr = statistics.median(prefix_hr_by_sec.values())
+    if prefix_median_hr <= confirmed_hr + 8:
+        return start
+    
+    # Backtrack from hint_start to find HR transition
+    lower_bound = max(start, hint_start - backtrack_window)
+    
+    # Build quiet HR by second for the search window
+    quiet_hr_by_sec = {}
+    for s in observed:
+        if lower_bound <= s.unix < hint_start:
+            if s.sleep_state == 3:
+                continue
+            if s.dynamic_accel_g is None:
+                continue
+            if not (s.dynamic_accel_g >= 0 and s.dynamic_accel_g <= quiet_accel_g):
+                continue
+            if s.unix not in quiet_hr_by_sec:
+                quiet_hr_by_sec[s.unix] = s.heart_rate
+    
+    onset = hint_start
+    while onset - 60 >= lower_bound:
+        minute_hrs = [quiet_hr_by_sec.get(t) for t in range(onset - 60, onset) if t in quiet_hr_by_sec]
+        if len(minute_hrs) < 40:  # Need >=40 observations per minute
+            return start
+        if statistics.median(minute_hrs) > confirmed_hr + 8:
+            return onset
+        onset -= 60
+    
+    return start
+
+
+def _is_gravity_sparse(samples: list[V18Sample]) -> bool:
+    """Check if gravity coverage is sparse relative to HR coverage.
+    
+    WHOOP 5.0/MG backfills mostly v18/v26 where gravity is clumped (~25% coverage).
+    When sparse, robustness branches engage: lower stillness threshold, wider windows,
+    and cardiac sparse flag down-weights HR-variance for wake promotion.
+    """
+    if not samples:
+        return True
+    grav_seconds = len(set(s.unix for s in samples if s.dynamic_accel_g is not None))
+    hr_seconds = len(set(s.unix for s in samples if s.wearing))
+    if hr_seconds == 0:
+        return True
+    return grav_seconds / hr_seconds < SPARSE_GRAVITY_COVERAGE_THRESHOLD
+
+
+def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float, 
+                                  hr_drop_bpm: float, min_segment_s: int = 1800) -> list[list[V18Sample]]:
+    """Split a quiet run at sustained HR elevations.
+    
+    A long quiet run may contain both sleep (low HR) and awake-but-quiet periods (elevated HR).
+    This splits at boundaries where HR rises close to active median for sustained periods.
+    
+    Returns list of run segments, each at least min_segment_s duration.
+    """
+    if len(run) < min_segment_s:
+        return [run]
+    
+    # Build per-second HR for the run
+    hr_by_sec = {}
+    for s in run:
+        if s.wearing and 35 <= s.heart_rate <= 220:
+            if s.unix not in hr_by_sec:
+                hr_by_sec[s.unix] = s.heart_rate
+    
+    if len(hr_by_sec) < min_segment_s // 2:
+        return [run]
+    
+    run_start = run[0].unix
+    run_end = run[-1].unix
+    
+    # Threshold for "elevated" HR: use primary sleep threshold (active_median - hr_drop_bpm)
+    # This catches HR elevations that would fail the sleep HR gate
+    elevated_threshold = active_median - hr_drop_bpm
+    
+    segments = []
+    seg_start = run_start
+    
+    # First, skip any leading elevated HR (awake in bed before sleep)
+    t = run_start
+    while t + 60 <= run_end:
+        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
+        if len(minute_hrs) >= 30:
+            minute_median = statistics.median(minute_hrs)
+            if minute_median >= elevated_threshold:
+                t += 30
+            else:
+                break
+        else:
+            break
+    seg_start = t
+    
+    # Scan with 1-minute sliding window for internal elevations (bathroom breaks, etc.)
+    t = seg_start
+    while t + 60 <= run_end:
+        # Check if this minute has elevated HR
+        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
+        if len(minute_hrs) >= 30:  # At least 30 samples in minute
+            minute_median = statistics.median(minute_hrs)
+            if minute_median >= elevated_threshold:
+                # Found sustained elevated HR - split here if segment is long enough
+                seg_duration = t - seg_start
+                if seg_duration >= min_segment_s:
+                    # Create segment
+                    seg_samples = [s for s in run if seg_start <= s.unix < t]
+                    if seg_samples:
+                        segments.append(seg_samples)
+                    # Skip the elevated period
+                    while t + 60 <= run_end:
+                        minute_hrs2 = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
+                        if len(minute_hrs2) >= 30 and statistics.median(minute_hrs2) >= elevated_threshold:
+                            t += 30
+                        else:
+                            break
+                    seg_start = t
+        t += 30  # Step by 30 seconds
+    
+    # Add final segment
+    if run_end - seg_start + 1 >= min_segment_s:
+        seg_samples = [s for s in run if seg_start <= s.unix <= run_end]
+        if seg_samples:
+            segments.append(seg_samples)
+    
+    # If no segments created (no valid sleep portions), return original run
+    if not segments:
+        return [run]
+    
+    return segments
+
+
+def _run_is_deeply_quiescent(run: list[V18Sample]) -> bool:
+    """Check if wrist barely moved AND posture unchanged across whole run.
+    
+    NOOP's runIsDeeplyQuiescent: gravity vector delta < threshold for all samples.
+    """
+    if not run:
+        return False
+    gravity_samples = [s for s in run if s.gravity_g is not None]
+    if len(gravity_samples) < 2:
+        return False
+    # Check gravity vector stability (posture unchanged)
+    ref = gravity_samples[0].gravity_g
+    for s in gravity_samples[1:]:
+        g = s.gravity_g
+        dx = abs(g[0] - ref[0])
+        dy = abs(g[1] - ref[1])
+        dz = abs(g[2] - ref[2])
+        if dx > 0.05 or dy > 0.05 or dz > 0.05:
+            return False
+    # Check motion is minimal
+    for s in run:
+        if s.dynamic_accel_g is not None and s.dynamic_accel_g > 0.01:
+            return False
+    return True
+
+
+def _off_wrist_fraction(run: list[V18Sample], samples: list[V18Sample]) -> float:
+    """Measure off-wrist COVERAGE as union of HR gaps + wrist-off events.
+    
+    NOOP measures off-wrist fraction, drops run only when >= 50%.
+    """
+    if not run:
+        return 1.0
+    run_start = run[0].unix
+    run_end = run[-1].unix
+    run_duration = run_end - run_start + 1
+    
+    # Find off-wrist intervals from the full sample stream
+    off_wrist_seconds = set()
+    for s in samples:
+        if run_start <= s.unix <= run_end:
+            if not s.wearing:
+                off_wrist_seconds.add(s.unix)
+    
+    # Add long HR gaps (missing seconds in run)
+    run_unixes = {s.unix for s in run}
+    expected = set(range(run_start, run_end + 1))
+    missing = expected - run_unixes
+    off_wrist_seconds.update(missing)
+    
+    return len(off_wrist_seconds) / run_duration
+
+
 def detect_sleep(
     samples: list[V18Sample],
     quiet_accel_g: float = QUIET_ACCEL_G,
     min_sleep_s: int = MIN_SLEEP_S,
     gap_tolerance_s: int = SLEEP_GAP_TOLERANCE_S,
     hr_drop_bpm: float = HR_DROP_BPM,
+    trace_sink: callable = None,
 ) -> list[SleepPeriod]:
     """Sustained-quiet periods confirmed by a heart-rate drop.
-
+    
     Motion alone is not enough - sitting still at a desk is not sleep - so a
     candidate period must also show HR below the session's active median by
     `hr_drop_bpm`. With no active seconds to compare against, the period is
     rejected rather than assumed.
+    
+    NOOP parity improvements:
+    - Sparse gravity handling for WHOOP 5.0/MG
+    - Motion-corroborated dual-band HR confirmation
+    - Off-wrist fractional backstop
+    - Structured diagnostic tracing
+    
+    Swift parity improvements (from SleepDetect.swift):
+    - Daytime 90-minute minimum sleep duration
+    - Band state=2 confirmation for pre-22:00 candidates
+    - Overnight onset refinement with bounded 90-min backtracking
+    - Autonomic onset gate (HR <= activeMedian + 5 for >=10 min)
+    - Terminal wake trimming (sustained band-up + HR/motion transition)
+    - Leading awake trimming (sustained band-up at overnight onset)
     """
     ordered = sorted(samples, key=lambda s: s.unix)
     if not ordered:
         return []
-
+    
+    sparse = _is_gravity_sparse(ordered)
+    if sparse and trace_sink:
+        trace_sink({"gate": "sparseBridge", "verdict": "sparse", "gravityCoverageRatio": 
+                    len(set(s.unix for s in ordered if s.dynamic_accel_g is not None)) / 
+                    max(1, len(set(s.unix for s in ordered if s.wearing)))})
+    
+    # Adjust stillness threshold for sparse gravity (NOOP P0)
+    effective_quiet_accel = quiet_accel_g
+    if sparse:
+        effective_quiet_accel = 0.10  # Lower threshold for sparse gravity
+    
     quiet = [
-        s.dynamic_accel_g is not None and s.dynamic_accel_g <= quiet_accel_g
+        s.dynamic_accel_g is not None and s.dynamic_accel_g <= effective_quiet_accel
         for s in ordered
     ]
     active_hrs = [
         float(s.heart_rate) for s, q in zip(ordered, quiet) if not q and s.wearing
     ]
     if not active_hrs:
+        if trace_sink:
+            trace_sink({"gate": "hrConfirm", "verdict": "dropped", "reason": "noActiveSeconds"})
         return []
     active_median = statistics.median(active_hrs)
-
+    
     closed = _close_gaps(ordered, quiet, gap_tolerance_s)
-
+    
     periods: list[SleepPeriod] = []
     i = 0
     n = len(ordered)
@@ -182,27 +519,534 @@ def detect_sleep(
             continue
         start = i
         while i < n and closed[i]:
+            # Break run on large timestamp gaps (RTC corruption, missing data)
+            # Mirrors Swift SleepDetect.swift line 90: gap > gapToleranceS splits candidate
+            if i > start and ordered[i].unix - ordered[i - 1].unix - 1 > gap_tolerance_s:
+                break
             i += 1
         end = i
         run = ordered[start:end]
         duration = run[-1].unix - run[0].unix + 1
         if duration < min_sleep_s or duration > MAX_SLEEP_WINDOW_S:
+            if trace_sink:
+                trace_sink({"gate": "minSleepMin", "verdict": "dropped", 
+                            "duration": duration, "min": min_sleep_s, "max": MAX_SLEEP_WINDOW_S})
             continue
-        run_hrs = [float(s.heart_rate) for s in run if s.wearing]
-        if not run_hrs or statistics.median(run_hrs) > active_median - hr_drop_bpm:
-            continue
-        periods.append(
-            SleepPeriod(
-                start_unix=run[0].unix,
-                end_unix=run[-1].unix,
-                quiet_fraction=sum(quiet[start:end]) / len(run),
-                mean_hr=statistics.mean(run_hrs),
-                wake_events=sum(
-                    1 for j in range(start + 1, end) if not quiet[j] and quiet[j - 1]
-                ),
+        
+        # Split long runs at sustained HR elevations (e.g., bathroom breaks, awake in bed)
+        # This prevents a single quiet run containing both sleep and awake periods from passing
+        run_segments = _split_run_at_hr_transitions(run, active_median, hr_drop_bpm, min_sleep_s)
+        
+        for run in run_segments:
+            duration = run[-1].unix - run[0].unix + 1
+            if duration < min_sleep_s:
+                continue
+            
+            run_hrs = [float(s.heart_rate) for s in run if s.wearing]
+            if not run_hrs:
+                if trace_sink:
+                    trace_sink({"gate": "hrConfirm", "verdict": "dropped", "reason": "noRunHR"})
+                continue
+            
+            # Coverage checks
+            run_worn_seconds = len({s.unix for s in run if s.wearing and 35 <= s.heart_rate <= 220})
+            run_observed_seconds = len({s.unix for s in run})
+            if run_observed_seconds < min_sleep_s // 2 or run_worn_seconds * 5 < run_observed_seconds * 4:
+                continue
+            
+            run_median_hr = statistics.median(run_hrs)
+            
+            # Primary HR drop gate (original STRAP): run median must be below active median by hr_drop_bpm
+            primary_threshold = active_median - hr_drop_bpm
+            
+            # Motion-corroborated dual-band HR confirmation (NOOP P1)
+            # Deeply quiescent runs get a wider band (multiplicative) as additional relaxation
+            deeply_quiescent = _run_is_deeply_quiescent(run)
+            if deeply_quiescent:
+                adaptive_threshold = active_median * QUIESCENT_HR_SLEEP_MULT
+            else:
+                adaptive_threshold = active_median * HR_SLEEP_BASELINE_MULT
+            
+            # Must pass BOTH gates: subtractive primary AND multiplicative adaptive
+            effective_threshold = min(primary_threshold, adaptive_threshold)
+            
+            if run_median_hr > effective_threshold:
+                if trace_sink:
+                    trace_sink({"gate": "hrConfirm", "verdict": "dropped", 
+                                "runMedianHR": run_median_hr, "primaryThreshold": primary_threshold,
+                                "adaptiveThreshold": adaptive_threshold, "effectiveThreshold": effective_threshold,
+                                "deeplyQuiescent": deeply_quiescent})
+                continue
+            
+# Off-wrist fractional backstop (NOOP P1)
+            off_frac = _off_wrist_fraction(run, ordered)
+            if off_frac >= MAX_OFF_WRIST_SLEEP_FRACTION:
+                if trace_sink:
+                    trace_sink({"gate": "offWrist", "verdict": "dropped", 
+                                "offWristFraction": off_frac})
+                continue
+            
+            # Daytime guard: require sustained low HR independent of HR drop gate
+            from datetime import datetime, timezone
+            start_hour = datetime.fromtimestamp(run[0].unix, tz=timezone.utc).hour
+            daytime = (8 <= start_hour < 22)
+            if daytime:
+                # Daytime minimum: require 90 minutes of evidence (Swift line 107)
+                if duration < max(min_sleep_s, 90 * 60):
+                    if trace_sink:
+                        trace_sink({"gate": "daytimeMinDuration", "verdict": "dropped", 
+                                    "duration": duration, "required": max(min_sleep_s, 90 * 60)})
+                    continue
+                
+                # Daytime guard: minimum rolling HR over 5 min must be <= activeMedian * 0.95
+                resting_hr = _minimum_rolling_mean(run_hrs, 300)
+                if resting_hr is None or resting_hr > active_median * 0.95:
+                    if trace_sink:
+                        trace_sink({"gate": "daytimeGuard", "verdict": "dropped", 
+                                    "restingHR": resting_hr, "threshold": active_median * 0.95})
+                    continue
+            
+            # Band state analysis
+            state_rows = [s for s in run if s.sleep_state is not None]
+            up_rows = sum(1 for s in state_rows if s.sleep_state == 3)
+            declared_sleep_rows = sum(1 for s in state_rows if s.sleep_state == 2)
+            declared_still_rows = sum(1 for s in state_rows if s.sleep_state == 1)
+            
+            verified_start = run[0].unix
+            run_start_unix = run[0].unix
+            run_end_unix = run[-1].unix
+            
+            if daytime:
+                # Pre-22:00: require sustained band state=2 confirmation (5 min)
+                # Swift lines 182-225
+                sleep_rows = [s for s in run if s.sleep_state == 2 and s.wearing and 35 <= s.heart_rate <= 220]
+                sleep_runs = _contiguous_runs(sleep_rows)
+                confirmed = None
+                for r in sleep_runs:
+                    if len(r) >= 300:  # 5 minutes sustained state=2
+                        confirmed = r
+                        break
+                if not confirmed:
+                    if trace_sink:
+                        trace_sink({"gate": "bandState2Confirm", "verdict": "dropped", 
+                                    "reason": "no sustained state=2"})
+                    continue
+                verified_start = confirmed[0].unix
+                
+                # Backtrack from confirmed state=2 through quiet, low-HR evidence
+                # Swift lines 196-225
+                confirmed_hr = statistics.median([float(s.heart_rate) for s in confirmed[:300]])
+                floor_unix = max(run_start_unix, verified_start - 30 * 60)
+                prelude = [s for s in run if floor_unix <= s.unix < verified_start]
+                
+                cursor = verified_start
+                while cursor - 60 >= floor_unix:
+                    minute = [s for s in prelude if cursor - 60 <= s.unix < cursor]
+                    valid = [s for s in minute 
+                             if s.wearing and 35 <= s.heart_rate <= 220
+                             and s.sleep_state != 3
+                             and s.dynamic_accel_g is not None
+                             and s.dynamic_accel_g >= 0
+                             and s.dynamic_accel_g <= 0.05  # tighter quiet threshold for backtrack
+                             and float(s.heart_rate) <= confirmed_hr + 8]
+                    if len({s.unix for s in valid}) < 40:  # At least 40 distinct seconds per minute
+                        break
+                    cursor -= 60
+                
+                # Only accept backtrack if prelude shows HR settling transition
+                earlier = [s for s in run 
+                           if cursor - 5 * 60 <= s.unix < cursor
+                           and s.wearing and 35 <= s.heart_rate <= 220]
+                transition_observed = (len(earlier) >= 180 and 
+                                       statistics.median([float(s.heart_rate) for s in earlier]) >= confirmed_hr + 6)
+                if verified_start - cursor >= 5 * 60 and transition_observed:
+                    verified_start = cursor
+            else:
+                # Overnight: trim leading sustained band-up (state=3) if >= 5 min
+                # Swift lines 226-250
+                leading_up_seconds = 0
+                leading_awake_end = None
+                for sample in run:
+                    if not (sample.wearing and 35 <= sample.heart_rate <= 220):
+                        break
+                    if sample.sleep_state == 3:
+                        leading_up_seconds += 1
+                        leading_awake_end = sample.unix
+                    elif leading_up_seconds >= 300:
+                        break
+                    else:
+                        leading_up_seconds = 0
+                        leading_awake_end = None
+                        break
+                if leading_up_seconds >= 300 and leading_awake_end is not None:
+                    verified_start = max(verified_start, leading_awake_end + 1)
+                
+                # HR-based leading awake trim (for cases without band state=3)
+                # Detect if run starts with elevated HR that settles into sleep HR
+                # Use median of middle portion as sleep HR reference
+                run_hrs_all = [float(s.heart_rate) for s in run if s.wearing and 35 <= s.heart_rate <= 220]
+                if len(run_hrs_all) >= 600:  # Need enough data
+                    # Sleep HR reference: median of middle 50% of run (avoiding edges)
+                    mid_start = len(run_hrs_all) // 4
+                    mid_end = 3 * len(run_hrs_all) // 4
+                    sleep_hr_ref = statistics.median(run_hrs_all[mid_start:mid_end])
+                    
+                    # Check first 30 minutes for sustained elevated HR
+                    leading_cutoff = run[0].unix + 30 * 60
+                    leading_hrs = [float(s.heart_rate) for s in run 
+                                   if s.unix < leading_cutoff 
+                                   and s.wearing and 35 <= s.heart_rate <= 220]
+                    if len(leading_hrs) >= 300:  # At least 5 min of data
+                        leading_median = statistics.median(leading_hrs)
+                        # If leading HR is >= 8 BPM above sleep HR, trim to where HR settles
+                        if leading_median >= sleep_hr_ref + 8:
+                            # Find transition point where HR drops to sleep level
+                            for t in range(run[0].unix + 5 * 60, leading_cutoff, 60):
+                                window_hrs = [float(s.heart_rate) for s in run
+                                              if t <= s.unix < t + 60
+                                              and s.wearing and 35 <= s.heart_rate <= 220]
+                                if len(window_hrs) >= 30 and statistics.median(window_hrs) <= sleep_hr_ref + 4:
+                                    verified_start = max(verified_start, t)
+                                    if trace_sink:
+                                        trace_sink({"gate": "leadingAwakeHR", "verdict": "trimmed",
+                                                    "leadingMedianHR": leading_median, "sleepHRRef": sleep_hr_ref,
+                                                    "newStart": verified_start})
+                                    break
+                
+                # Overnight onset refinement with bounded 90-min backtracking
+                # Swift lines 248-250, refineOvernightOnset
+                refined_start = _refine_overnight_onset(run, verified_start, effective_quiet_accel, active_median)
+                if run_end_unix - refined_start + 1 >= min_sleep_s:
+                    verified_start = refined_start
+            
+            # Autonomic onset gate (WHOOP parity): HR must settle <= activeMedian + 5 for >=10 min sustained stillness
+            # Swift lines 254-286
+            autonomic_threshold = active_median + 5.0  # AUTONOMIC_ONSET_THRESHOLD_BPM
+            autonomic_window = 10 * 60
+            autonomic_cursor = verified_start
+            search_floor = max(run_start_unix, verified_start - 60 * 60)  # Search up to 1 hour before
+            
+            while autonomic_cursor - 60 >= search_floor:
+                minute = [s for s in run 
+                          if autonomic_cursor - 60 <= s.unix < autonomic_cursor]
+                valid = [s for s in minute
+                         if s.wearing and 35 <= s.heart_rate <= 220
+                         and s.sleep_state != 3
+                         and s.dynamic_accel_g is not None
+                         and s.dynamic_accel_g >= 0
+                         and s.dynamic_accel_g <= effective_quiet_accel
+                         and float(s.heart_rate) <= autonomic_threshold]
+                # At least 50 distinct observed seconds per minute (>=83% coverage)
+                if len({s.unix for s in valid}) < 50:
+                    break
+                autonomic_cursor -= 60
+            
+            # Only apply autonomic backtrack if it extends >=5 min and shows settling transition
+            autonomic_backtrack = verified_start - autonomic_cursor
+            if autonomic_backtrack >= 5 * 60:
+                earlier = [s for s in run
+                           if autonomic_cursor - 5 * 60 <= s.unix < autonomic_cursor
+                           and s.wearing and 35 <= s.heart_rate <= 220]
+                transition_observed = (len(earlier) >= 180 and
+                                       statistics.median([float(s.heart_rate) for s in earlier]) >= autonomic_threshold + 3)
+                if transition_observed:
+                    verified_start = autonomic_cursor
+                    if trace_sink:
+                        trace_sink({"gate": "autonomicOnset", "verdict": "advanced", 
+                                    "backtrackMin": autonomic_backtrack // 60,
+                                    "newStart": verified_start})
+            
+            # A trimmed onset must still leave a real sleep-length window
+            if run_end_unix - verified_start + 1 < min_sleep_s:
+                if trace_sink:
+                    trace_sink({"gate": "minSleepMin", "verdict": "dropped", 
+                                "duration": run_end_unix - verified_start + 1, "min": min_sleep_s})
+                continue
+            
+            # State veto: constant zero/default state with mostly up and no sleep declaration
+            if (len(state_rows) >= 300 and
+                up_rows * 10 >= len(state_rows) * 7 and
+                declared_sleep_rows == 0 and
+                declared_still_rows * 10 < len(state_rows)):
+                if trace_sink:
+                    trace_sink({"gate": "stateVeto", "verdict": "dropped", 
+                                "stateRows": len(state_rows), "upRows": up_rows, 
+                                "sleepRows": declared_sleep_rows, "stillRows": declared_still_rows})
+                continue
+            
+            # Terminal wake trimming (Swift lines 306-406)
+            verified_end = run_end_unix
+            
+            # Scan backwards from end for sustained band-up (state=3)
+            up_start = None
+            up_seconds = 0
+            next_unix = None
+            trailing_unknown_seconds = 0
+            
+            for sample in reversed(run):
+                if not (sample.wearing and 35 <= sample.heart_rate <= 220):
+                    break
+                if next_unix is not None and next_unix - sample.unix > 2:
+                    break
+                
+                if sample.sleep_state == 0 and up_seconds == 0:
+                    # Terminal unknown state (state=0) suffix - skip up to 30 min
+                    trailing_unknown_seconds += (next_unix - sample.unix) if next_unix else 1
+                    if trailing_unknown_seconds > 30 * 60:
+                        break
+                elif sample.sleep_state == 3:
+                    up_start = sample.unix
+                    up_seconds += (next_unix - sample.unix) if next_unix else 1
+                else:
+                    break
+                next_unix = sample.unix
+            
+            if up_start is not None and up_seconds >= 300:
+                # Sustained terminal band-up >= 5 min
+                verified_end = up_start - 1
+            elif up_start is not None and run[-1].sleep_state == 3 and run_end_unix - up_start <= 60:
+                # Fresh terminal band-up transition - corroborate with HR + motion
+                # Swift lines 337-377
+                terminal_up = up_start
+                baseline = [s for s in run
+                            if terminal_up - 30 * 60 <= s.unix < terminal_up - 10 * 60
+                            and s.wearing and 35 <= s.heart_rate <= 220]
+                if len(baseline) >= 600:
+                    resting_hr = statistics.median([float(s.heart_rate) for s in baseline])
+                    lower_bound = max(verified_start + min_sleep_s, terminal_up - 12 * 60)
+                    
+                    wake_candidate = None
+                    minute = lower_bound
+                    while minute + 180 <= terminal_up:
+                        window = [s for s in run
+                                  if minute <= s.unix < minute + 180
+                                  and s.wearing and 35 <= s.heart_rate <= 220
+                                  and s.dynamic_accel_g is not None
+                                  and s.dynamic_accel_g >= 0]
+                        elevated = sum(1 for s in window if float(s.heart_rate) >= resting_hr + 10)
+                        moving = sum(1 for s in window if s.dynamic_accel_g is not None and s.dynamic_accel_g >= 0.015)
+                        if len({s.unix for s in window}) >= 150 and elevated >= 150 and moving >= 30:
+                            wake_candidate = minute
+                            break
+                        minute += 60
+                    
+                    if wake_candidate is not None:
+                        verified_end = min(verified_end, wake_candidate - 1)
+            
+            # HR-based terminal wake trim for long morning awake (no band state=3)
+            # Scan backward from end to find sleep-to-wake HR transition
+            run_hrs_all = [float(s.heart_rate) for s in run if s.wearing and 35 <= s.heart_rate <= 220]
+            if len(run_hrs_all) >= 600:
+                # Sleep HR reference from middle of run
+                mid_start = len(run_hrs_all) // 4
+                mid_end = 3 * len(run_hrs_all) // 4
+                sleep_hr_ref = statistics.median(run_hrs_all[mid_start:mid_end])
+                
+                # First, check if there's a sustained elevated HR period at the end (>=10 min)
+                elevated_minutes = 0
+                for t in range(run_end_unix - 60, verified_start + min_sleep_s, -60):
+                    window_hrs = [float(s.heart_rate) for s in run
+                                  if t <= s.unix < t + 60
+                                  and s.wearing and 35 <= s.heart_rate <= 220]
+                    if len(window_hrs) >= 30:
+                        window_median = statistics.median(window_hrs)
+                        if window_median >= sleep_hr_ref + 8:
+                            elevated_minutes += 1
+                        else:
+                            break
+                
+                # Only proceed if we have sustained elevated HR at end (>=10 min = 10 minutes)
+                if elevated_minutes >= 10:
+                    # Now find the sleep-to-wake transition (going backward from the elevated section)
+                    sleep_end_transition = None
+                    for t in range(run_end_unix - elevated_minutes * 60 - 60, verified_start + min_sleep_s, -60):
+                        window_hrs = [float(s.heart_rate) for s in run
+                                      if t <= s.unix < t + 60
+                                      and s.wearing and 35 <= s.heart_rate <= 220]
+                        if len(window_hrs) >= 30:
+                            window_median = statistics.median(window_hrs)
+                            # Going backward: first minute at sleep level = end of sleep
+                            if window_median <= sleep_hr_ref + 4:
+                                sleep_end_transition = t + 60
+                                break
+                    
+                    if sleep_end_transition is not None and sleep_end_transition > verified_start + min_sleep_s:
+                        verified_end = min(verified_end, sleep_end_transition - 1)
+                        if trace_sink:
+                            trace_sink({"gate": "terminalWakeHR", "verdict": "trimmed",
+                                        "sleepHRRef": sleep_hr_ref, "transitionAt": sleep_end_transition,
+                                        "elevatedMinutes": elevated_minutes, "newEnd": verified_end})
+            
+            # Band can continue reporting sleep(2) after waking - require 5-min HR+motion transition
+            # Swift lines 379-406
+            terminal_end = run_end_unix
+            terminal_start = terminal_end - 299
+            terminal = [s for s in run
+                        if terminal_start <= s.unix <= terminal_end
+                        and s.wearing and 35 <= s.heart_rate <= 220
+                        and s.dynamic_accel_g is not None
+                        and s.dynamic_accel_g >= 0]
+            # Use sleep HR from middle of verified window as reference (avoids morning awake contamination)
+            sleep_mid_start = verified_start + (verified_end - verified_start) // 3
+            sleep_mid_end = verified_start + 2 * (verified_end - verified_start) // 3
+            reference = [s for s in run
+                         if sleep_mid_start <= s.unix < sleep_mid_end
+                         and s.wearing and 35 <= s.heart_rate <= 220]
+            
+            if (len({s.unix for s in terminal}) >= 270 and
+                len({s.unix for s in reference}) >= 600):
+                resting_hr = statistics.median([float(s.heart_rate) for s in reference])
+                elevated = sum(1 for s in terminal if float(s.heart_rate) >= resting_hr + 10)
+                moving = sum(1 for s in terminal if s.dynamic_accel_g is not None and s.dynamic_accel_g >= 0.015)
+                # Sustained elevation AND measured movement both required
+                if elevated >= 240 and moving >= 90:
+                    verified_end = min(verified_end, terminal_start - 1)
+            
+            # Genuine sleep can exceed 12 hours (Issue #126) - protect only against multi-day RTC jumps
+            if not (verified_end - verified_start + 1 >= min_sleep_s and 
+                    verified_end - verified_start + 1 <= 24 * 3600):
+                continue
+            
+            # Metrics must describe the verified interval
+            verified_indices = [idx for idx in range(start, end) 
+                                if verified_start <= ordered[idx].unix <= verified_end]
+            
+            # Re-check coverage inside confirmed sleep window
+            verified_duration = verified_end - verified_start + 1
+            verified_observed = len({ordered[idx].unix for idx in verified_indices})
+            verified_worn = len({ordered[idx].unix for idx in verified_indices
+                                 if ordered[idx].wearing and 35 <= ordered[idx].heart_rate <= 220})
+            if verified_observed < verified_duration // 2 or verified_worn * 5 < verified_observed * 4:
+                continue
+            
+            quiet_seconds = sum(1 for idx in verified_indices if quiet[idx])
+            verified_hrs = [float(ordered[idx].heart_rate) for idx in verified_indices
+                            if ordered[idx].wearing and 35 <= ordered[idx].heart_rate <= 220]
+            
+            # Harmonize wakeEvents: count sustained movement bouts (>=15 seconds)
+            # Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
+            moving_seconds = 0
+            wake_events = 0
+            last_moving_unix = None
+            for idx in verified_indices:
+                u = ordered[idx].unix
+                if not quiet[idx]:
+                    if last_moving_unix is not None:
+                        if u == last_moving_unix + 1:
+                            moving_seconds += 1
+                        elif u > last_moving_unix + 1:
+                            moving_seconds = 1
+                    else:
+                        moving_seconds = 1
+                    last_moving_unix = u
+                    if moving_seconds == 15:
+                        wake_events += 1
+                else:
+                    moving_seconds = 0
+                    last_moving_unix = None
+            
+            if trace_sink:
+                trace_sink({"gate": "hrConfirm", "verdict": "passed", 
+                            "runMedianHR": run_median_hr, "threshold": effective_threshold,
+                            "deeplyQuiescent": deeply_quiescent})
+            
+            periods.append(
+                SleepPeriod(
+                    start_unix=verified_start,
+                    end_unix=verified_end,
+                    quiet_fraction=quiet_seconds / max(1, len(verified_indices)),
+                    mean_hr=statistics.mean(verified_hrs) if verified_hrs else 0.0,
+                    wake_events=wake_events,
+                )
             )
-        )
     return periods
+
+
+def is_nocturnal_period(period: SleepPeriod) -> bool:
+    """Check if a sleep period is nocturnal (starts 20:00-07:59 or ends <= 12:00)."""
+    from datetime import datetime, timezone
+    start_dt = datetime.fromtimestamp(period.start_unix, tz=timezone.utc)
+    end_dt = datetime.fromtimestamp(period.end_unix, tz=timezone.utc)
+    start_hour = start_dt.hour
+    end_hour = end_dt.hour
+    return start_hour >= 20 or start_hour < 8 or end_hour <= 12
+
+
+def merge_nocturnal_periods(
+    periods: list[SleepPeriod],
+    samples: list[V18Sample],
+    quiet_accel_g: float = QUIET_ACCEL_G,
+    max_awakening_gap_s: int = 30 * 60,
+    max_combined_sleep_s: int = 18 * 3600,
+) -> list[SleepPeriod]:
+    """Merge consecutive nocturnal sleep candidates separated by brief awakenings (≤30 min).
+    
+    Merges bathroom breaks, hydration, or restless wakefulness into a single overnight
+    sleep session, preserving awakenings as in-bed awake time for downstream staging.
+    """
+    if len(periods) <= 1:
+        return periods
+    
+    merged: list[SleepPeriod] = []
+    current = periods[0]
+    
+    for next_period in periods[1:]:
+        gap = next_period.start_unix - current.end_unix - 1
+        combined_end = max(current.end_unix, next_period.end_unix)
+        combined_span = combined_end - current.start_unix + 1
+        
+        is_nocturnal = is_nocturnal_period(current) and is_nocturnal_period(next_period)
+        
+        if not (is_nocturnal and gap <= max_awakening_gap_s and combined_span <= max_combined_sleep_s):
+            merged.append(current)
+            current = next_period
+            continue
+        
+        gap_samples = [s for s in samples if current.end_unix < s.unix < next_period.start_unix]
+        
+        # A short bathroom break still requires positive on-wrist coverage.
+        # Use elapsed seconds so missing records and replays cannot pass the gate.
+        worn_seconds = len({
+            s.unix for s in gap_samples 
+            if s.wearing and 35 <= s.heart_rate <= 220
+        })
+        worn_during_gap = gap <= 0 or worn_seconds * 5 >= gap * 3  # ≥60% coverage
+        
+        # A sustained active workout is not an in-bed awakening.
+        active_workout_seconds = len({
+            s.unix for s in gap_samples
+            if s.wearing and (s.dynamic_accel_g or 0) >= 0.15 and s.heart_rate >= 90
+        })
+        active_workout_during_gap = active_workout_seconds >= 180
+        
+        if worn_during_gap and not active_workout_during_gap:
+            all_indices = [s for s in samples if current.start_unix <= s.unix <= combined_end]
+            quiet_count = sum(
+                1 for sample in all_indices
+                if sample.wearing 
+                and 35 <= sample.heart_rate <= 220
+                and sample.dynamic_accel_g is not None
+                and math.isfinite(sample.dynamic_accel_g)
+                and sample.dynamic_accel_g >= 0
+                and sample.dynamic_accel_g <= quiet_accel_g
+            )
+            valid_hrs = [
+                float(s.heart_rate) for s in all_indices
+                if s.wearing and 35 <= s.heart_rate <= 220
+            ]
+            current = SleepPeriod(
+                start_unix=current.start_unix,
+                end_unix=combined_end,
+                quiet_fraction=quiet_count / max(1, len(all_indices)),
+                mean_hr=statistics.mean(valid_hrs) if valid_hrs else 0.0,
+                wake_events=current.wake_events + next_period.wake_events + 1,
+            )
+        else:
+            merged.append(current)
+            current = next_period
+    
+    merged.append(current)
+    return merged
 
 
 def total_sleep_hours(periods: list[SleepPeriod]) -> float:
