@@ -241,7 +241,7 @@ struct GPSRunView: View {
                         restingHR: store.measuredRestingHR,
                         sex: store.settings.sex,
                         heightCm: store.settings.heightCM,
-                        age: store.settings.profileAge()
+                        age: store.settings.profileAge().map { Int($0) }
                     )
                     recorder.start(activity: selectedActivity, trackRoute: trackRoute && canRecordGPS)
                 } label: {
@@ -798,8 +798,8 @@ enum HeartRateZone: String, CaseIterable {
         }
     }
 
-    static func zone(for hr: Int, maxHR: Int = 190, restingHR: Int = 60) -> HeartRateZone? {
-        let hrr = Double(hr - restingHR) / Double(maxHR - restingHR)
+    static func zone(for hr: Int, maxHR: Double = 190, restingHR: Double = 60) -> HeartRateZone? {
+        let hrr = (Double(hr) - restingHR) / (maxHR - restingHR)
         switch hrr {
         case ..<0.60: return .recovery
         case 0.60..<0.70: return .aerobic
