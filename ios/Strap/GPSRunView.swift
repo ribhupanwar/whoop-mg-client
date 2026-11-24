@@ -22,7 +22,7 @@ struct GPSRunView: View {
     @State private var workoutStarted = false
     @State private var showPicker = false
     @State private var search = ""
-    @State private var selectedActivity: ActivityKind = ActivityKind.allCases.first!
+    @State private var selectedActivity: ActivityKind = ActivityKind.run
     @State private var showStrain = false
     private var dayStrain: Double? {
         let key = JournalStore.dayKey(for: Date())
