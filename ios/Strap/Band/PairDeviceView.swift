@@ -261,7 +261,7 @@ struct PairDeviceView: View {
 
     private func deviceRow(_ band: DiscoveredBand) -> some View {
         HStack(spacing: 12) {
-            Image(systemName: "applewatch.radiowaves.left.and.right")
+            Image(systemName: StrapIcon.Device.bandSensor)
                 .font(.system(size: 20))
                 .foregroundStyle(Color.appAccent)
                 .frame(width: 32)

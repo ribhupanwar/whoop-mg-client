@@ -16,13 +16,13 @@ struct HealthspanOrbParticle: Equatable {
             state = state &* 6364136223846793005 &+ 1442695040888963407
             return Double(state >> 40) / 16_777_216
         }
-        return (0..<288).map { index in
+        return (0..<360).map { index in
             let angle = next() * 2 * .pi
             let depth = next()
             return Self(angle: angle + 0.21 * sin(3 * angle), phase: next(),
                         period: 6 + 12 * next(), drift: (next() - 0.5) * 0.52,
                         startRadius: 0.29 + 0.41 * depth,
-                        size: (index.isMultiple(of: 10) ? 2.9 : 0.65) + depth * 1.4)
+                        size: (index.isMultiple(of: 9) ? 3.2 : 0.65) + depth * 1.4)
         }
     }
 
@@ -51,7 +51,7 @@ struct HealthspanParticleField: View {
         GeometryReader { proxy in
             if Self.animates(reduceMotion: reduceMotion, active: scenePhase == .active,
                              visible: visible, lowPower: lowPower), proxy.size.width >= 150 {
-                TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+                TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { timeline in
                     canvas(elapsed: max(0, timeline.date.timeIntervalSince(epoch)))
                 }
             } else {
@@ -69,12 +69,12 @@ struct HealthspanParticleField: View {
         Canvas(opaque: false, rendersAsynchronously: true) { context, size in
             let diameter = min(size.width, size.height)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
-            let cyan = Color(hex: 0x54D7E9)
-            let base = diameter * 0.456 * (1 + 0.011 * sin(elapsed * 0.5))
+            let cyan = Color(hex: 0x69DBF0)
+            let base = diameter * 0.425 * (1 + 0.006 * sin(elapsed * 1.2))
             func membrane(_ angle: Double) -> Double {
-                1 + 0.035 * sin(3 * angle - elapsed * 0.16)
-                    + 0.019 * cos(5 * angle + elapsed * 0.12)
-                    + 0.012 * sin(8 * angle - elapsed * 0.19)
+                1 + 0.095 * sin(3 * angle - elapsed * 1.15)
+                    + 0.055 * cos(5 * angle + elapsed * 0.83)
+                    + 0.023 * sin(8 * angle - elapsed * 0.61)
             }
             func point(angle: Double, radius: Double) -> CGPoint {
                 CGPoint(x: center.x + cos(angle) * radius, y: center.y + sin(angle) * radius)
@@ -89,8 +89,8 @@ struct HealthspanParticleField: View {
             edge.closeSubpath()
             context.fill(edge, with: .radialGradient(
                 Gradient(stops: [.init(color: .black, location: 0.32),
-                                 .init(color: Color(hex: 0x06232F), location: 0.62),
-                                 .init(color: Color(hex: 0x167487), location: 0.9),
+                                 .init(color: Color(hex: 0x041923), location: 0.62),
+                                 .init(color: Color(hex: 0x126779), location: 0.9),
                                  .init(color: Color(hex: 0x0D5366), location: 1)]),
                 center: center, startRadius: 0, endRadius: base))
             var clipped = context
@@ -114,10 +114,10 @@ struct HealthspanParticleField: View {
             }
             clipped.drawLayer { glow in
                 glow.addFilter(.blur(radius: max(0.5, 2 * scale)))
-                glow.fill(glows, with: .color(cyan.opacity(0.42)))
+                glow.fill(glows, with: .color(cyan.opacity(0.72)))
             }
             for level in 1..<dust.count {
-                clipped.fill(dust[level], with: .color(cyan.opacity(Double(level) * 0.19)))
+                clipped.fill(dust[level], with: .color(cyan.opacity(Double(level) * 0.24)))
             }
             context.stroke(edge, with: .linearGradient(
                 Gradient(colors: [cyan.opacity(0.75), Color(hex: 0x4581BB).opacity(0.35), cyan.opacity(0.7)]),

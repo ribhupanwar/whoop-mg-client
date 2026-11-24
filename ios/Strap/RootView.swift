@@ -18,7 +18,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .humans: return "person.2.fill"
         case .train: return "dumbbell.fill"
         case .plan: return "calendar"
-        case .more: return "line.3.horizontal"
+        case .more: return StrapIcon.Navigation.moreSelected
         }
     }
 
@@ -29,7 +29,7 @@ enum AppTab: String, CaseIterable, Hashable {
         case .humans: return "person.2"
         case .train: return "dumbbell"
         case .plan: return "calendar"
-        case .more: return "line.3.horizontal"
+        case .more: return StrapIcon.Navigation.more
         }
     }
 }
@@ -50,6 +50,7 @@ enum Route: Hashable {
     case dayStreak
     case dataQuality
     case healthspan
+    case iconGallery
     case metricHistory(DetailMetric)
 }
 
@@ -137,6 +138,7 @@ struct RootView: View {
             else if args.contains("--preview-humans") { tab = .humans }
             else if args.contains("--preview-train") { showPlan = true }
             else if args.contains("--preview-plan") { showPlan = true }
+            else if args.contains("--preview-icons") { homePath = [.iconGallery] }
             else if args.contains("--preview-more") { tab = .more }
             #endif
         }
@@ -259,6 +261,7 @@ extension View {
             case .dayStreak: DayStreakView()
             case .dataQuality: DataQualityView()
             case .healthspan: HealthspanView()
+            case .iconGallery: IconGalleryView()
             case .metricHistory(let metric):
                 MetricHistoryView(metric: metric)
             }

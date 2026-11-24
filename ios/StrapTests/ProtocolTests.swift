@@ -294,15 +294,44 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [700, 710, 720, 730])
     }
 
-    func testRRNonZeroPaddingRejectsIntervals() {
+    func testRRNonZeroUnusedSlotsPreserveDeclaredBeats() {
         var inner = bytes(realV18Hex)
         inner[15] = 2
         inner[16] = 0x20
         inner[17] = 0x03  // 800
         inner[18] = 0x34
         inner[19] = 0x03  // 820
-        inner[22] = 0xAA  // Non-zero padding byte in tail (bytes 20..<24)
-        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [], "Non-zero padding byte must invalidate RR buffer")
+        inner[22] = 0xAA  // Opaque unused byte, not a declared beat
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800, 820])
+    }
+
+    func testRRSingleDeclaredBeatSurvivesNonZeroUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 1
+        inner[16] = 0x20
+        inner[17] = 0x03  // 800
+        inner[18] = 0xFF
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
+    }
+
+    func testRRZeroDeclaredBeatsIgnoreUnusedSlots() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 0
+        inner[16] = 0x20
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [])
+    }
+
+    func testRRInvalidDeclaredBeatDoesNotDiscardValidNeighbor() {
+        var inner = bytes(realV18Hex)
+        inner[15] = 2
+        inner[16] = 0x64
+        inner[17] = 0x00  // 100ms, implausible
+        inner[18] = 0x20
+        inner[19] = 0x03  // 800ms, plausible
+        inner[23] = 0xAA
+        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [800])
     }
 
     func testWrongVersionRejected() {
@@ -514,5 +543,35 @@ final class StandardHeartRateTests: XCTestCase {
         let reading = parse([0x19, 0x2C, 0x00, 0x20, 0x00, 0x00, 0x04])
         XCTAssertEqual(reading?.heartRate, 44)
         XCTAssertEqual(reading?.rrMS, [1000])
+    }
+}
+
+
+final class HistoricalOpticalK21DecoderTests: XCTestCase {
+    func testRejectsTruncatedOrOversizedBodies() {
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: []))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1243)))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1245)))
+    }
+
+    func testSixChannelsDecodeIndependentlyWithSignedLittleEndian() {
+        var body = [UInt8](repeating: 0, count: 1244)
+        let offsets = [20, 220, 420, 632, 832, 1032]
+        for (channel, offset) in offsets.enumerated() {
+            let value = Int16(channel % 2 == 0 ? -(channel + 1) : channel + 1)
+            let bits = UInt16(bitPattern: value)
+            body[offset] = UInt8(truncatingIfNeeded: bits)
+            body[offset + 1] = UInt8(truncatingIfNeeded: bits >> 8)
+        }
+        let decoded = HistoricalOpticalK21Decoder.decode(body: body)
+        XCTAssertEqual(decoded?.green.count, 3)
+        XCTAssertEqual(decoded?.infrared.count, 3)
+        XCTAssertEqual(decoded?.green[0][0], -1)
+        XCTAssertEqual(decoded?.green[1][0], 2)
+        XCTAssertEqual(decoded?.green[2][0], -3)
+        XCTAssertEqual(decoded?.infrared[0][0], 4)
+        XCTAssertEqual(decoded?.infrared[1][0], -5)
+        XCTAssertEqual(decoded?.infrared[2][0], 6)
+        XCTAssertEqual(decoded?.infrared[2][99], 0)
     }
 }

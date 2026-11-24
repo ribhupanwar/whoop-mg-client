@@ -123,20 +123,15 @@ enum V18Decoder {
 
         var rr: [Int] = []
         let declared = Int(inner[15])
+        // Only the declared RR slots are beats. Unused trailing bytes are not
+        // independently verified as zero padding on every firmware revision.
+        // Frame checksums are validated by Gen5Frame before this decoder runs;
+        // do not discard valid declared beats because of opaque unused bytes.
         if declared <= maxRRCount {
-            var paddingValid = true
-            for paddingOffset in (16 + 2 * declared)..<24 {
-                if inner[paddingOffset] != 0 {
-                    paddingValid = false
-                    break
-                }
-            }
-            if paddingValid {
-                for index in 0..<declared {
-                    if let value = i16(inner, 16 + 2 * index),
-                       (minRRMS...maxRRMS).contains(value) {
-                        rr.append(value)
-                    }
+            for index in 0..<declared {
+                if let value = i16(inner, 16 + 2 * index),
+                   (minRRMS...maxRRMS).contains(value) {
+                    rr.append(value)
                 }
             }
         }
@@ -253,5 +248,37 @@ enum V18Decoder {
         default: scale = pow(10.0, Double(digits))
         }
         return (value * scale).rounded() / scale
+    }
+}
+
+
+/// Research-only decoder for OpenWHOOP's historical optical k=21 array layout.
+/// Input is the unwrapped 1244-byte optical record body, NOT the BLE frame.
+/// This does not identify a red wavelength or calculate calibrated SpO2.
+struct HistoricalOpticalK21: Equatable {
+    let green: [[Int16]]
+    let infrared: [[Int16]]
+}
+
+enum HistoricalOpticalK21Decoder {
+    static let expectedBodyBytes = 1244
+    static let samplesPerChannel = 100
+    private static let greenOffsets = [20, 220, 420]
+    private static let infraredOffsets = [632, 832, 1032]
+
+    static func decode(body: [UInt8]) -> HistoricalOpticalK21? {
+        guard body.count == expectedBodyBytes else { return nil }
+        func channel(at offset: Int) -> [Int16]? {
+            guard offset >= 0, offset + samplesPerChannel * 2 <= body.count else { return nil }
+            return (0..<samplesPerChannel).map { index in
+                let position = offset + index * 2
+                let bits = UInt16(body[position]) | (UInt16(body[position + 1]) << 8)
+                return Int16(bitPattern: bits)
+            }
+        }
+        let green = greenOffsets.compactMap { channel(at: $0) }
+        let infrared = infraredOffsets.compactMap { channel(at: $0) }
+        guard green.count == 3, infrared.count == 3 else { return nil }
+        return HistoricalOpticalK21(green: green, infrared: infrared)
     }
 }
