@@ -93,6 +93,34 @@ class SensorTruthAndDataIntegrityTests(unittest.TestCase):
         self.assertEqual(list(rec.rr_intervals_ms), [920])
         # The decoder must not interpret undeclared bytes as additional beats.
         self.assertEqual(len(rec.rr_intervals_ms), 1)
+        self.assertFalse(rec.rr_padding_valid, "Non-zero padding byte must set rr_padding_valid to False")
+
+    def test_rr_zero_padding_sets_padding_valid(self):
+        """Zero unused RR padding sets rr_padding_valid to True."""
+        sample = bytearray(self.canonical_v18_bytes)
+        sample[15] = 1
+        for i in range(18, 24):
+            sample[i] = 0
+        rec = decode_v18(bytes(sample))
+        self.assertIsNotNone(rec)
+        self.assertTrue(rec.rr_padding_valid)
+
+    def test_hrv_detailed_diagnostics_provenance(self):
+        """Verifies detailed HRV diagnostics output structure and bounds."""
+        from whoop.metrics import hrv_detailed_diagnostics
+        samples = []
+        for i in range(30):
+            s = bytearray(self.canonical_v18_bytes)
+            s[7:11] = (1700000000 + i).to_bytes(4, "little")
+            rec = decode_v18(bytes(s))
+            if rec:
+                samples.append(rec)
+        diag = hrv_detailed_diagnostics(samples)
+        self.assertEqual(diag["selected_calculation_window"], "ALL_VALID_SLEEP")
+        self.assertGreater(diag["raw_rr_count"], 0)
+        self.assertGreater(diag["accepted_nn_count"], 0)
+        self.assertIn("rejected_beats_by_reason", diag)
+        self.assertIsNotNone(diag["final_rmssd"])
 
     def test_rr_out_of_range_dropped(self):
         """Verifies RR values outside 200..3000ms are dropped."""

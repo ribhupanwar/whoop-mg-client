@@ -66,6 +66,18 @@ struct HrvResult: Codable, Equatable {
     )
 }
 
+/// Detailed HRV calculation diagnostic summary for provenance auditing.
+struct HrvDetailedDiagnostics: Codable, Equatable {
+    let rawRRCount: Int
+    let acceptedNNCount: Int
+    let rejectedBeatsByReason: [String: Int]
+    let coveragePercentage: Double
+    let timestampGaps: Int
+    let selectedCalculationWindow: String
+    let finalRMSSD: Double?
+    let finalLnRMSSD: Double?
+}
+
 // MARK: - Sleep
 
 /// A detected sleep window from actigraphy + an HR drop. The stages come from
