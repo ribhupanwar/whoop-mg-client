@@ -24,7 +24,16 @@ struct HealthspanObservation: Equatable {
     let lastObserved: Date
 
     var isValid: Bool {
-        value.isFinite && observedDays > 0 && firstObserved <= lastObserved
+        guard value.isFinite, observedDays > 0, firstObserved <= lastObserved else { return false }
+        // A summary cannot report more distinct observation days than the
+        // calendar dates it spans. Apply this to contributor availability too,
+        // not only to rolling-window checks in missing(_:minimumDays:windowDays:).
+        let calendar = Calendar.current
+        let first = calendar.startOfDay(for: firstObserved)
+        let last = calendar.startOfDay(for: lastObserved)
+        guard let elapsedDays = calendar.dateComponents([.day], from: first, to: last).day,
+              elapsedDays >= 0 else { return false }
+        return observedDays <= elapsedDays + 1
     }
 }
 
