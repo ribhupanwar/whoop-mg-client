@@ -924,14 +924,21 @@ def detect_sleep(
                             if ordered[idx].wearing and 35 <= ordered[idx].heart_rate <= 220]
             
             # Harmonize wakeEvents: count sustained movement bouts (>=15 seconds)
+            # Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
             moving_seconds = 0
             wake_events = 0
             last_moving_unix = None
             for idx in verified_indices:
+                u = ordered[idx].unix
                 if not quiet[idx]:
-                    if ordered[idx].unix != last_moving_unix:
-                        moving_seconds += 1
-                        last_moving_unix = ordered[idx].unix
+                    if last_moving_unix is not None:
+                        if u == last_moving_unix + 1:
+                            moving_seconds += 1
+                        elif u > last_moving_unix + 1:
+                            moving_seconds = 1
+                    else:
+                        moving_seconds = 1
+                    last_moving_unix = u
                     if moving_seconds == 15:
                         wake_events += 1
                 else:
