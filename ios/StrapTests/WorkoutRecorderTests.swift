@@ -11,32 +11,28 @@ final class WorkoutRecorderTests: XCTestCase {
         testSuite = "workout-recorder-tests-\(UUID().uuidString)"
         defaults = UserDefaults(suiteName: testSuite)!
         recorder = WorkoutRecorder.shared
-        // Ensure clean state by starting and discarding if needed
-        if recorder.phase != .idle && recorder.phase != .saved && recorder.phase != .discarded {
-            recorder.discard()
-        }
-        // Wait for state to settle
-        let expectation = XCTestExpectation(description: "State reset")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        // Ensure clean state
+        resetRecorderFully()
     }
 
     override func tearDown() {
-        if recorder.phase != .idle && recorder.phase != .saved && recorder.phase != .discarded {
-            recorder.discard()
-        }
+        resetRecorderFully()
         defaults.removePersistentDomain(forName: testSuite)
         super.tearDown()
     }
 
-    private func resetRecorder() {
+    private func resetRecorderFully() {
+        // Discard any active workout
         if recorder.phase != .idle && recorder.phase != .saved && recorder.phase != .discarded {
             recorder.discard()
         }
+        // If in saved/discarded, start a new workout and discard to reset to idle
+        if recorder.phase == .saved || recorder.phase == .discarded {
+            recorder.start(activity: .run, trackRoute: false)
+            recorder.discard()
+        }
         let expectation = XCTestExpectation(description: "State reset")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
             expectation.fulfill()
         }
         wait(for: [expectation], timeout: 1.0)
@@ -45,7 +41,7 @@ final class WorkoutRecorderTests: XCTestCase {
     // MARK: - Session Transitions
 
     func testStartFromIdleTransitionsToRecording() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         XCTAssertEqual(recorder.phase, .recording)
         XCTAssertNotNil(recorder.currentSession)
@@ -54,21 +50,21 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testStartNonGPSActivityHasNoGPS() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .yoga, trackRoute: true)
         XCTAssertEqual(recorder.phase, .recording)
         XCTAssertFalse(recorder.currentSession?.hasGPS ?? true)
     }
 
     func testPauseFromRecordingTransitionsToPaused() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.pause()
         XCTAssertEqual(recorder.phase, .paused)
     }
 
     func testPauseFromNonRecordingDoesNothing() {
-        resetRecorder()
+        resetRecorderFully()
         // Ensure we're in idle
         XCTAssertEqual(recorder.phase, .idle)
         recorder.pause()
@@ -76,7 +72,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testResumeFromPausedTransitionsToRecording() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.pause()
         recorder.resume()
@@ -84,14 +80,14 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testResumeFromNonPausedDoesNothing() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.resume()
         XCTAssertEqual(recorder.phase, .recording)
     }
 
     func testStopSaveTransitionsToSaved() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         // Add some HR samples
         recorder.addHeartRateSample(140)
@@ -102,7 +98,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testStopDiscardTransitionsToDiscarded() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.stop(save: false)
         XCTAssertEqual(recorder.phase, .discarded)
@@ -110,7 +106,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testDiscardCallsStopWithSaveFalse() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.discard()
         XCTAssertEqual(recorder.phase, .discarded)
@@ -119,7 +115,7 @@ final class WorkoutRecorderTests: XCTestCase {
     // MARK: - Duplicate Prevention
 
     func testStartWhileRecordingDoesNothing() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         let firstSession = recorder.currentSession
         recorder.start(activity: .walk, trackRoute: true)
@@ -127,7 +123,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testStartWhilePausedDoesNothing() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.pause()
         let firstSession = recorder.currentSession
@@ -138,7 +134,7 @@ final class WorkoutRecorderTests: XCTestCase {
     // MARK: - GPS-Off Workouts
 
     func testNonGPSActivityPersistsWithoutRoute() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .yoga, trackRoute: false)
         recorder.addHeartRateSample(120)
         recorder.stop(save: true)
@@ -148,7 +144,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testGPSActivityWithTrackRouteFalseHasNoGPS() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: false)
         XCTAssertFalse(recorder.currentSession?.hasGPS ?? true)
     }
@@ -156,7 +152,7 @@ final class WorkoutRecorderTests: XCTestCase {
     // MARK: - Metric Provenance
 
     func testCaloriesRequiresProfileData() {
-        resetRecorder()
+        resetRecorderFully()
         // No profile data set
         recorder.start(activity: .run, trackRoute: true)
         recorder.addHeartRateSample(140)
@@ -166,7 +162,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testCaloriesWithProfileDataReturnsValue() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.updateProfile(
             weightKg: 70,
             maxHR: 190,
@@ -176,15 +172,17 @@ final class WorkoutRecorderTests: XCTestCase {
             age: 30
         )
         recorder.start(activity: .run, trackRoute: true)
-        recorder.addHeartRateSample(140)
-        recorder.addHeartRateSample(150)
+        // Add enough HR samples over sufficient duration
+        for _ in 0..<20 {
+            recorder.addHeartRateSample(140)
+        }
         recorder.stop(save: true)
         XCTAssertNotNil(recorder.currentSession?.metrics.calories)
         XCTAssertGreaterThan(recorder.currentSession?.metrics.calories ?? 0, 0)
     }
 
     func testActivityStrainRequiresProfileData() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
         recorder.addHeartRateSample(140)
         recorder.stop(save: true)
@@ -192,7 +190,7 @@ final class WorkoutRecorderTests: XCTestCase {
     }
 
     func testActivityStrainWithProfileDataReturnsValue() {
-        resetRecorder()
+        resetRecorderFully()
         recorder.updateProfile(
             weightKg: 70,
             maxHR: 190,
@@ -202,8 +200,8 @@ final class WorkoutRecorderTests: XCTestCase {
             age: 30
         )
         recorder.start(activity: .run, trackRoute: true)
-        // Need > 300 seconds for strain calculation - simulate by adding many samples
-        for _ in 0..<10 {
+        // Need > 300 seconds for strain calculation - add many samples
+        for _ in 0..<20 {
             recorder.addHeartRateSample(140)
         }
         recorder.stop(save: true)

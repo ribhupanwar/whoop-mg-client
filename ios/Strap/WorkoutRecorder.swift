@@ -257,8 +257,6 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
 
     private func buildSplits() -> [WorkoutSplit] {
         var splits: [WorkoutSplit] = []
-        var _currentSplitDistance = 0.0
-        var _currentSplitStartElapsed = 0
         var currentSplitHR: [Int] = []
         var splitIndex = 1
 
