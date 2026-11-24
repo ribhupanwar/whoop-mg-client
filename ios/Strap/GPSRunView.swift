@@ -126,7 +126,11 @@ struct GPSRunView: View {
             .background(.black)
 
             if showPicker {
-                VStack(spacing: 0) {
+                ZStack {
+                    Map(position: $mapPosition) { UserAnnotation() }
+                        .allowsHitTesting(false)
+                    Color.black.opacity(0.88)
+                    VStack(spacing: 0) {
                     HStack(spacing: 10) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 19))
@@ -194,14 +198,30 @@ struct GPSRunView: View {
                                     .padding(.horizontal, 24)
                                     .padding(.top, 18)
                             }
+                            if activityCategory == .recovery && search.isEmpty {
+                                Text("ACTIVITIES TO SUPPORT RECOVERY")
+                                    .font(StrapTypography.body(12))
+                                    .foregroundStyle(.gray)
+                                    .padding(.horizontal, 24)
+                                    .padding(.vertical, 18)
+                                Text("OTHER ACTIVITIES")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .tracking(1.5)
+                                    .foregroundStyle(.gray)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 10)
+                            }
                             ForEach(matching.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }) { activity in
                                 activityPickerRow(activity)
                             }
                         }
                     }
                     .scrollIndicators(.hidden)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 }
-                .background(Color.black.opacity(0.96))
+                .frame(maxHeight: .infinity)
+                .background(Color.black)
                 .foregroundStyle(.white)
                 .accessibilityIdentifier("running.activityPicker.overlay")
             } else {
@@ -1046,6 +1066,13 @@ private enum ActivityPickerCategory: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    private static let recoveryLabels: Set<String> = [
+        "acupuncture", "air compression", "air compression (normatec)",
+        "breathwork", "bright light therapy", "chiropractor", "cold shower",
+        "contrast therapy", "ice bath", "massage", "meditation", "sauna",
+        "stretching", "yoga", "breathing", "relaxation", "recovery"
+    ]
+
     func includes(_ activity: ActivityKind) -> Bool {
         let name = activity.label.lowercased()
         switch self {
@@ -1053,9 +1080,8 @@ private enum ActivityPickerCategory: String, CaseIterable, Identifiable {
         case .sleep:
             return name == "sleep" || name == "nap"
         case .recovery:
-            return ["breath", "meditation", "relax", "acupuncture", "compression",
-                    "therapy", "sauna", "massage", "cold shower", "ice bath",
-                    "chiropract", "stretch", "light therapy"].contains { name.contains($0) }
+            // Explicit, reviewable labels: do not classify activities by substring.
+            return Self.recoveryLabels.contains(name)
         case .strain:
             return !Self.sleep.includes(activity) && !Self.recovery.includes(activity)
         }
