@@ -2554,9 +2554,11 @@ final class BandLink: NSObject, ObservableObject {
             if inner.count > 1 {
                 pendingHistoryVersionCounts[Int(inner[1]), default: 0] += 1
             }
-            // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
-            // biometric record. Recognize it without inventing heartbeats.
+            // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
+            // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
+            // Recognize them without inventing heartbeats or marking frames undecodable.
             if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil
+                || Gen5V20Record.decode(inner) != nil || Gen5V22Record.decode(inner) != nil
                 || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
