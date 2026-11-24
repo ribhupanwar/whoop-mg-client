@@ -557,6 +557,8 @@ private struct HealthspanMetricScale: View {
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
-        .accessibilityElement(children: .combine)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Measured range")
+        .accessibilityValue("Current \(value.formatted()) \(unit); \(previous.map { "previous \($0.formatted()) \(unit); " } ?? "")range \(lower.formatted()) to \(upper.formatted()) \(unit)")
     }
 }
