@@ -165,6 +165,7 @@ struct GPSRunView: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityIdentifier("running.activityPicker.category." + category.rawValue)
+                            .accessibilityAddTraits(activityCategory == category ? .isSelected : [])
                         }
                     }
                     .padding(.top, 6)
