@@ -212,6 +212,17 @@ struct HealthspanView: View {
                     }
                 }
                 .padding(.vertical, 7)
+                if let value = reading.value, let range = reading.observedReference,
+                   range.upperBound > range.lowerBound {
+                    HealthspanMetricScale(value: value, previous: reading.prior,
+                        lower: range.lowerBound, upper: range.upperBound, unit: reading.unit)
+                        .padding(.bottom, 12)
+                } else {
+                    Text("Chart unavailable · insufficient measured reference range")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                        .padding(.bottom, 10)
+                }
             }
         }
     }
@@ -491,5 +502,61 @@ private struct HealthspanTrendChart: View {
                 connected = true
             }
         }
+    }
+}
+
+// Measured-value visualization only: colors do not imply proprietary age impact.
+private struct HealthspanMetricScale: View {
+    let value: Double
+    let previous: Double?
+    let lower: Double
+    let upper: Double
+    let unit: String
+
+    private func fraction(_ number: Double) -> CGFloat {
+        CGFloat(min(1, max(0, (number - lower) / (upper - lower))))
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            GeometryReader { proxy in
+                let width = proxy.size.width
+                ZStack(alignment: .leading) {
+                    HStack(spacing: 2) {
+                        ForEach(0..<10, id: \.self) { index in
+                            Rectangle()
+                                .fill(Color(red: 0.22 + 0.045 * Double(index),
+                                            green: 0.48 + 0.038 * Double(index),
+                                            blue: 0.54 + 0.015 * Double(index)))
+                        }
+                    }
+                    .frame(height: 8)
+                    .clipShape(RoundedRectangle(cornerRadius: 2))
+                    if let previous {
+                        Image(systemName: "triangle.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(Color.appMuted)
+                            .rotationEffect(.degrees(180))
+                            .offset(x: max(0, min(width - 10, width * fraction(previous) - 5)), y: -11)
+                    }
+                    Image(systemName: "triangle.fill")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Color.appFG)
+                        .offset(x: max(0, min(width - 10, width * fraction(value) - 5)), y: 10)
+                }
+            }
+            .frame(height: 25)
+            HStack {
+                Text(lower.formatted() + " " + unit)
+                Spacer()
+                Text(upper.formatted() + " " + unit)
+            }
+            .font(StrapTypography.body(10))
+            .foregroundStyle(Color.appMuted)
+            Text("Measured range · lower marker: current · upper marker: previous")
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
+        }
+        .accessibilityElement(children: .combine)
     }
 }
