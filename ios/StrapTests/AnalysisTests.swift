@@ -1749,3 +1749,48 @@ extension HistoricalArchiveWriterTests {
         XCTAssertEqual(saved.map(\.unix), [1_790_000_000])
     }
 }
+
+
+final class HealthspanCoverageBoundaryRegressionTests: XCTestCase {
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func day(_ offset: Int, from anchor: Date) -> Date {
+        utc.date(byAdding: .day, value: offset, to: anchor)!
+    }
+
+    func testLongHistoryOverlappingWindowRetainsGuaranteedDays() {
+        let asOf = Date(timeIntervalSince1970: 1_795_478_400) // stable UTC anchor
+        let observation = HealthspanObservation(
+            value: 55, observedDays: 35,
+            firstObserved: day(-39, from: asOf),
+            lastObserved: asOf
+        )
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: asOf)
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 20, windowDays: 30, calendar: utc))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 26, windowDays: 30, calendar: utc))
+    }
+
+    func testImpossibleObservedDayCountIsNotAvailable() {
+        let asOf = Date(timeIntervalSince1970: 1_795_478_400)
+        let impossible = HealthspanObservation(
+            value: 55, observedDays: 30,
+            firstObserved: day(-1, from: asOf),
+            lastObserved: asOf
+        )
+        let coverage = HealthspanInputCoverage(observations: [.steps: impossible], asOf: asOf)
+        XCTAssertFalse(impossible.isValid)
+        XCTAssertFalse(coverage.availableContributors.contains(.steps))
+        XCTAssertTrue(coverage.missingContributors.contains(.steps))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 1, windowDays: 30, calendar: utc))
+    }
+
+    func testRecentRetransmissionPrefersValidRRNotPadding() {
+        XCTAssertTrue(Hrv.preferRetransmittedRR([800, 810], over: [800, 810, 0]))
+        XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810, 0], over: [800, 810]))
+        XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810], over: [800, 810]))
+    }
+}
