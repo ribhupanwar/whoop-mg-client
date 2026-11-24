@@ -50,6 +50,12 @@ struct HealthspanInputCoverage {
               observation.lastObserved <= asOf,
               observation.firstObserved <= asOf else { return true }
         let firstDay = calendar.startOfDay(for: observation.firstObserved)
+        let lastDay = calendar.startOfDay(for: observation.lastObserved)
+        // A summary cannot contain more distinct observed days than its inclusive
+        // calendar span. Reject corrupted or mismatched aggregates rather than
+        // treating them as proof of recent coverage.
+        guard let span = calendar.dateComponents([.day], from: firstDay, to: lastDay).day,
+              span >= 0, observation.observedDays <= span + 1 else { return true }
         let outsideDays = max(0, calendar.dateComponents([.day], from: firstDay, to: start).day ?? 0)
         let guaranteedInWindow = max(0, observation.observedDays - outsideDays)
         return guaranteedInWindow < minimumDays
