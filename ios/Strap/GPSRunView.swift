@@ -100,7 +100,7 @@ struct GPSRunView: View {
                 // Reset after a brief moment to show the status
                 DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                     if recorder.phase == .saved || recorder.phase == .discarded {
-                        recorder.phase = .idle
+                        recorder.resetCompletedWorkout()
                     }
                 }
             }
@@ -425,7 +425,7 @@ struct GPSRunView: View {
         .onAppear {
             // Ensure we start fresh
             if recorder.phase == .saved || recorder.phase == .discarded {
-                recorder.phase = .idle
+                recorder.resetCompletedWorkout()
             }
         }
     }
@@ -716,7 +716,7 @@ struct HeartRatePage: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.secondary)
                         if let zone = hrZone {
-                            Text(zone.label)
+                            Text(zone.rawValue)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(zone.color)
                         }
