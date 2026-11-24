@@ -312,7 +312,7 @@ enum V18Decoder {
             | (UInt32(bytes[offset + 3]) << 24)
     }
 
-    private static func f32(_ bytes: [UInt8], _ offset: Int) -> Double? {
+    static func f32(_ bytes: [UInt8], _ offset: Int) -> Double? {
         guard let raw = u32(bytes, offset) else { return nil }
         let value = Float(bitPattern: raw)
         guard value.isFinite else { return nil }
@@ -324,7 +324,7 @@ enum V18Decoder {
         return round2(Double(raw) / scale)
     }
 
-    private static func round4(_ value: Double) -> Double {
+    static func round4(_ value: Double) -> Double {
         (value * 10_000.0).rounded() / 10_000.0
     }
 
