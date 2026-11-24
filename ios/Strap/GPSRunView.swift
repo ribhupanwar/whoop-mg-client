@@ -12,6 +12,7 @@ struct GPSRunView: View {
 
     @State private var showPicker = false
     @State private var search = ""
+    @State private var activityCategory: ActivityPickerCategory = .all
     @State private var selectedActivity: ActivityKind = .run
     @State private var showStrain = false
     @State private var trackRoute = true
@@ -125,42 +126,84 @@ struct GPSRunView: View {
             .background(.black)
 
             if showPicker {
-                VStack(spacing: 12) {
-                    TextField("Search Activities", text: $search)
-                        .textFieldStyle(.roundedBorder)
-                    // Category filters are intentionally omitted until backed by real activity metadata.
+                VStack(spacing: 0) {
+                    HStack(spacing: 10) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 19))
+                        TextField("Search", text: $search)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            .accessibilityIdentifier("running.activityPicker.search")
+                    }
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 16)
+                    .frame(height: 48)
+                    .background(Color(white: 0.67), in: Capsule())
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+
+                    HStack(spacing: 0) {
+                        ForEach(ActivityPickerCategory.allCases) { category in
+                            Button {
+                                activityCategory = category
+                            } label: {
+                                VStack(spacing: 8) {
+                                    Text(category.rawValue)
+                                        .font(.system(size: 11, weight: .bold))
+                                        .tracking(1.2)
+                                    Rectangle()
+                                        .fill(activityCategory == category ? Color.white : Color.clear)
+                                        .frame(height: 2)
+                                }
+                                .foregroundStyle(activityCategory == category ? Color.white : Color.gray)
+                                .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityIdentifier("running.activityPicker.category." + category.rawValue)
+                        }
+                    }
+                    .padding(.top, 6)
+
                     ScrollView {
-                        LazyVStack {
-                            if !search.isEmpty && !ActivityKind.allCases.contains(where: {
-                                $0.label.localizedCaseInsensitiveContains(search)
-                            }) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            let matching = ActivityKind.allCases.filter { activity in
+                                (search.isEmpty || activity.label.localizedCaseInsensitiveContains(search))
+                                && activityCategory.includes(activity)
+                            }
+                            if matching.isEmpty {
                                 Text("No matching activities")
-                                    .foregroundStyle(.secondary)
-                                    .padding(12)
+                                    .foregroundStyle(.gray)
+                                    .padding(20)
                                     .accessibilityIdentifier("running.activityPicker.empty")
                             }
-                            ForEach(ActivityKind.allCases.filter {
-                                search.isEmpty || $0.label.localizedCaseInsensitiveContains(search)
-                            }) { activity in
-                                Button {
-                                    selectedActivity = activity
-                                    withAnimation(.easeInOut(duration: 0.2)) { showPicker = false }
-                                } label: {
-                                    HStack {
-                                        Image(systemName: activity.icon).frame(width: 28)
-                                        Text(activity.label)
-                                        Spacer()
-                                    }
-                                    .padding(12)
-                                }
-                                .buttonStyle(.plain)
+                            if activityCategory == .all && search.isEmpty,
+                               matching.contains(where: { $0 == selectedActivity }) {
+                                Text("MOST RECENT")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .tracking(1.5)
+                                    .foregroundStyle(.gray)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 18)
+                                activityPickerRow(selectedActivity)
+                                    .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 5))
+                                    .padding(.horizontal, 12)
+                                Text("ALL A–Z")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .tracking(1.5)
+                                    .foregroundStyle(.gray)
+                                    .padding(.horizontal, 24)
+                                    .padding(.top, 18)
+                            }
+                            ForEach(matching.sorted { $0.label.localizedStandardCompare($1.label) == .orderedAscending }) { activity in
+                                activityPickerRow(activity)
                             }
                         }
                     }
+                    .scrollIndicators(.hidden)
                 }
-                .padding()
-                .background(.black)
+                .background(Color.black.opacity(0.96))
                 .foregroundStyle(.white)
+                .accessibilityIdentifier("running.activityPicker.overlay")
             } else {
                 ZStack {
                     Map(position: $mapPosition) {
@@ -260,6 +303,28 @@ struct GPSRunView: View {
             }
         }
         .background(Color(.systemBackground))
+    }
+
+    private func activityPickerRow(_ activity: ActivityKind) -> some View {
+        Button {
+            selectedActivity = activity
+            withAnimation(.easeInOut(duration: 0.2)) { showPicker = false }
+        } label: {
+            HStack(spacing: 18) {
+                Image(systemName: activity.icon)
+                    .font(.system(size: 24))
+                    .frame(width: 42, height: 42)
+                Text(activity.label.uppercased())
+                    .font(.system(size: 14, weight: .bold))
+                    .tracking(1.1)
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 64)
+            .padding(.horizontal, 22)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("running.activityPicker.item." + activity.rawValue)
     }
 
     private var strainTargetSheet: some View {
@@ -971,5 +1036,28 @@ struct MapPage: View {
         let s = seconds % 60
         if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
         return String(format: "%d:%02d", m, s)
+    }
+}
+private enum ActivityPickerCategory: String, CaseIterable, Identifiable {
+    case all = "ALL"
+    case strain = "STRAIN"
+    case recovery = "RECOVERY"
+    case sleep = "SLEEP"
+
+    var id: String { rawValue }
+
+    func includes(_ activity: ActivityKind) -> Bool {
+        let name = activity.label.lowercased()
+        switch self {
+        case .all: return true
+        case .sleep:
+            return name == "sleep" || name == "nap"
+        case .recovery:
+            return ["breath", "meditation", "relax", "acupuncture", "compression",
+                    "therapy", "sauna", "massage", "cold shower", "ice bath",
+                    "chiropract", "stretch", "light therapy"].contains { name.contains($0) }
+        case .strain:
+            return !Self.sleep.includes(activity) && !Self.recovery.includes(activity)
+        }
     }
 }
