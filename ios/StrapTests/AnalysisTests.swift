@@ -1788,6 +1788,21 @@ final class HealthspanCoverageBoundaryRegressionTests: XCTestCase {
         XCTAssertTrue(coverage.missing(.steps, minimumDays: 1, windowDays: 30, calendar: utc))
     }
 
+
+    func testDetailedDiagnosticsMatchesProductionRRReplaySelection() {
+        let clean = (0..<30).map { index in
+            makeSample(90_000 + index, hr: 65, accel: 0.01, rr: [800, 810])
+        }
+        let paddedReplay = makeSample(90_012, hr: 65, accel: 0.01, rr: [800, 810, 0])
+        let baseline = Hrv.detailedDiagnostics(samples: clean)
+        let replayed = Hrv.detailedDiagnostics(samples: clean + [paddedReplay])
+        XCTAssertEqual(replayed.rawRRCount, baseline.rawRRCount)
+        XCTAssertEqual(replayed.acceptedNNCount, baseline.acceptedNNCount)
+        XCTAssertEqual(replayed.finalRMSSD, baseline.finalRMSSD)
+        XCTAssertEqual(Hrv.fromSamples(clean + [paddedReplay]).rmssdMS,
+                       Hrv.fromSamples(clean).rmssdMS)
+    }
+
     func testRecentRetransmissionPrefersValidRRNotPadding() {
         XCTAssertTrue(Hrv.preferRetransmittedRR([800, 810], over: [800, 810, 0]))
         XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810, 0], over: [800, 810]))

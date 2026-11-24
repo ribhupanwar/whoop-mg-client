@@ -274,7 +274,7 @@ enum Hrv {
         var uniqueBySecond: [Int: V18Sample] = [:]
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
