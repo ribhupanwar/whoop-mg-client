@@ -2714,6 +2714,12 @@ final class BandLink: NSObject, ObservableObject {
               let reading = StandardHeartRate.parse(value),
               (25...230).contains(reading.heartRate) else { return }
         standardHRPackets += 1
+        // Retain valid standard 0x2A37 R-R intervals even while Type-40 HR
+        // remains fresh for display. Only HR display is suppressed below.
+        if !reading.rrMS.isEmpty {
+            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
+            liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
+        }
         // Prefer the Gen5 stream while it is fresh; SIG remains a live fallback.
         guard LiveHeartRateState.fresh(liveHeartRate, receivedAt: lastType40HRAt,
                                        connected: isConnected, now: Date()) == nil else { return }
@@ -2734,8 +2740,6 @@ final class BandLink: NSObject, ObservableObject {
         lastMessage = nil
         if !reading.rrMS.isEmpty {
             standardRRPackets += 1
-            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
-            liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
         guard isLiveSession else { return }
         let unix = Int(Date().timeIntervalSince1970)
