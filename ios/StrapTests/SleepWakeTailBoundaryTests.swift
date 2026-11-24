@@ -191,4 +191,25 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
             "Sustained terminal wake evidence should not require a band-up state")
     }
 
+    /// User-observed morning bathroom interruption: the band reports up for
+    /// six minutes, then records a quiet return to sleep for twelve minutes.
+    /// A terminal-wake trim must not discard the resumed sleep.
+    func testSixMinuteMorningBathroomUpThenTwelveMinuteResumedSleep() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 24, hour: 0, minute: 0
+        ))!.timeIntervalSince1970)
+        let sleepStart = base + 60
+        let bathroomStart = sleepStart + 6 * 3600
+        let bathroomEnd = bathroomStart + 6 * 60
+        let resumedEnd = bathroomEnd + 12 * 60
+        var rows = (0..<60).map { row(base + $0, hr: 85, accel: 0.2, state: 0) }
+        rows += (sleepStart..<bathroomStart).map { row($0, hr: 58, accel: 0.008, state: 2) }
+        rows += (bathroomStart..<bathroomEnd).map { row($0, hr: 82, accel: 0.15, state: 3) }
+        rows += (bathroomEnd..<resumedEnd).map { row($0, hr: 59, accel: 0.008, state: 2) }
+        let detected = SleepDetect.detect(rows)
+        XCTAssertEqual(detected.count, 1, "Bathroom trip followed by resumed sleep must remain one night")
+        XCTAssertEqual(detected.first?.endUnix, resumedEnd - 1,
+                       "Do not end sleep at the bathroom start when sleep resumes")
+    }
+
 }
