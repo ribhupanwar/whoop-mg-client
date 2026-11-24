@@ -44,7 +44,7 @@ Every biometric metric in STRAP is assigned an explicit evidence level:
                                                  │
                    ┌─────────────────────────────┼─────────────────────────────┐
                    ▼                             ▼                             ▼
-           1 Hz Continuous HR           RR Intervals (1024 Hz)         Dynamic Acceleration
+           1 Hz Continuous HR         RR Intervals (1.0 ms / unit)       Dynamic Acceleration
                    │                             │                             │
                    │               ┌─────────────┴─────────────┐               │
                    │               ▼                           ▼               ▼
@@ -67,7 +67,7 @@ Every biometric metric in STRAP is assigned an explicit evidence level:
 
 ### 2. RR Intervals & NN Filtering
 - **Evidence Level:** `BINARY_VERIFIED` & `CAPTURE_VERIFIED`
-- **Specification:** Up to 4 RR intervals per packet, decoded from $1/1024\text{s}$ ticks.
+- **Specification:** Up to 4 RR intervals per packet, decoded directly as 16-bit signed integers in milliseconds ($1.0\text{ ms}$ per LSB).
 - **Malik Artifact Filter:**
   - $300\text{ ms} \le RR \le 2000\text{ ms}$.
   - Maximum beat-to-beat step: $\le 20\%$ deviation from rolling 5-beat median.

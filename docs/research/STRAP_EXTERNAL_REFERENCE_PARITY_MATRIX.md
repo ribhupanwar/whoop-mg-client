@@ -49,7 +49,7 @@ Every external repository evaluated below was inspected from local clones and of
   - Bytes 0–7: Record header (record index `u32`, timestamp `u32`, sub-second `u16` Q15).
   - Byte 22: Heart rate in BPM ($30 \le HR \le 255$).
   - Byte 23: RR interval count ($0 \le count \le 4$).
-  - Bytes 24–31: 4 $\times$ 16-bit RR intervals in $1/1024$ second units.
+  - Bytes 24–31: 4 $\times$ 16-bit RR intervals in true integer milliseconds ($1.0\text{ ms}$ per LSB).
   - Byte 41: Dynamic acceleration in $G$ units ($Q8.8$ or scaled float).
   - Byte 63: Physical activity / gait classifier.
 - **STRAP Parity:** `ios/Strap/Protocol/V18Record.swift` and `whoop/records.py` match 100%. PR #173 and PR #203 resolved the trailing padding edge case (`rrPaddingValid`).

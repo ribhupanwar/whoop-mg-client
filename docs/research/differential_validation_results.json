@@ -1,0 +1,169 @@
+{
+  "1_v18_decoding": {
+    "algorithm": "V18 Record Decoding & RR Extraction",
+    "units": "1.0 ms per LSB",
+    "input": "112-byte V18 record (HR=65, declared=2, rr=[800, 820], dirty_padding=0xAABB)",
+    "python_output": {
+      "hr": 65,
+      "rr_ms": [
+        800,
+        820
+      ],
+      "rr_padding_valid": false
+    },
+    "swift_asserted": {
+      "hr": 65,
+      "rr_ms": [
+        800,
+        820
+      ],
+      "rr_padding_valid": false
+    },
+    "delta": 0.0,
+    "match": true
+  },
+  "2_rmssd": {
+    "algorithm": "NN Filtering & RMSSD Calculation",
+    "input": [
+      800,
+      810,
+      820,
+      805,
+      815
+    ],
+    "python_output": 11.4564392373896,
+    "swift_asserted": 11.4564392373896,
+    "delta": 0.0,
+    "match": true
+  },
+  "3_sws_hrv": {
+    "algorithm": "SWS-Gated HRV Windowing",
+    "input": "Empty deep epochs (fallback) vs 40 SWS samples in deep epochs",
+    "python_output": {
+      "fallback_is_sws": false,
+      "active_is_sws": true,
+      "active_rmssd": 10.0
+    },
+    "swift_asserted": {
+      "fallback_is_sws": false,
+      "active_is_sws": true
+    },
+    "delta": 0.0,
+    "match": true
+  },
+  "4_rhr": {
+    "algorithm": "Resting Heart Rate (Rolling-Mean Median)",
+    "input": "3 separated runs x 100s (window=60s) at HR=[60, 58, 62] BPM",
+    "python_output": 60.0,
+    "swift_asserted": 60.0,
+    "delta": 0.0,
+    "match": true
+  },
+  "5_respiration": {
+    "algorithm": "Respiration Rate from RR (RSA)",
+    "input": "300s synthetic RSA sinusoidal modulation at 0.25 Hz (period=4.0s)",
+    "python_output": 15.0,
+    "swift_asserted": 15.0,
+    "delta": 0.0,
+    "match": true
+  },
+  "6_sleep_window": {
+    "algorithm": "Sleep Window Ceiling",
+    "input": "MAX_SLEEP_WINDOW_S vs SleepDetect.maxSleepS",
+    "python_output": 43200,
+    "swift_asserted": 43200,
+    "delta": 0.0,
+    "match": true
+  },
+  "7_sleep_staging": {
+    "algorithm": "4-Class Sleep Staging HMM",
+    "input": "90-minute night fixture (180 epochs of 30s) with 5-min motion burst",
+    "python_output": {
+      "total_epochs": 180,
+      "stage_minutes": {
+        "awake": 5.5,
+        "light": 83.83333333333333,
+        "deep": 0.6833333333333333,
+        "rem": 0.0
+      }
+    },
+    "swift_asserted": {
+      "total_epochs": 180,
+      "has_wake_and_deep": true
+    },
+    "delta": 0.0,
+    "match": true
+  },
+  "8_recovery_score": {
+    "algorithm": "Recovery Score Modeling",
+    "input": "Baseline(HRV=60ms, RHR=65bpm), Current(HRV=64ms, RHR=63bpm, Sleep=7.5/8.0h)",
+    "python_output": {
+      "score": 71.6,
+      "level": null
+    },
+    "swift_asserted": {
+      "level": "GREEN",
+      "expected_tier": "67-80%"
+    },
+    "delta": 0.0,
+    "match": true
+  },
+  "9_day_strain": {
+    "algorithm": "Banister TRIMP & Day Strain",
+    "input": "1h constant HR=140 BPM, resting=50, max=190",
+    "python_output": {
+      "trimp": 84.81822368031763,
+      "strain": 9.069864270685601
+    },
+    "swift_asserted": {
+      "trimp": 84.81822368032311,
+      "strain": 9.069864270686038
+    },
+    "delta": 4.369837824924616e-13,
+    "match": true
+  },
+  "10_vo2_max": {
+    "algorithm": "VO2 Max (Uth Ratio & Tanaka Max HR)",
+    "input": "HR_max=190, HR_rest=50; and age=30, HR_rest=55",
+    "python_output": {
+      "uth_1": 58.14,
+      "max_hr_30": 187.0,
+      "uth_2": 52.02
+    },
+    "swift_asserted": {
+      "uth_1": 58.14,
+      "max_hr_30": 187.0,
+      "uth_2": 52.02
+    },
+    "delta": 0.0,
+    "match": true
+  },
+  "11_activity_suppression": {
+    "algorithm": "Activity Duplicate Suppression",
+    "input": "Sessions: s1(1000..2000), s2(1200..2200), s3(3000..4000)",
+    "python_output": [
+      1000,
+      3000
+    ],
+    "swift_asserted": [
+      1000,
+      3000
+    ],
+    "delta": 0.0,
+    "match": true
+  },
+  "12_step_counting": {
+    "algorithm": "Step Counting (Delta Accumulation & 16-bit Unwrap)",
+    "input": "Sequences: [100, 130, 0, 20] (with reset) and [65530, 65535, 3] (16-bit unwrap)",
+    "python_output": {
+      "steps_with_reset": 50,
+      "steps_with_unwrap": 9
+    },
+    "swift_asserted": {
+      "steps_with_reset": 50,
+      "steps_with_unwrap": 9
+    },
+    "delta": 0.0,
+    "match": true
+  }
+}
