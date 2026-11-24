@@ -315,7 +315,10 @@ struct HomeView: View {
             }
         }
         .sheet(isPresented: $showLiveSession) {
-            LiveSessionView()
+            NavigationStack {
+                GPSRunView()
+                    .environmentObject(store)
+            }
         }
         .sheet(isPresented: $showDeviceSettings) {
             HomeBandDeviceSettingsView()
