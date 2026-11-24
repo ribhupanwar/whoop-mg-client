@@ -9,37 +9,73 @@ enum SleepDetect {
     static let maxSleepS = 12 * 3600 // WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.swift)
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
+    /// Autonomic onset gate: HR must settle ≤ awakeMedian + 5 for ≥10 min sustained stillness.
+    static let autonomicOnsetThresholdBPM = 5.0
+    static let autonomicOnsetWindowS = 10 * 60
+    
+    // NOOP parity improvements
+    /// Sparse gravity threshold: when gravity coverage < 50% of HR coverage, engage robustness branches
+    static let sparseGravityCoverageThreshold = 0.5
+    /// Sparse gravity uses lower stillness threshold
+    static let sparseQuietAccelG = 0.10
+    /// Motion-corroborated HR confirmation multipliers
+    static let hrSleepBaselineMult = 1.05
+    static let quiescentHrSleepMult = 1.15
+    /// Off-wrist fractional backstop: drop run only when off-wrist fraction >= threshold
+    static let maxOffWristSleepFraction = 0.5
+    
+    /// Diagnostic trace callback for forensic gate analysis
+    /// Emits structured JSON-like dictionaries per gate decision
+    typealias TraceSink = ([String: Any]) -> Void
 
-    /// Sustained-quiet periods confirmed by a heart-rate drop.
+/// Sustained-quiet periods confirmed by a heart-rate drop.
     ///
     /// Motion alone is not enough — sitting still at a desk is not sleep — so
     /// a candidate must also sit below the capture's active median by
     /// `hrDropBPM`. With no active seconds to compare against, the period is
     /// rejected rather than assumed.
+    ///
+    /// NOOP parity improvements:
+    /// - Sparse gravity handling for WHOOP 5.0/MG
+    /// - Motion-corroborated dual-band HR confirmation
+    /// - Off-wrist fractional backstop
+    /// - Structured diagnostic tracing
     static func detect(
         _ samples: [V18Sample],
         quietAccelG: Double = SleepDetect.quietAccelG,
         minSleepS: Int = SleepDetect.minSleepS,
         gapToleranceS: Int = SleepDetect.gapToleranceS,
-        hrDropBPM: Double = SleepDetect.hrDropBPM
+        hrDropBPM: Double = SleepDetect.hrDropBPM,
+        traceSink: TraceSink? = nil
     ) -> [SleepPeriod] {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
-
+        
+        // Sparse gravity detection (NOOP P0): when gravity coverage < 50% of HR coverage
+        let gravSeconds = Set(ordered.compactMap { $0.dynamicAccelG != nil ? $0.unix : nil }).count
+        let hrSeconds = Set(ordered.filter { $0.wearing }.map(\.unix)).count
+        let sparse = hrSeconds > 0 && Double(gravSeconds) / Double(hrSeconds) < sparseGravityCoverageThreshold
+        if sparse {
+            traceSink?(["gate": "sparseBridge", "verdict": "sparse", "gravityCoverageRatio": hrSeconds > 0 ? Double(gravSeconds) / Double(hrSeconds) : 0])
+        }
+        
+        // Adjust stillness threshold for sparse gravity
+        let effectiveQuietAccelG = sparse ? sparseQuietAccelG : quietAccelG
+        
         let quiet = ordered.map { sample in
             guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
-            return sample.wearing && (35...220).contains(sample.heartRate) && accel <= quietAccelG
+            return sample.wearing && (35...220).contains(sample.heartRate) && accel <= effectiveQuietAccelG
         }
         let activeHRs = zip(ordered, quiet)
             .filter { !$0.1 && $0.0.wearing && (35...220).contains($0.0.heartRate) }
             .map { Double($0.0.heartRate) }
         guard !activeHRs.isEmpty else { return [] }
         let activeMedian = Stats.median(activeHRs)
-
+        
         let closed = GapClosing.closed(
             quiet, unix: ordered.map { $0.unix }, maxGapS: gapToleranceS
         )
-
+        
         var periods: [SleepPeriod] = []
         var index = 0
         while index < ordered.count {
@@ -69,21 +105,54 @@ enum SleepDetect {
             )
             let daytime = (8..<22).contains(startHour)
             if daytime && duration < max(minSleepS, 90 * 60) { continue }
-
+            
             let runHRs = run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map { Double($0.heartRate) }
             let wornSeconds = Set(run.filter { $0.wearing && (35...220).contains($0.heartRate) }.map(\.unix)).count
             let observedSeconds = Set(run.map(\.unix)).count
             // Avoid interpreting sparse or off-wrist quiet records as sleep.
             guard observedSeconds >= minSleepS / 2,
                   wornSeconds * 5 >= observedSeconds * 4,
-                  !runHRs.isEmpty,
-                  Stats.median(runHRs) <= activeMedian - hrDropBPM else { continue }
+                  !runHRs.isEmpty else { continue }
+            
+            // Primary HR drop gate (original STRAP): run median must be below active median by hrDropBPM
+            let primaryThreshold = activeMedian - hrDropBPM
+            
+            // Motion-corroborated dual-band HR confirmation (NOOP P1)
+            let deeplyQuiescent = runIsDeeplyQuiescent(run)
+            let adaptiveThreshold = deeplyQuiescent ? activeMedian * quiescentHrSleepMult : activeMedian * hrSleepBaselineMult
+            
+            // Must pass BOTH gates: subtractive primary AND multiplicative adaptive
+            let effectiveThreshold = min(primaryThreshold, adaptiveThreshold)
+            let runMedianHR = Stats.median(runHRs)
+            guard runMedianHR <= effectiveThreshold else {
+                traceSink?(["gate": "hrConfirm", "verdict": "dropped", 
+                            "runMedianHR": runMedianHR, "primaryThreshold": primaryThreshold,
+                            "adaptiveThreshold": adaptiveThreshold, "effectiveThreshold": effectiveThreshold,
+                            "deeplyQuiescent": deeplyQuiescent])
+                continue
+            }
+            
+            traceSink?(["gate": "hrConfirm", "verdict": "passed", 
+                        "runMedianHR": runMedianHR, "primaryThreshold": primaryThreshold,
+                        "adaptiveThreshold": adaptiveThreshold, "effectiveThreshold": effectiveThreshold,
+                        "deeplyQuiescent": deeplyQuiescent])
+            
+            // Off-wrist fractional backstop (NOOP P1)
+            let offWristFraction = computeOffWristFraction(run, in: ordered)
+            if offWristFraction >= maxOffWristSleepFraction {
+                traceSink?(["gate": "offWrist", "verdict": "dropped", "offWristFraction": offWristFraction])
+                continue
+            }
+            
             // A waking HR spike can make sedentary rest appear to have a
             // large HR drop. Require the candidate's lowest sustained HR
             // to be below the waking reference as an independent check.
             if daytime {
                 guard let resting = Hrv.minimumRollingMean(runHRs, window: 300),
-                      resting <= activeMedian * 0.95 else { continue }
+                      resting <= activeMedian * 0.95 else {
+                    traceSink?(["gate": "daytimeGuard", "verdict": "dropped", "restingHR": Hrv.minimumRollingMean(runHRs, window: 300) as Any, "threshold": activeMedian * 0.95])
+                    continue
+                }
             }
 
             // WHOOP v18 inner[73] bits 4–5 encode a coarse band
@@ -181,10 +250,45 @@ enum SleepDetect {
                     verifiedStart = refinedStart
                 }
             }
+
+            // Autonomic onset gate (WHOOP parity): HR must settle ≤ activeMedian + 5 for ≥10 min sustained stillness.
+            // This finds the true physiological sleep onset independent of band state lag.
+            let autonomicThreshold = activeMedian + SleepDetect.autonomicOnsetThresholdBPM
+            let autonomicWindow = SleepDetect.autonomicOnsetWindowS
+            var autonomicCursor = verifiedStart
+            let runStart = run[0].unix
+            let searchFloor = max(runStart, verifiedStart - 60 * 60) // Search up to 1 hour before verifiedStart
+            while autonomicCursor - 60 >= searchFloor {
+                let minute = run.filter { autonomicCursor - 60 <= $0.unix && $0.unix < autonomicCursor }
+                let valid = minute.filter {
+                    $0.wearing && (35...220).contains($0.heartRate)
+                        && $0.sleepState != 3
+                        && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= quietAccelG } ?? false)
+                        && Double($0.heartRate) <= autonomicThreshold
+                }
+                // At least 50 distinct observed seconds per minute (≥83% coverage)
+                guard Set(valid.map(\.unix)).count >= 50 else { break }
+                autonomicCursor -= 60
+            }
+            // Only apply autonomic backtrack if it extends ≥5 min and shows a settling transition
+            let autonomicBacktrack = verifiedStart - autonomicCursor
+            if autonomicBacktrack >= 5 * 60 {
+                let earlier = run.filter {
+                    autonomicCursor - 5 * 60 <= $0.unix && $0.unix < autonomicCursor
+                        && $0.wearing && (35...220).contains($0.heartRate)
+                }
+                let transitionObserved = earlier.count >= 180
+                    && Stats.median(earlier.map { Double($0.heartRate) }) >= autonomicThreshold + 3
+                if transitionObserved {
+                    verifiedStart = autonomicCursor
+                    print("[SleepDetect] Autonomic onset gate advanced start by \(autonomicBacktrack / 60) min to \(Date(timeIntervalSince1970: TimeInterval(verifiedStart)))")
+                }
+            }
             // A trimmed onset must still leave a real sleep-length window.
             // Otherwise an hours-long quiet evening with only a few minutes
             // of declared sleep could pass the earlier duration check.
             guard run[run.count - 1].unix - verifiedStart + 1 >= minSleepS else {
+                traceSink?(["gate": "minSleepMin", "verdict": "dropped", "duration": run[run.count - 1].unix - verifiedStart + 1, "min": minSleepS])
                 continue
             }
             // If the signal is a constant zero/default, abstain entirely.
@@ -195,6 +299,7 @@ enum SleepDetect {
                upRows * 10 >= stateRows.count * 7,
                declaredSleepRows == 0,
                declaredStillRows * 10 < stateRows.count {
+                traceSink?(["gate": "stateVeto", "verdict": "dropped", "stateRows": stateRows.count, "upRows": upRows, "sleepRows": declaredSleepRows, "stillRows": declaredStillRows])
                 continue
             }
 
@@ -327,24 +432,15 @@ enum SleepDetect {
             }
             // Harmonize wakeEvents with WHOOP 5.80.2 disturbanceCount and SleepSession.movementBouts:
             // Count sustained movement bouts (movement persisting >= 15 seconds), not 1-second edge noise.
-            // Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
             var movingSeconds = 0
             var wakeEvents = 0
             var lastMovingUnix: Int? = nil
             for index in verifiedIndices {
-                let u = ordered[index].unix
                 if !quiet[index] {
-                    if let last = lastMovingUnix {
-                        if u == last + 1 {
-                            movingSeconds += 1
-                        } else if u > last + 1 {
-                            // Sparse gap: reset to single moving second rather than bridging across gap
-                            movingSeconds = 1
-                        }
-                    } else {
-                        movingSeconds = 1
+                    if ordered[index].unix != lastMovingUnix {
+                        movingSeconds += 1
+                        lastMovingUnix = ordered[index].unix
                     }
-                    lastMovingUnix = u
                     if movingSeconds == 15 { wakeEvents += 1 }
                 } else {
                     movingSeconds = 0
@@ -492,5 +588,59 @@ enum SleepDetect {
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {
         periods.reduce(0.0) { $0 + $1.hours }
+    }
+    
+    // MARK: - NOOP Parity Helper Functions
+    
+    /// Check if run is deeply quiescent: wrist barely moved AND posture unchanged.
+    /// NOOP's runIsDeeplyQuiescent: gravity vector delta < threshold for all samples.
+    private static func runIsDeeplyQuiescent(_ run: [V18Sample]) -> Bool {
+        guard run.count >= 2 else { return false }
+        let gravitySamples = run.compactMap { $0.gravityXG != nil && $0.gravityYG != nil && $0.gravityZG != nil ? $0 : nil }
+        guard gravitySamples.count >= 2 else { return false }
+        // Check gravity vector stability (posture unchanged)
+        let refX = gravitySamples[0].gravityXG!
+        let refY = gravitySamples[0].gravityYG!
+        let refZ = gravitySamples[0].gravityZG!
+        for s in gravitySamples.dropFirst() {
+            let dx = abs(s.gravityXG! - refX)
+            let dy = abs(s.gravityYG! - refY)
+            let dz = abs(s.gravityZG! - refZ)
+            if dx > 0.05 || dy > 0.05 || dz > 0.05 {
+                return false
+            }
+        }
+        // Check motion is minimal
+        for s in run {
+            if let accel = s.dynamicAccelG, accel > 0.01 {
+                return false
+            }
+        }
+        return true
+    }
+    
+    /// Measure off-wrist COVERAGE as union of HR gaps + wrist-off events.
+    /// NOOP measures off-wrist fraction, drops run only when >= 50%.
+    private static func computeOffWristFraction(_ run: [V18Sample], in ordered: [V18Sample]) -> Double {
+        guard let runStart = run.first?.unix, let runEnd = run.last?.unix else { return 1.0 }
+        let runDuration = runEnd - runStart + 1
+        guard runDuration > 0 else { return 1.0 }
+        
+        var offWristSeconds = Set<Int>()
+        // Off-wrist from wearing flag
+        for s in ordered {
+            if runStart <= s.unix && s.unix <= runEnd {
+                if !s.wearing {
+                    offWristSeconds.insert(s.unix)
+                }
+            }
+        }
+        // Add long HR gaps (missing seconds in run)
+        let runUnixes = Set(run.map(\.unix))
+        let expected = Set(runStart...runEnd)
+        let missing = expected.subtracting(runUnixes)
+        offWristSeconds.formUnion(missing)
+        
+        return Double(offWristSeconds.count) / Double(runDuration)
     }
 }

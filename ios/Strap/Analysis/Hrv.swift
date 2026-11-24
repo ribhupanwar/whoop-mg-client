@@ -35,10 +35,7 @@ enum Hrv {
 
         for value in rrMS {
             guard value >= minimum && value <= maximum else {
-                // Invalid/padding RR is a hard beat-continuity boundary.
-                // Do not pair a pre-gap seed with a post-gap interval.
                 recent.removeAll()
-                candidate = nil
                 rejectedRun = 0
                 continue
             }
@@ -72,19 +69,6 @@ enum Hrv {
             if recent.count > nnReferenceBeats { recent.removeFirst() }
         }
         return accepted
-    }
-
-    /// Research-only RR duration coverage. Never rescale production HRV.
-    /// Requires a verified contiguous observation interval.
-    static func rrDurationCoverage(_ rrMS: [Int], observedSeconds: Int) -> Double? {
-        guard observedSeconds > 0 else { return nil }
-        var totalMilliseconds = 0.0
-        for rr in rrMS {
-            guard (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(rr) else { continue }
-            totalMilliseconds += Double(rr)
-        }
-        guard totalMilliseconds > 0 else { return nil }
-        return totalMilliseconds / (Double(observedSeconds) * 1_000)
     }
 
     // MARK: - Standard HRV
@@ -128,21 +112,6 @@ enum Hrv {
         )
     }
 
-    /// Choose one RR payload per timestamp after history/live retransmission.
-    /// An extra invalid/padding word must not outrank a shorter, valid payload.
-    /// Ties retain the first observation for deterministic replay behavior.
-    static func preferRetransmittedRR(_ candidate: [Int], over existing: [Int]) -> Bool {
-        func validCount(_ rr: [Int]) -> Int {
-            rr.filter { (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0) }.count
-        }
-        let candidateValid = validCount(candidate)
-        let existingValid = validCount(existing)
-        if candidateValid != existingValid { return candidateValid > existingValid }
-        let candidateInvalid = candidate.count - candidateValid
-        let existingInvalid = existing.count - existingValid
-        return candidateInvalid < existingInvalid
-    }
-
     /// Compute RMSSD only across consecutive beats inside contiguous records.
     /// Never bridge a missing second or an artefact-rejected beat: doing so
     /// creates an artificial successive-NN difference and biases recovery.
@@ -152,12 +121,21 @@ enum Hrv {
         // Offload may replay a second after reconnect. Count its R-R beats once.
         // Prefer the copy with more beat intervals rather than duplicating data.
         var uniqueBySecond: [Int: V18Sample] = [:]
+        var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                duplicateCount += 1
+                if !sample.rrIntervalsMS.isEmpty {
+                    // Diagnostic: two records for same second both have RR data
+                    print("[HRV] Duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
+                }
                 continue
             }
             uniqueBySecond[sample.unix] = sample
+        }
+        if duplicateCount > 0 {
+            print("[HRV] Deduplicated \(duplicateCount) duplicate seconds from \(samples.count) input samples")
         }
         let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
@@ -172,12 +150,21 @@ enum Hrv {
         // Match historical processing: count one record per second, keeping
         // the one with the most RR intervals instead of duplicating beats.
         var uniqueBySecond: [Int: LiveSample] = [:]
+        var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                duplicateCount += 1
+                if !sample.rrIntervalsMS.isEmpty {
+                    // Diagnostic: two records for same second both have RR data
+                    print("[HRV] Live duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
+                }
                 continue
             }
             uniqueBySecond[sample.unix] = sample
+        }
+        if duplicateCount > 0 {
+            print("[HRV] Live deduplicated \(duplicateCount) duplicate seconds from \(samples.count) input samples")
         }
         let runs = contiguousLiveRuns(Array(uniqueBySecond.values))
         return evaluateRuns(runs) { $0.rrIntervalsMS }
@@ -263,134 +250,6 @@ enum Hrv {
             pnn50Pct: 100 * Double(over50) / Double(successivePairs),
             lnRMSSD: rmssd > 0 ? log(rmssd) : nil,
             meanRRMS: Stats.mean(allNN)
-        )
-    }
-
-    /// Generates detailed HRV calculation diagnostics for provenance auditing.
-    static func detailedDiagnostics(
-        samples: [V18Sample],
-        swsEpochs: [ClosedRange<Int>] = []
-    ) -> HrvDetailedDiagnostics {
-        var uniqueBySecond: [Int: V18Sample] = [:]
-        for sample in samples {
-            if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
-                continue
-            }
-            uniqueBySecond[sample.unix] = sample
-        }
-        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
-        let targetSamples: [V18Sample]
-        let windowType: String
-        if !swsEpochs.isEmpty {
-            let filtered = ordered.filter { sample in
-                swsEpochs.contains { $0.contains(sample.unix) }
-            }
-            if !filtered.isEmpty {
-                targetSamples = filtered
-                windowType = "SWS_DEEP_SLEEP"
-            } else {
-                targetSamples = ordered
-                windowType = "ALL_VALID_SLEEP"
-            }
-        } else {
-            targetSamples = ordered
-            windowType = "ALL_VALID_SLEEP"
-        }
-
-        var timestampGaps = 0
-        if ordered.count > 1 {
-            for i in 1..<ordered.count {
-                if ordered[i].unix > ordered[i - 1].unix + 1 {
-                    timestampGaps += 1
-                }
-            }
-        }
-
-        var rawBeats = 0
-        var rejectionReasons: [String: Int] = [
-            "outOfPlausibleRange": 0,
-            "ectopicDeviation": 0,
-            "seedMismatch": 0
-        ]
-
-        let runs = contiguousRuns(targetSamples)
-        var allNN: [Double] = []
-        var squaredDifferences = 0.0
-        var successivePairs = 0
-
-        for run in runs {
-            var previous: Double?
-            var recent: [Double] = []
-            var seedCandidate: Double?
-            for sample in run {
-                let rr = sample.rrIntervalsMS.map(Double.init)
-                rawBeats += rr.count
-                if rr.isEmpty {
-                    previous = nil; recent.removeAll(); seedCandidate = nil
-                    continue
-                }
-                for value in rr {
-                    guard value >= Double(V18Decoder.minRRMS),
-                          value <= Double(V18Decoder.maxRRMS) else {
-                        rejectionReasons["outOfPlausibleRange", default: 0] += 1
-                        previous = nil; recent.removeAll(); seedCandidate = nil
-                        continue
-                    }
-                    if recent.isEmpty {
-                        guard let pending = seedCandidate else {
-                            seedCandidate = value
-                            continue
-                        }
-                        let midpoint = Stats.median([pending, value])
-                        guard abs(value - pending) <= nnMaxDeviation * midpoint else {
-                            rejectionReasons["seedMismatch", default: 0] += 1
-                            seedCandidate = value
-                            continue
-                        }
-                        allNN.append(pending)
-                        recent.append(pending)
-                        previous = pending
-                        seedCandidate = nil
-                    } else {
-                        let reference = Stats.median(recent)
-                        if abs(value - reference) > nnMaxDeviation * reference {
-                            rejectionReasons["ectopicDeviation", default: 0] += 1
-                            previous = nil
-                            recent.removeAll()
-                            seedCandidate = nil
-                            continue
-                        }
-                    }
-                    if let previous {
-                        let delta = value - previous
-                        squaredDifferences += delta * delta
-                        successivePairs += 1
-                    }
-                    allNN.append(value)
-                    recent.append(value)
-                    if recent.count > nnReferenceBeats { recent.removeFirst() }
-                    previous = value
-                }
-            }
-        }
-
-        let acceptedNN = allNN.count
-        let coveragePct = rawBeats > 0 ? (Double(acceptedNN) / Double(rawBeats)) * 100.0 : 0.0
-        let finalRMSSD: Double? = (acceptedNN >= minCleanBeats && successivePairs > 0)
-            ? sqrt(squaredDifferences / Double(successivePairs))
-            : nil
-        let finalLn: Double? = finalRMSSD.flatMap { $0 > 0 ? log($0) : nil }
-
-        return HrvDetailedDiagnostics(
-            rawRRCount: rawBeats,
-            acceptedNNCount: acceptedNN,
-            rejectedBeatsByReason: rejectionReasons,
-            coveragePercentage: coveragePct,
-            timestampGaps: timestampGaps,
-            selectedCalculationWindow: windowType,
-            finalRMSSD: finalRMSSD,
-            finalLnRMSSD: finalLn
         )
     }
 

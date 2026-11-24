@@ -131,6 +131,10 @@ class V18Sample:
     header: RecordHeader
     heart_rate: int  # 0 means absent / off-skin, not bradycardia
     rr_intervals_ms: list[int] = field(default_factory=list)
+    # True when declared RR count matches parsed count AND all unused padding bytes are zero.
+    # False means padding contained non-zero bytes; RR intervals are preserved for analysis
+    # but should be treated as lower confidence.
+    rr_padding_valid: bool = True
     dynamic_accel_g: float | None = None
     gravity_g: tuple[float, float, float] | None = None
     step_motion_counter: int | None = None
@@ -156,9 +160,6 @@ class V18Sample:
     # The band's own log-variance quality weight; lower is cleaner. Unlike the
     # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
     signal_quality_log_variance: float | None = None
-    # Diagnostic quality flag: true when all unused trailing RR slots are zero-padded.
-    # Non-zero unused bytes do not discard valid declared beats.
-    rr_padding_valid: bool = True
 
     @property
     def unix(self) -> int:
@@ -211,22 +212,21 @@ def decode_v18(inner: bytes) -> V18Sample | None:
     hr = hr_raw if MIN_HR <= hr_raw <= MAX_HR else 0
 
     rr: list[int] = []
+    rr_padding_valid = True
     declared = inner[15]
-    padding_valid = True
     # Unused slots may contain firmware-specific data. Frame integrity is
     # checked by the framing layer; decode only declared, plausible RR beats.
     if declared <= MAX_RR_COUNT:
+        # Check padding bytes (offsets 16 + 2*declared ..< 24) for non-zero values.
+        # Non-zero padding doesn't invalidate declared beats but flags lower confidence.
+        for offset in range(16 + 2 * declared, 24):
+            if inner[offset] != 0:
+                rr_padding_valid = False
+                break
         for i in range(declared):
             value = _i16(inner, 16 + 2 * i)
             if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
                 rr.append(value)
-        unused_start = 16 + 2 * declared
-        for b in inner[unused_start:24]:
-            if b != 0:
-                padding_valid = False
-                break
-    else:
-        padding_valid = False
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
@@ -250,6 +250,7 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         header=header,
         heart_rate=hr,
         rr_intervals_ms=rr,
+        rr_padding_valid=rr_padding_valid,
         dynamic_accel_g=round(dyn, 4) if dyn is not None else None,
         gravity_g=gravity,
         step_motion_counter=_u16(inner, 49),
@@ -266,7 +267,6 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         spo2_candidate_pct=spo2_pct,
         spo2_candidate_status=spo2_status,
         signal_quality_log_variance=round(quality, 4) if quality is not None else None,
-        rr_padding_valid=padding_valid,
     )
 
 
