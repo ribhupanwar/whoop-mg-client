@@ -25,10 +25,6 @@ struct V18Sample: Equatable, Codable {
     let header: BandRecordHeader
     let heartRate: Int
     let rrIntervalsMS: [Int]
-    /// True when declared RR count matches parsed count AND all unused padding bytes are zero.
-    /// False means padding contained non-zero bytes; RR intervals are preserved for analysis
-    /// but should be treated as lower confidence.
-    var rrPaddingValid: Bool = true
     let dynamicAccelG: Double?
     let gravityXG: Double?
     let gravityYG: Double?
@@ -54,6 +50,89 @@ struct V18Sample: Equatable, Codable {
     /// Signed optical pSNR (dB); -128 means unavailable, not low quality or sample rejection.
     let psnrB: Int?
     let psnrA: Int?
+    /// Diagnostic quality flag: true when all unused trailing RR slots are zero-padded.
+    /// Unused padding is never used to discard valid declared beats.
+    let rrPaddingValid: Bool
+
+    init(
+        header: BandRecordHeader,
+        heartRate: Int,
+        rrIntervalsMS: [Int] = [],
+        dynamicAccelG: Double? = nil,
+        gravityXG: Double? = nil,
+        gravityYG: Double? = nil,
+        gravityZG: Double? = nil,
+        stepCounter: Int? = nil,
+        stepCadence: Int? = nil,
+        activityClass: Int? = nil,
+        skinTempC: Double? = nil,
+        tempAux1C: Double? = nil,
+        tempAux2C: Double? = nil,
+        sleepStateByte: Int? = nil,
+        sleepState: Int? = nil,
+        cardiacFlags: Int? = nil,
+        hrQualityFlags: Int? = nil,
+        spo2CandidateRaw: Int? = nil,
+        spo2CandidatePct: Int? = nil,
+        spo2CandidateKind: Spo2CandidateKind = .absent,
+        signalQualityLogVariance: Double? = nil,
+        psnrB: Int? = nil,
+        psnrA: Int? = nil,
+        rrPaddingValid: Bool = true
+    ) {
+        self.header = header
+        self.heartRate = heartRate
+        self.rrIntervalsMS = rrIntervalsMS
+        self.dynamicAccelG = dynamicAccelG
+        self.gravityXG = gravityXG
+        self.gravityYG = gravityYG
+        self.gravityZG = gravityZG
+        self.stepCounter = stepCounter
+        self.stepCadence = stepCadence
+        self.activityClass = activityClass
+        self.skinTempC = skinTempC
+        self.tempAux1C = tempAux1C
+        self.tempAux2C = tempAux2C
+        self.sleepStateByte = sleepStateByte
+        self.sleepState = sleepState
+        self.cardiacFlags = cardiacFlags
+        self.hrQualityFlags = hrQualityFlags
+        self.spo2CandidateRaw = spo2CandidateRaw
+        self.spo2CandidatePct = spo2CandidatePct
+        self.spo2CandidateKind = spo2CandidateKind
+        self.signalQualityLogVariance = signalQualityLogVariance
+        self.psnrB = psnrB
+        self.psnrA = psnrA
+        self.rrPaddingValid = rrPaddingValid
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.header = try container.decode(BandRecordHeader.self, forKey: .header)
+        self.heartRate = try container.decode(Int.self, forKey: .heartRate)
+        self.rrIntervalsMS = try container.decodeIfPresent([Int].self, forKey: .rrIntervalsMS) ?? []
+        self.dynamicAccelG = try container.decodeIfPresent(Double.self, forKey: .dynamicAccelG)
+        self.gravityXG = try container.decodeIfPresent(Double.self, forKey: .gravityXG)
+        self.gravityYG = try container.decodeIfPresent(Double.self, forKey: .gravityYG)
+        self.gravityZG = try container.decodeIfPresent(Double.self, forKey: .gravityZG)
+        self.stepCounter = try container.decodeIfPresent(Int.self, forKey: .stepCounter)
+        self.stepCadence = try container.decodeIfPresent(Int.self, forKey: .stepCadence)
+        self.activityClass = try container.decodeIfPresent(Int.self, forKey: .activityClass)
+        self.skinTempC = try container.decodeIfPresent(Double.self, forKey: .skinTempC)
+        self.tempAux1C = try container.decodeIfPresent(Double.self, forKey: .tempAux1C)
+        self.tempAux2C = try container.decodeIfPresent(Double.self, forKey: .tempAux2C)
+        self.sleepStateByte = try container.decodeIfPresent(Int.self, forKey: .sleepStateByte)
+        self.sleepState = try container.decodeIfPresent(Int.self, forKey: .sleepState)
+        self.cardiacFlags = try container.decodeIfPresent(Int.self, forKey: .cardiacFlags)
+        self.hrQualityFlags = try container.decodeIfPresent(Int.self, forKey: .hrQualityFlags)
+        self.spo2CandidateRaw = try container.decodeIfPresent(Int.self, forKey: .spo2CandidateRaw)
+        self.spo2CandidatePct = try container.decodeIfPresent(Int.self, forKey: .spo2CandidatePct)
+        self.spo2CandidateKind = try container.decodeIfPresent(Spo2CandidateKind.self, forKey: .spo2CandidateKind) ?? .absent
+        self.signalQualityLogVariance = try container.decodeIfPresent(Double.self, forKey: .signalQualityLogVariance)
+        self.psnrB = try container.decodeIfPresent(Int.self, forKey: .psnrB)
+        self.psnrA = try container.decodeIfPresent(Int.self, forKey: .psnrA)
+        self.rrPaddingValid = try container.decodeIfPresent(Bool.self, forKey: .rrPaddingValid) ?? true
+    }
 
     var unix: Int { Int(header.unix) }
     var wearing: Bool {
@@ -126,27 +205,28 @@ enum V18Decoder {
         let hr = (minHR...maxHR).contains(hrRaw) ? hrRaw : 0
 
         var rr: [Int] = []
-        var rrPaddingValid = true
         let declared = Int(inner[15])
+        var paddingValid = true
         // Only the declared RR slots are beats. Unused trailing bytes are not
         // independently verified as zero padding on every firmware revision.
         // Frame checksums are validated by Gen5Frame before this decoder runs;
         // do not discard valid declared beats because of opaque unused bytes.
-if declared <= maxRRCount {
-            // Check padding bytes (offsets 16 + 2*declared ..< 24) for non-zero values.
-            // Non-zero padding doesn't invalidate declared beats but flags lower confidence.
-            for paddingOffset in (16 + 2 * declared)..<24 {
-                if inner[paddingOffset] != 0 {
-                    rrPaddingValid = false
-                    break
-                }
-            }
+        if declared <= maxRRCount {
             for index in 0..<declared {
                 if let value = i16(inner, 16 + 2 * index),
                    (minRRMS...maxRRMS).contains(value) {
                     rr.append(value)
                 }
             }
+            let unusedStart = 16 + 2 * declared
+            for offset in unusedStart..<24 {
+                if offset < inner.count && inner[offset] != 0 {
+                    paddingValid = false
+                    break
+                }
+            }
+        } else {
+            paddingValid = false
         }
 
         var dyn = f32(inner, 33)
@@ -169,7 +249,6 @@ if declared <= maxRRCount {
             header: header,
             heartRate: hr,
             rrIntervalsMS: rr,
-            rrPaddingValid: rrPaddingValid,
             dynamicAccelG: dyn.map { round4($0) },
             gravityXG: gravity?.0,
             gravityYG: gravity?.1,
@@ -189,7 +268,8 @@ if declared <= maxRRCount {
             spo2CandidateKind: spo2.kind,
             signalQualityLogVariance: f32(inner, 105).map { round4($0) },
             psnrB: signedByte(inner, 100),
-            psnrA: signedByte(inner, 101)
+            psnrA: signedByte(inner, 101),
+            rrPaddingValid: paddingValid
         )
     }
 
@@ -262,5 +342,37 @@ if declared <= maxRRCount {
         default: scale = pow(10.0, Double(digits))
         }
         return (value * scale).rounded() / scale
+    }
+}
+
+
+/// Research-only decoder for OpenWHOOP's historical optical k=21 array layout.
+/// Input is the unwrapped 1244-byte optical record body, NOT the BLE frame.
+/// This does not identify a red wavelength or calculate calibrated SpO2.
+struct HistoricalOpticalK21: Equatable {
+    let green: [[Int16]]
+    let infrared: [[Int16]]
+}
+
+enum HistoricalOpticalK21Decoder {
+    static let expectedBodyBytes = 1244
+    static let samplesPerChannel = 100
+    private static let greenOffsets = [20, 220, 420]
+    private static let infraredOffsets = [632, 832, 1032]
+
+    static func decode(body: [UInt8]) -> HistoricalOpticalK21? {
+        guard body.count == expectedBodyBytes else { return nil }
+        func channel(at offset: Int) -> [Int16]? {
+            guard offset >= 0, offset + samplesPerChannel * 2 <= body.count else { return nil }
+            return (0..<samplesPerChannel).map { index in
+                let position = offset + index * 2
+                let bits = UInt16(body[position]) | (UInt16(body[position + 1]) << 8)
+                return Int16(bitPattern: bits)
+            }
+        }
+        let green = greenOffsets.compactMap { channel(at: $0) }
+        let infrared = infraredOffsets.compactMap { channel(at: $0) }
+        guard green.count == 3, infrared.count == 3 else { return nil }
+        return HistoricalOpticalK21(green: green, infrared: infrared)
     }
 }
