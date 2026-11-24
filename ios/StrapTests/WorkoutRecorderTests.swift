@@ -15,12 +15,7 @@ final class WorkoutRecorderTests: XCTestCase {
         if recorder.phase != .idle && recorder.phase != .saved && recorder.phase != .discarded {
             recorder.discard()
         }
-        // Wait for state to settle
-        let expectation = XCTestExpectation(description: "State reset")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        // WorkoutRecorder transitions are synchronous; no asynchronous wait is needed.
     }
 
     override func tearDown() {
@@ -35,11 +30,7 @@ final class WorkoutRecorderTests: XCTestCase {
         if recorder.phase != .idle && recorder.phase != .saved && recorder.phase != .discarded {
             recorder.discard()
         }
-        let expectation = XCTestExpectation(description: "State reset")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        // Avoid simulator main-queue timing races; discard() is synchronous.
     }
 
     // MARK: - Session Transitions
