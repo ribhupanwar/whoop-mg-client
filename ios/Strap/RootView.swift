@@ -60,6 +60,14 @@ private final class AppStoreOwner: ObservableObject {
 
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
+    private var preferredAppearance: ColorScheme? {
+        switch appearanceMode {
+        case "dark": return .dark
+        case "light": return .light
+        default: return nil
+        }
+    }
     // The navigation shell owns the store without subscribing to sensor changes.
     // Descendant screens observe it; tab selection never rebuilds every screen per packet.
     @StateObject private var owner = AppStoreOwner()
@@ -104,6 +112,7 @@ struct RootView: View {
             .tabItem { Label(AppTab.more.label, systemImage: AppTab.more.icon) }
             .tag(AppTab.more)
         }
+        .preferredColorScheme(preferredAppearance)
         .toolbar(.hidden, for: .tabBar)
         .safeAreaInset(edge: .bottom) { floatingNavigation }
         .sheet(isPresented: $showInsights) { DailyInsightsView().environmentObject(store) }
