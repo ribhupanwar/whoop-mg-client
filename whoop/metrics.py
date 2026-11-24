@@ -168,6 +168,115 @@ def resting_hrv(
     return hrv(longest), len(longest)
 
 
+def hrv_detailed_diagnostics(
+    samples: list[V18Sample],
+    sws_epochs: list[tuple[int, int]] | None = None,
+) -> dict:
+    """Detailed HRV diagnostics for provenance and audit trail."""
+    unique_by_second: dict[int, V18Sample] = {}
+    for s in samples:
+        if s.unix in unique_by_second:
+            if len(unique_by_second[s.unix].rr_intervals_ms) >= len(s.rr_intervals_ms):
+                continue
+        unique_by_second[s.unix] = s
+    ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
+
+    sws_samples = ordered
+    window_type = "ALL_VALID_SLEEP"
+    if sws_epochs:
+        filtered = [
+            s for s in ordered
+            if any(start <= s.unix <= end for start, end in sws_epochs)
+        ]
+        if filtered:
+            sws_samples = filtered
+            window_type = "SWS_DEEP_SLEEP"
+
+    timestamp_gaps = 0
+    if len(ordered) > 1:
+        for i in range(1, len(ordered)):
+            if ordered[i].unix > ordered[i - 1].unix + 1:
+                timestamp_gaps += 1
+
+    raw_beats = 0
+    rejection_reasons = {
+        "outOfPlausibleRange": 0,
+        "ectopicDeviation": 0,
+        "seedMismatch": 0,
+    }
+
+    runs = _contiguous_runs(sws_samples)
+    all_nn: list[float] = []
+    squared_diffs = 0.0
+    pairs = 0
+
+    for run in runs:
+        previous: float | None = None
+        recent: list[float] = []
+        seed_candidate: float | None = None
+        for s in run:
+            rr = [float(val) for val in s.rr_intervals_ms]
+            raw_beats += len(rr)
+            if not rr:
+                previous = None
+                recent.clear()
+                seed_candidate = None
+                continue
+            for val in rr:
+                if not (MIN_RR_MS <= val <= MAX_RR_MS):
+                    rejection_reasons["outOfPlausibleRange"] += 1
+                    previous = None
+                    recent.clear()
+                    seed_candidate = None
+                    continue
+                if not recent:
+                    if seed_candidate is None:
+                        seed_candidate = val
+                        continue
+                    midpoint = statistics.median([seed_candidate, val])
+                    if abs(val - seed_candidate) > NN_MAX_DEVIATION * midpoint:
+                        rejection_reasons["seedMismatch"] += 1
+                        seed_candidate = val
+                        continue
+                    all_nn.append(seed_candidate)
+                    recent.append(seed_candidate)
+                    previous = seed_candidate
+                    seed_candidate = None
+                else:
+                    reference = statistics.median(recent)
+                    if abs(val - reference) > NN_MAX_DEVIATION * reference:
+                        rejection_reasons["ectopicDeviation"] += 1
+                        previous = None
+                        recent.clear()
+                        seed_candidate = None
+                        continue
+                if previous is not None:
+                    delta = val - previous
+                    squared_diffs += delta * delta
+                    pairs += 1
+                all_nn.append(val)
+                recent.append(val)
+                if len(recent) > NN_REFERENCE_BEATS:
+                    recent.pop(0)
+                previous = val
+
+    accepted_nn = len(all_nn)
+    coverage_pct = (accepted_nn / raw_beats * 100.0) if raw_beats > 0 else 0.0
+    final_rmssd = math.sqrt(squared_diffs / pairs) if (accepted_nn >= 20 and pairs > 0) else None
+    final_ln = math.log(final_rmssd) if final_rmssd is not None and final_rmssd > 0 else None
+
+    return {
+        "raw_rr_count": raw_beats,
+        "accepted_nn_count": accepted_nn,
+        "rejected_beats_by_reason": rejection_reasons,
+        "coverage_percentage": round(coverage_pct, 2),
+        "timestamp_gaps": timestamp_gaps,
+        "selected_calculation_window": window_type,
+        "final_rmssd": round(final_rmssd, 2) if final_rmssd is not None else None,
+        "final_ln_rmssd": round(final_ln, 2) if final_ln is not None else None,
+    }
+
+
 def sws_resting_hrv(
     samples: list[V18Sample],
     deep_epochs: list[tuple[int, int]] | None = None,

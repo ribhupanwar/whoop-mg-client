@@ -156,6 +156,9 @@ class V18Sample:
     # The band's own log-variance quality weight; lower is cleaner. Unlike the
     # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
     signal_quality_log_variance: float | None = None
+    # Diagnostic quality flag: true when all unused trailing RR slots are zero-padded.
+    # Non-zero unused bytes do not discard valid declared beats.
+    rr_padding_valid: bool = True
 
     @property
     def unix(self) -> int:
@@ -209,6 +212,7 @@ def decode_v18(inner: bytes) -> V18Sample | None:
 
     rr: list[int] = []
     declared = inner[15]
+    padding_valid = True
     # Unused slots may contain firmware-specific data. Frame integrity is
     # checked by the framing layer; decode only declared, plausible RR beats.
     if declared <= MAX_RR_COUNT:
@@ -216,6 +220,13 @@ def decode_v18(inner: bytes) -> V18Sample | None:
             value = _i16(inner, 16 + 2 * i)
             if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
                 rr.append(value)
+        unused_start = 16 + 2 * declared
+        for b in inner[unused_start:24]:
+            if b != 0:
+                padding_valid = False
+                break
+    else:
+        padding_valid = False
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
@@ -255,6 +266,7 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         spo2_candidate_pct=spo2_pct,
         spo2_candidate_status=spo2_status,
         signal_quality_log_variance=round(quality, 4) if quality is not None else None,
+        rr_padding_valid=padding_valid,
     )
 
 

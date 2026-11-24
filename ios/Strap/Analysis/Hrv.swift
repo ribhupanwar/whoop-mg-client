@@ -266,6 +266,134 @@ enum Hrv {
         )
     }
 
+    /// Generates detailed HRV calculation diagnostics for provenance auditing.
+    static func detailedDiagnostics(
+        samples: [V18Sample],
+        swsEpochs: [ClosedRange<Int>] = []
+    ) -> HrvDetailedDiagnostics {
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
+        let targetSamples: [V18Sample]
+        let windowType: String
+        if !swsEpochs.isEmpty {
+            let filtered = ordered.filter { sample in
+                swsEpochs.contains { $0.contains(sample.unix) }
+            }
+            if !filtered.isEmpty {
+                targetSamples = filtered
+                windowType = "SWS_DEEP_SLEEP"
+            } else {
+                targetSamples = ordered
+                windowType = "ALL_VALID_SLEEP"
+            }
+        } else {
+            targetSamples = ordered
+            windowType = "ALL_VALID_SLEEP"
+        }
+
+        var timestampGaps = 0
+        if ordered.count > 1 {
+            for i in 1..<ordered.count {
+                if ordered[i].unix > ordered[i - 1].unix + 1 {
+                    timestampGaps += 1
+                }
+            }
+        }
+
+        var rawBeats = 0
+        var rejectionReasons: [String: Int] = [
+            "outOfPlausibleRange": 0,
+            "ectopicDeviation": 0,
+            "seedMismatch": 0
+        ]
+
+        let runs = contiguousRuns(targetSamples)
+        var allNN: [Double] = []
+        var squaredDifferences = 0.0
+        var successivePairs = 0
+
+        for run in runs {
+            var previous: Double?
+            var recent: [Double] = []
+            var seedCandidate: Double?
+            for sample in run {
+                let rr = sample.rrIntervalsMS.map(Double.init)
+                rawBeats += rr.count
+                if rr.isEmpty {
+                    previous = nil; recent.removeAll(); seedCandidate = nil
+                    continue
+                }
+                for value in rr {
+                    guard value >= Double(V18Decoder.minRRMS),
+                          value <= Double(V18Decoder.maxRRMS) else {
+                        rejectionReasons["outOfPlausibleRange", default: 0] += 1
+                        previous = nil; recent.removeAll(); seedCandidate = nil
+                        continue
+                    }
+                    if recent.isEmpty {
+                        guard let pending = seedCandidate else {
+                            seedCandidate = value
+                            continue
+                        }
+                        let midpoint = Stats.median([pending, value])
+                        guard abs(value - pending) <= nnMaxDeviation * midpoint else {
+                            rejectionReasons["seedMismatch", default: 0] += 1
+                            seedCandidate = value
+                            continue
+                        }
+                        allNN.append(pending)
+                        recent.append(pending)
+                        previous = pending
+                        seedCandidate = nil
+                    } else {
+                        let reference = Stats.median(recent)
+                        if abs(value - reference) > nnMaxDeviation * reference {
+                            rejectionReasons["ectopicDeviation", default: 0] += 1
+                            previous = nil
+                            recent.removeAll()
+                            seedCandidate = nil
+                            continue
+                        }
+                    }
+                    if let previous {
+                        let delta = value - previous
+                        squaredDifferences += delta * delta
+                        successivePairs += 1
+                    }
+                    allNN.append(value)
+                    recent.append(value)
+                    if recent.count > nnReferenceBeats { recent.removeFirst() }
+                    previous = value
+                }
+            }
+        }
+
+        let acceptedNN = allNN.count
+        let coveragePct = rawBeats > 0 ? (Double(acceptedNN) / Double(rawBeats)) * 100.0 : 0.0
+        let finalRMSSD: Double? = (acceptedNN >= minCleanBeats && successivePairs > 0)
+            ? sqrt(squaredDifferences / Double(successivePairs))
+            : nil
+        let finalLn: Double? = finalRMSSD.flatMap { $0 > 0 ? log($0) : nil }
+
+        return HrvDetailedDiagnostics(
+            rawRRCount: rawBeats,
+            acceptedNNCount: acceptedNN,
+            rejectedBeatsByReason: rejectionReasons,
+            coveragePercentage: coveragePct,
+            timestampGaps: timestampGaps,
+            selectedCalculationWindow: windowType,
+            finalRMSSD: finalRMSSD,
+            finalLnRMSSD: finalLn
+        )
+    }
+
     // MARK: - Resting windows
 
     /// Consecutive seconds, split wherever the record clock jumps.

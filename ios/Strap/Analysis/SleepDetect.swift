@@ -327,15 +327,24 @@ enum SleepDetect {
             }
             // Harmonize wakeEvents with WHOOP 5.80.2 disturbanceCount and SleepSession.movementBouts:
             // Count sustained movement bouts (movement persisting >= 15 seconds), not 1-second edge noise.
+            // Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
             var movingSeconds = 0
             var wakeEvents = 0
             var lastMovingUnix: Int? = nil
             for index in verifiedIndices {
+                let u = ordered[index].unix
                 if !quiet[index] {
-                    if ordered[index].unix != lastMovingUnix {
-                        movingSeconds += 1
-                        lastMovingUnix = ordered[index].unix
+                    if let last = lastMovingUnix {
+                        if u == last + 1 {
+                            movingSeconds += 1
+                        } else if u > last + 1 {
+                            // Sparse gap: reset to single moving second rather than bridging across gap
+                            movingSeconds = 1
+                        }
+                    } else {
+                        movingSeconds = 1
                     }
+                    lastMovingUnix = u
                     if movingSeconds == 15 { wakeEvents += 1 }
                 } else {
                     movingSeconds = 0

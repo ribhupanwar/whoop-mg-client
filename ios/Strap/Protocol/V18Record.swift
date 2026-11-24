@@ -50,6 +50,89 @@ struct V18Sample: Equatable, Codable {
     /// Signed optical pSNR (dB); -128 means unavailable, not low quality or sample rejection.
     let psnrB: Int?
     let psnrA: Int?
+    /// Diagnostic quality flag: true when all unused trailing RR slots are zero-padded.
+    /// Unused padding is never used to discard valid declared beats.
+    let rrPaddingValid: Bool
+
+    init(
+        header: BandRecordHeader,
+        heartRate: Int,
+        rrIntervalsMS: [Int] = [],
+        dynamicAccelG: Double? = nil,
+        gravityXG: Double? = nil,
+        gravityYG: Double? = nil,
+        gravityZG: Double? = nil,
+        stepCounter: Int? = nil,
+        stepCadence: Int? = nil,
+        activityClass: Int? = nil,
+        skinTempC: Double? = nil,
+        tempAux1C: Double? = nil,
+        tempAux2C: Double? = nil,
+        sleepStateByte: Int? = nil,
+        sleepState: Int? = nil,
+        cardiacFlags: Int? = nil,
+        hrQualityFlags: Int? = nil,
+        spo2CandidateRaw: Int? = nil,
+        spo2CandidatePct: Int? = nil,
+        spo2CandidateKind: Spo2CandidateKind = .absent,
+        signalQualityLogVariance: Double? = nil,
+        psnrB: Int? = nil,
+        psnrA: Int? = nil,
+        rrPaddingValid: Bool = true
+    ) {
+        self.header = header
+        self.heartRate = heartRate
+        self.rrIntervalsMS = rrIntervalsMS
+        self.dynamicAccelG = dynamicAccelG
+        self.gravityXG = gravityXG
+        self.gravityYG = gravityYG
+        self.gravityZG = gravityZG
+        self.stepCounter = stepCounter
+        self.stepCadence = stepCadence
+        self.activityClass = activityClass
+        self.skinTempC = skinTempC
+        self.tempAux1C = tempAux1C
+        self.tempAux2C = tempAux2C
+        self.sleepStateByte = sleepStateByte
+        self.sleepState = sleepState
+        self.cardiacFlags = cardiacFlags
+        self.hrQualityFlags = hrQualityFlags
+        self.spo2CandidateRaw = spo2CandidateRaw
+        self.spo2CandidatePct = spo2CandidatePct
+        self.spo2CandidateKind = spo2CandidateKind
+        self.signalQualityLogVariance = signalQualityLogVariance
+        self.psnrB = psnrB
+        self.psnrA = psnrA
+        self.rrPaddingValid = rrPaddingValid
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.header = try container.decode(BandRecordHeader.self, forKey: .header)
+        self.heartRate = try container.decode(Int.self, forKey: .heartRate)
+        self.rrIntervalsMS = try container.decodeIfPresent([Int].self, forKey: .rrIntervalsMS) ?? []
+        self.dynamicAccelG = try container.decodeIfPresent(Double.self, forKey: .dynamicAccelG)
+        self.gravityXG = try container.decodeIfPresent(Double.self, forKey: .gravityXG)
+        self.gravityYG = try container.decodeIfPresent(Double.self, forKey: .gravityYG)
+        self.gravityZG = try container.decodeIfPresent(Double.self, forKey: .gravityZG)
+        self.stepCounter = try container.decodeIfPresent(Int.self, forKey: .stepCounter)
+        self.stepCadence = try container.decodeIfPresent(Int.self, forKey: .stepCadence)
+        self.activityClass = try container.decodeIfPresent(Int.self, forKey: .activityClass)
+        self.skinTempC = try container.decodeIfPresent(Double.self, forKey: .skinTempC)
+        self.tempAux1C = try container.decodeIfPresent(Double.self, forKey: .tempAux1C)
+        self.tempAux2C = try container.decodeIfPresent(Double.self, forKey: .tempAux2C)
+        self.sleepStateByte = try container.decodeIfPresent(Int.self, forKey: .sleepStateByte)
+        self.sleepState = try container.decodeIfPresent(Int.self, forKey: .sleepState)
+        self.cardiacFlags = try container.decodeIfPresent(Int.self, forKey: .cardiacFlags)
+        self.hrQualityFlags = try container.decodeIfPresent(Int.self, forKey: .hrQualityFlags)
+        self.spo2CandidateRaw = try container.decodeIfPresent(Int.self, forKey: .spo2CandidateRaw)
+        self.spo2CandidatePct = try container.decodeIfPresent(Int.self, forKey: .spo2CandidatePct)
+        self.spo2CandidateKind = try container.decodeIfPresent(Spo2CandidateKind.self, forKey: .spo2CandidateKind) ?? .absent
+        self.signalQualityLogVariance = try container.decodeIfPresent(Double.self, forKey: .signalQualityLogVariance)
+        self.psnrB = try container.decodeIfPresent(Int.self, forKey: .psnrB)
+        self.psnrA = try container.decodeIfPresent(Int.self, forKey: .psnrA)
+        self.rrPaddingValid = try container.decodeIfPresent(Bool.self, forKey: .rrPaddingValid) ?? true
+    }
 
     var unix: Int { Int(header.unix) }
     var wearing: Bool {
@@ -123,6 +206,7 @@ enum V18Decoder {
 
         var rr: [Int] = []
         let declared = Int(inner[15])
+        var paddingValid = true
         // Only the declared RR slots are beats. Unused trailing bytes are not
         // independently verified as zero padding on every firmware revision.
         // Frame checksums are validated by Gen5Frame before this decoder runs;
@@ -134,6 +218,15 @@ enum V18Decoder {
                     rr.append(value)
                 }
             }
+            let unusedStart = 16 + 2 * declared
+            for offset in unusedStart..<24 {
+                if offset < inner.count && inner[offset] != 0 {
+                    paddingValid = false
+                    break
+                }
+            }
+        } else {
+            paddingValid = false
         }
 
         var dyn = f32(inner, 33)
@@ -175,7 +268,8 @@ enum V18Decoder {
             spo2CandidateKind: spo2.kind,
             signalQualityLogVariance: f32(inner, 105).map { round4($0) },
             psnrB: signedByte(inner, 100),
-            psnrA: signedByte(inner, 101)
+            psnrA: signedByte(inner, 101),
+            rrPaddingValid: paddingValid
         )
     }
 
