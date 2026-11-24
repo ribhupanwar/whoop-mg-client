@@ -341,6 +341,9 @@ struct HealthspanOrb: View {
         GeometryReader { geometry in
             let diameter = min(geometry.size.width, geometry.size.height)
             ZStack {
+                // The particle canvas owns both the animated membrane and its
+                // clipping path. A second animated clip created conflicting
+                // silhouettes and hid the changing edge.
                 HealthspanParticleField()
                     .accessibilityHidden(true)
                 VStack(spacing: 6) {

@@ -7,10 +7,10 @@ enum CoachKnowledge {
     static func answer(_ question: String) -> String? {
         let normalized = question.lowercased()
             .replacingOccurrences(of: "₂", with: "2")
-            .replacingOccurrences(of: " ", with: "")
-            .replacingOccurrences(of: "₂", with: "2")
+            .filter { !$0.isWhitespace }
         let asksVO2 = normalized.contains("vo2max") || normalized.contains("v02max")
-        let asksMeaning = ["kyause", "kyause", "matlab", "meaning", "what", "explain", "kaam", "purpose", "benefit", "important", "kya hai", "kya"].contains { normalized.contains($0.replacingOccurrences(of: " ", with: "")) }
+        let asksMeaning = ["kyause", "matlab", "meaning", "explain", "kaam", "purpose", "benefit", "important",
+                           "kyahai", "whatisvo2", "whatisv02"].contains { normalized.contains($0) }
         guard asksVO2, asksMeaning else { return nil }
         return """
         VO₂ max batata hai ki intense exercise ke dauran aapki body maximum kitni oxygen use kar sakti hai (mL/kg/min). Running mein ye aerobic fitness aur endurance potential ka useful indicator hai.

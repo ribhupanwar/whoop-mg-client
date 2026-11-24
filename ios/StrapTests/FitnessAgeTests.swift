@@ -131,3 +131,118 @@ final class FitnessAgeModelTests: XCTestCase {
                        alone?.physicalActivityIndex)
     }
 }
+
+final class HealthspanInputCoverageTests: XCTestCase {
+    func testMissingMetricsAreNotInterpretedAsZero() {
+        let coverage = HealthspanInputCoverage(observations: [:], asOf: Date())
+        XCTAssertEqual(coverage.missingContributors.count, 9)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+
+    func testNinePublishedContributorsAreDistinct() {
+        XCTAssertEqual(Set(HealthspanContributor.allCases).count, 9)
+    }
+
+    func testValidObservationIsPresentButDoesNotImplySixMonthCoverage() {
+        let now = Date()
+        let sample = HealthspanObservation(value: 9000, observedDays: 7,
+                                            firstObserved: now.addingTimeInterval(-6 * 86400),
+                                            lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: sample], asOf: now)
+        XCTAssertTrue(coverage.availableContributors.contains(.steps))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 180))
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 7, windowDays: 30))
+    }
+    func testLongHistoryRetainsGuaranteedRecentCoverage() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -39, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 40,
+                                                 firstObserved: first, lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
+    }
+
+    func testSparseLongHistoryDoesNotInventWindowCoverage() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -39, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 30,
+                                                 firstObserved: first, lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
+    }
+
+    func testHistoryStartingBeforeWindowWithoutEnoughRecentDaysStaysMissing() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -90, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 20,
+                                                firstObserved: first, lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30, calendar: calendar))
+    }
+
+    func testImpossibleObservedDayCountIsNotAcceptedAsRecentCoverage() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -9, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 40,
+                                                 firstObserved: first, lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30, calendar: calendar))
+    }
+
+    func testStaleObservationCannotPassRecentWindow() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -70, to: now)!
+        let last = calendar.date(byAdding: .day, value: -40, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 31,
+                                                 firstObserved: first, lastObserved: last)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30, calendar: calendar))
+    }
+
+}
+
+
+final class RRBeatDurationAuditTests: XCTestCase {
+    func testRepeatedSecondDoesNotDoubleCountBeatDuration() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [800]),
+            (second: 100, intervalsMS: [800, 810]),
+            (second: 101, intervalsMS: [790])
+        ])
+        XCTAssertEqual(result.uniqueSeconds, 2)
+        XCTAssertEqual(result.totalRRDurationMS, 2_400)
+        XCTAssertFalse(result.exceedsObservedSpan)
+    }
+
+    func testImplausibleDurationOverflowIsFlaggedButNotDiscarded() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [1_500, 1_500, 1_500, 1_500]),
+            (second: 101, intervalsMS: [1_500, 1_500, 1_500, 1_500])
+        ])
+        XCTAssertTrue(result.exceedsObservedSpan)
+        XCTAssertEqual(result.totalRRDurationMS, 12_000)
+    }
+
+    func testNonpositiveRRIntervalsAreDiagnosedWithoutDiscardingHistory() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [800, 0, -5]),
+            (second: 101, intervalsMS: [790])
+        ])
+        XCTAssertEqual(result.invalidIntervals, 2)
+        XCTAssertEqual(result.totalRRDurationMS, 1_590)
+    }
+
+    func testEmptyAndNormalRRWindowsAreSafe() {
+        let emptyRecords: [(second: Int, intervalsMS: [Int])] = []
+        XCTAssertFalse(HistoryCoverage.beatDurationAudit(emptyRecords).exceedsObservedSpan)
+        XCTAssertFalse(HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [900]),
+            (second: 101, intervalsMS: [900])
+        ]).exceedsObservedSpan)
+    }
+}

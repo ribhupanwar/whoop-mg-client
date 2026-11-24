@@ -1,10 +1,12 @@
 # Personal biometric captures and device identifiers - never commit.
 *.jsonl
 *.csv
+!docs/research/WHOOP_TO_STRAP_ICON_MAPPING.csv
 capture*.json
 session*.json
 *dashboard*.html
 baseline.json
+research-inputs/
 
 # Third-party reference sources downloaded during protocol research.
 # From OpenStrap/protocol, AGPL-3.0 - NOT part of this clean-room implementation.

@@ -2,7 +2,6 @@ import Foundation
 import Security
 
 /// User-owned API credentials. No bundled secrets, proxy, or telemetry.
-@available(iOS 26.0, *)
 enum CoachServiceKey {
     static func read(_ service: String) -> String {
         let query: [String: Any] = [
@@ -25,20 +24,25 @@ enum CoachServiceKey {
             kSecAttrService as String: "com.ribhupanwar.strap.coach." + service,
             kSecAttrAccount as String: "user-api-key"
         ]
-        SecItemDelete(query as CFDictionary)
-        guard !key.isEmpty else { return true }
-        var payload = query
-        payload[kSecValueData as String] = Data(key.utf8)
-        payload[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        guard !key.isEmpty else {
+            let status = SecItemDelete(query as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
+        }
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(key.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        ]
+        let status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        guard status == errSecItemNotFound else { return status == errSecSuccess }
+        let payload = query.merging(attributes) { _, new in new }
         return SecItemAdd(payload as CFDictionary, nil) == errSecSuccess
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachGemini {
     // Model availability and free-tier quotas are provider-controlled.
     static let model = "gemini-2.5-flash"
-    static func answer(question: String, history: String, context: String?, webEvidence: String?) async throws -> String {
+    static func answer(question: String, turns: [CoachConversationContext.Turn], context: String?, webEvidence: String?) async throws -> String {
         let key = CoachServiceKey.read("gemini")
         guard !key.isEmpty else { throw CoachOnlineError.missingKey("Gemini") }
         let endpoint = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent")!
@@ -47,13 +51,8 @@ enum CoachGemini {
         request.timeoutInterval = 25
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-        var contents: [[String: Any]] = []
-        for line in history.components(separatedBy: "\n").suffix(8) {
-            if line.hasPrefix("User: ") {
-                contents.append(["role": "user", "parts": [["text": String(line.dropFirst(6))]]])
-            } else if line.hasPrefix("Assistant: ") {
-                contents.append(["role": "model", "parts": [["text": String(line.dropFirst(11))]]])
-            }
+        var contents: [[String: Any]] = turns.suffix(8).map { turn in
+            ["role": turn.role == .user ? "user" : "model", "parts": [["text": turn.text]]]
         }
         let instructions = """
         You are STRAP Coach. Answer the latest question directly, in the user's language including Hinglish.
@@ -69,7 +68,7 @@ enum CoachGemini {
         request.httpBody = try JSONSerialization.data(withJSONObject: [
             "systemInstruction": ["parts": [["text": instructions]]],
             "contents": contents,
-            "generationConfig": ["temperature": 0.3, "maxOutputTokens": 600]
+            "generationConfig": ["temperature": 0.3, "maxOutputTokens": 800, "thinkingConfig": ["thinkingBudget": 0]]
         ])
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
@@ -95,7 +94,6 @@ enum CoachGemini {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachWebSearch {
     static func search(_ question: String) async throws -> String {
         let key = CoachServiceKey.read("tavily")
@@ -130,7 +128,6 @@ enum CoachWebSearch {
     }
 }
 
-@available(iOS 26.0, *)
 enum CoachOnlineError: LocalizedError {
     case missingKey(String), http(Int), empty
     var errorDescription: String? {

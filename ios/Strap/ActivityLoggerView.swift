@@ -12,6 +12,7 @@ struct ActivityLoggerView: View {
     @State private var sets: [WorkSet] = [WorkSet(reps: 8, loadKG: 60.0)]
     @State private var notes = ""
     @State private var activitySearch = ""
+    @State private var showsActivityPicker = false
     
     private let editing: ManualActivity?
     private let today = JournalStore.dayKey(for: Date())
@@ -60,6 +61,7 @@ struct ActivityLoggerView: View {
     private var kindPanel: some View {
         Panel {
             SectionTitle("Type")
+            Button { withAnimation(.easeInOut(duration: 0.2)) { showsActivityPicker.toggle() } } label: {
             HStack(spacing: 10) {
                 Image(systemName: kind.icon)
                     .foregroundStyle(Color.appAccent)
@@ -67,12 +69,15 @@ struct ActivityLoggerView: View {
                     .font(StrapTypography.body(14, weight: .bold))
                     .foregroundStyle(Color.appFG)
                 Spacer()
-                Image(systemName: "chevron.down")
+                Image(systemName: showsActivityPicker ? "chevron.up" : "chevron.down")
                     .foregroundStyle(Color.appMuted)
             }
+            }
+            .buttonStyle(.plain)
             .padding(12)
             .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-            TextField("Search 60+ activities", text: $activitySearch)
+            if showsActivityPicker {
+            TextField("Search activities", text: $activitySearch)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .font(StrapTypography.body(13))
@@ -86,6 +91,7 @@ struct ActivityLoggerView: View {
                         Button {
                             kind = option
                             activitySearch = ""
+                            withAnimation(.easeInOut(duration: 0.2)) { showsActivityPicker = false }
                         } label: {
                             HStack(spacing: 12) {
                                 Image(systemName: option.icon)
@@ -106,6 +112,7 @@ struct ActivityLoggerView: View {
                 }
             }
             .frame(maxHeight: 225)
+            }
         }
     }
 

@@ -33,13 +33,25 @@
 - [ ] **CODEX FOLLOW-UP:** Enumerate actual current source tree, report matching paths/classes/tests for each unverified feature, and propose only evidence-backed missing capabilities. Do not change BLE or metrics merely to match a competitor.
 - [ ] **FINAL CI:** Verify post-merge main push run independently; earlier green run `44994215767` and six-job matrix `44994215751` are pre-merge commit evidence.
 
-### 2026-11-22 additional external research — candidates, NOT confirmed missing
-- [ ] **Decoder parity:** Compare STRAP Gen5 packet decoding and persistence invariants with schema-driven tests in `johnmiddleton12/wearable`; its hardware scope is WHOOP 4, so do not reuse Gen4 offsets on Gen5.
-- [ ] **Data coverage diagnostics:** Evaluate a per-hour raw RR/HR/IMU coverage heatmap, gap histogram, duplicate count and persisted-vs-ACK ledger, inspired by `jaredwerba/andyguzmaneth__whoop4-ble`. Its SET_CLOCK finding is WHOOP 4-specific and must not be sent to Gen5.
-- [ ] **Metric explainability:** Compare `ryanbr/noop` HRV quality gating, rolling baselines, recovery driver explanations, breathing biofeedback and haptic interval timer against current STRAP source. No blind algorithm copying.
-- [ ] **OpenStrap Edge UX:** Compare journal correlation insights, HRV spot-check, smart wake-window, scheduled backups and Shortcuts against actual STRAP source; classify present/partial/missing before implementation.
-- [ ] **Safety/licensing:** Independently verify code licenses, firmware applicability, ECG hardware availability, and avoid unsafe/destructive BLE commands.
-- [ ] **Evidence gate:** For any improvement, demand file/line proof of gap, deterministic fixture, before/after results, current-main CI and physical-device validation where necessary.
+### 2026-11-22 complete 10-repository reference audit — verified & reconciled
+- [x] **Decoder parity:** Completed 10-repository source audit (`docs/research/STRAP_TEN_REPOSITORY_REFERENCE_AUDIT_20261122.md`). Confirmed `johnmiddleton12/wearable` is strictly WHOOP 4.0 (GATT `61080001-...`, 5-byte header, CRC8); STRAP's Gen5 V18, 8-byte envelope (`Whoop5Frame.swift`), and dual CRC remain strictly isolated from Gen4.
+- [x] **Data coverage diagnostics:** Confirmed `jaredwerba/andyguzmaneth__whoop4-ble` `SET_CLOCK` is Gen4-specific. STRAP PR #141 integrated replay-aware `HistoryCoverage.swift` with distinct second counting, gap detection, duplicate tracking, and backward transition detection.
+- [x] **Metric explainability:** Audited `ryanbr/noop` and `LeonardSEO/wearable5.0` scoring models (Day strain $0.781 L^{0.4086}$, Sleep need debt chain, Recovery prior). STRAP production metrics verified against golden fixtures without copying unverified coefficients.
+- [x] **OpenStrap Edge UX:** Audited `OpenStrap/edge` `docs/FEATURES.md`. Verified STRAP equivalents for journal, alarm schedule, manual backup/restore, and health metrics. Scheduled rolling local backups classified as high-value candidate for future dedicated PR; Widgets/Shortcuts deferred.
+- [x] **Safety/licensing:** Verified licenses across all 10 repositories: NOOP & Zhoop (PolyForm Noncommercial), Edge (AGPL-3.0), whoop4-ble, whoop5-protocol, wearable5.0, geniemax-core (MIT), KOUSHIK-9/Noop (Public Domain). No external code or assets imported; clean-room implementation preserved.
+- [x] **Evidence gate:** Verified all CI runs on latest main (tests run 45008007970, ios run 45008007991). Post-merge main CI is 100% green across simulator build, IPA packaging, font checks, and Python matrix. All 373 unit tests passing.
+
+### 2026-11-22 additional external research — completed audit & gap reconciliation
+- [x] **Decoder parity:** Completed exhaustive comparison across 18 reference repositories; confirmed Gen4 vs Gen5/MG isolation. Reconciled in `docs/research/WHOOP5_MG_REFERENCE_IMPLEMENTATION_MATRIX.md`.
+- [x] **Data coverage diagnostics:** Verified distinct second counting and replay deduplication in `HistoryCoverage.swift` and `HistoryDatabase.swift`. Proved Gen4 `SET_CLOCK` is obsolete on Gen5.
+- [x] **Metric explainability:** Audited NOOP, wearable5.0, and geniemax-core algorithms. Confirmed WHOOP calculates scores server-side; documented STRAP local model boundaries in `docs/research/STRAP_VERIFIED_GAPS.md`.
+- [x] **OpenStrap Edge UX & Backup:** Evaluated scheduled local rolling backups (PR #146) and activity icon catalogs (PR #149); established non-duplication barriers with active PRs.
+- [x] **Safety & licensing:** Verified PolyForm Noncommercial and AGPL boundaries; confirmed strict prohibition on destructive commands (`FORCE_TRIM` 25, `REBOOT_STRAP` 29, `POWER_CYCLE_STRAP` 32, `SET_READ_POINTER` 33).
+- [x] **Evidence gate & test plan:** Delivered formal regression architecture, golden vectors, and hardware-in-the-loop gates in `docs/research/STRAP_SYNC_AND_SENSOR_TEST_PLAN.md`. Aligned `HistoricalRecordSelection` HR bounds to `25...230` in `V18Record.swift`.
+- [x] **WHOOP 5.80.2 Complete Icon Forensics & Mapping Matrix (PR #163):** Decoded 40 asset catalogs across `Whoop.app` and modular SPM bundles (768 first-party assets cataloged). Proved binary architecture of `ActivitiesManager` dynamic icon pipeline (`getActivityIcon`). Confirmed 100% SF Symbol coverage across all 272 WHOOP sports in `ActivityStore.swift` and `ActivityIconRegistryTests.swift`. Cataloged in `docs/research/WHOOP_ICON_INVENTORY.md` and `docs/research/WHOOP_TO_STRAP_ICON_MAPPING.csv`.
+- [x] **WHOOP 5.80.2 Ghidra Forensic Handoff (PR #139):** Complete reverse-engineering research on WHOOP iOS 5.80.2 (ARM64 Mach-O) delivered in `docs/research/CODEX_HANDOFF.md`. Established three-tier epistemic classification (`VERIFIED`, `INFERRED`, `UNKNOWN`) and confirmed strict architectural boundaries across firmware, client, and cloud.
+- [x] **Original Icon Assets & Type-Safe Registry (PR #165):** Shipped 27 clean-room custom icon imagesets with 1x/2x/3x assets in `Assets.xcassets`, type-safe `IconAsset.swift` registry with semantic SF Symbol fallbacks, and 9 automated unit tests in `IconAssetRegistryTests.swift`.
+- [x] **UI Parity, Icon Coverage & Performance Benchmarks (PR #166):** Delivered exact pull-to-refresh stationary `WhoopWGlyph` and rotating arc, dynamic battery charging lightning bolt and low-battery amber alert, screenless band sensor glyph (`sensor.fill`), blood oxygen saturation badge (`o.circle`), mechanical haptic vibration glyph (`iphone.radiowaves.left.and.right`), segmented More tab hub (`ellipsis.circle`), pre-computed `IconGalleryView` contact sheet, and automated benchmarks in `docs/research/STRAP_UI_PERFORMANCE_AUDIT.md` and `UIPerformanceBenchmarkTests.swift`. Issue #164 remains open for continued asset coverage tracking.
 
 ### Next acceptance criteria
 1. Confirm current main head and latest post-merge CI.
@@ -353,3 +365,18 @@ The [reference inventory](WHOOP_UI_REFERENCE_INVENTORY.md) covers 61 images. Use
 - **DEFERRED:** Active ECG commands and persistence, new artifact-correction algorithms, and new device-dependent or substantial UX features pending evidence and review.
 
 [Cross-repository source and feature matrix](engineering/cross-repository-reliability-audit.md)
+
+## Sensor reliability and HELLO research
+
+- **IMPLEMENTED** in #154. Typed hardware events, four-state wrist contact, debounce, tabletop artifact rejection and background restoration supersede #153.
+- **IMPLEMENTED** in #155. Durable history progress, duplicate handling and bounded ACK retries.
+- **IMPLEMENTED** in #156. Debug-only Instruments timing for durable history commits. The reconciled head passed [iOS packaging and tests](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059748) and the [six-job protocol matrix](https://github.com/ribhupanwar/whoop-mg-client/actions/runs/45061059739).
+- **DEVICE-VERIFY.** Test wrist transitions, notification restoration and interrupted history sync on Gen5 and MG hardware.
+- **DEFERRED.** The HELLO forensic notes distinguish static observations from hypotheses. Request bytes, response layout and firmware-specific behavior still need matched captures before any production change.
+
+## STRAP AI Coach
+
+- Open the Coach button next to the bottom tabs. Daily Insights remains on Home.
+- The local educational path works without a provider key. General on-device conversations use Apple's model on supported iOS 26 devices.
+- Select **AI model settings** to configure Groq or Gemini with your own API key. Optional Tavily search sends the current question. Cloud health-snapshot sharing is off by default.
+- **DEVICE-VERIFY.** Validate Apple model availability and Keychain behavior on a SideStore-installed device. Verify external provider calls with user-owned keys.

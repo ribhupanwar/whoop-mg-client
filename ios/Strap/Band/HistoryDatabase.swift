@@ -47,11 +47,18 @@ final class HistoryDatabase {
     }
 
     func commitReportingProgress(_ rows: [V18Sample], token: String?) throws -> CommitProgress {
-        try transaction {
-            let progress = try insert(rows)
-            if let token { try setMetadata("last_history_chunk", value: token) }
-            return progress
+        func commitBatch() throws -> CommitProgress {
+            try transaction {
+                let progress = try insert(rows)
+                if let token { try setMetadata("last_history_chunk", value: token) }
+                return progress
+            }
         }
+#if DEBUG
+        return try PerformanceProfiler.measureHistoryCommit(commitBatch)
+#else
+        return try commitBatch()
+#endif
     }
 
     /// Keep the original JSON intact. The migration marker commits with its

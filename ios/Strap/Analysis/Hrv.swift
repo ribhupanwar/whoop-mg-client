@@ -35,7 +35,10 @@ enum Hrv {
 
         for value in rrMS {
             guard value >= minimum && value <= maximum else {
+                // Invalid/padding RR is a hard beat-continuity boundary.
+                // Do not pair a pre-gap seed with a post-gap interval.
                 recent.removeAll()
+                candidate = nil
                 rejectedRun = 0
                 continue
             }
@@ -69,6 +72,19 @@ enum Hrv {
             if recent.count > nnReferenceBeats { recent.removeFirst() }
         }
         return accepted
+    }
+
+    /// Research-only RR duration coverage. Never rescale production HRV.
+    /// Requires a verified contiguous observation interval.
+    static func rrDurationCoverage(_ rrMS: [Int], observedSeconds: Int) -> Double? {
+        guard observedSeconds > 0 else { return nil }
+        var totalMilliseconds = 0.0
+        for rr in rrMS {
+            guard (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(rr) else { continue }
+            totalMilliseconds += Double(rr)
+        }
+        guard totalMilliseconds > 0 else { return nil }
+        return totalMilliseconds / (Double(observedSeconds) * 1_000)
     }
 
     // MARK: - Standard HRV
@@ -112,6 +128,21 @@ enum Hrv {
         )
     }
 
+    /// Choose one RR payload per timestamp after history/live retransmission.
+    /// An extra invalid/padding word must not outrank a shorter, valid payload.
+    /// Ties retain the first observation for deterministic replay behavior.
+    static func preferRetransmittedRR(_ candidate: [Int], over existing: [Int]) -> Bool {
+        func validCount(_ rr: [Int]) -> Int {
+            rr.filter { (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0) }.count
+        }
+        let candidateValid = validCount(candidate)
+        let existingValid = validCount(existing)
+        if candidateValid != existingValid { return candidateValid > existingValid }
+        let candidateInvalid = candidate.count - candidateValid
+        let existingInvalid = existing.count - existingValid
+        return candidateInvalid < existingInvalid
+    }
+
     /// Compute RMSSD only across consecutive beats inside contiguous records.
     /// Never bridge a missing second or an artefact-rejected beat: doing so
     /// creates an artificial successive-NN difference and biases recovery.
@@ -123,7 +154,7 @@ enum Hrv {
         var uniqueBySecond: [Int: V18Sample] = [:]
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
@@ -143,7 +174,7 @@ enum Hrv {
         var uniqueBySecond: [Int: LiveSample] = [:]
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample

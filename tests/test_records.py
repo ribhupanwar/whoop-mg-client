@@ -149,14 +149,17 @@ class TestV18(unittest.TestCase):
         sample = decode_v18(bytes(good))
         self.assertEqual(sample.rr_intervals_ms, [700, 710, 720, 730])
 
-    def test_rr_nonzero_padding_rejects_intervals(self):
-        corrupted = bytearray(REAL_V18)
-        corrupted[15] = 2
-        corrupted[16:18] = (800).to_bytes(2, "little", signed=True)
-        corrupted[18:20] = (820).to_bytes(2, "little", signed=True)
-        corrupted[22] = 0xAA  # Non-zero in padding area (bytes 20..<24)
-        sample = decode_v18(bytes(corrupted))
-        self.assertEqual(sample.rr_intervals_ms, [], "Non-zero padding bytes must reject corrupted RR block")
+    def test_rr_nonzero_unused_bytes_preserve_declared_intervals(self):
+        # Issue #171: bytes beyond the declared count are not declared beats.
+        # The framing layer validates the CRC; opaque trailing bytes must not
+        # cause valid 800ms and 820ms intervals to be discarded.
+        record = bytearray(REAL_V18)
+        record[15] = 2
+        record[16:18] = (800).to_bytes(2, "little", signed=True)
+        record[18:20] = (820).to_bytes(2, "little", signed=True)
+        record[22] = 0xAA  # Undeclared slot (bytes 20..<24)
+        sample = decode_v18(bytes(record))
+        self.assertEqual(sample.rr_intervals_ms, [800, 820])
 
     def test_rr_count_above_four_is_ignored(self):
         bad = bytearray(REAL_V18)
@@ -409,6 +412,19 @@ class TestV21(unittest.TestCase):
         sample = decode_v18(bytes(record))
         self.assertIsNotNone(sample)
         self.assertEqual(sample.heart_rate, 94)
+
+    def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
+        # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
+        record = bytearray(REAL_V18)
+        record[14] = 45
+        # Set skin temp to 21.5C (2150 in scale 100)
+        record[65:67] = (2150).to_bytes(2, "little", signed=True)
+        # Set dynamic accel to 0.001 g
+        import struct
+        record[33:37] = struct.pack("<f", 0.001)
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertFalse(sample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
 
 
 if __name__ == "__main__":

@@ -86,7 +86,7 @@ class TestCoachBiometricSnapshot(unittest.TestCase):
         """When shareHealthWithCloud is False, context must be None/empty."""
         share_health_with_cloud = False
         measured_context = "SECRET BIOMETRICS: HRV 45ms, Recovery 68%"
-        
+
         cloud_payload_context = measured_context if share_health_with_cloud else None
         self.assertIsNone(cloud_payload_context)
 
