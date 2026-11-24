@@ -187,13 +187,17 @@ struct GPSRunView: View {
                 VStack(spacing: 12) {
                     TextField("Search Activities", text: $search)
                         .textFieldStyle(.roundedBorder)
-                    HStack {
-                        ForEach(["ALL", "STRAIN", "RECOVERY", "SLEEP"], id: \.self) { tab in
-                            Text(tab).font(.caption2).padding(6)
-                        }
-                    }
+                    // Category filters are intentionally omitted until backed by real activity metadata.
                     ScrollView {
                         LazyVStack {
+                            if !search.isEmpty && !ActivityKind.allCases.contains(where: {
+                                $0.label.localizedCaseInsensitiveContains(search)
+                            }) {
+                                Text("No matching activities")
+                                    .foregroundStyle(.secondary)
+                                    .padding(12)
+                                    .accessibilityIdentifier("running.activityPicker.empty")
+                            }
                             ForEach(ActivityKind.allCases.filter {
                                 search.isEmpty || $0.label.localizedCaseInsensitiveContains(search)
                             }) { activity in
