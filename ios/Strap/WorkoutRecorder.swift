@@ -116,7 +116,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
              .crossCountrySkiing, .skiing, .snowboarding,
              .rowing, .sailing, .kayaking, .canoeing,
              .golf, .horsebackRiding, .mountaineering,
-             .obstacleCourseRacing, .parkour, .trailRun:
+             .obstacleCourseRacing, .parkour:
             return true
         default:
             return false
@@ -257,8 +257,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
 
     private func buildSplits() -> [WorkoutSplit] {
         var splits: [WorkoutSplit] = []
-        var currentSplitDistance = 0.0
-        var currentSplitStartElapsed = 0
+        var _currentSplitDistance = 0.0
+        var _currentSplitStartElapsed = 0
         var currentSplitHR: [Int] = []
         var splitIndex = 1
 

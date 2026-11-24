@@ -94,7 +94,7 @@ struct GPSRunView: View {
         .onReceive(ticker) { _ in
             updateHRHistory()
         }
-        .onChange(of: recorder.phase) { newPhase in
+        .onChange(of: recorder.phase) { _, newPhase in
             if newPhase == .saved || newPhase == .discarded {
                 // WorkoutRecorder handles phase transitions; UI observes only.
                 // No direct phase mutation here.
