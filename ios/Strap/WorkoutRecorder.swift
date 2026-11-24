@@ -27,6 +27,14 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private var trackRoute: Bool = true
     private var gpsEnabled: Bool = false
 
+    // Profile data for accurate calorie/HR/strain calculations
+    private var profileWeightKg: Double?
+    private var profileMaxHR: Double?
+    private var profileRestingHR: Double?
+    private var profileSex: Sex?
+    private var profileHeightCm: Double?
+    private var profileAge: Int?
+
     private var heartRateSamples: [Int] = []
     private var hrSampleCount: Int = 0
 
@@ -40,6 +48,15 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         manager.pausesLocationUpdatesAutomatically = false
         manager.allowsBackgroundLocationUpdates = true
         manager.showsBackgroundLocationIndicator = true
+    }
+
+    func updateProfile(weightKg: Double?, maxHR: Double?, restingHR: Double?, sex: Sex?, heightCm: Double?, age: Int?) {
+        self.profileWeightKg = weightKg
+        self.profileMaxHR = maxHR
+        self.profileRestingHR = restingHR
+        self.profileSex = sex
+        self.profileHeightCm = heightCm
+        self.profileAge = age
     }
 
     func start(activity: ActivityKind, trackRoute: Bool) {
@@ -207,38 +224,30 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     }
 
     private func estimateCalories() -> Int? {
-        // Simplified calorie estimation based on HR, duration, and activity type
-        // This is a placeholder - real implementation would use validated formulas
+        // Calorie estimation using Keytel formula (HR-based) when profile data available
+        // Returns nil if insufficient profile data — UI should show "—" and name the gap
         guard let avgHR = averageHeartRate(), elapsedSeconds > 60 else { return nil }
-        let durationMinutes = Double(elapsedSeconds) / 60.0
-        // Rough MET-based estimate
-        let met = metForActivity(currentActivityKind)
-        let weightKg = 70.0 // Default, should come from user profile
-        let calories = met * weightKg * durationMinutes / 60.0
-        return Int(calories.rounded())
-    }
+        guard let weightKg = profileWeightKg,
+              let heightCm = profileHeightCm,
+              let age = profileAge,
+              let sex = profileSex,
+              let restingHR = profileRestingHR,
+              let maxHR = profileMaxHR else { return nil }
 
-    private func metForActivity(_ activity: ActivityKind) -> Double {
-        switch activity {
-        case .run, .outdoorRun, .trailRun, .intervalRun: return 9.8
-        case .walk, .hiking: return 4.5
-        case .cycling, .mountainBiking: return 7.5
-        case .swimming: return 8.0
-        case .lift, .strengthTraining, .weightlifting, .powerlifting: return 6.0
-        case .hiit, .crossTraining, .functionalFitness: return 8.5
-        case .yoga, .pilates, .stretching, .mobility: return 2.5
-        case .cardio: return 7.0
-        default: return 5.0
-        }
+        let durationMinutes = Double(elapsedSeconds) / 60.0
+        let hr = Double(avgHR)
+        let cappedHR = min(hr, maxHR)
+        let bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * Double(age)) + (sex == .male ? 5 : -161)
+        let activeKcal = (cappedHR - restingHR) / (maxHR - restingHR) * (bmr / 24.0 / 60.0) * durationMinutes
+        return Int(max(0, activeKcal).rounded())
     }
 
     private func calculateActivityStrain() -> Double? {
         // Activity-specific strain using simplified Banister TRIMP
-        // This should match the production strain calculation when available
+        // Returns nil if insufficient profile data — UI should show "—" and name the gap
         guard let avgHR = averageHeartRate(), elapsedSeconds > 300 else { return nil }
+        guard let maxHR = profileMaxHR, let restingHR = profileRestingHR else { return nil }
         let durationMinutes = Double(elapsedSeconds) / 60.0
-        let restingHR = 60.0 // Should come from user profile
-        let maxHR = 190.0 // Should come from user profile
         let hrr = (Double(avgHR) - restingHR) / (maxHR - restingHR)
         guard hrr > 0 else { return 0 }
         let trimp = durationMinutes * hrr * 0.64 * exp(1.92 * hrr)

@@ -92,17 +92,12 @@ struct GPSRunView: View {
         .navigationTitle(recorder.phase == .idle ? "Start Activity" : selectedActivity.label)
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(ticker) { _ in
-            recorder.refreshElapsed()
             updateHRHistory()
         }
         .onChange(of: recorder.phase) { newPhase in
             if newPhase == .saved || newPhase == .discarded {
-                // Reset after a brief moment to show the status
-                DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-                    if recorder.phase == .saved || recorder.phase == .discarded {
-                        recorder.phase = .idle
-                    }
-                }
+                // WorkoutRecorder handles phase transitions; UI observes only.
+                // No direct phase mutation here.
             }
         }
     }
@@ -239,6 +234,15 @@ struct GPSRunView: View {
                 // Start Activity button
                 Button {
                     hrHistory.removeAll()
+                    // Pass profile data for accurate calorie/HR/strain calculations
+                    recorder.updateProfile(
+                        weightKg: store.settings.weightKG,
+                        maxHR: store.maxHeartRate,
+                        restingHR: store.measuredRestingHR,
+                        sex: store.settings.sex,
+                        heightCm: store.settings.heightCM,
+                        age: store.settings.profileAge()
+                    )
                     recorder.start(activity: selectedActivity, trackRoute: trackRoute && canRecordGPS)
                 } label: {
                     Text("START ACTIVITY")
@@ -267,53 +271,37 @@ struct GPSRunView: View {
                 .padding(.top, 8)
 
             VStack(spacing: 16) {
-                HStack {
-                    Text("STRAIN TARGET")
-                        .font(.system(size: 13, weight: .bold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Toggle("", isOn: Binding(
-                        get: { false }, // Placeholder - no validated target formula yet
-                        set: { _ in }
-                    ))
-                    .labelsHidden()
-                    .disabled(true)
-                }
+                Text("STRAIN TARGET")
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(1.2)
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Large target ring
+                // Large target ring — empty until validated formula exists
                 ZStack {
                     Circle()
                         .stroke(Color.secondary.opacity(0.2), lineWidth: 16)
                         .frame(width: 200, height: 200)
-                    Circle()
-                        .trim(from: 0, to: 0.0) // No validated target
-                        .stroke(Color(red: 0.04, green: 0.60, blue: 0.94), style: StrokeStyle(lineWidth: 16, lineCap: .round))
-                        .frame(width: 200, height: 200)
-                        .rotationEffect(.degrees(-90))
                     VStack(spacing: 4) {
-                        Text("—")
-                            .font(.system(size: 56, weight: .bold))
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 32))
                             .foregroundStyle(.secondary)
-                        Text("TARGET")
-                            .font(.system(size: 13, weight: .semibold))
+                        Text("UNAVAILABLE")
+                            .font(.system(size: 17, weight: .semibold))
                             .foregroundStyle(.secondary)
+                        Text("Target requires validated formula")
+                            .font(.system(size: 12))
+                            .foregroundStyle(.tertiary)
                     }
                 }
 
-                // Current metrics
+                // Current metrics (day strain only — activity strain unknown pre-workout)
                 VStack(spacing: 12) {
-                    HStack(spacing: 20) {
-                        MetricCard(label: "DAY STRAIN", value: dayStrain.map { String(format: "%.1f", $0) } ?? "—")
-                        MetricCard(label: "ACTIVITY STRAIN", value: "—")
-                    }
-                    HStack(spacing: 20) {
-                        MetricCard(label: "EST. DAY STRAIN", value: "—")
-                        MetricCard(label: "RECOVERY", value: "—")
-                    }
+                    MetricCard(label: "DAY STRAIN", value: dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                    MetricCard(label: "RECOVERY", value: "—")
                 }
 
-                Text("Recovery-based activity target is unavailable until validated.")
+                Text("Recovery-based activity strain target is unavailable. No validated formula connects recovery to activity strain.")
                     .font(.system(size: 13))
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -369,7 +357,9 @@ struct GPSRunView: View {
                     calories: recorder.currentSession?.metrics.calories,
                     hrHistory: hrHistory,
                     isConnected: store.band.isConnected,
-                    isPaused: recorder.phase == .paused
+                    isPaused: recorder.phase == .paused,
+                    maxHR: store.maxHeartRate,
+                    restingHR: store.measuredRestingHR
                 )
                 .tag(WorkoutPage.heartRate)
 
@@ -423,10 +413,8 @@ struct GPSRunView: View {
             Text("This will permanently delete the current workout. This action cannot be undone.")
         }
         .onAppear {
-            // Ensure we start fresh
-            if recorder.phase == .saved || recorder.phase == .discarded {
-                recorder.phase = .idle
-            }
+            // WorkoutRecorder handles phase transitions; UI observes only.
+            // If we reach a terminal state, the recorder will stay there until start() is called.
         }
     }
 
@@ -687,10 +675,14 @@ struct HeartRatePage: View {
     let hrHistory: [HeartRateSample]
     let isConnected: Bool
     let isPaused: Bool
+    let maxHR: Double?
+    let restingHR: Double?
 
     private var hrZone: HeartRateZone? {
-        guard let hr = currentHR else { return nil }
-        return HeartRateZone.zone(for: hr, maxHR: 190, restingHR: 60) // Should come from profile
+        guard let hr = currentHR,
+              let maxHR = maxHR,
+              let restingHR = restingHR else { return nil }
+        return HeartRateZone.zone(for: hr, maxHR: maxHR, restingHR: restingHR)
     }
 
     var body: some View {
@@ -716,7 +708,7 @@ struct HeartRatePage: View {
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(.secondary)
                         if let zone = hrZone {
-                            Text(zone.label)
+                            Text(zone.rawValue)
                                 .font(.system(size: 13, weight: .bold))
                                 .foregroundStyle(zone.color)
                         }
