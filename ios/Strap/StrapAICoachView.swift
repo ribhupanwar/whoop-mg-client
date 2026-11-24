@@ -27,6 +27,9 @@ struct StrapAICoachView: View {
     @State private var shareHealthWithCloud = false
     @State private var showAISettings = false
     @State private var groqKeyInput = ""
+    @State private var geminiKeyInput = ""
+    @State private var tavilyKeyInput = ""
+    @State private var useLiveSearch = false
     @FocusState private var composerFocused: Bool
 
     @State private var waitingMessageIndex = 0
@@ -67,7 +70,7 @@ struct StrapAICoachView: View {
                     Text(selectedEngine == "Apple (offline)" ? "Private · On-device" : "Cloud AI · optional").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true } label: {
+                Button { loadCoachKeys(); showAISettings = true } label: {
                     Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
                 }.accessibilityLabel("AI model settings")
                 Button { dismiss() } label: {
@@ -79,7 +82,7 @@ struct StrapAICoachView: View {
             HStack {
                 Text(selectedEngine).font(.caption)
                 Spacer()
-                Button("Change model") { groqKeyInput = CoachCloudAI.readKey(); showAISettings = true }.font(.caption)
+                Button("Change model") { loadCoachKeys(); showAISettings = true }.font(.caption)
             }.foregroundStyle(.secondary).padding(.horizontal, 20).padding(.bottom, 7)
             ScrollViewReader { proxy in
                 ScrollView {
@@ -197,6 +200,8 @@ struct StrapAICoachView: View {
                             Text("Apple (offline)").tag("Apple (offline)")
                             Text("Groq Llama 70B").tag("Groq Llama 70B")
                             Text("Groq Llama 8B fast").tag("Groq Llama 8B fast")
+                            Text("Gemini Flash").tag("Gemini Flash")
+                            Text("Auto cloud (Groq → Gemini)").tag("Auto cloud (Groq → Gemini)")
                         }
                         Text("Groq requires internet, your own API key and is subject to free-tier limits.").font(.footnote)
                     }
@@ -215,6 +220,35 @@ struct StrapAICoachView: View {
                             _ = CoachCloudAI.saveKey("")
                             groqKeyInput = ""
                         }
+                    }
+                    Section("Gemini key (optional)") {
+                        SecureField("Gemini API key", text: $geminiKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Gemini key") {
+                            if !CoachServiceKey.save(geminiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "gemini") {
+                                notice = "Could not save Gemini key."
+                            }
+                        }
+                        Button("Delete Gemini key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "gemini")
+                            geminiKeyInput = ""
+                        }
+                    }
+                    Section("Live internet search (optional)") {
+                        Toggle("Enable web search", isOn: $useLiveSearch)
+                        SecureField("Tavily API key", text: $tavilyKeyInput)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        Button("Save Tavily key") {
+                            if !CoachServiceKey.save(tavilyKeyInput.trimmingCharacters(in: .whitespacesAndNewlines), service: "tavily") {
+                                notice = "Could not save Tavily key."
+                            }
+                        }
+                        Button("Delete Tavily key", role: .destructive) {
+                            _ = CoachServiceKey.save("", service: "tavily")
+                            tavilyKeyInput = ""
+                        }
+                        Text("Search sends only the current question, never private health data. Requires a cloud model and your own Tavily key.")
+                            .font(.footnote)
                     }
                     Section("Privacy") {
                         Toggle("Share STRAP health snapshot with cloud", isOn: $shareHealthWithCloud)
@@ -250,6 +284,12 @@ struct StrapAICoachView: View {
                 showAttachments = false
             }
         }
+    }
+
+    private func loadCoachKeys() {
+        groqKeyInput = CoachCloudAI.readKey()
+        geminiKeyInput = CoachServiceKey.read("gemini")
+        tavilyKeyInput = CoachServiceKey.read("tavily")
     }
 
     private func send(_ input: String) {
@@ -296,22 +336,49 @@ struct StrapAICoachView: View {
         }
         if selectedEngine != "Apple (offline)" {
             let started = ContinuousClock.now
-            let modelName = selectedEngine == "Groq Llama 70B"
-                ? "llama-3.3-70b-versatile" : "llama-3.1-8b-instant"
             do {
-                let response = try await CoachCloudAI.answer(
-                    question: prompt,
-                    history: conversationContext.suffix(6).joined(separator: "\n"),
-                    context: shareHealthWithCloud ? measuredContext : nil,
-                    model: modelName
-                )
+                // Search is opt-in and receives only the current question.
+                var evidence: String?
+                if useLiveSearch { evidence = try await CoachWebSearch.search(prompt) }
+                let history = conversationContext.suffix(6).joined(separator: "\n")
+                let response: String
+                if selectedEngine == "Gemini Flash" {
+                    response = try await CoachGemini.answer(
+                        question: prompt, history: history,
+                        context: shareHealthWithCloud ? measuredContext : nil,
+                        webEvidence: evidence
+                    )
+                } else {
+                    let modelName = selectedEngine == "Groq Llama 8B fast"
+                        ? "llama-3.1-8b-instant" : "llama-3.3-70b-versatile"
+                    let enrichedQuestion = evidence.map {
+                        prompt + "\n\nUntrusted web results (cite only listed URLs):\n" + $0
+                    } ?? prompt
+                    do {
+                        response = try await CoachCloudAI.answer(
+                            question: enrichedQuestion, history: history,
+                            context: shareHealthWithCloud ? measuredContext : nil,
+                            model: modelName
+                        )
+                    } catch {
+                        // Fallback only when explicitly selected and user provided Gemini key.
+                        guard selectedEngine == "Auto cloud (Groq → Gemini)",
+                              !CoachServiceKey.read("gemini").isEmpty else { throw error }
+                        response = try await CoachGemini.answer(
+                            question: prompt, history: history,
+                            context: shareHealthWithCloud ? measuredContext : nil,
+                            webEvidence: evidence
+                        )
+                    }
+                }
+                guard !Task.isCancelled else { return }
                 let duration = started.duration(to: ContinuousClock.now)
                 elapsedSeconds = Double(duration.components.seconds) + Double(duration.components.attoseconds) / 1e18
                 messages.append(CoachMessage(text: response, fromUser: false))
                 conversationContext.append("User: " + prompt)
                 conversationContext.append("Assistant: " + response)
             } catch {
-                notice = error.localizedDescription
+                if !Task.isCancelled { notice = error.localizedDescription }
             }
             return
         }

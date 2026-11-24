@@ -16,9 +16,11 @@ final class AICoachTests: XCTestCase {
         let calendar = Calendar(identifier: .gregorian)
         let now = Date()
         let todayKey = JournalStore.dayKey(for: now, calendar: calendar)
+        let yesterdayDate = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now))!
+        let yesterdayKey = JournalStore.dayKey(for: yesterdayDate, calendar: calendar)
         
         let yesterday = DayMetrics(
-            dateKey: "2026-11-21",
+            dateKey: yesterdayKey,
             state: "sleep",
             restingHR: 56.0,
             lnRMSSD: log(48.0),
@@ -40,7 +42,7 @@ final class AICoachTests: XCTestCase {
         
         let priorDays = (14...20).map { dayIndex in
             DayMetrics(
-                dateKey: "2026-11-\(dayIndex)",
+                dateKey: JournalStore.dayKey(for: calendar.date(byAdding: .day, value: dayIndex - 21, to: yesterdayDate)!, calendar: calendar),
                 state: "sleep",
                 restingHR: 58.0,
                 lnRMSSD: log(45.0),
@@ -92,7 +94,7 @@ final class AICoachTests: XCTestCase {
         XCTAssertTrue(snapshot.contains("Current SWS HRV: 45 ms"))
         XCTAssertTrue(snapshot.contains("Current Resting HR: 58 bpm"))
         XCTAssertTrue(snapshot.contains("Last Night's Sleep: 7.2h actual vs 8.0h needed"))
-        XCTAssertTrue(snapshot.contains("YESTERDAY (2026-11-21)"))
+        XCTAssertTrue(snapshot.contains("YESTERDAY (\(yesterdayKey))"))
         XCTAssertTrue(snapshot.contains("Final Day Strain: 12.4"))
         XCTAssertTrue(snapshot.contains("Sleep Duration: 6.8 hrs"))
         XCTAssertTrue(snapshot.contains("7-DAY BASELINE TRENDS"))
