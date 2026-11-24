@@ -134,8 +134,39 @@ def hrv_from_rr(rr_ms: list[float]) -> HrvResult:
     )
 
 
+def prefer_retransmitted_rr(
+    candidate: list[int | float], over: list[int | float]
+) -> bool:
+    """Return True if candidate RR list should replace existing one during deduplication.
+
+    Prefers the list with more plausible valid intervals (200..3000 ms).
+    If valid counts are equal, prefers the list with fewer out-of-range words.
+    """
+    cand_valid = sum(1 for v in candidate if MIN_RR_MS <= v <= MAX_RR_MS)
+    over_valid = sum(1 for v in over if MIN_RR_MS <= v <= MAX_RR_MS)
+    if cand_valid != over_valid:
+        return cand_valid > over_valid
+    cand_bad = sum(1 for v in candidate if not (MIN_RR_MS <= v <= MAX_RR_MS))
+    over_bad = sum(1 for v in over if not (MIN_RR_MS <= v <= MAX_RR_MS))
+    return cand_bad < over_bad
+
+
 def hrv(samples: list[V18Sample]) -> HrvResult:
-    return hrv_from_rr([float(rr) for s in samples for rr in s.rr_intervals_ms])
+    """Cardiovascular HRV (RMSSD) from a list of records.
+
+    Offload can re-stream a second after reconnect. Deduplicate by second,
+    keeping the record with the most valid intervals, before pulling the R-Rs.
+    """
+    unique_by_second: dict[int, V18Sample] = {}
+    for s in samples:
+        if s.unix in unique_by_second:
+            if not prefer_retransmitted_rr(
+                s.rr_intervals_ms, unique_by_second[s.unix].rr_intervals_ms
+            ):
+                continue
+        unique_by_second[s.unix] = s
+    ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
+    return hrv_from_rr([float(rr) for s in ordered for rr in s.rr_intervals_ms])
 
 
 def resting_hrv(
@@ -176,7 +207,9 @@ def hrv_detailed_diagnostics(
     unique_by_second: dict[int, V18Sample] = {}
     for s in samples:
         if s.unix in unique_by_second:
-            if len(unique_by_second[s.unix].rr_intervals_ms) >= len(s.rr_intervals_ms):
+            if not prefer_retransmitted_rr(
+                s.rr_intervals_ms, unique_by_second[s.unix].rr_intervals_ms
+            ):
                 continue
         unique_by_second[s.unix] = s
     ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
