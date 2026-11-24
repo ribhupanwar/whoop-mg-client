@@ -73,8 +73,16 @@ struct GPSRunView: View {
                         Text(store.band.isConnected ? "WHOOP BAND" : "BAND DISCONNECTED")
                             .font(StrapTypography.body(10, weight: .medium))
                     }
-                    Text("LIVE STRAIN · unavailable until measured activity strain is connected")
-                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                    HStack(spacing: 8) {
+                        Text("DAY STRAIN")
+                            .font(StrapTypography.body(11, weight: .bold))
+                        Spacer()
+                        Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                            .font(StrapTypography.metric(25, weight: .bold))
+                    }
+                    .foregroundStyle(Color.appFG)
+                    .accessibilityIdentifier("running.liveDayStrain")
+                    Hint("Live day strain updates from connected band HR; this is not an independently measured activity strain.")
                     Text(gps.status)
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
