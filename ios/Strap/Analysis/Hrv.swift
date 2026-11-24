@@ -71,6 +71,19 @@ enum Hrv {
         return accepted
     }
 
+    /// Research-only RR duration coverage. Never rescale production HRV.
+    /// Requires a verified contiguous observation interval.
+    static func rrDurationCoverage(_ rrMS: [Int], observedSeconds: Int) -> Double? {
+        guard observedSeconds > 0 else { return nil }
+        var totalMilliseconds = 0.0
+        for rr in rrMS {
+            guard (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(rr) else { continue }
+            totalMilliseconds += Double(rr)
+        }
+        guard totalMilliseconds > 0 else { return nil }
+        return totalMilliseconds / (Double(observedSeconds) * 1_000)
+    }
+
     // MARK: - Standard HRV
 
     static func rmssd(_ nnMS: [Double]) -> Double? {
