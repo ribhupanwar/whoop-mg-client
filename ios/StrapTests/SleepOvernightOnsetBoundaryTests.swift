@@ -693,13 +693,15 @@ final class SleepOvernightOnsetBoundaryTests: XCTestCase {
         let periods = SleepDetect.detect(records)
         XCTAssertFalse(periods.isEmpty)
         let night = periods[0]
-        // Autonomic gate should advance onset to when HR ≤ activeMedian + 5 (≤95) for 10 min
-        // With activeMedian=90, threshold=95. HR drops below 95 within first few minutes of transition.
-        // The gate should backtrack from band state=2 confirmation (at start+900) to ~start-300
-        // This is a regression test - exact value depends on implementation details
-        XCTAssertLessThanOrEqual(night.startUnix, start,
-                                 "Autonomic onset gate should not delay onset past physiological settling")
-        XCTAssertGreaterThanOrEqual(night.startUnix, start - 1800,
-                                    "Autonomic onset gate should not backtrack more than 30 min")
+        // The transition is NOT quiet at start: accel begins at 0.30 g and
+        // crosses the detector's 0.08 g quiet threshold about 707 seconds later.
+        // A start at/before the transition would incorrectly label active motion
+        // as sleep. The band only declares sleep at start+900, so a valid onset
+        // should fall in the quiet transition, before band confirmation.
+        let quietTransitionSecond = Int(900.0 * (0.30 - SleepDetect.quietAccelG) / 0.28)
+        XCTAssertGreaterThanOrEqual(night.startUnix, start + quietTransitionSecond - 60,
+                                    "Do not backdate sleep into the moving transition")
+        XCTAssertLessThanOrEqual(night.startUnix, start + 900,
+                                 "Quiet onset should precede or coincide with band sleep confirmation")
     }
 }
