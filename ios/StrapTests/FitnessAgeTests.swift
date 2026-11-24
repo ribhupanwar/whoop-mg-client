@@ -173,6 +173,16 @@ final class HealthspanInputCoverageTests: XCTestCase {
         XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
     }
 
+    func testImpossibleObservedDayCountIsNotAcceptedAsRecentCoverage() {
+        let calendar = Calendar(identifier: .gregorian)
+        let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -9, to: now)!
+        let observation = HealthspanObservation(value: 9000, observedDays: 40,
+                                                 firstObserved: first, lastObserved: now)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: now)
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30, calendar: calendar))
+    }
+
     func testStaleObservationCannotPassRecentWindow() {
         let calendar = Calendar(identifier: .gregorian)
         let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
