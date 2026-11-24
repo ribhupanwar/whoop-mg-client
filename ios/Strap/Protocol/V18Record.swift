@@ -250,3 +250,35 @@ enum V18Decoder {
         return (value * scale).rounded() / scale
     }
 }
+
+
+/// Research-only decoder for OpenWHOOP's historical optical k=21 array layout.
+/// Input is the unwrapped 1244-byte optical record body, NOT the BLE frame.
+/// This does not identify a red wavelength or calculate calibrated SpO2.
+struct HistoricalOpticalK21: Equatable {
+    let green: [[Int16]]
+    let infrared: [[Int16]]
+}
+
+enum HistoricalOpticalK21Decoder {
+    static let expectedBodyBytes = 1244
+    static let samplesPerChannel = 100
+    private static let greenOffsets = [20, 220, 420]
+    private static let infraredOffsets = [632, 832, 1032]
+
+    static func decode(body: [UInt8]) -> HistoricalOpticalK21? {
+        guard body.count == expectedBodyBytes else { return nil }
+        func channel(at offset: Int) -> [Int16]? {
+            guard offset >= 0, offset + samplesPerChannel * 2 <= body.count else { return nil }
+            return (0..<samplesPerChannel).map { index in
+                let position = offset + index * 2
+                let bits = UInt16(body[position]) | (UInt16(body[position + 1]) << 8)
+                return Int16(bitPattern: bits)
+            }
+        }
+        let green = greenOffsets.compactMap { channel(at: $0) }
+        let infrared = infraredOffsets.compactMap { channel(at: $0) }
+        guard green.count == 3, infrared.count == 3 else { return nil }
+        return HistoricalOpticalK21(green: green, infrared: infrared)
+    }
+}

@@ -375,11 +375,10 @@ struct HealthView: View {
                 chipGood: false
             )
             MetricTile(
-                label: "SpO₂ candidate",
-                value: demo ? "\(SampleData.spo2Candidate)%"
-                             : summary?.spo2.pct.map { String(format: "%.0f%%", $0) } ?? "—",
+                label: "SpO₂ (unvalidated)",
+                value: "—",
                 unit: nil,
-                chip: demo ? "unvalidated · sample" : spo2Chip,
+                chip: demo ? "candidate telemetry only · sample" : spo2Chip,
                 chipGood: false
             )
             MetricTile(
@@ -578,7 +577,7 @@ struct HealthView: View {
 
     private var spo2Chip: String {
         guard let spo2 = summary?.spo2 else { return "sleep capture only" }
-        if spo2.pct != nil { return "unvalidated · \(spo2.readings) readings" }
+        if spo2.pct != nil { return "\(spo2.readings) raw candidates · no calibrated %" }
         return spo2.reason ?? "no in-band candidate"
     }
 

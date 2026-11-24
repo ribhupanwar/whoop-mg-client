@@ -61,6 +61,40 @@ struct HistoryCoverage: Equatable {
                         repeatedSecondRecords: repeatedSecondRecords)
     }
 
+
+    /// Diagnostic only: compare summed beat durations against the unique
+    /// observed-second span. RR intervals can cross second boundaries, so
+    /// a small tolerance is necessary and overflow is not automatic rejection.
+    /// Prefer the retransmission with the most RR beats for each second,
+    /// consistent with Hrv.fromSamples.
+    static func beatDurationAudit(_ records: [(second: Int, intervalsMS: [Int])]) -> RRBeatDurationAudit {
+        var unique: [Int: [Int]] = [:]
+        for record in records {
+            if (unique[record.second]?.count ?? -1) < record.intervalsMS.count {
+                unique[record.second] = record.intervalsMS
+            }
+        }
+        let total = unique.values.reduce(Int64(0)) { sum, intervals in
+            sum + intervals.reduce(Int64(0)) { $0 + Int64(max(0, $1)) }
+        }
+        let seconds = unique.count
+        // Negative/zero RR values must never silently look like valid beats.
+        let invalidIntervals = unique.values.reduce(0) { count, intervals in
+            count + intervals.filter { $0 <= 0 }.count
+        }
+        // Two seconds of boundary slack prevents flagging a beat that
+        // started before the first record or ended after the last.
+        let allowance = Int64(seconds) * 1_000 + 2_000
+        return RRBeatDurationAudit(uniqueSeconds: seconds,
+                                   invalidIntervals: invalidIntervals,
+                                   totalRRDurationMS: total,
+                                   exceedsObservedSpan: total > allowance)
+    }
+
+    static func beatDurationAudit(_ samples: [V18Sample]) -> RRBeatDurationAudit {
+        beatDurationAudit(samples.map { (second: $0.unix, intervalsMS: $0.rrIntervalsMS) })
+    }
+
     var summary: String {
         "Received seconds: \(observedSeconds), HR: \(heartRateSeconds), RR: \(rrSeconds), motion: \(motionSeconds), gaps: \(missingSeconds)s, repeated-second records: \(repeatedSecondRecords), backwards transitions: \(backwardsTransitions)"
     }
@@ -84,4 +118,12 @@ struct RRCoverageAudit: Equatable {
         rrSeconds >= 0 && observedSeconds >= 0
             && rrSeconds <= observedSeconds && repeatedSecondRecords >= 0
     }
+}
+
+struct RRBeatDurationAudit: Equatable {
+    let uniqueSeconds: Int
+    let invalidIntervals: Int
+    let totalRRDurationMS: Int64
+    /// Warning only; packet timing must be validated before excluding beats.
+    let exceedsObservedSpan: Bool
 }

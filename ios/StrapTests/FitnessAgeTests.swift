@@ -195,3 +195,44 @@ final class HealthspanInputCoverageTests: XCTestCase {
     }
 
 }
+
+
+final class RRBeatDurationAuditTests: XCTestCase {
+    func testRepeatedSecondDoesNotDoubleCountBeatDuration() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [800]),
+            (second: 100, intervalsMS: [800, 810]),
+            (second: 101, intervalsMS: [790])
+        ])
+        XCTAssertEqual(result.uniqueSeconds, 2)
+        XCTAssertEqual(result.totalRRDurationMS, 2_400)
+        XCTAssertFalse(result.exceedsObservedSpan)
+    }
+
+    func testImplausibleDurationOverflowIsFlaggedButNotDiscarded() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [1_500, 1_500, 1_500, 1_500]),
+            (second: 101, intervalsMS: [1_500, 1_500, 1_500, 1_500])
+        ])
+        XCTAssertTrue(result.exceedsObservedSpan)
+        XCTAssertEqual(result.totalRRDurationMS, 12_000)
+    }
+
+    func testNonpositiveRRIntervalsAreDiagnosedWithoutDiscardingHistory() {
+        let result = HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [800, 0, -5]),
+            (second: 101, intervalsMS: [790])
+        ])
+        XCTAssertEqual(result.invalidIntervals, 2)
+        XCTAssertEqual(result.totalRRDurationMS, 1_590)
+    }
+
+    func testEmptyAndNormalRRWindowsAreSafe() {
+        let emptyRecords: [(second: Int, intervalsMS: [Int])] = []
+        XCTAssertFalse(HistoryCoverage.beatDurationAudit(emptyRecords).exceedsObservedSpan)
+        XCTAssertFalse(HistoryCoverage.beatDurationAudit([
+            (second: 100, intervalsMS: [900]),
+            (second: 101, intervalsMS: [900])
+        ]).exceedsObservedSpan)
+    }
+}
