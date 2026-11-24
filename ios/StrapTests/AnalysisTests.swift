@@ -88,6 +88,22 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
     Baseline(lnRMSSDMean: 4.0, lnRMSSDSD: 0.3, rhrMean: 55.0, rhrSD: 3.0, days: days)
 }
 
+
+// MARK: - NN seed continuity
+
+final class NNSeedBoundaryTests: XCTestCase {
+    func testInvalidPaddingCannotJoinSeparatedRRSeedBeats() {
+        XCTAssertTrue(Hrv.nnIntervals([800, 0, 800]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, 0, 800, 800]), [800, 800])
+    }
+
+    func testOutOfRangeIntervalResetsPendingSeed() {
+        let invalid = Double(V18Decoder.maxRRMS + 1)
+        XCTAssertTrue(Hrv.nnIntervals([800, invalid, 800]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, invalid, 800, 810]), [800, 810])
+    }
+}
+
 // MARK: - HRV
 
 final class LiveRRReplayDedupTests: XCTestCase {
