@@ -221,6 +221,8 @@ final class BandLink: NSObject, ObservableObject {
     }
     @Published private(set) var days: [DayMetrics] = []
     @Published private(set) var drainStats = DrainStats()
+    @Published private(set) var lastDataRangeResponse: DataRangeResponse?
+    @Published private(set) var isStrapStuck = false
     @Published private(set) var lastCapturePath: String?
     @Published private(set) var isLiveSession = false
     @Published var lastMessage: String?
@@ -388,6 +390,8 @@ final class BandLink: NSObject, ObservableObject {
     private var newestInsertedThisPass: Int?
     private var seenRecordIndices: Set<UInt32> = []
     private var historyClock = HistoryClockGate()
+    private var strapReportedNewestUnix: Int?
+    private var stuckDetector = StuckStrapDetector(stuckAfterSeconds: 60.0, behindGapSeconds: 300)
     @Published private(set) var passiveECG: MGEcgPacket?
     @Published private(set) var currentBandModel: String?
     private var historySyncGeneration = 0
@@ -1864,6 +1868,8 @@ final class BandLink: NSObject, ObservableObject {
         if !continuing {
             continuationAttempts = 0
             continuationFrontier = retainedHistoricalSamples.last?.unix
+            stuckDetector.reset()
+            isStrapStuck = false
         }
         resubscribeNotifyCharacteristics()
         startCaptureFile()
@@ -2133,6 +2139,16 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
+        if let strapNewest = strapReportedNewestUnix {
+            let frontier = newestInsertedThisPass ?? continuationFrontier ?? retainedHistoricalSamples.last?.unix
+            let stuck = stuckDetector.observe(strapNewestTs: strapNewest, ourFrontierTs: frontier, now: now.timeIntervalSince1970)
+            if stuck && !isStrapStuck {
+                isStrapStuck = true
+                BLEDiagnosticLog.shared.log("stuckStrapDetector triggered: strapNewest=\(strapNewest) frontier=\(frontier ?? 0)")
+            } else if !stuck && isStrapStuck {
+                isStrapStuck = false
+            }
+        }
         // Throttle high-frequency drain diagnostic counters to 1 Hz to prevent
         // flooding SwiftUI with hundreds of objectWillChange notifications per second.
         if historyRRRecords != pendingHistoryRRRecords || historyUndecodableFrames != pendingHistoryUndecodableFrames {
@@ -2237,6 +2253,8 @@ final class BandLink: NSObject, ObservableObject {
             }
             if completed && historicalRecordFrames == 0 {
                 lastMessage = "History sync completed. No new stored sensor records."
+            } else if isStrapStuck {
+                lastMessage = "Strap transfer stopped: band reported records (\(lastDataRangeResponse?.pagesBehind ?? 0) pages behind) but offload was stuck. Re-initiating historical drain."
             } else if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
             } else if historicalRecordFrames > 0 {
@@ -2586,7 +2604,16 @@ final class BandLink: NSObject, ObservableObject {
             // Note: in raw Gen5 BLE frame, inner[4] resides at byte 12 (+4 shift from 4.0 byte 8).
             let cmdOpcode = inner[2]
             let resultCode = inner[4]
-            if cmdOpcode == BandCommand.rebootStrap.rawValue {
+            if cmdOpcode == BandCommand.getDataRange.rawValue {
+                let body = Array(inner.dropFirst(5))
+                if let response = DataRangeResponse.decode(body) {
+                    lastDataRangeResponse = response
+                    BLEDiagnosticLog.shared.log("getDataRange decoded: write=\(response.writePage) trim=\(response.trimPage) behind=\(response.pagesBehind) newest=\(response.newestUnix ?? 0)")
+                    if let newest = response.newestUnix {
+                        strapReportedNewestUnix = newest
+                    }
+                }
+            } else if cmdOpcode == BandCommand.rebootStrap.rawValue {
                 if resultCode == 1 {
                     rebootExpectedDisconnect = true
                     isRebooting = true
