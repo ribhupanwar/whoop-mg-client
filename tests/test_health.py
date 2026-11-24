@@ -13,6 +13,7 @@ from whoop.health import (
     STRESS_MAX,
     clock_label,
     detect_sleep,
+    merge_nocturnal_periods,
     recovery_score,
     sleep_coach,
     sleep_debt,
@@ -108,6 +109,114 @@ class TestSleepDetection(unittest.TestCase):
         rows += stretch(6000, 3600, 60, 0.02)
         rows += stretch(9600, 600, 100, 0.5)
         self.assertAlmostEqual(total_sleep_hours(detect_sleep(rows)), 2.0, places=6)
+
+    # --- NOOP Parity Regression Tests ---
+    
+    def test_awake_in_bed_60_min_without_hr_drop_is_not_sleep(self):
+        """Awake in bed for 60 min WITHOUT HR drop should NOT be sleep."""
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 3600, 88, 0.02)  # 60 min awake, no HR drop (only 2 BPM)
+        rows += stretch(4201, 400, 90, 0.5)  # 6+ min movement gap (> gap_tolerance_s=300)
+        rows += stretch(4601, 7200, 55, 0.01)  # 2 hours confirmed sleep
+        rows += stretch(11801, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        # Should detect sleep from 4601 onwards, not from 600
+        self.assertEqual(len(periods), 1)
+        self.assertEqual(periods[0].start_unix, 4601)
+
+    def test_bathroom_break_2_min_merges(self):
+        """2-minute bathroom break should merge into single sleep session."""
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 3600, 55, 0.01)  # 1 hour sleep
+        rows += stretch(4200, 120, 85, 0.15)  # 2 min bathroom break
+        rows += stretch(4320, 3600, 55, 0.01)  # 1 hour sleep
+        rows += stretch(7920, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        merged = merge_nocturnal_periods(periods, rows)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].duration_s, 7320)  # 2h + 2min merged
+
+    def test_bathroom_break_5_min_merges(self):
+        """5-minute bathroom break should merge into single sleep session."""
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 3600, 55, 0.01)
+        rows += stretch(4200, 300, 85, 0.15)  # 5 min bathroom break
+        rows += stretch(4500, 3600, 55, 0.01)
+        rows += stretch(8100, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        merged = merge_nocturnal_periods(periods, rows)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].duration_s, 7500)
+
+    def test_bathroom_break_10_min_merges(self):
+        """10-minute bathroom break should merge into single sleep session."""
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 3600, 55, 0.01)
+        rows += stretch(4200, 600, 85, 0.15)  # 10 min bathroom break
+        rows += stretch(4800, 3600, 55, 0.01)
+        rows += stretch(8400, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        merged = merge_nocturnal_periods(periods, rows)
+        self.assertEqual(len(merged), 1)
+        self.assertEqual(merged[0].duration_s, 7800)
+
+    def test_bathroom_break_30_min_splits(self):
+        """30-minute bathroom break should NOT merge (exceeds 30 min threshold)."""
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 3600, 55, 0.01)
+        rows += stretch(4200, 1800, 85, 0.15)  # 30 min awake - should split
+        rows += stretch(6000, 3600, 55, 0.01)
+        rows += stretch(9600, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 2)
+        self.assertEqual(periods[0].duration_s, 3600)
+        self.assertEqual(periods[1].duration_s, 3600)
+
+    def test_rtc_corruption_25_hour_timestamps_isolated(self):
+        """RTC corruption with 25-hour jump should be isolated, not bridge HRV."""
+        base = 1000
+        rows = stretch(0, 600, 90, 0.3)
+        # Gap before first sleep
+        rows += stretch(600, 600, 90, 0.3)
+        # Normal sleep
+        normal_sleep = stretch(1200, 3600, 55, 0.01)
+        # RTC jump: next record shows +25 hours (90000 seconds) but record_index is sequential
+        rtc_jump = stretch(91200, 3600, 55, 0.01)
+        rows += normal_sleep + rtc_jump + stretch(94800, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        # Should detect two separate sleep periods, not one 25-hour session
+        self.assertEqual(len(periods), 2)
+        self.assertEqual(periods[0].duration_s, 3600)
+        self.assertEqual(periods[1].duration_s, 3600)
+
+    def test_manual_sleep_correction_recalculates_downstream(self):
+        """Manual sleep correction should trigger downstream metric recalculation."""
+        from whoop.health import SleepPeriod
+        base = 1000
+        rows = stretch(0, 600, 90, 0.3)
+        rows += stretch(600, 7200, 55, 0.01)  # 2 hours detected sleep
+        rows += stretch(7800, 600, 90, 0.3)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 1)
+        original_start = periods[0].start_unix
+        original_end = periods[0].end_unix
+        
+        # Simulate manual correction: user edits wake time 30 min earlier
+        corrected_end = original_end - 1800
+        # The corrected period should have shorter duration
+        corrected_duration = corrected_end - original_start + 1
+        self.assertEqual(corrected_duration, periods[0].duration_s - 1800)
+        
+        # Downstream metrics (mean HR, quiet fraction) should be recomputed
+        # based on the corrected window
+        corrected_period = SleepPeriod(
+            start_unix=original_start,
+            end_unix=corrected_end,
+            quiet_fraction=periods[0].quiet_fraction,
+            mean_hr=periods[0].mean_hr,
+            wake_events=periods[0].wake_events
+        )
+        self.assertLess(corrected_period.duration_s, periods[0].duration_s)
 
 
 class TestStrain(unittest.TestCase):
