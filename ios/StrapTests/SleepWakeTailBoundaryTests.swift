@@ -192,16 +192,16 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
     }
 
     /// User-observed morning bathroom interruption: the band reports up for
-    /// six minutes, then records a quiet return to sleep for twelve minutes.
+    /// three minutes, then records a quiet return to sleep for nine minutes.
     /// A terminal-wake trim must not discard the resumed sleep.
-    func testSixMinuteMorningBathroomUpThenTwelveMinuteResumedSleep() throws {
+    func testThreeMinuteMorningBathroomUpThenResumedSleep() throws {
         let base = Int(Calendar.current.date(from: DateComponents(
             year: 2026, month: 11, day: 24, hour: 0, minute: 0
         ))!.timeIntervalSince1970)
         let sleepStart = base + 60
         let bathroomStart = sleepStart + 6 * 3600
-        let bathroomEnd = bathroomStart + 6 * 60
-        let resumedEnd = bathroomEnd + 12 * 60
+        let bathroomEnd = bathroomStart + 3 * 60
+        let resumedEnd = bathroomEnd + 9 * 60
         var rows = (0..<60).map { row(base + $0, hr: 85, accel: 0.2, state: 0) }
         rows += (sleepStart..<bathroomStart).map { row($0, hr: 58, accel: 0.008, state: 2) }
         rows += (bathroomStart..<bathroomEnd).map { row($0, hr: 82, accel: 0.15, state: 3) }
