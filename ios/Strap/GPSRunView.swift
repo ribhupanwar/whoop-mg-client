@@ -28,7 +28,7 @@ struct GPSRunView: View {
     @State private var mapPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     private var canRecordGPS: Bool {
         switch selectedActivity {
-        case .run, .outdoorRun, .trailRun, .intervalRun, .walk, .hiking, .cycling, .mountainBiking: return true
+        case .run, .outdoorRun, .trailRun, .intervalRun: return true
         default: return false
         }
     }
@@ -54,7 +54,7 @@ struct GPSRunView: View {
         Screen {
             VStack(alignment: .leading, spacing: 12) {
                 Panel {
-                    SectionTitle("Outdoor GPS run")
+                    SectionTitle(selectedActivity.label + " · GPS")
                     Text(String(format: "%.2f km", gps.distanceMeters / 1000))
                         .font(StrapTypography.body(40, weight: .bold))
                         .foregroundStyle(Color.appFG)
@@ -302,7 +302,7 @@ struct GPSRunView: View {
                 .presentationDetents([.medium, .large])
             }
             if !canRecordGPS {
-                Text("This activity needs a dedicated recording workflow. GPS run will not start.")
+                Text("GPS recording currently supports running only. Other activities need their own recording workflow.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(.horizontal, 18)
