@@ -35,7 +35,10 @@ enum Hrv {
 
         for value in rrMS {
             guard value >= minimum && value <= maximum else {
+                // Invalid/padding RR is a hard beat-continuity boundary.
+                // Do not pair a pre-gap seed with a post-gap interval.
                 recent.removeAll()
+                candidate = nil
                 rejectedRun = 0
                 continue
             }
