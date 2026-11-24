@@ -27,7 +27,9 @@ struct GPSRunView: View {
     private var dayStrain: Double? {
         let key = JournalStore.dayKey(for: Date())
         let saved = store.band.days.first(where: { $0.dateKey == key })?.strain
-        if let live = store.band.liveDayStrain { return max(live, saved ?? 0) }
+        if store.band.liveDayStrainDateKey == key, let live = store.band.liveDayStrain {
+            return max(live, saved ?? 0)
+        }
         return saved
     }
 
