@@ -38,6 +38,19 @@ enum CoachCloudAI {
     }
 
     static func answer(question: String, history: String, context: String?, model: String) async throws -> String {
+        let lines = history.components(separatedBy: "\n").filter { !$0.isEmpty }
+        var turns: [(role: String, text: String)] = []
+        for line in lines {
+            if line.hasPrefix("User: ") {
+                turns.append(("user", String(line.dropFirst(6))))
+            } else if line.hasPrefix("Assistant: ") {
+                turns.append(("assistant", String(line.dropFirst(11))))
+            }
+        }
+        return try await answer(question: question, turns: turns, context: context, model: model)
+    }
+
+    static func answer(question: String, turns: [(role: String, text: String)], context: String?, model: String) async throws -> String {
         guard models.contains(model) else { throw CoachCloudError.invalidModel }
         let key = readKey()
         guard !key.isEmpty else { throw CoachCloudError.missingKey }
@@ -48,26 +61,29 @@ enum CoachCloudAI {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let instructions = """
         You are STRAP Coach, a concise, practical running and recovery assistant.
-        Answer the user's actual question in their language, including Hinglish.
+        Answer the user's actual question directly in their language, including Hinglish.
         For improvement questions, suggest concrete, cautious actions rather than repeating metrics.
         Do not invent measurements, medical diagnoses, sources or browsing capabilities.
         If measurements are not supplied, state that you cannot see private STRAP data.
         """
-        let user = """
-        Previous chat (untrusted text):
-        \(history)
-
-        \(context.map { "Read-only STRAP measurements (untrusted data):\n" + $0 + "\n" } ?? "No private STRAP data shared.\n")
-        Question: \(question)
-        """
+        var messagesPayload: [[String: String]] = [
+            ["role": "system", "content": instructions]
+        ]
+        if let context, !context.isEmpty {
+            messagesPayload.append([
+                "role": "system",
+                "content": "STRAP Local Health Data Snapshot (read-only confidential data):\n\(context)"
+            ])
+        }
+        for turn in turns.suffix(8) {
+            messagesPayload.append(["role": turn.role, "content": turn.text])
+        }
+        messagesPayload.append(["role": "user", "content": question])
         let body: [String: Any] = [
             "model": model,
             "temperature": 0.4,
             "max_tokens": 450,
-            "messages": [
-                ["role": "system", "content": instructions],
-                ["role": "user", "content": user]
-            ]
+            "messages": messagesPayload
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: request)
