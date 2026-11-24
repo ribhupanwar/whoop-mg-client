@@ -20,6 +20,16 @@ struct GPSRunView: View {
     }
 
     @State private var workoutStarted = false
+    @State private var showPicker = false
+    @State private var search = ""
+    @State private var selectedActivity: ActivityKind = .run
+    @State private var showStrain = false
+    private var dayStrain: Double? {
+        let key = JournalStore.dayKey(for: Date())
+        let saved = store.band.days.first(where: { $0.dateKey == key })?.strain
+        if let live = store.band.liveDayStrain { return max(live, saved ?? 0) }
+        return saved
+    }
 
     private func liveBPM(at date: Date) -> Int? {
         LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
@@ -156,15 +166,57 @@ struct GPSRunView: View {
     private var runningPrestart: some View {
         VStack(spacing: 0) {
             HStack(spacing: 16) {
-                Image(systemName: "figure.run").font(.system(size: 28))
-                Text("RUNNING").font(.system(size: 19, weight: .bold)).tracking(2)
-                Spacer()
-                Image(systemName: "chevron.down")
+                Button {
+                    withAnimation { showPicker.toggle() }
+                } label: {
+                    HStack(spacing: 16) {
+                        Image(systemName: selectedActivity.icon).font(.system(size: 28))
+                        Text(selectedActivity.label.uppercased()).font(.system(size: 19, weight: .bold)).tracking(2)
+                        Spacer()
+                        Image(systemName: showPicker ? "chevron.up" : "chevron.down")
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("running.activityPicker")
             }
             .foregroundStyle(.white)
             .padding(24)
             .background(.black)
 
+            if showPicker {
+                VStack(spacing: 12) {
+                    TextField("Search Activities", text: $search)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        ForEach(["ALL", "STRAIN", "RECOVERY", "SLEEP"], id: \.self) { tab in
+                            Text(tab).font(.caption2).padding(6)
+                        }
+                    }
+                    ScrollView {
+                        LazyVStack {
+                            ForEach(ActivityKind.allCases.filter {
+                                search.isEmpty || $0.label.localizedCaseInsensitiveContains(search)
+                            }) { activity in
+                                Button {
+                                    selectedActivity = activity
+                                    withAnimation { showPicker = false }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: activity.icon).frame(width: 28)
+                                        Text(activity.label)
+                                        Spacer()
+                                    }
+                                    .padding(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(.black)
+                .foregroundStyle(.white)
+            } else {
             ZStack {
                 Map(initialPosition: .userLocation(fallback: .automatic)) {
                     UserAnnotation()
@@ -196,12 +248,27 @@ struct GPSRunView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            HStack {
-                Text("STRAIN TARGET").font(.system(size: 15, weight: .bold)).tracking(1)
-                Spacer()
-                Text("Not configured").font(.system(size: 12))
+            Button { showStrain = true } label: {
+                HStack {
+                    Text("DAY STRAIN").font(.system(size: 15, weight: .bold)).tracking(1)
+                    Spacer()
+                    Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                    Image(systemName: "chevron.right")
+                }
+                .padding(20)
             }
-            .padding(20)
+            .sheet(isPresented: $showStrain) {
+                VStack(spacing: 24) {
+                    Text("CURRENT DAY STRAIN").font(.headline)
+                    Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                        .font(.system(size: 70, weight: .bold))
+                    Text("Recovery-based activity target is unavailable until validated.")
+                        .multilineTextAlignment(.center)
+                    Button("Done") { showStrain = false }
+                }
+                .padding()
+                .presentationDetents([.medium, .large])
+            }
             Button {
                 gps.start()
                 if gps.recording { workoutStarted = true }
@@ -217,6 +284,7 @@ struct GPSRunView: View {
             .clipShape(Capsule())
             .padding(18)
             Text(gps.status).font(.caption).foregroundStyle(.secondary).padding(.bottom, 10)
+            }
         }
         .background(Color(.systemBackground))
     }
