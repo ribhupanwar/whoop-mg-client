@@ -171,6 +171,9 @@ class V18Sample:
     # The band's own log-variance quality weight; lower is cleaner. Unlike the
     # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
     signal_quality_log_variance: float | None = None
+    # Signed optical pSNR (dB); -128 means unavailable, not low quality or sample rejection.
+    psnr_b: int | None = None
+    psnr_a: int | None = None
 
     @property
     def unix(self) -> int:
@@ -257,6 +260,12 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         raw = _i16(inner, offset)
         return round(raw / scale, 2) if raw is not None else None
 
+    def signed_byte(offset: int) -> int | None:
+        if offset >= len(inner):
+            return None
+        val = inner[offset]
+        return val - 256 if val >= 128 else val
+
     return V18Sample(
         header=header,
         heart_rate=hr,
@@ -278,6 +287,8 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         spo2_candidate_pct=spo2_pct,
         spo2_candidate_status=spo2_status,
         signal_quality_log_variance=round(quality, 4) if quality is not None else None,
+        psnr_b=signed_byte(100),
+        psnr_a=signed_byte(101),
     )
 
 

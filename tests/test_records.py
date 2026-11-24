@@ -418,6 +418,15 @@ class TestV21(unittest.TestCase):
         sample = decode_v18(bytes(record))
         self.assertIsNotNone(sample)
         self.assertEqual(sample.heart_rate, 94)
+        self.assertEqual(sample.psnr_b, -128)
+        self.assertEqual(sample.psnr_a, -128)
+
+        # Positive dB values decode as signed int8
+        record[100] = 0x1E  # +30 dB
+        record[101] = 0x1E  # +30 dB
+        sample_valid = decode_v18(bytes(record))
+        self.assertEqual(sample_valid.psnr_b, 30)
+        self.assertEqual(sample_valid.psnr_a, 30)
 
     def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
         # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
