@@ -15,6 +15,7 @@ struct GPSRunView: View {
     @State private var activityCategory: ActivityPickerCategory = .all
     @State private var selectedActivity: ActivityKind = .run
     @State private var showStrain = false
+    @AppStorage("strap.activityStrainTargetEnabled") private var strainTargetEnabled = false
     @State private var trackRoute = true
     @State private var mapPosition: MapCameraPosition = .userLocation(fallback: .automatic)
     @State private var showControls = false
@@ -251,14 +252,19 @@ struct GPSRunView: View {
                         }
                         .accessibilityIdentifier("running.recenterMap")
                         Circle()
-                            .fill(Color(red: 0.07, green: 0.58, blue: 0.92))
-                            .frame(width: 220, height: 220)
+                            .fill(Color(red: 0.07, green: 0.58, blue: 0.92).opacity(0.84))
+                            .frame(width: 192, height: 192)
                             .overlay {
                                 VStack(spacing: 10) {
                                     Image(systemName: "heart.fill").font(.system(size: 30))
                                     Text("READY").font(.system(size: 38, weight: .bold))
                                     Text(liveBPM(at: Date()).map { "\($0) BPM" } ?? "HR WAITING")
                                         .font(.system(size: 15, weight: .semibold))
+                                    if let battery = store.band.batteryPercent {
+                                        Label("\(Int(battery))%", systemImage: "battery.100percent")
+                                            .font(.system(size: 14, weight: .medium))
+                                            .foregroundStyle(.white.opacity(0.82))
+                                    }
                                 }
                                 .foregroundStyle(.white)
                             }
@@ -280,6 +286,12 @@ struct GPSRunView: View {
                 .sheet(isPresented: $showStrain) {
                     strainTargetSheet
                 }
+                Toggle("STRAIN TARGET", isOn: $strainTargetEnabled)
+                    .font(.system(size: 13, weight: .bold))
+                    .tracking(1)
+                    .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
+                    .padding(.horizontal, 20)
+                    .accessibilityIdentifier("running.strainTargetToggle")
 
                 // Activity-specific guidance
                 if !canRecordGPS {
