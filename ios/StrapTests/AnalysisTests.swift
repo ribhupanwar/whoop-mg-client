@@ -237,7 +237,8 @@ final class HrvTests: XCTestCase {
     }
 
     func testOutOfRangeRejected() {
-        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810]), [800, 810])
+        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810]), [])
+        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810, 815]), [810, 815])
     }
 
     func testEmpty() {
@@ -264,8 +265,9 @@ final class HrvTests: XCTestCase {
         XCTAssertEqual(Hrv.nnIntervals([800]), [])
     }
 
-    func testSeedCandidateSurvivesADropout() {
-        XCTAssertEqual(Hrv.nnIntervals([800, 5000, 810]), [800, 810])
+    func testSeedCandidateResetsAtDropout() {
+        XCTAssertTrue(Hrv.nnIntervals([800, 5000, 810]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, 5000, 810, 815]), [810, 815])
     }
 
     func testRmssdKnownVector() {
