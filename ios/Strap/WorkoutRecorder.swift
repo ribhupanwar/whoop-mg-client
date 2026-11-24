@@ -184,7 +184,16 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         stop(save: false)
     }
 
-    private func refreshElapsed() {
+    /// Return a completed workout to the pre-start screen without bypassing recording state transitions.
+    func resetCompletedWorkout() {
+        guard phase == .saved || phase == .discarded else { return }
+        currentSession = nil
+        phase = .idle
+        status = "Ready"
+    }
+
+    /// Update the published elapsed time for the live workout timer.
+    func refreshElapsed() {
         guard phase == .recording else { return }
         let active = activeSince.map { Date().timeIntervalSince($0) } ?? 0
         elapsedSeconds = Int((accumulated + active).rounded(.down))
