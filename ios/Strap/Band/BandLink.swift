@@ -164,6 +164,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveDayStrain: Double?
     @Published private(set) var liveDayRawStrain: Double = 0.0
     private var liveDayStrainKey: String = ""
+    var liveDayStrainDateKey: String { liveDayStrainKey }
     private var lastLiveStrainSampleUnix: Int?
     private var configuredRestingHR: Double?
     @Published private(set) var lastLiveHRAt: Date?

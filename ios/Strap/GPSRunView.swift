@@ -20,6 +20,26 @@ struct GPSRunView: View {
     }
 
     @State private var workoutStarted = false
+    @State private var showPicker = false
+    @State private var search = ""
+    @State private var selectedActivity: ActivityKind = ActivityKind.run
+    @State private var showStrain = false
+    @State private var trackRoute = true
+    @State private var mapPosition: MapCameraPosition = .userLocation(fallback: .automatic)
+    private var canRecordGPS: Bool {
+        switch selectedActivity {
+        case .run, .outdoorRun, .trailRun, .intervalRun: return true
+        default: return false
+        }
+    }
+    private var dayStrain: Double? {
+        let key = JournalStore.dayKey(for: Date())
+        let saved = store.band.days.first(where: { $0.dateKey == key })?.strain
+        if store.band.liveDayStrainDateKey == key, let live = store.band.liveDayStrain {
+            return max(live, saved ?? 0)
+        }
+        return saved
+    }
 
     private func liveBPM(at date: Date) -> Int? {
         LiveHeartRateState.fresh(store.band.liveHeartRate, receivedAt: store.band.lastLiveHRAt,
@@ -34,7 +54,7 @@ struct GPSRunView: View {
         Screen {
             VStack(alignment: .leading, spacing: 12) {
                 Panel {
-                    SectionTitle("Outdoor GPS run")
+                    SectionTitle(selectedActivity.label + " · GPS")
                     Text(String(format: "%.2f km", gps.distanceMeters / 1000))
                         .font(StrapTypography.body(40, weight: .bold))
                         .foregroundStyle(Color.appFG)
@@ -53,8 +73,16 @@ struct GPSRunView: View {
                         Text(store.band.isConnected ? "WHOOP BAND" : "BAND DISCONNECTED")
                             .font(StrapTypography.body(10, weight: .medium))
                     }
-                    Text("LIVE STRAIN · unavailable until measured activity strain is connected")
-                        .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                    HStack(spacing: 8) {
+                        Text("DAY STRAIN")
+                            .font(StrapTypography.body(11, weight: .bold))
+                        Spacer()
+                        Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                            .font(StrapTypography.metric(25, weight: .bold))
+                    }
+                    .foregroundStyle(Color.appFG)
+                    .accessibilityIdentifier("running.liveDayStrain")
+                    Hint("Live day strain updates from connected band HR; this is not an independently measured activity strain.")
                     Text(gps.status)
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
@@ -156,30 +184,86 @@ struct GPSRunView: View {
     private var runningPrestart: some View {
         VStack(spacing: 0) {
             HStack(spacing: 16) {
-                Image(systemName: "figure.run").font(.system(size: 28))
-                Text("RUNNING").font(.system(size: 19, weight: .bold)).tracking(2)
-                Spacer()
-                Image(systemName: "chevron.down")
+                Button {
+                    withAnimation { showPicker.toggle() }
+                } label: {
+                    HStack(spacing: 16) {
+                        Image(systemName: selectedActivity.icon).font(.system(size: 28))
+                        Text(selectedActivity.label.uppercased()).font(.system(size: 19, weight: .bold)).tracking(2)
+                        Spacer()
+                        Image(systemName: showPicker ? "chevron.up" : "chevron.down")
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("running.activityPicker")
             }
             .foregroundStyle(.white)
             .padding(24)
             .background(.black)
 
+            if showPicker {
+                VStack(spacing: 12) {
+                    TextField("Search Activities", text: $search)
+                        .textFieldStyle(.roundedBorder)
+                    // Category filters are intentionally omitted until backed by real activity metadata.
+                    ScrollView {
+                        LazyVStack {
+                            if !search.isEmpty && !ActivityKind.allCases.contains(where: {
+                                $0.label.localizedCaseInsensitiveContains(search)
+                            }) {
+                                Text("No matching activities")
+                                    .foregroundStyle(.secondary)
+                                    .padding(12)
+                                    .accessibilityIdentifier("running.activityPicker.empty")
+                            }
+                            ForEach(ActivityKind.allCases.filter {
+                                search.isEmpty || $0.label.localizedCaseInsensitiveContains(search)
+                            }) { activity in
+                                Button {
+                                    selectedActivity = activity
+                                    withAnimation { showPicker = false }
+                                } label: {
+                                    HStack {
+                                        Image(systemName: activity.icon).frame(width: 28)
+                                        Text(activity.label)
+                                        Spacer()
+                                    }
+                                    .padding(12)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+                .padding()
+                .background(.black)
+                .foregroundStyle(.white)
+            } else {
             ZStack {
-                Map(initialPosition: .userLocation(fallback: .automatic)) {
+                Map(position: $mapPosition) {
                     UserAnnotation()
                 }
                 .mapControls { MapCompass() }
                 VStack {
                     HStack {
                         Spacer()
-                        Text("TRACK ROUTE")
+                        Toggle("TRACK ROUTE", isOn: $trackRoute)
                             .font(.system(size: 12, weight: .semibold))
+                            .fixedSize()
                             .padding(12)
                             .background(.regularMaterial, in: Capsule())
+                            .accessibilityIdentifier("running.trackRouteToggle")
                     }
                     .padding(12)
                     Spacer()
+                    Button {
+                        mapPosition = .userLocation(fallback: .automatic)
+                    } label: {
+                        Image(systemName: "location.fill")
+                            .padding(12)
+                            .background(.regularMaterial, in: Circle())
+                    }
+                    .accessibilityIdentifier("running.recenterMap")
                     Circle()
                         .fill(Color(red: 0.07, green: 0.58, blue: 0.92))
                         .frame(width: 220, height: 220)
@@ -196,13 +280,40 @@ struct GPSRunView: View {
                 }
             }
             .frame(maxHeight: .infinity)
-            HStack {
-                Text("STRAIN TARGET").font(.system(size: 15, weight: .bold)).tracking(1)
-                Spacer()
-                Text("Not configured").font(.system(size: 12))
+            Button { showStrain = true } label: {
+                HStack {
+                    Text("DAY STRAIN").font(.system(size: 15, weight: .bold)).tracking(1)
+                    Spacer()
+                    Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                    Image(systemName: "chevron.right")
+                }
+                .padding(20)
             }
-            .padding(20)
+            .sheet(isPresented: $showStrain) {
+                VStack(spacing: 24) {
+                    Text("CURRENT DAY STRAIN").font(.headline)
+                    Text(dayStrain.map { String(format: "%.1f", $0) } ?? "—")
+                        .font(.system(size: 70, weight: .bold))
+                    Text("Recovery-based activity target is unavailable until validated.")
+                        .multilineTextAlignment(.center)
+                    Button("Done") { showStrain = false }
+                }
+                .padding()
+                .presentationDetents([.medium, .large])
+            }
+            if !canRecordGPS {
+                Text("GPS recording currently supports running only. Other activities need their own recording workflow.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+            } else if !trackRoute {
+                Text("Enable Track Route to record an outdoor GPS activity.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 18)
+            }
             Button {
+                guard canRecordGPS && trackRoute else { return }
                 gps.start()
                 if gps.recording { workoutStarted = true }
             } label: {
@@ -213,10 +324,12 @@ struct GPSRunView: View {
                     .padding(18)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(!canRecordGPS || !trackRoute)
             .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
             .clipShape(Capsule())
             .padding(18)
             Text(gps.status).font(.caption).foregroundStyle(.secondary).padding(.bottom, 10)
+            }
         }
         .background(Color(.systemBackground))
     }
