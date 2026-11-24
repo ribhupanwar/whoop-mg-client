@@ -1,0 +1,12 @@
+night,metric,whoop,strap,error,source,notes
+2026-11-24,sleep_start,23:33,23:33,0min,WHOOP screenshot + CSV,match
+2026-11-24,sleep_end,06:38,06:26,+12min (STRAP early),WHOOP screenshot + CSV end 1795481767,data cutoff not detector
+2026-11-24,sleep_duration,7h05,6h53,-12min,derived,archive truncated 12 min
+2026-11-24,actual_sleep,6h41,6h21,-20min,WHOOP screenshot,estimate
+2026-11-24,awake,0h24,0h32,+8min,WHOOP screenshot,estimate
+2026-11-24,light,3h12,2h46,-26min,WHOOP screenshot,estimate
+2026-11-24,deep,1h54,1h58,+4min,WHOOP screenshot,estimate
+2026-11-24,REM,1h35,1h37,+2min,WHOOP screenshot,estimate
+2026-11-24,restorative,3h29,3h35,+6min,WHOOP screenshot,estimate
+2026-11-24,sleep_performance,79%,80%,+1pp,WHOOP screenshot,estimate
+2026-11-24,recovery,61%,70%,+9pp,WHOOP screenshot,STRAP higher
