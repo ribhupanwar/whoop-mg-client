@@ -41,7 +41,7 @@ struct HealthView: View {
     }
 
     private var fiveMetricGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible())], spacing: 18) {
             healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
             healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen, value: demo ? "95" : ActivityFormat.whole(monitor[.oxygen].value) ?? "—",
@@ -55,10 +55,12 @@ struct HealthView: View {
         .padding(.bottom, 18)
     }
 
-    // No validated relative-to-baseline temperature is available yet.
-    // Show the WHOOP-style tile without inventing a +°C delta from raw skin ADC.
+    // Show a baseline-relative *candidate* only after seven qualifying prior
+    // nights. Raw v18 skin temperature is not clinically calibrated.
     private var skinTemperatureCard: some View {
-        VStack(alignment: .leading, spacing: 15) {
+        let reading = monitor[.temperature]
+        let hasDelta = reading.baselineDays >= 7 && reading.value != nil
+        return VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "thermometer")
                     .font(.system(size: 16, weight: .light))
@@ -71,20 +73,20 @@ struct HealthView: View {
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            Text("—")
+            Text(hasDelta ? String(format: "%+.1f", reading.value ?? 0) + " °C" : "—")
                 .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
-            Text("BUILDING BASELINE")
+            Text(hasDelta ? "UNVALIDATED CANDIDATE" : reading.statusText)
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(Color.appMuted)
-            Text("No validated temperature delta")
+                .foregroundStyle(hasDelta ? Color.appWarn : Color.appMuted)
+            Text(hasDelta ? reading.referenceText : "Personal baseline: \\(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
@@ -133,9 +135,9 @@ struct HealthView: View {
                 .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
     }
 
     // Full-bleed WHOOP-style monitor. Sensor readings are never synthesized.
