@@ -201,14 +201,51 @@ class SensorTruthAndDataIntegrityTests(unittest.TestCase):
         self.assertEqual(r1_rmssd, 0.0)
         self.assertEqual(r2_rmssd, 0.0)
 
+    def test_retransmission_prefers_valid_rr_not_padding(self):
+        """Verifies deduplication prefers retransmissions with valid RR intervals over padding."""
+        from whoop.metrics import prefer_retransmitted_rr, hrv, hrv_detailed_diagnostics
+        # [800, 810] has 2 valid, 0 bad; [800, 810, 0] has 2 valid, 1 bad.
+        self.assertTrue(prefer_retransmitted_rr([800, 810], [800, 810, 0]))
+        self.assertFalse(prefer_retransmitted_rr([800, 810, 0], [800, 810]))
+
+        # Retransmission replacing clean with padded should be rejected
+        s1 = bytearray(self.canonical_v18_bytes)
+        s1[15] = 2
+        s1[16:20] = (800).to_bytes(2, "little") + (810).to_bytes(2, "little")
+        s1_padded = bytearray(self.canonical_v18_bytes)
+        s1_padded[15] = 3
+        s1_padded[16:22] = (800).to_bytes(2, "little") + (810).to_bytes(2, "little") + (0).to_bytes(2, "little")
+
+        rec_clean = decode_v18(bytes(s1))
+        rec_padded = decode_v18(bytes(s1_padded))
+
+        # Replay order 1: clean then padded -> clean retained
+        res1 = hrv([rec_clean, rec_padded])
+        # Replay order 2: padded then clean -> clean retained
+        res2 = hrv([rec_padded, rec_clean])
+        self.assertEqual(res1.beats, 2)
+        self.assertEqual(res2.beats, 2)
+        self.assertEqual(res1.rmssd_ms, res2.rmssd_ms)
+
+        diag = hrv_detailed_diagnostics([rec_clean, rec_padded])
+        self.assertEqual(diag["raw_rr_count"], 2)
+
     def test_real_sensor_archive_provenance(self):
         """Verifies sensor truth provenance against the real 24,147-row capture if present."""
-        archive_path = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "research-inputs",
-            "sleep-1795375775-1795399923-3A748598-4D50-4FA9-84ED-319209137EE3.csv",
-        )
-        if not os.path.exists(archive_path):
+        candidates = [
+            os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "research-inputs",
+                "sleep-1795375775-1795399923-3A748598-4D50-4FA9-84ED-319209137EE3(4).csv",
+            ),
+            os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                "research-inputs",
+                "sleep-1795375775-1795399923-3A748598-4D50-4FA9-84ED-319209137EE3.csv",
+            ),
+        ]
+        archive_path = next((p for p in candidates if os.path.exists(p)), None)
+        if not archive_path:
             self.skipTest("Research sensor capture file not present in repository")
 
         import csv
