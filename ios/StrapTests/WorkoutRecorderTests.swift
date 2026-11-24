@@ -173,7 +173,9 @@ final class WorkoutRecorderTests: XCTestCase {
             age: 30
         )
         recorder.start(activity: .run, trackRoute: true)
-        // Add enough HR samples over sufficient duration
+        // Simulate > 60 seconds elapsed for calorie calculation
+        recorder.setElapsedForTesting(90)
+        // Add enough HR samples
         for _ in 0..<20 {
             recorder.addHeartRateSample(140)
         }
@@ -185,6 +187,7 @@ final class WorkoutRecorderTests: XCTestCase {
     func testActivityStrainRequiresProfileData() {
         resetRecorderFully()
         recorder.start(activity: .run, trackRoute: true)
+        recorder.setElapsedForTesting(10)
         recorder.addHeartRateSample(140)
         recorder.stop(save: true)
         XCTAssertNil(recorder.currentSession?.metrics.activityStrain)
@@ -201,7 +204,9 @@ final class WorkoutRecorderTests: XCTestCase {
             age: 30
         )
         recorder.start(activity: .run, trackRoute: true)
-        // Need > 300 seconds for strain calculation - add many samples
+        // Need > 300 seconds for strain calculation
+        recorder.setElapsedForTesting(360)
+        // Add many HR samples
         for _ in 0..<20 {
             recorder.addHeartRateSample(140)
         }

@@ -207,6 +207,13 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         elapsedSeconds = Int((accumulated + active).rounded(.down))
     }
 
+    /// Test-only helper to simulate elapsed time without waiting.
+    func setElapsedForTesting(_ seconds: Int) {
+        elapsedSeconds = seconds
+        accumulated = TimeInterval(seconds)
+        activeSince = Date()
+    }
+
     func addHeartRateSample(_ hr: Int) {
         guard phase == .recording, (35...220).contains(hr) else { return }
         heartRateSamples.append(hr)
