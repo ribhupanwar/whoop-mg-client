@@ -97,19 +97,9 @@ enum StepCounter {
         guard window.count >= 2, let start = window.first, let last = window.last else {
             return nil
         }
-        var total = 0
-        for (before, after) in zip(window, window.dropFirst()) {
-            let gap = after.unix - before.unix
-            // Do not turn duplicate timestamps or long sync gaps into cadence.
-            // Match total() semantics: only adjacent, continuous counter epochs.
-            guard gap > 0 && gap <= 10,
-                  let beforeSteps = before.stepCounter,
-                  let afterSteps = after.stepCounter else { continue }
-            let steps = delta(from: beforeSteps, to: afterSteps, seconds: gap)
-            if steps <= maxStepsPerSecond * gap {
-                total += steps
-            }
-        }
+        // Reuse the replay-safe total calculation: conflicting same-second
+        // counter payloads must not create a false cadence spike.
+        let total = StepCounter.total(Array(window)) ?? 0
         let span = last.unix - start.unix
         guard span > 0 else { return nil }
         return Double(total) * 60.0 / Double(span)
