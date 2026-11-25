@@ -924,7 +924,7 @@ extension Hrv {
                     guard value >= Double(V18Decoder.minRRMS),
                           value <= Double(V18Decoder.maxRRMS) else {
                         rejectionReasons["outOfPlausibleRange", default: 0] += 1
-                        previous = nil; previousTs = nil; recent.removeAll(); seedCandidate = nil
+                        previous = nil; recent.removeAll(); seedCandidate = nil
                         continue
                     }
                     if recent.isEmpty {
