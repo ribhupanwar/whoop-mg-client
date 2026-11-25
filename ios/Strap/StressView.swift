@@ -71,7 +71,7 @@ struct StressView: View {
 
     private var stressStateText: String {
         if let reason = store.band.stress.reason { return reason }
-        return "\(store.recordedDayCount) awake baseline days recorded"
+        return "Awake-quiet baseline available"
     }
 
     private var seriesPanel: some View {
