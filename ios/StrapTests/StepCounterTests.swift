@@ -132,6 +132,14 @@ final class StepCounterTests: XCTestCase {
         XCTAssertEqual(StepCounter.total(records.reversed().map { $0 }), 2)
     }
 
+    func testRateRejectsConflictingSameSecondReplay() {
+        let records = [sample(10, steps: 100), sample(11, steps: 101),
+                       sample(11, steps: 120), sample(12, steps: 122),
+                       sample(13, steps: 124)]
+        // Only the 12 -> 13 delta is proven; 2 steps over 3 seconds.
+        XCTAssertEqual(StepCounter.rate(records, at: 4) ?? -1, 40, accuracy: 0.001)
+    }
+
     func testIdenticalSameSecondRetransmissionIsIdempotent() {
         let records = [sample(10, steps: 100), sample(11, steps: 102),
                        sample(11, steps: 102), sample(12, steps: 104)]
