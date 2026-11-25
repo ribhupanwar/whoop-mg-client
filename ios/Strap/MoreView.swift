@@ -8,6 +8,8 @@ struct MoreView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage(ProfileView.nameKey) private var displayName = ""
     @AppStorage(DailyLocalBackup.enabledKey) private var dailyBackupEnabled = false
+    @AppStorage(DailyLocalBackup.intervalKey) private var backupIntervalSeconds = 86_400
+    @AppStorage(DailyLocalBackup.retentionKey) private var backupRetentionDays = 30
 
     var body: some View {
         Screen {
@@ -86,6 +88,28 @@ struct MoreView: View {
                         }
                     }
                     .accessibilityIdentifier("more.dailyBackup")
+                    if dailyBackupEnabled {
+                        Divider().background(Color.appLine)
+                        Picker("Backup Frequency", selection: $backupIntervalSeconds) {
+                            Text("Every hour").tag(3_600)
+                            Text("Every 6 hours").tag(21_600)
+                            Text("Every 12 hours").tag(43_200)
+                            Text("Daily").tag(86_400)
+                            Text("Weekly").tag(604_800)
+                            Text("Manual only").tag(0)
+                        }
+                        .accessibilityIdentifier("more.backupFrequency")
+                        Divider().background(Color.appLine)
+                        Picker("Keep Backups", selection: $backupRetentionDays) {
+                            Text("7 days").tag(7)
+                            Text("30 days").tag(30)
+                            Text("No expiry").tag(0)
+                        }
+                        .accessibilityIdentifier("more.backupRetention")
+                        Text("Backups run when the app is active; iOS does not guarantee exact background timing.")
+                            .font(StrapTypography.body(11))
+                            .foregroundStyle(Color.appMuted)
+                    }
                     Divider().background(Color.appLine)
 
                     NavigationLink { SettingsView() } label: {
