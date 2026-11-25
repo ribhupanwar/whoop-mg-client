@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// WHOOP/NOOP-inspired clean More tab hierarchy.
 /// Consolidates all settings, integrations, device controls, diagnostics,
@@ -310,7 +311,7 @@ private struct BackupRestoreSettingsView: View {
                 do {
                     let access = url.startAccessingSecurityScopedResource()
                     defer { if access { url.stopAccessingSecurityScopedResource() } }
-                    let bookmark = try url.bookmarkData(options: .minimalBookmark, includingResourceValuesForKeys: nil, relativeTo: nil)
+                    let bookmark = try url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil)
                     UserDefaults.standard.set(bookmark, forKey: bookmarkKey)
                     selectedFolder = url
                     message = "Export folder selected. Existing backups remain inside STRAP."
