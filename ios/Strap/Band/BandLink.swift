@@ -809,13 +809,20 @@ final class BandLink: NSObject, ObservableObject {
                 self.historyProgress = HistoryProgress(stage: .finishing, completed: 0, total: 0, reused: 0,
                                                       startedAt: began, lastStepAt: Date())
             }
+            // isEdited is a legacy presentation flag, not proof of an explicit
+            // user correction. Only a persisted SleepCorrectionStore entry
+            // may prevent a later complete-history recalculation replacing a
+            // stale early wake boundary.
+            func hasSavedCorrection(_ session: SleepSession) -> Bool {
+                SleepCorrectionStore.times(for: session.sourcePeriod, overrides: corrections) != nil
+            }
             let editedDays = Set(freshDays.filter { day in
                 fresh.sleepSessions?.contains {
-                    $0.isEdited && $0.startUnix == day.sleepStartUnix
+                    hasSavedCorrection($0) && $0.startUnix == day.sleepStartUnix
                         && $0.endUnix - 1 == day.sleepEndUnix
                 } ?? false
             }.map(\.dateKey))
-            let previousEditedDays = Set(sessionsSnapshot.filter(\.isEdited).compactMap { session in
+            let previousEditedDays = Set(sessionsSnapshot.filter { hasSavedCorrection($0) }.compactMap { session in
                 JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)), calendar: .current)
             })
             var byDay: [String: DayMetrics] = [:]
