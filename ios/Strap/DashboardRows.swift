@@ -209,7 +209,7 @@ struct DashboardRows: View {
     }
 
     private var stressCaption: String {
-        store.band.stress.reason ?? "awake baseline · \(store.recordedDayCount) days"
+        store.band.stress.reason ?? "Awake-quiet baseline"
     }
 
     // MARK: VO₂ max — published estimate, never a strap reading
