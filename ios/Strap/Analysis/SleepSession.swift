@@ -89,6 +89,9 @@ struct SleepSession: Codable, Equatable {
         let pending = SleepStaging(segments: [], deepMinutes: 0, lightMinutes: 0,
             remMinutes: 0, wakeMinutes: 0, epochs: 0, hrCoverage: 0,
             reason: "Recalculating the saved sleep window from recorded sensor data.")
+        // The saved correction is authoritative even when it happens to
+        // equal the current detector bounds; isEdited must not be inferred
+        // from quietness or from a legacy cached session alone.
         return SleepSession(version: version, sourceStartUnix: sourceStartUnix,
             startUnix: times[0], endUnix: times[1], staging: changed ? pending : staging,
             heartRate: changed ? heartRate.filter { times[0] <= $0.unix && $0.unix < times[1] } : heartRate,
