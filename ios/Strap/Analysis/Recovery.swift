@@ -119,7 +119,7 @@ enum Recovery {
     /// never feeds a score.
     static func spo2Summary(_ samples: [V18Sample]) -> Spo2Summary {
         let inBand = samples.compactMap { sample -> Double? in
-            guard let pct = sample.spo2CandidatePct,
+            guard sample.wearing, let pct = sample.spo2CandidatePct,
                   pct >= V18Decoder.spo2CandidateMin && pct <= V18Decoder.spo2CandidateMax
             else { return nil }
             return Double(pct)
