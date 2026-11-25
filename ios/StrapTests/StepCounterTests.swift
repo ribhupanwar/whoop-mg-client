@@ -121,4 +121,21 @@ final class StepCounterTests: XCTestCase {
         XCTAssertNil(StepCounter.capturedToday([], now: now, calendar: calendar))
     }
 
+    func testConflictingSameSecondReplayDoesNotInventSteps() {
+        let records = [
+            sample(10, steps: 100), sample(11, steps: 101),
+            sample(11, steps: 120), sample(12, steps: 122),
+            sample(13, steps: 124)
+        ]
+        // The disputed second is discarded. Only 12 -> 13 is certain.
+        XCTAssertEqual(StepCounter.total(records), 2)
+        XCTAssertEqual(StepCounter.total(records.reversed().map { $0 }), 2)
+    }
+
+    func testIdenticalSameSecondRetransmissionIsIdempotent() {
+        let records = [sample(10, steps: 100), sample(11, steps: 102),
+                       sample(11, steps: 102), sample(12, steps: 104)]
+        XCTAssertEqual(StepCounter.total(records), 4)
+    }
+
 }
