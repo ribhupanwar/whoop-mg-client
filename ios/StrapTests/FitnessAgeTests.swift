@@ -193,6 +193,31 @@ final class HealthspanInputCoverageTests: XCTestCase {
         XCTAssertTrue(coverage.missing(.steps, minimumDays: 7, windowDays: 30, calendar: calendar))
     }
 
+    func testCoverageAtRollingWindowBoundaryIsInclusive() {
+        let calendar = Calendar(identifier: .gregorian)
+        let asOf = calendar.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 12))!
+        let start = calendar.date(byAdding: .day, value: -29,
+                                  to: calendar.startOfDay(for: asOf))!
+        let observation = HealthspanObservation(value: 8000, observedDays: 30,
+                                                 firstObserved: start, lastObserved: asOf)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: asOf)
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
+    }
+
+    func testSparseHistoryAcrossWindowBoundaryIsNotOvercounted() {
+        let calendar = Calendar(identifier: .gregorian)
+        let asOf = calendar.date(from: DateComponents(year: 2026, month: 11, day: 25, hour: 12))!
+        let first = calendar.date(byAdding: .day, value: -30,
+                                  to: calendar.startOfDay(for: asOf))!
+        let observation = HealthspanObservation(value: 8000, observedDays: 30,
+                                                 firstObserved: first, lastObserved: asOf)
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: asOf)
+        // Two dates lie outside the inclusive 30-day window; 30 observed
+        // days over 31 dates cannot prove that all 30 were recent.
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 29, windowDays: 30, calendar: calendar))
+    }
+
     func testStaleObservationCannotPassRecentWindow() {
         let calendar = Calendar(identifier: .gregorian)
         let now = calendar.date(from: DateComponents(year: 2026, month: 11, day: 23, hour: 12))!
