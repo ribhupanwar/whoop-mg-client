@@ -956,6 +956,11 @@ final class BandLink: NSObject, ObservableObject {
         guard let point = summary?.stressSeries?.last else {
             return StressResult(index: nil, reason: "Needs recorded awake R-R windows")
         }
+        // Historical stress windows are chartable but must not masquerade as live stress.
+        let age = Date().timeIntervalSince1970 - Double(point.unix)
+        guard age >= 0, age <= 10 * 60 else {
+            return StressResult(index: nil, reason: "No recent awake R-R stress window; historical values remain in the chart")
+        }
         return StressResult(index: point.index, reason: nil)
     }
 

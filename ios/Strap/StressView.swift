@@ -28,7 +28,7 @@ struct StressView: View {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
                         .font(StrapTypography.metric(36, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                    Text(demo ? "HIGH · SAMPLE" : "\(store.band.stress.band.uppercased())")
+                    Text(demo ? "HIGH · SAMPLE" : (stressIndex == nil ? "UNAVAILABLE" : store.band.stress.band.uppercased()))
                         .font(StrapTypography.body(11, weight: .medium))
                         .tracking(1.0)
                         .foregroundStyle(demo ? Color.appWarn : Color.appMuted)
