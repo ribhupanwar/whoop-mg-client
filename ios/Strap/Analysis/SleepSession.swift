@@ -215,6 +215,22 @@ struct SleepSession: Codable, Equatable {
             let missingReliableReplacement = old.isComplete && !fresh.contains {
                 $0.isComplete && max($0.startUnix, old.startUnix) < min($0.endUnix, old.endUnix)
             }
+            // Some persisted sessions carry isEdited without a corresponding
+            // authoritative correction. Do not freeze such a stale wake boundary
+            // when late BLE history provides >=5 minutes of consecutive, on-wrist
+            // firmware-confirmed sleep and a newer detector candidate.
+            // Explicit saved corrections remain authoritative.
+            let confirmedLateExtension = savedEdit == nil && old.isEdited && fresh.contains { candidate in
+                guard !candidate.isEdited, candidate.startUnix <= old.startUnix,
+                      candidate.endUnix > old.endUnix else { return false }
+                let tail = samples.filter {
+                    $0.unix >= old.endUnix && $0.unix < candidate.endUnix
+                        && $0.wearing && $0.sleepState == 2
+                        && (35...220).contains($0.heartRate)
+                }
+                return Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
+            }
+            if confirmedLateExtension { continue }
             guard old.isEdited || editedBoundsChanged || unsupportedExtension || missingReliableReplacement
                     || first > old.startUnix || last < old.endUnix - 1 else { continue }
             // Keep intersecting source windows and the latest saved night, not a growing archive.
