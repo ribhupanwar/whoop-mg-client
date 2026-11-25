@@ -354,6 +354,28 @@ struct HistoricalOpticalK21: Equatable {
     let infrared: [[Int16]]
 }
 
+/// Optical signal diagnostics only. These raw ADC counts cannot be converted
+/// into calibrated SpO2 without verified wavelength mapping and calibration.
+enum OpticalSignalValidity: Equatable {
+    case missing, flatline, clipped, variable
+}
+
+extension HistoricalOpticalK21 {
+    var signalValidity: OpticalSignalValidity {
+        let channels = green + infrared
+        guard channels.count == 6, channels.allSatisfy({ $0.count == 100 }) else { return .missing }
+        // Signed ADC rails are not valid oxygen saturation measurements.
+        if channels.contains(where: { $0.contains(Int16.min) || $0.contains(Int16.max) }) {
+            return .clipped
+        }
+        if channels.allSatisfy({ channel in
+            guard let first = channel.first else { return true }
+            return channel.allSatisfy { $0 == first }
+        }) { return .flatline }
+        return .variable
+    }
+}
+
 enum HistoricalOpticalK21Decoder {
     static let expectedBodyBytes = 1244
     static let samplesPerChannel = 100
