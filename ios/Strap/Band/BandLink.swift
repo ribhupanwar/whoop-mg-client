@@ -999,7 +999,11 @@ final class BandLink: NSObject, ObservableObject {
                 self?.recalculateRetainedMetrics()
             }
         } else if status.isReady, isConnected,
-                  HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: lastSyncAttempt, foreground: true) {
+                  (hasIncompleteHistory ||
+                   HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: lastSyncAttempt, foreground: true)) {
+            // A timed-out drain can leave a persisted, incomplete night. Do not
+            // let the normal foreground cooldown suppress its recovery attempt.
+            // readHistory() still enforces pairing and active-drain guards.
             readHistory()
         }
     }
