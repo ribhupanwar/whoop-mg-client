@@ -911,17 +911,16 @@ extension Hrv {
 
         for run in runs {
             var previous: Double?
-            var previousTs: Int?
             var recent: [Double] = []
             var seedCandidate: Double?
             for sample in run {
                 let rr = sample.rrIntervalsMS.map(Double.init)
                 rawBeats += rr.count
                 if rr.isEmpty {
-                    previous = nil; previousTs = nil; recent.removeAll(); seedCandidate = nil
+                    previous = nil; recent.removeAll(); seedCandidate = nil
                     continue
                 }
-                for (idx, value) in rr.enumerated() {
+                for (_, value) in rr.enumerated() {
                     guard value >= Double(V18Decoder.minRRMS),
                           value <= Double(V18Decoder.maxRRMS) else {
                         rejectionReasons["outOfPlausibleRange", default: 0] += 1
@@ -943,14 +942,12 @@ extension Hrv {
                         allNNTimestamps.append(sample.unix)
                         recent.append(pending)
                         previous = pending
-                        previousTs = sample.unix
                         seedCandidate = nil
                     } else {
                         let reference = Stats.median(recent)
                         if abs(value - reference) > nnMaxDeviation * reference {
                             rejectionReasons["ectopicDeviation", default: 0] += 1
                             previous = nil
-                            previousTs = nil
                             recent.removeAll()
                             seedCandidate = nil
                             continue
@@ -966,7 +963,6 @@ extension Hrv {
                     recent.append(value)
                     if recent.count > nnReferenceBeats { recent.removeFirst() }
                     previous = value
-                    previousTs = sample.unix
                 }
             }
         }
