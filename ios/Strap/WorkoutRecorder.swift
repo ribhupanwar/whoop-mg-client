@@ -207,6 +207,11 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         elapsedSeconds = Int((accumulated + active).rounded(.down))
     }
 
+    /// Refresh elapsed time for the workout screen and Live Activity bridge.
+    func tick() {
+        refreshElapsed()
+    }
+
     /// Test-only helper to simulate elapsed time without waiting.
     func setElapsedForTesting(_ seconds: Int) {
         elapsedSeconds = seconds

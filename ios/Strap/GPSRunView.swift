@@ -94,12 +94,25 @@ struct GPSRunView: View {
         .navigationTitle(recorder.phase == .idle ? "Start Activity" : selectedActivity.label)
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(ticker) { _ in
+            recorder.tick()
             updateHRHistory()
+            WorkoutLiveActivityController.shared.update(
+                session: recorder.currentSession, phase: recorder.phase,
+                heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
+                distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds
+            )
         }
         .onChange(of: recorder.phase) { _, newPhase in
-            if newPhase == .saved || newPhase == .discarded {
-                // WorkoutRecorder handles phase transitions; UI observes only.
-                // No direct phase mutation here.
+            if newPhase == .recording, let session = recorder.currentSession {
+                WorkoutLiveActivityController.shared.start(session: session)
+            } else if newPhase == .saved || newPhase == .discarded {
+                WorkoutLiveActivityController.shared.end()
+            } else if newPhase == .paused {
+                WorkoutLiveActivityController.shared.update(
+                    session: recorder.currentSession, phase: newPhase,
+                    heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
+                    distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds
+                )
             }
         }
     }
