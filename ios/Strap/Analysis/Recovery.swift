@@ -118,14 +118,28 @@ enum Recovery {
     /// saturation sentinels, other nonzero values are diagnostic codes. It
     /// never feeds a score.
     static func spo2Summary(_ samples: [V18Sample]) -> Spo2Summary {
-        let inBand = samples.compactMap { sample -> Double? in
+        // BLE history transfers can replay the same second after reconnect.
+        // Each recorded second contributes at most one candidate to the mean.
+        // Prefer an eligible on-wrist reading over a duplicate off-wrist or
+        // diagnostic record; equal-quality replays retain the first record.
+        var bySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            let eligible = sample.wearing && sample.spo2CandidatePct != nil
+            if let previous = bySecond[sample.unix] {
+                let previousEligible = previous.wearing && previous.spo2CandidatePct != nil
+                if !eligible || previousEligible { continue }
+            }
+            bySecond[sample.unix] = sample
+        }
+        let unique = bySecond.values
+        let inBand = unique.compactMap { sample -> Double? in
             guard sample.wearing, let pct = sample.spo2CandidatePct,
                   pct >= V18Decoder.spo2CandidateMin && pct <= V18Decoder.spo2CandidateMax
             else { return nil }
             return Double(pct)
         }
-        let saturated = samples.filter { $0.spo2CandidateKind == .saturated }.count
-        let diagnostic = samples.filter { $0.spo2CandidateKind == .diagnostic }.count
+        let saturated = unique.filter { $0.spo2CandidateKind == .saturated }.count
+        let diagnostic = unique.filter { $0.spo2CandidateKind == .diagnostic }.count
         guard !inBand.isEmpty else {
             return Spo2Summary(
                 pct: nil,
