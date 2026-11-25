@@ -1820,3 +1820,148 @@ final class HealthspanCoverageBoundaryRegressionTests: XCTestCase {
         XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810], over: [800, 810]))
     }
 }
+
+// MARK: - Observation-Only Diagnostics (Non-Production)
+
+final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
+    /// Constant NN series returns nil ACF1 (zero variance)
+    func testNnDiffAcf1ConstantSeriesReturnsNil() {
+        XCTAssertNil(Hrv.nnDiffAcf1([800, 800, 800, 800]))
+    }
+
+    /// Fewer than 30 pairs returns nil
+    func testNnDiffAcf1InsufficientPairsReturnsNil() {
+        XCTAssertNil(Hrv.nnDiffAcf1((0..<20).flatMap { _ in [800.0, 810.0] })) // 19 pairs < 30
+    }
+
+    /// Smooth tachogram with RSA-like pattern -> positive ACF1
+    func testNnDiffAcf1SmoothTachogramPositiveAcf1() {
+        var nn: [Double] = []
+        for i in 0..<100 {
+            nn.append(800 + 20 * sin(Double(i) * 0.1)) // Slow modulation
+        }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertGreaterThan(acf1!, 0.5) // Strong positive correlation
+    }
+
+    /// White noise NN intervals -> ACF1 ≈ -0.5 (below -0.35 floor)
+    func testNnDiffAcf1WhiteNoiseBelowFloor() {
+        var rng = SeededRandom(seed: 42)
+        var nn: [Double] = []
+        for _ in 0..<200 {
+            nn.append(800 + Double.random(in: -50...50, using: &rng))
+        }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertLessThan(acf1!, -0.35) // Should be below OpenStrap floor
+    }
+
+    /// Alternating pattern (800, 810, 800, 810...) -> ACF1 ≈ -1
+    func testNnDiffAcf1AlternatingPatternStrongNegative() {
+        let nn = (0..<100).flatMap { _ in [800.0, 810.0] }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertLessThan(acf1!, -0.9)
+    }
+
+    /// Normal RR stream: sum of RR ≈ wall-clock span
+    func testRrCoverageNormalStream() {
+        let rr = Array(repeating: 800.0, count: 1000)
+        let timestamps = (0..<1000).map { 800 * ($0 + 1) }
+        let cov = Hrv.rrCoverage(rr, timestamps: timestamps)
+        XCTAssertNotNil(cov)
+        XCTAssertEqual(cov!, 1.0, accuracy: 0.01)
+    }
+
+    /// Duplicate beats: more beat-time than elapsed time -> coverage > 1.10
+    func testRrCoverageDuplicateBeatsOverCounted() {
+        let rr = Array(repeating: 800.0, count: 2000)
+        let timestamps = (0..<1000).map { 800 * ($0 + 1) } + (0..<1000).map { 800 * ($0 + 1) }
+        let cov = Hrv.rrCoverage(rr, timestamps: timestamps)
+        XCTAssertNotNil(cov)
+        XCTAssertGreaterThan(cov!, 1.10)
+    }
+
+    /// Span < 600s returns nil
+    func testRrCoverageInsufficientSpanReturnsNil() {
+        let rr = Array(repeating: 800.0, count: 500)
+        let timestamps = (0..<500).map { 800 * ($0 + 1) } // 400s < 600s
+        XCTAssertNil(Hrv.rrCoverage(rr, timestamps: timestamps))
+    }
+
+    /// Mismatched lengths returns nil
+    func testRrCoverageMismatchedLengthsReturnsNil() {
+        XCTAssertNil(Hrv.rrCoverage([800, 810], timestamps: [0]))
+    }
+
+    /// Extended diagnostics includes ACF1 and RR coverage flags
+    func testExtendedDiagnosticsIncludesAcf1AndCoverage() {
+        var rows: [V18Sample] = []
+        var rng = SeededRandom(seed: 42)
+        for i in 0..<1000 {
+            // RSA: 4 beats per breath cycle, plus small physiological noise
+            let rrVal = 800 + 20 * sin(Double(i) * 2 * .pi / 4) + Double.random(in: -2...2, using: &rng)
+            rows.append(makeSample(i, hr: 60, accel: 0.01, rr: [Int(rrVal), Int(rrVal + 5)]))
+        }
+        let diag = Hrv.extendedDiagnostics(samples: rows)
+        XCTAssertNotNil(diag.nnDiffAcf1)
+        XCTAssertNotNil(diag.rrCoverageRatio)
+        XCTAssertNotNil(diag.acf1BelowFloor)
+        XCTAssertNotNil(diag.rrOverCoverage)
+        XCTAssertFalse(diag.acf1BelowFloor!) // RSA pattern should be above floor
+        XCTAssertFalse(diag.rrOverCoverage!) // Normal coverage
+    }
+
+    /// Extended diagnostics with SWS epochs selects correct window type
+    func testExtendedDiagnosticsWithSwSEpochs() {
+        let rows = (0..<500).map { makeSample($0, hr: 60, accel: 0.01, rr: [800, 810]) }
+        let diag = Hrv.extendedDiagnostics(samples: rows, swsEpochs: [100...400])
+        XCTAssertEqual(diag.selectedCalculationWindow, "SWS_DEEP_SLEEP")
+    }
+
+    /// Median-of-5-minute-window RMSSD basic test
+    func testMedianOfWindowedRmssdBasic() {
+        // Alternating 800/810 -> RMSSD = 10
+        let nn = (0..<50).flatMap { _ in [800.0, 810.0] }
+        let timestamps = Array(0..<100)
+        let rmssd = Hrv.medianOfWindowedRMSSD(nn, timestamps: timestamps, windowSeconds: 300)
+        XCTAssertNotNil(rmssd)
+        // Each 5-min window has 300 beats -> 299 diffs, all ±10 -> RMSSD = 10
+        XCTAssertEqual(rmssd!, 10.0, accuracy: 0.1)
+    }
+
+    /// Median-of-windowed RMSSD with insufficient data returns nil
+    func testMedianOfWindowedRmssdInsufficientData() {
+        let nn = (0..<5).flatMap { _ in [800.0, 810.0] } // Only 10 beats
+        let timestamps = Array(0..<10)
+        XCTAssertNil(Hrv.medianOfWindowedRMSSD(nn, timestamps: timestamps))
+    }
+
+    /// Median-of-windowed RMSSD with mismatched lengths returns nil
+    func testMedianOfWindowedRmssdMismatchedLengths() {
+        XCTAssertNil(Hrv.medianOfWindowedRMSSD([800, 810], timestamps: [0]))
+    }
+
+    /// Production HRV is unchanged by observation-only diagnostics
+    func testProductionHrvUnchangedByObservationOnlyDiagnostics() {
+        let rows = (0..<600).map { makeSample($0, hr: 60, accel: 0.01, rr: [800, 810]) }
+        let production = Hrv.fromSamples(rows)
+        let extended = Hrv.extendedDiagnostics(samples: rows)
+        XCTAssertEqual(extended.finalRMSSD, production.rmssdMS)
+        XCTAssertEqual(extended.finalLnRMSSD, production.lnRMSSD)
+        XCTAssertEqual(extended.acceptedNNCount, production.nnBeats)
+        XCTAssertEqual(extended.rawRRCount, production.beats)
+    }
+}
+
+// Seeded random number generator for deterministic tests
+struct SeededRandom: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+    mutating func next() -> UInt64 {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return state
+    }
+}
+}
