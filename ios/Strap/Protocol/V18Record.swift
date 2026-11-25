@@ -155,9 +155,18 @@ enum HistoricalRecordSelection {
         let candidateHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(candidate.heartRate)
         let currentHRValid = (V18Decoder.minHR...V18Decoder.maxHR).contains(current.heartRate)
         if candidateHRValid != currentHRValid { return candidateHRValid }
-        if candidate.rrIntervalsMS.count != current.rrIntervalsMS.count {
-            return candidate.rrIntervalsMS.count > current.rrIntervalsMS.count
-        }
+        // Match the HRV replay selector: invalid/padding RR words must not
+        // displace a shorter record containing more usable beat intervals.
+        let candidateValidRR = candidate.rrIntervalsMS.filter {
+            (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+        }.count
+        let currentValidRR = current.rrIntervalsMS.filter {
+            (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+        }.count
+        if candidateValidRR != currentValidRR { return candidateValidRR > currentValidRR }
+        let candidateInvalidRR = candidate.rrIntervalsMS.count - candidateValidRR
+        let currentInvalidRR = current.rrIntervalsMS.count - currentValidRR
+        if candidateInvalidRR != currentInvalidRR { return candidateInvalidRR < currentInvalidRR }
         let candidateHasMotion = candidate.dynamicAccelG != nil
         let currentHasMotion = current.dynamicAccelG != nil
         if candidateHasMotion != currentHasMotion { return candidateHasMotion }
