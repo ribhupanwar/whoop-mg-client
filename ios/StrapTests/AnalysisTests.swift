@@ -1831,7 +1831,7 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
 
     /// Fewer than 30 pairs returns nil
     func testNnDiffAcf1InsufficientPairsReturnsNil() {
-        XCTAssertNil(Hrv.nnDiffAcf1((0..<20).flatMap { _ in [800.0, 810.0] })) // 19 pairs < 30
+        XCTAssertNil(Hrv.nnDiffAcf1((0..<15).flatMap { _ in [800.0, 810.0] })) // 30 NN intervals = 29 differences
     }
 
     /// Smooth tachogram with RSA-like pattern -> positive ACF1
@@ -1901,16 +1901,21 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         var rng = SeededRandom(seed: 42)
         for i in 0..<1000 {
             // RSA: 4 beats per breath cycle, plus small physiological noise
-            let rrVal = 800 + 20 * sin(Double(i) * 2 * .pi / 4) + Double.random(in: -2...2, using: &rng)
-            rows.append(makeSample(i, hr: 60, accel: 0.01, rr: [Int(rrVal), Int(rrVal + 5)]))
+            let rrVal = 1000 + 20 * sin(Double(i) * 2 * .pi / 4) + Double.random(in: -2...2, using: &rng)
+            // One ~1000ms beat per second matches measured wall-clock coverage.
+            rows.append(makeSample(i, hr: 60, accel: 0.01, rr: [Int(rrVal)]))
         }
         let diag = Hrv.extendedDiagnostics(samples: rows)
         XCTAssertNotNil(diag.nnDiffAcf1)
         XCTAssertNotNil(diag.rrCoverageRatio)
         XCTAssertNotNil(diag.acf1BelowFloor)
         XCTAssertNotNil(diag.rrOverCoverage)
-        XCTAssertFalse(diag.acf1BelowFloor!) // RSA pattern should be above floor
-        XCTAssertFalse(diag.rrOverCoverage!) // Normal coverage
+        guard let belowFloor = diag.acf1BelowFloor, let overCoverage = diag.rrOverCoverage else {
+            XCTFail("Expected ACF1 and coverage for 1000 seconds of valid NN beats")
+            return
+        }
+        XCTAssertFalse(belowFloor) // RSA pattern should be above floor
+        XCTAssertFalse(overCoverage) // Normal coverage
     }
 
     /// Extended diagnostics with SWS epochs selects correct window type
