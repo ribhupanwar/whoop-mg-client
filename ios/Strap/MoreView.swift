@@ -342,11 +342,15 @@ private struct BackupRestoreSettingsView: View {
                   let documents = fm.urls(for: .documentDirectory, in: .userDomainMask).first else {
                 throw CocoaError(.fileNoSuchFile)
             }
-            let archive = try PersistenceDiagnostics.write(
-                support: support, documents: documents,
-                preferences: UserDefaults.standard.dictionaryRepresentation(), fullBackup: true)
-            let inspected = try StrapBackup.inspect(archive)
-            try? fm.removeItem(at: inspected.folder)
+            let preferences = UserDefaults.standard.dictionaryRepresentation()
+            let archive = try await Task.detached(priority: .userInitiated) {
+                let archive = try PersistenceDiagnostics.write(
+                    support: support, documents: documents,
+                    preferences: preferences, fullBackup: true)
+                let inspected = try StrapBackup.inspect(archive)
+                try? FileManager.default.removeItem(at: inspected.folder)
+                return archive
+            }.value
             exported = archive
             if let folder = selectedFolder {
                 let access = folder.startAccessingSecurityScopedResource()
@@ -355,7 +359,7 @@ private struct BackupRestoreSettingsView: View {
                     message = "Backup created. Folder access unavailable; use Share backup ZIP."
                     return
                 }
-                let target = folder.appendingPathComponent(archive.lastPathComponent)
+                let target = folder.appendingPathComponent("STRAP-backup-" + UUID().uuidString + ".zip")
                 try fm.copyItem(at: archive, to: target)
                 message = "Verified backup exported to " + folder.lastPathComponent
             } else {
