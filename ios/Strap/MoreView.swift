@@ -82,15 +82,15 @@ struct MoreView: View {
 
                     Toggle(isOn: $dailyBackupEnabled) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Daily Local Backup").font(StrapTypography.body(13.5, weight: .semibold))
-                            Text("Optional · retain last 3 local copies")
+                            Text("Automatic Local Backups").font(StrapTypography.body(13.5, weight: .semibold))
+                            Text("Saved in STRAP · older backups expire by age")
                                 .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                         }
                     }
                     .accessibilityIdentifier("more.dailyBackup")
                     if dailyBackupEnabled {
                         Divider().background(Color.appLine)
-                        Picker("Backup Frequency", selection: $backupIntervalSeconds) {
+                        Picker("Back Up When", selection: $backupIntervalSeconds) {
                             Text("Every hour").tag(3_600)
                             Text("Every 6 hours").tag(21_600)
                             Text("Every 12 hours").tag(43_200)
@@ -100,13 +100,13 @@ struct MoreView: View {
                         }
                         .accessibilityIdentifier("more.backupFrequency")
                         Divider().background(Color.appLine)
-                        Picker("Keep Backups", selection: $backupRetentionDays) {
+                        Picker("Keep Backups For", selection: $backupRetentionDays) {
                             Text("7 days").tag(7)
                             Text("30 days").tag(30)
-                            Text("No expiry").tag(0)
+                            Text("Until I delete them").tag(0)
                         }
                         .accessibilityIdentifier("more.backupRetention")
-                        Text("Backups run when the app is active; iOS does not guarantee exact background timing.")
+                        Text("Backups are stored inside STRAP. They run when the app is active and due; iOS does not guarantee background timing. The newest backup is kept even after older copies expire.")
                             .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                     }
