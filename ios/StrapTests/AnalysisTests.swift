@@ -1831,7 +1831,8 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
 
     /// Fewer than 30 pairs returns nil
     func testNnDiffAcf1InsufficientPairsReturnsNil() {
-        XCTAssertNil(Hrv.nnDiffAcf1((0..<20).flatMap { _ in [800.0, 810.0] })) // 19 pairs < 30
+        // Need < 30 pairs -> < 31 values -> 15 iterations of [800, 810] = 30 values = 29 pairs
+        XCTAssertNil(Hrv.nnDiffAcf1((0..<15).flatMap { _ in [800.0, 810.0] })) // 29 pairs < 30
     }
 
     /// Smooth tachogram with RSA-like pattern -> positive ACF1

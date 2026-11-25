@@ -913,6 +913,9 @@ extension Hrv {
             var previous: Double?
             var recent: [Double] = []
             var seedCandidate: Double?
+            // Track cumulative beat time in milliseconds for timestamp generation
+            // Start from the first sample's unix * 1000
+            var beatTimeMs = run[0].unix * 1000
             for sample in run {
                 let rr = sample.rrIntervalsMS.map(Double.init)
                 rawBeats += rr.count
@@ -930,6 +933,8 @@ extension Hrv {
                     if recent.isEmpty {
                         guard let pending = seedCandidate else {
                             seedCandidate = value
+                            // Advance beat time by the seed candidate
+                            beatTimeMs += Int(seedCandidate)
                             continue
                         }
                         let midpoint = Stats.median([pending, value])
@@ -939,7 +944,7 @@ extension Hrv {
                             continue
                         }
                         allNN.append(pending)
-                        allNNTimestamps.append(sample.unix)
+                        allNNTimestamps.append(beatTimeMs)
                         recent.append(pending)
                         previous = pending
                         seedCandidate = nil
@@ -959,7 +964,8 @@ extension Hrv {
                         successivePairs += 1
                     }
                     allNN.append(value)
-                    allNNTimestamps.append(sample.unix)
+                    beatTimeMs += Int(value)
+                    allNNTimestamps.append(beatTimeMs)
                     recent.append(value)
                     if recent.count > nnReferenceBeats { recent.removeFirst() }
                     previous = value
