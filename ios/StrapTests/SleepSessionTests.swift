@@ -772,4 +772,24 @@ extension SleepSessionTests {
             }
         }
     }
+    func testLateQuietHistoryExtendsPrematureWakeWithoutExplicitSleepState() throws {
+        // Regression: historical sync completes after an early 06:08 boundary;
+        // 26 more minutes of on-wrist quiet data arrive without sleep(2).
+        let oldSeconds = 7 * 3600
+        let lateSeconds = 26 * 60
+        let rows = (0..<(oldSeconds + lateSeconds)).map { sample(start + $0) }
+        let saved = SleepSession.make(samples: Array(rows.prefix(oldSeconds)),
+                                      period: period(oldSeconds))
+        let replacement = SleepSession.make(samples: rows,
+                                            period: period(oldSeconds + lateSeconds))
+        XCTAssertTrue(saved.isComplete)
+        XCTAssertTrue(replacement.isComplete)
+        let merged = SleepSession.retainingUncovered(
+            previous: [saved], fresh: [replacement],
+            coverageStart: start, coverageEnd: start + rows.count - 1, samples: rows)
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].endUnix, start + oldSeconds + lateSeconds,
+                       "Quiet measured late history must not be discarded only because sleepState is nil")
+    }
+
 }
