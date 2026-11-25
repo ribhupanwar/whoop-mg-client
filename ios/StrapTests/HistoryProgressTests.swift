@@ -16,6 +16,21 @@ final class HistoryProgressTests: XCTestCase {
                                     startedAt: began, lastStepAt: began.addingTimeInterval(30))
         XCTAssertFalse(cached.detail(now: began.addingTimeInterval(30)).contains("left"))
     }
+    func testIncompleteNightResumesDespiteForegroundCooldown() {
+        // Regression: a timed-out drain persisted an incomplete night whose
+        // saved wake (06:08) preceded the real end (06:38). The foreground
+        // cooldown must not suppress the recovery attempt on resume.
+        let last = Date(timeIntervalSince1970: 1000)
+        let justAttempted = last // 0s since last attempt: cooldown would block
+        XCTAssertTrue(HistorySyncPolicy.shouldResumeIncompleteForeground(
+            hasIncompleteHistory: true, now: justAttempted, lastAttempt: last))
+        // Without an incomplete night, the foreground cooldown still applies.
+        XCTAssertFalse(HistorySyncPolicy.shouldResumeIncompleteForeground(
+            hasIncompleteHistory: false, now: justAttempted, lastAttempt: last))
+        // After the cooldown elapses, a normal foreground sync resumes anyway.
+        XCTAssertTrue(HistorySyncPolicy.shouldResumeIncompleteForeground(
+            hasIncompleteHistory: false, now: last.addingTimeInterval(90), lastAttempt: last))
+    }
     func testAutomaticSyncBackoffNeverDelaysManualOrForegroundSync() {
         let last = Date(timeIntervalSince1970: 1000)
         XCTAssertFalse(HistorySyncPolicy.shouldSync(now: last.addingTimeInterval(899), lastAttempt: last))
