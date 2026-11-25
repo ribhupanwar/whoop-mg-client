@@ -1445,6 +1445,17 @@ final class RecoveryTests: XCTestCase {
         XCTAssertNil(summary.reason)
     }
 
+    func testSpo2ExcludesOffWristCandidate() {
+        let rows = [
+            makeSample(0, hr: 60, spo2: 96),
+            makeSample(1, hr: 0, spo2: 80),
+            makeSample(2, hr: 60, spo2: 98)
+        ]
+        let summary = Recovery.spo2Summary(rows)
+        XCTAssertEqual(summary.pct!, 97, accuracy: 1e-6)
+        XCTAssertEqual(summary.readings, 2)
+    }
+
     func testSpo2WithoutInBandCandidateProducesNoValue() {
         let rows = [
             makeSample(0, hr: 60, spo2: 0),
