@@ -554,6 +554,21 @@ final class HistoricalOpticalK21DecoderTests: XCTestCase {
         XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1245)))
     }
 
+    func testRawOpticalSignalValidityNeverImpliesCalibratedSpo2() {
+        let flat = HistoricalOpticalK21(
+            green: Array(repeating: Array(repeating: Int16(500), count: 100), count: 3),
+            infrared: Array(repeating: Array(repeating: Int16(600), count: 100), count: 3))
+        XCTAssertEqual(flat.signalValidity, .flatline)
+        var variable = flat
+        var green = variable.green
+        green[0][5] = 501
+        variable = HistoricalOpticalK21(green: green, infrared: variable.infrared)
+        XCTAssertEqual(variable.signalValidity, .variable)
+        green[0][5] = Int16.max
+        XCTAssertEqual(HistoricalOpticalK21(green: green, infrared: flat.infrared).signalValidity, .clipped)
+        XCTAssertEqual(HistoricalOpticalK21(green: [], infrared: []).signalValidity, .missing)
+    }
+
     func testSixChannelsDecodeIndependentlyWithSignedLittleEndian() {
         var body = [UInt8](repeating: 0, count: 1244)
         let offsets = [20, 220, 420, 632, 832, 1032]
