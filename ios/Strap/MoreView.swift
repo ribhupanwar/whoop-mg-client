@@ -359,7 +359,14 @@ private struct BackupRestoreSettingsView: View {
                     message = "Backup created. Folder access unavailable; use Share backup ZIP."
                     return
                 }
-                let target = folder.appendingPathComponent("STRAP-backup-" + UUID().uuidString + ".zip")
+                let stamp = DateFormatter()
+                stamp.dateFormat = "yyyy-MM-dd_HH-mm-ss"
+                let filename = "STRAP-backup-" + stamp.string(from: Date()) + ".zip"
+                let target = folder.appendingPathComponent(filename)
+                if fm.fileExists(atPath: target.path) {
+                    message = "Backup created. A backup with this timestamp already exists; use Share backup ZIP or retry in a second."
+                    return
+                }
                 try fm.copyItem(at: archive, to: target)
                 message = "Verified backup exported to " + folder.lastPathComponent
             } else {
