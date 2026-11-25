@@ -939,7 +939,7 @@ extension Hrv {
                             continue
                         }
                         allNN.append(pending)
-                        allNNTimestamps.append(sample.unix)
+                        allNNTimestamps.append(sample.unix * 1_000)
                         recent.append(pending)
                         previous = pending
                         seedCandidate = nil
@@ -959,7 +959,7 @@ extension Hrv {
                         successivePairs += 1
                     }
                     allNN.append(value)
-                    allNNTimestamps.append(sample.unix)
+                    allNNTimestamps.append(sample.unix * 1_000)
                     recent.append(value)
                     if recent.count > nnReferenceBeats { recent.removeFirst() }
                     previous = value
