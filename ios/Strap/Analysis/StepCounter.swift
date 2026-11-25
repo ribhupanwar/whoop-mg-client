@@ -39,7 +39,16 @@ enum StepCounter {
         var total = 0
         var previous: (unix: Int, value: Int)?
         var sawCounter = false
-        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+        // Conflicting replay values at the same timestamp are ambiguous.
+        // Drop the second and reset the baseline to avoid invented steps.
+        let grouped = Dictionary(grouping: samples.filter { $0.stepCounter != nil }, by: { $0.unix })
+        for second in grouped.keys.sorted() {
+            guard let records = grouped[second], let sample = records.first else { continue }
+            if Set(records.compactMap({ $0.stepCounter })).count > 1 {
+                sawCounter = true
+                previous = nil
+                continue
+            }
             guard let value = sample.stepCounter else { continue }
             sawCounter = true
             guard let before = previous else {
