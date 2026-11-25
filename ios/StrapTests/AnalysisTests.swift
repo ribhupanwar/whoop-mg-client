@@ -1456,6 +1456,31 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(summary.readings, 2)
     }
 
+    func testSpo2ReplayDoesNotBiasMeanOrCandidateCounts() {
+        let original = [
+            makeSample(100, hr: 60, spo2: 96),
+            makeSample(101, hr: 60, spo2: 98),
+            makeSample(102, hr: 60, spo2: 0x80),
+            makeSample(103, hr: 60, spo2: 5)
+        ]
+        let baseline = Recovery.spo2Summary(original)
+        let replayed = Recovery.spo2Summary(original + [original[0], original[0], original[2], original[3]])
+        XCTAssertEqual(replayed.pct, baseline.pct)
+        XCTAssertEqual(replayed.readings, baseline.readings)
+        XCTAssertEqual(replayed.saturated, baseline.saturated)
+        XCTAssertEqual(replayed.diagnostic, baseline.diagnostic)
+    }
+
+    func testSpo2OnWristReplayOutranksOffWristCandidate() {
+        let offWrist = makeSample(100, hr: 0, spo2: 80)
+        let onWrist = makeSample(100, hr: 60, spo2: 96)
+        for rows in [[offWrist, onWrist], [onWrist, offWrist]] {
+            let result = Recovery.spo2Summary(rows)
+            XCTAssertEqual(result.pct, 96)
+            XCTAssertEqual(result.readings, 1)
+        }
+    }
+
     func testSpo2WithoutInBandCandidateProducesNoValue() {
         let rows = [
             makeSample(0, hr: 60, spo2: 0),
