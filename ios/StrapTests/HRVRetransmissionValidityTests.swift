@@ -19,4 +19,14 @@ final class HRVRetransmissionValidityTests: XCTestCase {
         XCTAssertFalse(Hrv.preferRetransmittedRR([800], over: [800]))
         XCTAssertFalse(Hrv.preferRetransmittedRR([], over: []))
     }
+
+    func testSameValidCountPrefersFewerInvalidWords() {
+        XCTAssertTrue(Hrv.preferRetransmittedRR([800, 810], over: [800, 810, 0, 0]))
+        XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810, 0], over: [800, 810]))
+    }
+
+    func testConflictingEqualQualityRetransmissionKeepsFirstDeterministically() {
+        XCTAssertFalse(Hrv.preferRetransmittedRR([820, 830], over: [800, 810]))
+    }
+
 }
