@@ -196,8 +196,17 @@ struct SleepSession: Codable, Equatable {
             let unsupportedExtension = fresh.contains { candidate in
                 guard candidate.startUnix < old.endUnix, old.startUnix < candidate.endUnix,
                       candidate.endUnix > old.endUnix, !candidate.isEdited else { return false }
-                let tail = samples.filter { $0.unix >= old.endUnix && $0.unix < candidate.endUnix
-                    && $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2 }
+                // Late BLE history may contain valid, quiet on-wrist observations
+                // without an explicit sleep(2) state. Do not freeze the saved
+                // early wake solely because the firmware state is unknown/still.
+                // Require five contiguous minutes of corroborating low motion;
+                // explicit up(3) and missing accelerometer data cannot qualify.
+                let tail = samples.filter {
+                    $0.unix >= old.endUnix && $0.unix < candidate.endUnix
+                        && $0.wearing && (35...220).contains($0.heartRate)
+                        && ($0.sleepState == 2 || ($0.sleepState != 3
+                            && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= 0.015 } ?? false)))
+                }
                 return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
             }
             // Archive endpoints do not prove usable data throughout a night.
