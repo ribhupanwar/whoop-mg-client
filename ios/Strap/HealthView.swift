@@ -80,7 +80,7 @@ struct HealthView: View {
             Text(hasDelta ? "UNVALIDATED CANDIDATE" : reading.statusText)
                 .font(StrapTypography.body(10, weight: .semibold))
                 .foregroundStyle(hasDelta ? Color.appWarn : Color.appMuted)
-            Text(hasDelta ? reading.referenceText : "Personal baseline: \\(reading.baselineDays)/7 prior nights")
+            Text(hasDelta ? reading.referenceText : "Personal baseline: \(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
