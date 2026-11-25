@@ -130,6 +130,43 @@ final class SleepSessionTests: XCTestCase {
             signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
         )
     }
+    private func confirmedSleepSample(_ unix: Int) -> V18Sample {
+        V18Sample(
+            header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
+            heartRate: 62, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            gravityXG: 0, gravityYG: 0, gravityZG: 1,
+            stepCounter: nil, stepCadence: nil, activityClass: 0,
+            skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+            sleepStateByte: nil, sleepState: 2, cardiacFlags: nil, hrQualityFlags: nil,
+            spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+        )
+    }
+
+    func testDelayedHistoryExtendsUnownedEditedBoundaryButPreservesExplicitCorrection() {
+        let oldEnd = start + 6 * 3600
+        let newEnd = oldEnd + 28 * 60
+        let old = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: oldEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: true, sourceEndUnix: oldEnd, bandSleepConfirmed: true)
+        let fresh = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: newEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: false, sourceEndUnix: newEnd, bandSleepConfirmed: true)
+        let late = (oldEnd..<newEnd).map { confirmedSleepSample($0) }
+        let repaired = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late)
+        XCTAssertEqual(repaired.map(\.endUnix), [newEnd])
+        let protected = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late,
+            overrides: [String(start): [start, oldEnd]])
+        XCTAssertEqual(protected.map(\.endUnix), [oldEnd])
+        let insufficient = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: Array(late.prefix(299)))
+        XCTAssertEqual(insufficient.map(\.endUnix), [oldEnd])
+    }
+
     private func period(_ seconds: Int, quiet: Double = 0.2) -> SleepPeriod {
         SleepPeriod(startUnix: start, endUnix: start + seconds - 1, quietFraction: quiet, meanHR: 55, wakeEvents: 1436)
     }
