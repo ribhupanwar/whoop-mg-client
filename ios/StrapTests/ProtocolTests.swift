@@ -368,6 +368,32 @@ final class ProtocolTests: XCTestCase {
         }
     }
 
+    func testFirmwareVersionAndShortPayloadFailClosed() {
+        let valid = bytes(realV18Hex)
+        XCTAssertNotNil(V18Decoder.decode(valid))
+        for version: UInt8 in [20, 21, 22, 24, 26] {
+            var other = valid
+            other[1] = version
+            XCTAssertNil(V18Decoder.decode(other),
+                "Do not reinterpret unverified firmware layout as V18")
+        }
+        XCTAssertNil(V18Decoder.decode(Array(valid.prefix(V18Decoder.minReadable - 1))))
+    }
+
+    func testInvalidImuAccelerationDoesNotDiscardValidHR() {
+        var inner = bytes(realV18Hex)
+        let bits = Float(99).bitPattern
+        for (offset, value) in [(33, bits), (37, bits)] {
+            for byte in 0..<4 {
+                inner[offset + byte] = UInt8(truncatingIfNeeded: value >> (byte * 8))
+            }
+        }
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.heartRate, 94)
+        XCTAssertNil(sample?.dynamicAccelG)
+        XCTAssertNil(sample?.gravityXG)
+    }
+
     func testSpo2CandidateTriMode() {
         XCTAssertEqual(V18Decoder.spo2Candidate(raw: 96).pct, 96)
         XCTAssertEqual(V18Decoder.spo2Candidate(raw: 96).kind, .pct)
