@@ -63,6 +63,17 @@ enum HistorySyncPolicy {
         return now.timeIntervalSince(last) >= floor
     }
 
+    /// A foreground resume must retry a persisted, incomplete night even when
+    /// the normal foreground cooldown has not elapsed. A timed-out drain can
+    /// leave a saved night truncated (e.g. an early wake with the band still
+    /// reporting sleep); the cooldown must not suppress its recovery attempt.
+    /// readHistory() still enforces pairing and active-drain guards.
+    static func shouldResumeIncompleteForeground(hasIncompleteHistory: Bool,
+                                                 now: Date, lastAttempt: Date?,
+                                                 foreground: Bool = true) -> Bool {
+        hasIncompleteHistory || shouldSync(now: now, lastAttempt: lastAttempt, foreground: foreground)
+    }
+
     /// Chase only a genuinely advancing, still-old backlog. Never spin on
     /// duplicate/empty chunks or a future-dated strap clock.
     static func shouldContinue(timedOut: Bool, sealedAndAcknowledged: Bool, newestInserted: Int?, previous: Int?, attempts: Int, now: Date) -> Bool {
