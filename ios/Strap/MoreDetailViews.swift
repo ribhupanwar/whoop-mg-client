@@ -968,33 +968,7 @@ struct AppInfoView: View {
                     }
                 }
 
-                Panel {
-                    SectionTitle("COMMUNITY & REPOSITORY")
-                    ShareLink(item: "Experience offline health tracking with STRAP: https://github.com/ribhupanwar/whoop-mg-client") {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("Share STRAP with Friends")
-                                .font(StrapTypography.body(13.5, weight: .semibold))
-                            Spacer()
-                        }
-                        .foregroundStyle(Color.appAccent)
-                        .padding(.vertical, 6)
-                    }
 
-                    Divider().background(Color.appLine).padding(.vertical, 4)
-
-                    Link(destination: URL(string: "https://github.com/ribhupanwar/whoop-mg-client")!) {
-                        HStack {
-                            Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            Text("Open GitHub Repository")
-                                .font(StrapTypography.body(13.5, weight: .semibold))
-                            Spacer()
-                            Image(systemName: "arrow.up.right").font(.system(size: 11, weight: .bold))
-                        }
-                        .foregroundStyle(Color.appFG)
-                        .padding(.vertical, 6)
-                    }
-                }
             }
         }
         .navigationTitle("App Information")
