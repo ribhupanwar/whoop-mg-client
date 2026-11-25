@@ -29,7 +29,8 @@ enum StepCounter {
     /// delta across the boundary would assign an unknown number of steps to today.
     static func capturedToday(_ samples: [V18Sample], now: Date = Date(), calendar: Calendar = .current) -> Int? {
         let start = calendar.startOfDay(for: now).timeIntervalSince1970
-        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!.timeIntervalSince1970
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return nil }
+        let end = nextDay.timeIntervalSince1970
         return total(samples.filter { Double($0.unix) >= start && Double($0.unix) < end })
     }
 
