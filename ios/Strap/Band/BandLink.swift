@@ -2717,6 +2717,7 @@ final class BandLink: NSObject, ObservableObject {
         // Retain valid standard 0x2A37 R-R intervals even while Type-40 HR
         // remains fresh for display. Only HR display is suppressed below.
         if !reading.rrMS.isEmpty {
+            standardRRPackets += 1
             archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
             liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
         }
@@ -2738,9 +2739,6 @@ final class BandLink: NSObject, ObservableObject {
         liveHRNotificationCount += 1
         hrRecoveryAttempts = 0
         lastMessage = nil
-        if !reading.rrMS.isEmpty {
-            standardRRPackets += 1
-        }
         guard isLiveSession else { return }
         let unix = Int(Date().timeIntervalSince1970)
         let sample = LiveSample(unix: unix, heartRate: reading.heartRate, rrIntervalsMS: reading.rrMS)
