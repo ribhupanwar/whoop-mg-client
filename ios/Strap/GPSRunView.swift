@@ -94,6 +94,7 @@ struct GPSRunView: View {
         .navigationTitle(recorder.phase == .idle ? "Start Activity" : selectedActivity.label)
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(ticker) { _ in
+            recorder.tick()
             updateHRHistory()
             WorkoutLiveActivityController.shared.update(
                 session: recorder.currentSession, phase: recorder.phase,
