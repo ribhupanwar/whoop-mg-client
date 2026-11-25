@@ -212,7 +212,7 @@ final class HealthspanInputCoverageTests: XCTestCase {
         let observation = HealthspanObservation(value: 8000, observedDays: 30,
                                                  firstObserved: first, lastObserved: asOf)
         let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: asOf)
-        // Two dates lie outside the inclusive 30-day window; 30 observed
+        // One date lies outside the inclusive 30-day window; 30 observed
         // days over 31 dates cannot prove that all 30 were recent.
         XCTAssertTrue(coverage.missing(.steps, minimumDays: 30, windowDays: 30, calendar: calendar))
         XCTAssertFalse(coverage.missing(.steps, minimumDays: 29, windowDays: 30, calendar: calendar))
