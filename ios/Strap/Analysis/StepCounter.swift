@@ -24,6 +24,15 @@ enum StepCounter {
     static let wrapFloor = 0xF000
     static let wrapCeiling = 0x0FFF
 
+    /// Captured steps within the current local calendar day, not a verified all-day total.
+    /// The preceding sample is intentionally excluded at midnight: carrying a
+    /// delta across the boundary would assign an unknown number of steps to today.
+    static func capturedToday(_ samples: [V18Sample], now: Date = Date(), calendar: Calendar = .current) -> Int? {
+        let start = calendar.startOfDay(for: now).timeIntervalSince1970
+        let end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now))!.timeIntervalSince1970
+        return total(samples.filter { Double($0.unix) >= start && Double($0.unix) < end })
+    }
+
     /// Steps recorded across a window. nil when no record carried a counter.
     static func total(_ samples: [V18Sample]) -> Int? {
         var total = 0
