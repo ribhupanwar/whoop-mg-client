@@ -218,6 +218,20 @@ class TestSleepDetection(unittest.TestCase):
         )
         self.assertLess(corrected_period.duration_s, periods[0].duration_s)
 
+    def test_sustained_three_minute_hr_elevation_trims_awake_in_bed_prefix_and_ignores_one_minute_surge(self):
+        # 600s active (85 bpm), 2700s quiet awake-in-bed laptop prefix (83 bpm),
+        # 5400s sleep (60 bpm) with a 1-minute 85 bpm REM surge at 4800s (must NOT split).
+        rows = stretch(0, 600, 85, 0.3)
+        rows += stretch(600, 2700, 83, 0.01)
+        rows += stretch(3300, 1500, 60, 0.01)
+        rows += stretch(4800, 60, 85, 0.01)  # 1-min surge only
+        rows += stretch(4860, 3840, 60, 0.01)
+        rows += stretch(8700, 600, 85, 0.3)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 1)
+        self.assertGreaterEqual(periods[0].start_unix, 3300)
+        self.assertEqual(periods[0].end_unix, 8699)
+
 
 class TestStrain(unittest.TestCase):
     def test_zero_trimp_is_zero(self):

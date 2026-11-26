@@ -347,43 +347,46 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
     seg_start = run_start
     
     # First, skip any leading elevated HR (awake in bed before sleep)
+    def _minute_median(start_sec: int) -> float | None:
+        hrs = [hr_by_sec[sec] for sec in range(start_sec, start_sec + 60) if sec in hr_by_sec]
+        return statistics.median(hrs) if len(hrs) >= 30 else None
+
     t = run_start
     while t + 60 <= run_end:
-        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-        if len(minute_hrs) >= 30:
-            minute_median = statistics.median(minute_hrs)
-            if minute_median >= elevated_threshold:
-                t += 30
-            else:
-                break
+        m = _minute_median(t)
+        if m is not None and m >= elevated_threshold:
+            t += 60
         else:
             break
     seg_start = t
-    
-    # Scan with 1-minute sliding window for internal elevations (bathroom breaks, etc.)
+
+    # Scan with 3-consecutive-minute sustained HR elevation gate (180s)
+    # so brief 1-2 minute REM surges do not fragment a continuous night.
     t = seg_start
-    while t + 60 <= run_end:
-        # Check if this minute has elevated HR
-        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-        if len(minute_hrs) >= 30:  # At least 30 samples in minute
-            minute_median = statistics.median(minute_hrs)
-            if minute_median >= elevated_threshold:
-                # Found sustained elevated HR - split here if segment is long enough
-                seg_duration = t - seg_start
-                if seg_duration >= min_segment_s:
-                    # Create segment
-                    seg_samples = [s for s in run if seg_start <= s.unix < t]
-                    if seg_samples:
-                        segments.append(seg_samples)
-                    # Skip the elevated period
-                    while t + 60 <= run_end:
-                        minute_hrs2 = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-                        if len(minute_hrs2) >= 30 and statistics.median(minute_hrs2) >= elevated_threshold:
-                            t += 30
-                        else:
-                            break
-                    seg_start = t
-        t += 30  # Step by 30 seconds
+    while t + 180 <= run_end:
+        m0 = _minute_median(t)
+        m1 = _minute_median(t + 60)
+        m2 = _minute_median(t + 120)
+        if (
+            m0 is not None and m0 >= elevated_threshold
+            and m1 is not None and m1 >= elevated_threshold
+            and m2 is not None and m2 >= elevated_threshold
+        ):
+            seg_duration = t - seg_start
+            if seg_duration >= min_segment_s:
+                seg_samples = [s for s in run if seg_start <= s.unix < t]
+                if seg_samples:
+                    segments.append(seg_samples)
+            t += 180
+            while t + 60 <= run_end:
+                m_next = _minute_median(t)
+                if m_next is not None and m_next >= elevated_threshold:
+                    t += 60
+                else:
+                    break
+            seg_start = t
+        else:
+            t += 60
     
     # Add final segment
     if run_end - seg_start + 1 >= min_segment_s:
