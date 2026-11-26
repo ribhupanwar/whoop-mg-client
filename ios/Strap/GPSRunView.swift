@@ -99,7 +99,8 @@ struct GPSRunView: View {
             WorkoutLiveActivityController.shared.update(
                 session: recorder.currentSession, phase: recorder.phase,
                 heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
-                distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds
+                distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds,
+                steps: store.band.recordedTodayFromLedger, stepsObservedAt: store.band.capturedTodayStepAt
             )
         }
         .onChange(of: recorder.phase) { _, newPhase in
@@ -111,7 +112,8 @@ struct GPSRunView: View {
                 WorkoutLiveActivityController.shared.update(
                     session: recorder.currentSession, phase: newPhase,
                     heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
-                    distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds
+                    distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds,
+                steps: store.band.recordedTodayFromLedger, stepsObservedAt: store.band.capturedTodayStepAt
                 )
             }
         }
