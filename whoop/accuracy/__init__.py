@@ -30,6 +30,13 @@ from .report import (
     generate_svg_hypnogram,
     generate_svg_metric_bars,
 )
+from .longitudinal import (
+    ErrorStats,
+    MetricABComparison,
+    PairedObservation,
+    compute_error_stats,
+    evaluate_metric_ab,
+)
 
 __all__ = [
     "AccuracyReportGenerator",
@@ -40,15 +47,20 @@ __all__ = [
     "Diagnosis",
     "DiagnosticStatus",
     "DiscrepancyCategory",
+    "ErrorStats",
     "GHIDRA_EVIDENCE_REGISTRY",
     "GhidraEvidence",
+    "MetricABComparison",
     "MetricComparison",
+    "PairedObservation",
     "QualityReport",
     "ReplayStats",
     "RootCauseClassifier",
     "SensorQualityMonitor",
     "WhoopStrapComparator",
     "WireImpairmentConfig",
+    "compute_error_stats",
+    "evaluate_metric_ab",
     "generate_svg_hypnogram",
     "generate_svg_metric_bars",
     "parse_timestamp",

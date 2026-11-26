@@ -6,6 +6,7 @@ import Foundation
 /// not any proprietary algorithm.
 enum StressWindows {
     static let windowSeconds = 300
+    static let maxRestingAccelG = 0.25
 
     static func outsideWorkouts(
         samples: [V18Sample], baseline: Baseline?, sleep: [(start: Int, end: Int)],
@@ -13,6 +14,36 @@ enum StressWindows {
     ) -> StressSplit {
         let workouts = activities.filter { !isDeleted($0) }.map { (start: $0.startUnix, end: $0.endUnix) }
         return share(samples: samples, baseline: baseline, excluded: sleep + workouts)
+    }
+
+    private static func bucketedRR(
+        samples: [V18Sample],
+        excluded: [(start: Int, end: Int)]
+    ) -> (buckets: [Int: [Double]], coveredSeconds: [Int: Int]) {
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
+            if let accel = sample.dynamicAccelG, accel > maxRestingAccelG { continue }
+            if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
+                continue
+            }
+            if let previous = uniqueBySecond[sample.unix],
+               !Hrv.preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        var buckets: [Int: [Double]] = [:]
+        var coveredSeconds: [Int: Int] = [:]
+        for unix in uniqueBySecond.keys.sorted() {
+            let sample = uniqueBySecond[unix]!
+            let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
+            guard !rr.isEmpty else { continue }
+            let bucket = unix / windowSeconds
+            coveredSeconds[bucket, default: 0] += 1
+            buckets[bucket, default: []].append(contentsOf: rr)
+        }
+        return (buckets, coveredSeconds)
     }
 
     /// Share of awake windows in each stress band. `excluded` drops windows
@@ -29,24 +60,7 @@ enum StressWindows {
                 reason: "needs at least \(Recovery.minBaselineDays) awake-baseline days"
             )
         }
-        var buckets: [Int: [Double]] = [:]
-        var coveredSecondsByBucket: [Int: Int] = [:]
-        // Replayed BLE archive chunks can repeat a second. Count its RR
-        // payload once, otherwise stress confidence is artificially inflated.
-        var seenSeconds = Set<Int>()
-        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
-            guard sample.wearing, !sample.rrIntervalsMS.isEmpty,
-                  !seenSeconds.contains(sample.unix) else { continue }
-            if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
-                continue
-            }
-            let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
-            guard !rr.isEmpty else { continue }
-            seenSeconds.insert(sample.unix)
-            let bucket = sample.unix / windowSeconds
-            coveredSecondsByBucket[bucket, default: 0] += 1
-            buckets[bucket, default: []].append(contentsOf: rr)
-        }
+        let (buckets, coveredSecondsByBucket) = bucketedRR(samples: samples, excluded: excluded)
 
         var high = 0
         var medium = 0
@@ -99,21 +113,7 @@ enum StressWindows {
         excluded: [(start: Int, end: Int)] = []
     ) -> [StressPoint] {
         guard let baseline, baseline.days >= Recovery.minBaselineDays else { return [] }
-        var buckets: [Int: [Double]] = [:]
-        // Replayed BLE archive chunks can repeat a second. Count its RR
-        // payload once, otherwise stress confidence is artificially inflated.
-        var seenSeconds = Set<Int>()
-        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
-            guard sample.wearing, !sample.rrIntervalsMS.isEmpty,
-                  !seenSeconds.contains(sample.unix) else { continue }
-            if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
-                continue
-            }
-            let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
-            guard !rr.isEmpty else { continue }
-            seenSeconds.insert(sample.unix)
-            buckets[sample.unix / windowSeconds, default: []].append(contentsOf: rr)
-        }
+        let (buckets, _) = bucketedRR(samples: samples, excluded: excluded)
         var points: [StressPoint] = []
         for bucket in buckets.keys.sorted() {
             let rr = buckets[bucket]!

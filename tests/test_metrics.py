@@ -390,5 +390,34 @@ class TestRestingHeartRate(unittest.TestCase):
         self.assertIsNone(resting_heart_rate(rows))
 
 
+class TestWindowedSleepHRV(unittest.TestCase):
+    def test_averages_multiple_5min_windows_eliminating_longest_run_bias(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): RMSSD = 20 ms (alternating 800, 820)
+        # Window 2 (300..599): RMSSD = 40 ms (alternating 800, 840)
+        # Window 3 (600..899): RMSSD = 60 ms (alternating 800, 860)
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 820], accel=0.02) for t in range(0, 300)]
+        w2 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(300, 600)]
+        w3 = [sample(t, 60, rr=[800 if t % 2 == 0 else 860], accel=0.02) for t in range(600, 900)]
+        res, secs, n_win, used_fb = windowed_sleep_hrv(w1 + w2 + w3)
+        self.assertEqual(n_win, 3)
+        self.assertFalse(used_fb)
+        self.assertIsNotNone(res.rmssd_ms)
+        # Mean of (20, 40, 60) = 40 ms
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 900)
+
+    def test_rejects_overcounted_5min_window_without_losing_valid_windows(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): normal 1 beat/sec -> 40 ms RMSSD
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(0, 300)]
+        # Window 2 (300..599): over-counted 3 beats/sec -> >2.4x elapsed -> rejected
+        w2 = [sample(t, 60, rr=[800, 900, 800], accel=0.02) for t in range(300, 600)]
+        res, secs, n_win, _ = windowed_sleep_hrv(w1 + w2)
+        self.assertEqual(n_win, 1)
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 300)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -499,6 +499,98 @@ enum Hrv {
         return (result: fallback.result, windowSeconds: fallback.windowSeconds, isSWS: false)
     }
 
+    /// Multi-window 5-minute sleep RMSSD estimator (Accuracy Engine V2).
+    ///
+    /// Instead of selecting a single longest contiguous run (which introduces ±7–15 ms
+    /// sampling variance whenever a single micro-movement or 1s gap splits a run),
+    /// this partitions the sleep period into 5-minute windows, enforces per-window
+    /// RR coverage (<= 1.05 * elapsed) and gap-aware NN cleaning (>= 21 clean beats),
+    /// and averages the qualifying window RMSSDs across the sleep session.
+    /// Falls back to `swsRestingHRV` when no 5-minute window qualifies.
+    static func windowedSleepHRV(
+        _ samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = 0.15,
+        windowSeconds: Int = restingMinWindowS,
+        minBeatsPerWindow: Int = 21
+    ) -> (result: HrvResult, windowSeconds: Int, qualifyingWindows: Int, usedSWSFallback: Bool) {
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let eligible = uniqueBySecond.values
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+            }
+            .sorted { $0.unix < $1.unix }
+
+        var buckets: [Int: [V18Sample]] = [:]
+        for sample in eligible {
+            buckets[sample.unix / windowSeconds, default: []].append(sample)
+        }
+
+        var windowRMSSDs: [Double] = []
+        var windowSDNNs: [Double] = []
+        var windowPNN50s: [Double] = []
+        var windowMeanRRs: [Double] = []
+        var totalBeats = 0
+        var totalNNBeats = 0
+        var totalSeconds = 0
+
+        for bucket in buckets.keys.sorted() {
+            guard let records = buckets[bucket],
+                  let firstUnix = records.first?.unix,
+                  let lastUnix = records.last?.unix else { continue }
+            let elapsed = lastUnix - firstUnix + 1
+            guard elapsed >= 60 else { continue }
+            let validRRSumMS = records.reduce(0) { acc, s in
+                acc + s.rrIntervalsMS.filter {
+                    (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+                }.reduce(0, +)
+            }
+            if Double(validRRSumMS) / 1000.0 > Double(elapsed) * 1.05 {
+                continue
+            }
+            let res = fromSamples(records)
+            guard let rmssd = res.rmssdMS, rmssd.isFinite, rmssd > 0,
+                  res.nnBeats >= minBeatsPerWindow else { continue }
+            windowRMSSDs.append(rmssd)
+            if let sd = res.sdnnMS, sd.isFinite { windowSDNNs.append(sd) }
+            if let p50 = res.pnn50Pct, p50.isFinite { windowPNN50s.append(p50) }
+            if let mrr = res.meanRRMS, mrr.isFinite { windowMeanRRs.append(mrr) }
+            totalBeats += res.beats
+            totalNNBeats += res.nnBeats
+            totalSeconds += records.count
+        }
+
+        if !windowRMSSDs.isEmpty {
+            let meanRMSSD = Stats.mean(windowRMSSDs)
+            let result = HrvResult(
+                beats: totalBeats,
+                nnBeats: totalNNBeats,
+                rmssdMS: meanRMSSD,
+                sdnnMS: windowSDNNs.isEmpty ? nil : Stats.mean(windowSDNNs),
+                pnn50Pct: windowPNN50s.isEmpty ? nil : Stats.mean(windowPNN50s),
+                lnRMSSD: meanRMSSD > 0 ? log(meanRMSSD) : nil,
+                meanRRMS: windowMeanRRs.isEmpty ? nil : Stats.mean(windowMeanRRs)
+            )
+            return (result: result, windowSeconds: totalSeconds,
+                    qualifyingWindows: windowRMSSDs.count, usedSWSFallback: false)
+        }
+
+        let fallback = swsRestingHRV(samples, deepEpochs: deepEpochs,
+                                     quietAccelG: min(quietAccelG, restingQuietAccelG),
+                                     minWindowS: windowSeconds)
+        return (result: fallback.result, windowSeconds: fallback.windowSeconds,
+                qualifyingWindows: fallback.result.rmssdMS != nil ? 1 : 0,
+                usedSWSFallback: fallback.isSWS)
+    }
+
     /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
     /// change either production estimator or its quality thresholds.
     struct RestingWindowDiagnostic: Encodable {

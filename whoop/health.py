@@ -1368,6 +1368,55 @@ def _window_rates(detrended: list[float]) -> list[float]:
     return rates
 
 
+def _spectral_window_rates(
+    detrended: list[float], median_rr_seconds: float
+) -> list[float]:
+    ceiling_hz = min(0.40, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.40
+    if ceiling_hz <= 0.16:
+        return []
+    window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
+    min_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
+    rates: list[float] = []
+    for start in range(0, len(detrended), window_samples):
+        window = detrended[start : start + window_samples]
+        n = len(window)
+        if n < min_samples:
+            continue
+        denom = max(1, n - 1)
+        windowed = [
+            window[i] * 0.5 * (1.0 - math.cos(2.0 * math.pi * i / denom))
+            for i in range(n)
+        ]
+        best_power = -1.0
+        best_freq = 0.0
+        total_power = 0.0
+        bins = 0
+        freq = 0.05
+        while freq <= ceiling_hz + 1e-6:
+            omega = 2.0 * math.pi * freq / RSA_RESAMPLE_HZ
+            re = 0.0
+            im = 0.0
+            for i in range(n):
+                ang = omega * i
+                re += windowed[i] * math.cos(ang)
+                im -= windowed[i] * math.sin(ang)
+            power = re * re + im * im
+            total_power += power
+            bins += 1
+            if power > best_power:
+                best_power = power
+                best_freq = freq
+            freq += 0.005
+        mean_power = total_power / bins if bins > 0 else 0.0
+        if (
+            mean_power > 0
+            and (best_power / mean_power) >= 2.0
+            and 0.133 <= best_freq <= 0.417
+        ):
+            rates.append(best_freq * 60.0)
+    return rates
+
+
 def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
     """Estimate sleeping respiratory rate from R-R via RSA.
 
@@ -1387,6 +1436,7 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         )
 
     rates: list[float] = []
+    spectral_rates: list[float] = []
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
             continue
@@ -1403,25 +1453,28 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         detrended = _detrend(grid)
         if statistics.pstdev(detrended) <= 1e-9:
             continue
+        median_rr_s = statistics.median(rr / 1000.0 for _, rr in segment)
+        spectral_rates.extend(_spectral_window_rates(detrended, median_rr_s))
         rates.extend(_window_rates(detrended))
 
-    if not rates:
+    active_rates = spectral_rates if len(spectral_rates) >= 3 else rates
+    if not active_rates:
         return RespRate(
             None,
             "no usable RSA peak train - needs a continuous still or sleep R-R window",
             total_beats,
             0,
         )
-    median = statistics.median(rates)
+    median = statistics.median(active_rates)
     if not (RESP_PLAUSIBLE_MIN_BPM <= median <= RESP_PLAUSIBLE_MAX_BPM):
         return RespRate(
             None,
             f"RSA estimate {median:.1f}/min fell outside the plausible"
             f" {RESP_PLAUSIBLE_MIN_BPM:.0f}-{RESP_PLAUSIBLE_MAX_BPM:.0f} band",
             total_beats,
-            len(rates),
+            len(active_rates),
         )
-    return RespRate(round(median, 1), None, total_beats, len(rates))
+    return RespRate(round(median, 1), None, total_beats, len(active_rates))
 
 
 @dataclass
