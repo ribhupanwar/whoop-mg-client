@@ -71,6 +71,10 @@ struct StressView: View {
 
     private var stressStateText: String {
         if let reason = store.band.stress.reason { return reason }
+        if let diagnostics = store.band.stress.diagnostics,
+           let deviation = diagnostics.unclampedScore, deviation <= 0 {
+            return "Low estimate: HRV at or above your awake baseline"
+        }
         return "Awake-quiet baseline available"
     }
 
@@ -97,7 +101,7 @@ struct StressView: View {
                     yLabels: ["3.0", "1.5", "0.0"],
                     xLabels: stressTimeLabels(series)
                 )
-                Hint("Awake 5-minute windows scored against your baseline; sleep is excluded, so the line skips the night. Local estimate, not WHOOP's algorithm.")
+                Hint("Qualifying awake 5-minute windows only; missing intervals are not measured. Local estimate, not WHOOP's algorithm.")
             } else {
                 EmptyState(
                     title: "No stress series yet",
