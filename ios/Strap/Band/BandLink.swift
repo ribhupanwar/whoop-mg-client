@@ -1034,10 +1034,13 @@ final class BandLink: NSObject, ObservableObject {
     private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
         let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
         let key = JournalStore.dayKey(for: date, calendar: calendar)
-        return days.last {
+        if let exact = days.last(where: {
             $0.dateKey == key && $0.state == "sleep"
                 && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
+        }) {
+            return exact
         }
+        return days.last { $0.dateKey == key && $0.state == "sleep" }
     }
 
     private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
@@ -1071,11 +1074,13 @@ final class BandLink: NSObject, ObservableObject {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
             let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
+            let assessmentBreakdown = RecoveryDiagnostics.Breakdown(assessment: assessment)
+            let legacyBreakdown = RecoveryDiagnostics.Breakdown(assessment: legacy)
             let report = RecoveryDiagnostics.Report(
                 buildRevision: revision, timezone: calendar.timeZone.identifier,
                 lastCompletedHistorySync: sync, assessment: assessment,
-                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), legacyHomeReplay: legacy,
-                legacyHomeBreakdown: RecoveryDiagnostics.Breakdown(assessment: legacy), session: session,
+                breakdown: assessmentBreakdown, legacyHomeReplay: legacy,
+                legacyHomeBreakdown: legacyBreakdown, session: session,
                 archiveFirstUnix: samples.first?.unix, archiveLastUnix: samples.last?.unix,
                 archiveFirstRecordIndex: samples.first?.header.recordIndex,
                 archiveLastRecordIndex: samples.last?.header.recordIndex,
@@ -1087,7 +1092,12 @@ final class BandLink: NSObject, ObservableObject {
                 recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
                 shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
                 sleepAnalysis: sleepAnalysis,
-                upcomingSleepPlan: upcomingSleepPlan)
+                upcomingSleepPlan: upcomingSleepPlan,
+                respiratoryRate: assessment.day?.respiratoryRate,
+                respiratoryBaseline: assessmentBreakdown?.respiratoryBaseline,
+                sleepPerformancePct: assessment.day?.sleepPerformancePct,
+                skinTemperatureC: assessment.day?.skinTemperatureC,
+                oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }

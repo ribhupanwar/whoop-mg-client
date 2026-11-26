@@ -1156,6 +1156,7 @@ def recovery_score(
     baseline: Baseline | None,
     respiratory_rate: float | None = None,
     respiratory_rate_baseline: float | None = None,
+    sleep_performance: float | None = None,
 ) -> RecoveryResult:
     """Baseline-relative 0-100 recovery estimate. Not WHOOP's recovery.
 
@@ -1179,7 +1180,9 @@ def recovery_score(
     )
     components = {"hrv": _logistic(hrv_z), "rhr": _logistic(rhr_z)}
 
-    if sleep_hours is not None and sleep_need_hours and sleep_need_hours > 0:
+    if sleep_performance is not None and math.isfinite(sleep_performance) and sleep_performance >= 0:
+        components["sleep"] = min(100.0, sleep_performance)
+    elif sleep_hours is not None and sleep_need_hours and sleep_need_hours > 0:
         components["sleep"] = 100.0 * min(sleep_hours / sleep_need_hours, 1.0)
 
     total_weight = sum(RECOVERY_WEIGHTS[k] for k in components)

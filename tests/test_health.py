@@ -349,6 +349,14 @@ class TestRecovery(unittest.TestCase):
         # Expected: 65.0 * (1 - 0.10) = 58.5
         self.assertEqual(sick.score, 58.5)
 
+    def test_sleep_performance_incorporating_sleep_debt(self):
+        # When sleep performance (e.g. 75% after sleep debt) is provided,
+        # it drives the sleep component directly.
+        base = baseline()
+        res_with_perf = recovery_score(4.0, 55.0, sleep_hours=8.0, sleep_need_hours=8.0,
+                                       baseline=base, sleep_performance=75.0)
+        self.assertEqual(res_with_perf.sleep_component, 75.0)
+
     def test_vo2max_source_enumeration(self):
         # 4 source strings matching 0x109748af0-0x109748b50
         self.assertEqual(VO2MaxSource.INTERNAL_ESTIMATE.value, "INTERNAL_ESTIMATE")
