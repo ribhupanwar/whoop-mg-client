@@ -70,16 +70,15 @@ actor DailyStepLedger {
         let upper = Int(end.timeIntervalSince1970)
         // Stored buckets reflect the timezone at ingestion. Re-select by absolute
         // timestamps so changing timezone cannot hide or double-count a day.
-        var bySecond: [Int: Int?] = [:]
+        var bySecond: [Int: Observation] = [:]
         for day in days {
             for row in day.observations where row.unix >= lower && row.unix < upper {
                 if let previous = bySecond[row.unix] {
-                    bySecond[row.unix] = previous == row.counter ? previous : nil
-                } else if bySecond.keys.contains(row.unix) {
-                    // A previously disputed second must remain invalid.
-                    continue
+                    if previous.counter != row.counter {
+                        bySecond[row.unix] = Observation(unix: row.unix, counter: nil)
+                    }
                 } else {
-                    bySecond[row.unix] = row.counter
+                    bySecond[row.unix] = row
                 }
             }
         }
@@ -87,7 +86,7 @@ actor DailyStepLedger {
         var sum = 0
         var sawValid = false
         for unix in bySecond.keys.sorted() {
-            guard let value = bySecond[unix] ?? nil else {
+            guard let value = bySecond[unix]?.counter else {
                 previous = nil
                 continue
             }
