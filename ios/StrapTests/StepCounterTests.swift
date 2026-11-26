@@ -209,10 +209,13 @@ final class StepCounterTests: XCTestCase {
                              sample(midnightUTC - 1, steps: 102),
                              sample(midnightUTC, steps: 104),
                              sample(midnightUTC + 1, steps: 106)], calendar: utc, now: now)
-        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: utc), 2)
-        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: kolkata), 6)
+        let utcCount = await ledger.capturedToday(now: now, calendar: utc)
+        let kolkataCount = await ledger.capturedToday(now: now, calendar: kolkata)
+        XCTAssertEqual(utcCount, 2)
+        XCTAssertEqual(kolkataCount, 6)
         let restored = DailyStepLedger(defaults: defaults)
-        XCTAssertEqual(await restored.capturedToday(now: now, calendar: kolkata), 6)
+        let restoredCount = await restored.capturedToday(now: now, calendar: kolkata)
+        XCTAssertEqual(restoredCount, 6)
     }
 
 }
