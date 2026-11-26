@@ -28,6 +28,13 @@ struct DashboardRows: View {
                 .padding(.bottom, 8)
             }
         }
+        .onAppear { store.band.refreshRecordedTodaySteps() }
+        .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
+            store.band.refreshRecordedTodaySteps()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in
+            store.band.refreshRecordedTodaySteps()
+        }
     }
 
     @ViewBuilder
@@ -56,7 +63,7 @@ struct DashboardRows: View {
             historyRow(.steps) {
                 MetricRow(icon: "figure.walk", title: "Steps",
                           value: demo ? SampleData.steps.formatted() : stepsText,
-                          detail: demo ? SampleData.stepsCompare.formatted() : nil,
+                          detail: demo ? SampleData.stepsCompare.formatted() : stepsDetail,
                           detailColor: demo ? .appWarn : .appMuted)
             }
         case .zonesLow:
@@ -154,11 +161,12 @@ struct DashboardRows: View {
     }
 
     private var todayRecordedSteps: Int? {
-        let formatter = DateFormatter()
-        formatter.calendar = .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        let today = formatter.string(from: Date())
-        return store.band.days.first(where: { $0.dateKey == today })?.steps
+        let today = JournalStore.dayKey(for: Date())
+        let archived = store.band.days.first(where: { $0.dateKey == today })?.steps
+        // Never add overlapping capture windows or imply whole-day coverage.
+        return DailyStepLedger.bestRecordedMinimum(
+            archive: archived, ledger: store.band.recordedTodayFromLedger
+        )
     }
 
     private var stepsText: String {
