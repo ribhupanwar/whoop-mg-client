@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import WidgetKit
 
 /// Single source of truth for the UI. Settings and journal persist to
 /// UserDefaults; band state lives in `BandLink`, which persists its own
@@ -32,6 +33,7 @@ final class AppStore: ObservableObject {
     private var summaryCancellable: AnyCancellable?
     private var healthCancellable: AnyCancellable?
     private var monitorCancellable: AnyCancellable?
+    private var healthWidgetCancellable: AnyCancellable?
     @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
@@ -99,6 +101,11 @@ final class AppStore: ObservableObject {
                 HealthMonitor.make(days: days, session: summary?.latestSleepSession)
             }
             .sink { [weak self] snapshot in self?.healthMonitor = snapshot }
+        healthWidgetCancellable = band.objectWillChange
+            .throttle(for: .seconds(60), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.refreshHealthWidget() }
+            }
         // Fitness comparisons change with saved observations/profile, never
         // with each live pulse or history packet. Work runs on a serial worker.
         fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
@@ -126,6 +133,34 @@ final class AppStore: ObservableObject {
             }
         }
         band.autoConnectIfNeeded()
+    }
+
+    func refreshHealthWidget() {
+        guard defaults.bool(forKey: "strap.healthWidgetEnabled"), !isPreview else {
+            if HealthWidgetSnapshot.load() != nil, HealthWidgetSnapshot.save(nil) {
+                WidgetCenter.shared.reloadTimelines(ofKind: HealthWidgetSnapshot.widgetKind)
+            }
+            return
+        }
+        guard !band.isAnalyzingHistory else { return }
+        let now = Date()
+        let key = JournalStore.dayKey(for: now)
+        let night = band.recoveryNight.flatMap { $0.dateKey == key ? $0 : nil }
+        let day = band.days.last { $0.dateKey == key }
+        func valid(_ value: Double?, range: ClosedRange<Double>) -> Double? {
+            guard let value, value.isFinite, range.contains(value) else { return nil }
+            return value
+        }
+        let recovery = night == nil ? nil : valid(band.recovery.score, range: 0...100)
+        let sleep = valid(night?.sleepPerformancePct, range: 0...100)
+        let liveStrain = band.liveDayStrainDateKey == key ? band.liveDayStrain : nil
+        let strain = valid(liveStrain ?? day?.strain, range: 0...21)
+        let battery = band.isConnected ? band.batteryPercent.flatMap { (0...100).contains($0) ? $0 : nil } : nil
+        let snapshot = HealthWidgetSnapshot(dayKey: key, recovery: recovery, sleep: sleep,
+                                            strain: strain, battery: battery, savedAt: now)
+        if HealthWidgetSnapshot.save(snapshot) {
+            WidgetCenter.shared.reloadTimelines(ofKind: HealthWidgetSnapshot.widgetKind)
+        }
     }
 
     /// A drain can report the same session twice; the store merges overlaps,
