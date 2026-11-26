@@ -74,7 +74,8 @@ enum WhoopImportedHistory {
                     guard let raw = text(name), let value = Double(raw), value.isFinite, range.contains(value) else { return nil }
                     return value
                 }
-                day.recovery = number("Recovery score %", 0...100) ?? day.recovery
+                day.recovery = number("Recovery score %", 0...100)
+                    ?? number("Recovery score pct", 0...100) ?? day.recovery
                 day.strain = number("Day Strain", 0...21) ?? day.strain
                 day.hrvMS = number("Heart rate variability (ms)", 0.001...1000)
                     ?? number("Heart rate variability (RMSSD ms)", 0.001...1000)
