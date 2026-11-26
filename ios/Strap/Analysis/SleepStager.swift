@@ -684,19 +684,46 @@ enum SleepStager {
         return labels
     }
 
+    private static func localHRZScores(_ epochs: [Epoch], radiusEpochs: Int = 90) -> [Double] {
+        let n = epochs.count
+        let radiusSeconds = radiusEpochs * epochS
+        var out = [Double](repeating: 0, count: n)
+        var lo = 0
+        var hi = 0
+        for index in 0..<n {
+            guard let hr = epochs[index].hr else { continue }
+            let tMin = epochs[index].start - radiusSeconds
+            let tMax = epochs[index].start + radiusSeconds
+            while lo < n && epochs[lo].start < tMin {
+                lo += 1
+            }
+            while hi < n && epochs[hi].start < tMax {
+                hi += 1
+            }
+            let window = epochs[lo..<hi].compactMap(\.hr)
+            guard !window.isEmpty else { continue }
+            let median = Stats.median(window)
+            let variance = window.reduce(0.0) { $0 + ($1 - median) * ($1 - median) } / Double(window.count)
+            let sd = max(1.0, sqrt(variance))
+            out[index] = (hr - median) / sd
+        }
+        return out
+    }
+
     private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {
         guard !epochs.isEmpty else { return [] }
-        let zHR = zScorer(population.map { $0.hr })
+        let localHRZ = localHRZScores(epochs)
         let zVar = zScorer(population.map { $0.hrVar })
         let zMove = zScorer(population.map { Optional($0.moveFrac) })
         let zResp = zScorer(population.map { $0.respReg })
         let flatSorted = population.compactMap { $0.hrFlat11 }.sorted()
 
         var emissions: [[SleepStage: Double]] = []
-        for epoch in epochs {
+        for (index, epoch) in epochs.enumerated() {
+            let lhr = localHRZ[index]
             let gate = deepGateSlope
                 * max(0, percentileRank(flatSorted, epoch.hrFlat11) - deepGateThreshold)
-            var awakeCardiac = 0.8 * zVar(epoch.hrVar) + 0.4 * zHR(epoch.hr)
+            var awakeCardiac = 0.8 * zVar(epoch.hrVar) + 0.4 * lhr
             if motionQuiescent(epoch) {
                 awakeCardiac = min(0, awakeCardiac)
             }
@@ -704,7 +731,7 @@ enum SleepStager {
                 .deep: -1.1 * zVar(epoch.hrVar) - 0.5 * zMove(epoch.moveFrac)
                     - gate + baseLogPrior[.deep]!,
                 .rem: 0.6 * zVar(epoch.hrVar) - 0.6 * zMove(epoch.moveFrac)
-                    + 0.4 * zHR(epoch.hr) + baseLogPrior[.rem]!,
+                    + 0.4 * lhr + baseLogPrior[.rem]!,
                 .light: baseLogPrior[.light]!,
                 .wake: zMove(epoch.moveFrac) + awakeCardiac + baseLogPrior[.wake]!
             ]

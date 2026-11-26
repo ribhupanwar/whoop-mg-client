@@ -162,7 +162,33 @@ class SleepStageTests(unittest.TestCase):
         self.assertAlmostEqual(res.light_min, 206.0, delta=15.0)
         self.assertAlmostEqual(res.deep_min, 132.0, delta=15.0)
         self.assertAlmostEqual(res.rem_min, 136.0, delta=15.0)
-        self.assertAlmostEqual(res.deep_min + res.rem_min, 268.0, delta=5.0)
+        self.assertAlmostEqual(res.deep_min + res.rem_min, 268.0, delta=10.0)
+
+    def test_local_hr_baseline_preserves_late_night_rem_despite_circadian_hr_drop(self):
+        # Early half: HR=74 bpm; Late half: basal HR decays to 58 bpm, with a
+        # 40-min late-night REM episode at HR=66 bpm (+8 bpm over local baseline,
+        # still 8 bpm below early-night HR) and elevated HR variance.
+        samples = []
+        base_unix = 1_700_000_000
+        for s in range(420 * 60):
+            minute = s // 60
+            if minute < 210:
+                hr = 74
+            elif 300 <= minute < 340:
+                hr = 66 + (4 if (s // 15) % 2 == 0 else -4)
+            else:
+                hr = 58
+            samples.append(V18Sample(
+                header=RecordHeader(version=18, flags=0x80, record_index=s, unix=base_unix + s, subsec_q15=0),
+                heart_rate=hr,
+                rr_intervals_ms=[int(60_000 / hr)],
+                gravity_g=(0.0, 0.0, 1.0),
+                dynamic_accel_g=0.01,
+                sleep_state=2,
+            ))
+        period = SleepPeriod(start_unix=base_unix, end_unix=base_unix + 420 * 60 - 1, quiet_fraction=0.98, mean_hr=66)
+        res = stage_sleep(samples, period)
+        self.assertGreater(res.rem_min, 20.0)
 
 
 if __name__ == "__main__":

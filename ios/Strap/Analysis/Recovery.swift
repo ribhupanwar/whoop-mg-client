@@ -26,7 +26,8 @@ enum Recovery {
         sleepNeedHours: Double?,
         baseline: Baseline?,
         respiratoryRate: Double? = nil,
-        respiratoryRateBaseline: Double? = nil
+        respiratoryRateBaseline: Double? = nil,
+        sleepPerformance: Double? = nil
     ) -> RecoveryResult {
         guard let baseline, baseline.days >= minBaselineDays else {
             return RecoveryResult(
@@ -58,8 +59,13 @@ enum Recovery {
         var weighted = hrvComponent * hrvWeight + rhrComponent * rhrWeight
         var weight = hrvWeight + rhrWeight
         var sleepComponent: Double?
-        if let sleepHours, sleepHours.isFinite, sleepHours >= 0,
-           let sleepNeedHours, sleepNeedHours.isFinite, sleepNeedHours > 0 {
+        if let sleepPerformance, sleepPerformance.isFinite, sleepPerformance >= 0 {
+            let sleep = min(100.0, sleepPerformance)
+            sleepComponent = sleep
+            weighted += sleep * sleepWeight
+            weight += sleepWeight
+        } else if let sleepHours, sleepHours.isFinite, sleepHours >= 0,
+                  let sleepNeedHours, sleepNeedHours.isFinite, sleepNeedHours > 0 {
             let sleep = 100.0 * min(sleepHours / sleepNeedHours, 1.0)
             sleepComponent = sleep
             weighted += sleep * sleepWeight

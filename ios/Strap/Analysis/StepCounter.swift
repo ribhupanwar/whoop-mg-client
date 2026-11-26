@@ -44,7 +44,11 @@ enum StepCounter {
         let grouped = Dictionary(grouping: samples.filter { $0.stepCounter != nil }, by: { $0.unix })
         for second in grouped.keys.sorted() {
             guard let records = grouped[second], let sample = records.first else { continue }
-            if Set(records.compactMap({ $0.stepCounter })).count > 1 {
+            // A confirmed off-wrist second is a hard continuity boundary:
+            // skipping that row must not join two on-wrist endpoints and assign
+            // unobserved desk movement to the wearer.
+            if records.contains(where: { !$0.wearing })
+                || Set(records.compactMap({ $0.stepCounter })).count > 1 {
                 sawCounter = true
                 previous = nil
                 continue

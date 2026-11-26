@@ -8,6 +8,9 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         var zone: Int?
         var distanceMeters: Double?
         var paceSecondsPerKilometer: Int?
+        // Optional for backward decoding of existing workout Live Activities.
+        var steps: Int?
+        var stepsObservedAt: Date?
         var paused: Bool
         var lastSampleAt: Date
     }

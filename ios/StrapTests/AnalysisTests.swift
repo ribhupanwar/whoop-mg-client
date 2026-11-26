@@ -1463,6 +1463,67 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(sick.score!, 58.5, accuracy: 1e-6)
     }
 
+    func testRecoveryUsesSleepPerformanceIncorporatingSleepDebt() {
+        let baseline = steadyBaseline()
+        let result = Recovery.score(
+            lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8,
+            baseline: baseline, sleepPerformance: 75.0
+        )
+        XCTAssertEqual(result.sleepComponent, 75.0)
+    }
+
+    func testDatedRecoveryEvaluatesRespiratoryBaselineAndPassesToScore() throws {
+        // Keep fixture day keys and timestamps in the same explicit calendar.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let firstDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        let midnight = Int(firstDay.timeIntervalSince1970)
+        let priorDays: [DayMetrics] = (1...14).map { dayIndex in
+            DayMetrics(
+                dateKey: String(format: "2026-11-%02d", dayIndex),
+                state: "sleep",
+                restingHR: 55.0,
+                lnRMSSD: 4.0,
+                hrvWindowSeconds: 300,
+                sleepHours: 8.0,
+                sleepStartUnix: midnight + (dayIndex - 1) * 86400,
+                sleepEndUnix: midnight + (dayIndex - 1) * 86400 + 28800,
+                strain: 10.0,
+                steps: 5000,
+                sleepDurationReliable: true,
+                respiratoryRate: 14.0
+            )
+        }
+        let sickDay = DayMetrics(
+            dateKey: "2026-11-15",
+            state: "sleep",
+            restingHR: 55.0,
+            lnRMSSD: 4.0,
+            hrvWindowSeconds: 300,
+            sleepHours: 8.0,
+            sleepStartUnix: midnight + 14 * 86400,
+            sleepEndUnix: midnight + 14 * 86400 + 28800,
+            strain: 10.0,
+            steps: 5000,
+            sleepDurationReliable: true,
+            respiratoryRate: 16.0
+        )
+        let assessment = DatedRecovery.evaluate(
+            day: sickDay,
+            priorDays: priorDays,
+            date: Date(timeIntervalSince1970: TimeInterval(midnight + 14 * 86400 + 28800)),
+            sleepNeedHours: 8.0,
+            calendar: calendar
+        )
+        XCTAssertEqual(assessment.dateKey, sickDay.dateKey)
+        XCTAssertEqual(assessment.baselineDays.count, 14)
+        XCTAssertEqual(assessment.result.score, 58.5)
+        let breakdown = try XCTUnwrap(RecoveryDiagnostics.Breakdown(assessment: assessment))
+        XCTAssertEqual(breakdown.respiratoryRate, 16.0)
+        XCTAssertEqual(breakdown.respiratoryBaseline, 14.0)
+        XCTAssertEqual(breakdown.respiratoryPenaltyApplied, true)
+    }
+
     func testVO2MaxSourceEnumeration() {
         // 4 source strings matching 0x109748af0-0x109748b50
         XCTAssertEqual(VO2MaxSource.internalEstimate.rawValue, "INTERNAL_ESTIMATE")
