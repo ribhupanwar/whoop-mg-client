@@ -65,25 +65,41 @@ actor DailyStepLedger {
     /// lower bound over verified continuous intervals, not a fabricated total.
     func capturedToday(now: Date = Date(), calendar: Calendar = .current) -> Int? {
         let start = calendar.startOfDay(for: now)
-        guard let day = days.first(where: { $0.start == start }) else { return nil }
-        let rows = day.observations.sorted { $0.unix < $1.unix }
-        var previous: Observation?
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
+        let lower = Int(start.timeIntervalSince1970)
+        let upper = Int(end.timeIntervalSince1970)
+        // Stored buckets reflect the timezone at ingestion. Re-select by absolute
+        // timestamps so changing timezone cannot hide or double-count a day.
+        var bySecond: [Int: Int?] = [:]
+        for day in days {
+            for row in day.observations where row.unix >= lower && row.unix < upper {
+                if let previous = bySecond[row.unix] {
+                    bySecond[row.unix] = previous == row.counter ? previous : nil
+                } else if bySecond.keys.contains(row.unix) {
+                    // A previously disputed second must remain invalid.
+                    continue
+                } else {
+                    bySecond[row.unix] = row.counter
+                }
+            }
+        }
+        var previous: (unix: Int, value: Int)?
         var sum = 0
         var sawValid = false
-        for row in rows {
-            guard let value = row.counter else {
+        for unix in bySecond.keys.sorted() {
+            guard let value = bySecond[unix] ?? nil else {
                 previous = nil
                 continue
             }
             sawValid = true
-            if let before = previous, let old = before.counter {
-                let seconds = row.unix - before.unix
+            if let before = previous {
+                let seconds = unix - before.unix
                 if seconds > 0 && seconds <= 10 {
-                    let delta = StepCounter.delta(from: old, to: value, seconds: seconds)
+                    let delta = StepCounter.delta(from: before.value, to: value, seconds: seconds)
                     if delta <= StepCounter.maxStepsPerSecond * seconds { sum += delta }
                 }
             }
-            previous = row
+            previous = (unix, value)
         }
         return sawValid ? sum : nil
     }
