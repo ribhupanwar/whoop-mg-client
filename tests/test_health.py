@@ -64,6 +64,16 @@ class TestSleepDetection(unittest.TestCase):
         rows += stretch(4200, 600, 100, 0.5)
         self.assertEqual(detect_sleep(rows), [])
 
+    def test_deep_stillness_without_hr_drop_is_not_sleep(self):
+        # Stable wrist posture is possible during quiet wakefulness.
+        # No declared sleep state and no reduction from the active HR reference.
+        rows = stretch(0, 600, 70, 0.3)
+        quiet = stretch(600, 7200, 75, 0.005)
+        for row in quiet:
+            row.gravity_g = (0.0, 0.0, 1.0)
+        rows += quiet + stretch(7800, 600, 70, 0.3)
+        self.assertEqual(detect_sleep(rows), [])
+
     def test_short_quiet_period_is_not_sleep(self):
         rows = stretch(0, 600, 100, 0.5)
         rows += stretch(600, 1200, 60, 0.02)
