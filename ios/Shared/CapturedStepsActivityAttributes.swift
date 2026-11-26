@@ -8,6 +8,8 @@ struct CapturedStepsActivityAttributes: ActivityAttributes {
         let recordedMinimum: Int
         let lastObservedAt: Date
         let isConnected: Bool
+        var heartRate: Int?
+        var estimatedStrain: Double?
     }
 
     let startedAt: Date
