@@ -91,16 +91,18 @@ struct StressView: View {
                     yLabels: ["3.0", "1.5", "0.0"],
                     xLabels: ["00:00", "12:00", "24:00"]
                 )
-            } else if let series = store.band.summary?.stressSeries, !series.isEmpty {
-                LineChart(
-                    values: series.map(\.index),
-                    color: .appGood,
-                    minY: 0,
-                    maxY: 3,
-                    height: 130,
-                    yLabels: ["3.0", "1.5", "0.0"],
-                    xLabels: stressTimeLabels(series)
-                )
+            } else if let series = store.band.summary?.stressSeries,
+                      !StressDayChart.todayPoints(series).isEmpty {
+                StressDayChart(points: series, height: 130)
+                HStack {
+                    Text("00:00")
+                    Spacer()
+                    Text("12:00")
+                    Spacer()
+                    Text("24:00")
+                }
+                .font(StrapTypography.body(10))
+                .foregroundStyle(Color.appMuted)
                 Hint("Qualifying awake 5-minute windows only; missing intervals are not measured. Local estimate, not WHOOP's algorithm.")
             } else {
                 EmptyState(
@@ -213,5 +215,51 @@ struct StressView: View {
                 .foregroundStyle(Color.appMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+/// Local-day, timestamp-positioned series. Do not interpolate unmeasured gaps.
+struct StressDayChart: View {
+    let points: [StressPoint]
+    var height: CGFloat = 60
+
+    static func todayPoints(_ points: [StressPoint], now: Date = Date(),
+                            calendar: Calendar = .current) -> [StressPoint] {
+        guard let day = calendar.dateInterval(of: .day, for: now) else { return [] }
+        return points.filter {
+            let stamp = Double($0.unix)
+            return stamp >= day.start.timeIntervalSince1970 && stamp <= now.timeIntervalSince1970
+                && stamp < day.end.timeIntervalSince1970 && $0.index.isFinite
+                && (0...3).contains($0.index)
+        }.sorted { $0.unix < $1.unix }
+    }
+
+    var body: some View {
+        Canvas { context, size in
+            let now = Date()
+            guard let day = Calendar.current.dateInterval(of: .day, for: now) else { return }
+            let visible = Self.todayPoints(points, now: now)
+            var previous: StressPoint?
+            var previousPosition: CGPoint?
+            for reading in visible {
+                let x = size.width * CGFloat((Double(reading.unix) - day.start.timeIntervalSince1970) / day.duration)
+                let y = 3 + max(0, size.height - 6) * CGFloat(1 - reading.index / 3)
+                let position = CGPoint(x: x, y: y)
+                let color: Color = reading.index >= Recovery.stressHighSD ? .appWarn :
+                    (reading.index >= Recovery.stressElevatedSD ? .appAccent : .appGood)
+                if let previous, let previousPosition,
+                   reading.unix - previous.unix == StressWindows.windowSeconds {
+                    var line = Path()
+                    line.move(to: previousPosition)
+                    line.addLine(to: position)
+                    context.stroke(line, with: .color(color), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                }
+                context.fill(Path(ellipseIn: CGRect(x: x - 1.5, y: y - 1.5, width: 3, height: 3)), with: .color(color))
+                previous = reading
+                previousPosition = position
+            }
+        }
+        .frame(height: height)
+        .accessibilityLabel("Today's recorded stress windows, with gaps for missing data")
     }
 }
