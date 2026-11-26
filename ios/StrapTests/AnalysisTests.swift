@@ -1355,6 +1355,46 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(green.band, "green")
     }
 
+    // Regression scenario from the 2026-11-26 WHOOP/STRAP comparison.
+    // Respiratory rate must be compared to STRAP's own baseline, not WHOOP's
+    // displayed 18.9 rpm. A small difference between devices is not an
+    // illness penalty and must not explain a six-point recovery gap.
+    func testRecoveryRespirationBelowElevationGateDoesNotChangeScore() {
+        let baseline = steadyBaseline()
+        let withoutRespiration = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        let withRespiration = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline,
+            respiratoryRate: 19.8, respiratoryRateBaseline: 19.0
+        )
+        XCTAssertEqual(withRespiration.score, withoutRespiration.score)
+        XCTAssertEqual(withRespiration.hrvComponent, withoutRespiration.hrvComponent)
+        XCTAssertEqual(withRespiration.rhrComponent, withoutRespiration.rhrComponent)
+        XCTAssertEqual(withRespiration.sleepComponent, withoutRespiration.sleepComponent)
+    }
+
+    func testRecoveryRespondsToMeasuredHRVWithoutChangingOtherInputs() throws {
+        let baseline = Baseline(
+            lnRMSSDMean: log(40), lnRMSSDSD: 0.3,
+            rhrMean: 68, rhrSD: 3, days: 14
+        )
+        let lowerHRV = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        let higherHRV = Recovery.score(
+            lnRMSSD: log(44), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        XCTAssertGreaterThan(try XCTUnwrap(higherHRV.score),
+                             try XCTUnwrap(lowerHRV.score))
+        XCTAssertEqual(lowerHRV.rhrComponent, higherHRV.rhrComponent)
+        XCTAssertEqual(lowerHRV.sleepComponent, higherHRV.sleepComponent)
+    }
+
     func testRespiratoryRateIllnessPenalty() {
         let baseline = steadyBaseline()
         // Normal respiration (+0.3 rpm above baseline) applies no deduction
