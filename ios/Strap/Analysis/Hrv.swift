@@ -149,6 +149,10 @@ enum Hrv {
     /// Each contiguous run is cleaned independently, preventing a stale
     /// rolling-median reference from leaking across a recording gap.
     static func fromSamples(_ samples: [V18Sample]) -> HrvResult {
+        fromSamples(samples, rrRange: V18Decoder.minRRMS...V18Decoder.maxRRMS)
+    }
+
+    static func fromSamples(_ samples: [V18Sample], rrRange: ClosedRange<Int>) -> HrvResult {
         // Offload may replay a second after reconnect. Count its R-R beats once.
         // Prefer the copy with more beat intervals rather than duplicating data.
         var uniqueBySecond: [Int: V18Sample] = [:]
@@ -161,7 +165,10 @@ enum Hrv {
         }
         let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
-        return evaluateRuns(runs) { $0.rrIntervalsMS }
+        return evaluateRuns(runs) { sample in
+            // Keep an invalid beat as a boundary instead of joining its neighbours.
+            sample.rrIntervalsMS.map { rrRange.contains($0) ? $0 : 0 }
+        }
     }
 
     /// Compute RMSSD for live streaming samples across consecutive beats inside
