@@ -499,6 +499,104 @@ enum Hrv {
         return (result: fallback.result, windowSeconds: fallback.windowSeconds, isSWS: false)
     }
 
+    /// Multi-window 5-minute sleep RMSSD estimator (Accuracy Engine V2).
+    ///
+    /// Instead of selecting a single longest contiguous run (which introduces ±7–15 ms
+    /// sampling variance whenever a single micro-movement or 1s gap splits a run),
+    /// this partitions the sleep period into 5-minute windows, enforces per-window
+    /// RR coverage (<= 1.05 * elapsed) and gap-aware NN cleaning (>= 21 clean beats),
+    /// and averages the qualifying window RMSSDs across the sleep session.
+    /// Falls back to `swsRestingHRV` when no 5-minute window qualifies.
+    static func windowedSleepHRV(
+        _ samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = restingQuietAccelG,
+        windowSeconds: Int = 300,
+        minBeatsPerWindow: Int = 21
+    ) -> (result: HrvResult, windowSeconds: Int, qualifyingWindows: Int, usedSWSFallback: Bool) {
+        guard windowSeconds > 0 else { return (.empty, 0, 0, false) }
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let eligible = uniqueBySecond.values
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+            }
+            .sorted { $0.unix < $1.unix }
+
+        var buckets: [Int: [V18Sample]] = [:]
+        for sample in eligible {
+            buckets[sample.unix / windowSeconds, default: []].append(sample)
+        }
+
+        var windowRMSSDs: [Double] = []
+        var windowSDNNs: [Double] = []
+        var windowPNN50s: [Double] = []
+        var windowMeanRRs: [Double] = []
+        var totalBeats = 0
+        var totalNNBeats = 0
+        var totalSeconds = 0
+
+        let minCoveredSeconds = max(60, windowSeconds / 2)
+        let minRRDurationS = Double(windowSeconds) * 0.25
+
+        for bucket in buckets.keys.sorted() {
+            guard let records = buckets[bucket],
+                  records.count >= minCoveredSeconds,
+                  let firstUnix = records.first?.unix,
+                  let lastUnix = records.last?.unix else { continue }
+            let elapsed = lastUnix - firstUnix + 1
+            guard elapsed >= minCoveredSeconds else { continue }
+            let validRRSumMS = records.reduce(0) { acc, s in
+                acc + s.rrIntervalsMS.filter {
+                    (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+                }.reduce(0, +)
+            }
+            let validRRSumS = Double(validRRSumMS) / 1000.0
+            if validRRSumS < minRRDurationS || validRRSumS > Double(elapsed) * 1.05 {
+                continue
+            }
+            let res = fromSamples(records)
+            guard let rmssd = res.rmssdMS, rmssd.isFinite, rmssd > 0,
+                  res.nnBeats >= minBeatsPerWindow else { continue }
+            windowRMSSDs.append(rmssd)
+            if let sd = res.sdnnMS, sd.isFinite { windowSDNNs.append(sd) }
+            if let p50 = res.pnn50Pct, p50.isFinite { windowPNN50s.append(p50) }
+            if let mrr = res.meanRRMS, mrr.isFinite { windowMeanRRs.append(mrr) }
+            totalBeats += res.beats
+            totalNNBeats += res.nnBeats
+            totalSeconds += records.count
+        }
+
+        if !windowRMSSDs.isEmpty {
+            let meanRMSSD = Stats.mean(windowRMSSDs)
+            let result = HrvResult(
+                beats: totalBeats,
+                nnBeats: totalNNBeats,
+                rmssdMS: meanRMSSD,
+                sdnnMS: windowSDNNs.isEmpty ? nil : Stats.mean(windowSDNNs),
+                pnn50Pct: windowPNN50s.isEmpty ? nil : Stats.mean(windowPNN50s),
+                lnRMSSD: meanRMSSD > 0 ? log(meanRMSSD) : nil,
+                meanRRMS: windowMeanRRs.isEmpty ? nil : Stats.mean(windowMeanRRs)
+            )
+            return (result: result, windowSeconds: totalSeconds,
+                    qualifyingWindows: windowRMSSDs.count, usedSWSFallback: false)
+        }
+
+        let fallback = swsRestingHRV(samples, deepEpochs: deepEpochs,
+                                     quietAccelG: min(quietAccelG, restingQuietAccelG),
+                                     minWindowS: windowSeconds)
+        return (result: fallback.result, windowSeconds: fallback.windowSeconds,
+                qualifyingWindows: fallback.result.rmssdMS != nil ? 1 : 0,
+                usedSWSFallback: fallback.isSWS)
+    }
+
     /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
     /// change either production estimator or its quality thresholds.
     struct RestingWindowDiagnostic: Encodable {
@@ -1037,5 +1135,79 @@ extension Hrv {
         return sorted.count % 2 == 0
             ? (sorted[mid - 1] + sorted[mid]) / 2
             : sorted[mid]
+    }
+
+    struct ShadowCandidateSummary: Encodable {
+        let name: String
+        let rmssdMS: Double?
+        let lnRMSSD: Double?
+        let windowsUsed: Int
+        let windowSeconds: Int
+        let rawBeats: Int
+        let nnBeats: Int
+        let rejectedBeats: Int
+    }
+
+    /// Observation-only shadow-mode comparison for the leading candidate HRV
+    /// estimators (OpenStrap quality-gated 5m mean, stage-independent quiet
+    /// pooled, and pooled SWS). Does not affect production HRV or Recovery.
+    static func shadowCandidateSummaries(
+        samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = restingQuietAccelG,
+        minWindowS: Int = 300
+    ) -> [ShadowCandidateSummary] {
+        let windowed = windowedSleepHRV(samples, deepEpochs: deepEpochs, quietAccelG: quietAccelG, windowSeconds: minWindowS)
+        let candWindowed = ShadowCandidateSummary(
+            name: "windowed_sleep_5m_mean",
+            rmssdMS: windowed.result.rmssdMS,
+            lnRMSSD: windowed.result.lnRMSSD,
+            windowsUsed: windowed.qualifyingWindows,
+            windowSeconds: windowed.windowSeconds,
+            rawBeats: windowed.result.beats,
+            nnBeats: windowed.result.nnBeats,
+            rejectedBeats: max(0, windowed.result.beats - windowed.result.nnBeats)
+        )
+
+        func pooledSummary(name: String, subset: [V18Sample]) -> ShadowCandidateSummary {
+            let eligible = subset
+                .filter {
+                    $0.wearing && (35...220).contains($0.heartRate)
+                        && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                }
+                .sorted { $0.unix < $1.unix }
+            let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
+            var qualifying: [[V18Sample]] = []
+            var totalSec = 0
+            for run in runs {
+                let eval = fromSamples(run)
+                if let rmssd = eval.rmssdMS, rmssd.isFinite, rmssd > 0, eval.nnBeats >= minCleanBeats {
+                    qualifying.append(run)
+                    totalSec += run.count
+                }
+            }
+            guard !qualifying.isEmpty else {
+                return ShadowCandidateSummary(
+                    name: name, rmssdMS: nil, lnRMSSD: nil,
+                    windowsUsed: 0, windowSeconds: 0, rawBeats: 0, nnBeats: 0, rejectedBeats: 0
+                )
+            }
+            let pooled = evaluateRuns(qualifying) { $0.rrIntervalsMS }
+            return ShadowCandidateSummary(
+                name: name,
+                rmssdMS: pooled.rmssdMS,
+                lnRMSSD: pooled.lnRMSSD,
+                windowsUsed: qualifying.count,
+                windowSeconds: totalSec,
+                rawBeats: pooled.beats,
+                nnBeats: pooled.nnBeats,
+                rejectedBeats: max(0, pooled.beats - pooled.nnBeats)
+            )
+        }
+
+        let candQuietPooled = pooledSummary(name: "stage_independent_quiet_pooled", subset: samples)
+        let deepSamples = deepEpochs.isEmpty ? [] : samples.filter { s in deepEpochs.contains { $0.contains(s.unix) } }
+        let candPooledSWS = pooledSummary(name: "pooled_sws", subset: deepSamples)
+        return [candWindowed, candQuietPooled, candPooledSWS]
     }
 }

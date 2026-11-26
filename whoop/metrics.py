@@ -599,6 +599,108 @@ def sws_resting_hrv(
     return fallback_res, fallback_len, False
 
 
+def windowed_sleep_hrv(
+    samples: list[V18Sample],
+    deep_epochs: list[tuple[int, int]] | None = None,
+    quiet_accel_g: float = 0.15,
+    window_seconds: int = 300,
+    min_beats_per_window: int = 21,
+) -> tuple[HrvResult, int, int, bool]:
+    """Multi-window 5-minute sleep RMSSD estimator (Accuracy Engine V2).
+
+    Evaluates every 5-minute bucket in the sleep period independently with
+    per-window RR coverage gating (<= 1.05 * elapsed) and gap-aware NN
+    cleaning (>= 21 clean beats), returning the mean RMSSD across qualifying
+    windows. Falls back to sws_resting_hrv when no 5-minute window qualifies.
+    """
+    unique_by_sec: dict[int, V18Sample] = {}
+    for sample in samples:
+        prev = unique_by_sec.get(sample.unix)
+        if prev is not None and not prefer_retransmitted_rr(
+            sample.rr_intervals_ms, prev.rr_intervals_ms
+        ):
+            continue
+        unique_by_sec[sample.unix] = sample
+
+    eligible = sorted(
+        (
+            s
+            for s in unique_by_sec.values()
+            if s.wearing
+            and 35 <= s.heart_rate <= 220
+            and (s.dynamic_accel_g is not None and s.dynamic_accel_g <= quiet_accel_g)
+        ),
+        key=lambda s: s.unix,
+    )
+
+    buckets: dict[int, list[V18Sample]] = {}
+    for s in eligible:
+        buckets.setdefault(s.unix // window_seconds, []).append(s)
+
+    window_rmssds: list[float] = []
+    window_sdnns: list[float] = []
+    window_pnn50s: list[float] = []
+    window_mean_rrs: list[float] = []
+    total_beats = 0
+    total_nn_beats = 0
+    total_seconds = 0
+
+    min_covered_seconds = max(60, window_seconds // 2)
+    min_rr_duration_s = window_seconds * 0.25
+
+    for _, records in sorted(buckets.items()):
+        if len(records) < min_covered_seconds:
+            continue
+        elapsed = records[-1].unix - records[0].unix + 1
+        if elapsed < min_covered_seconds:
+            continue
+        valid_rr_sum_ms = sum(
+            v
+            for r in records
+            for v in r.rr_intervals_ms
+            if 300 <= v <= 2000
+        )
+        valid_rr_sum_s = valid_rr_sum_ms / 1000.0
+        if valid_rr_sum_s < min_rr_duration_s or valid_rr_sum_s > elapsed * 1.05:
+            continue
+        res = hrv(records)
+        if res.rmssd_ms is None or not math.isfinite(res.rmssd_ms) or res.rmssd_ms <= 0:
+            continue
+        if res.nn_beats < min_beats_per_window:
+            continue
+        window_rmssds.append(res.rmssd_ms)
+        if res.sdnn_ms is not None and math.isfinite(res.sdnn_ms):
+            window_sdnns.append(res.sdnn_ms)
+        if res.pnn50_pct is not None and math.isfinite(res.pnn50_pct):
+            window_pnn50s.append(res.pnn50_pct)
+        if res.mean_rr_ms is not None and math.isfinite(res.mean_rr_ms):
+            window_mean_rrs.append(res.mean_rr_ms)
+        total_beats += res.beats
+        total_nn_beats += res.nn_beats
+        total_seconds += len(records)
+
+    if window_rmssds:
+        mean_rmssd = sum(window_rmssds) / len(window_rmssds)
+        result = HrvResult(
+            beats=total_beats,
+            nn_beats=total_nn_beats,
+            rmssd_ms=mean_rmssd,
+            sdnn_ms=sum(window_sdnns) / len(window_sdnns) if window_sdnns else None,
+            pnn50_pct=sum(window_pnn50s) / len(window_pnn50s) if window_pnn50s else None,
+            ln_rmssd=math.log(mean_rmssd) if mean_rmssd > 0 else None,
+            mean_rr_ms=sum(window_mean_rrs) / len(window_mean_rrs) if window_mean_rrs else None,
+        )
+        return result, total_seconds, len(window_rmssds), False
+
+    fb_res, fb_len, is_sws = sws_resting_hrv(
+        samples,
+        deep_epochs=deep_epochs,
+        quiet_accel_g=min(quiet_accel_g, 0.08),
+        min_window_s=window_seconds,
+    )
+    return fb_res, fb_len, (1 if fb_res.rmssd_ms is not None else 0), is_sws
+
+
 def age_predicted_max_hr(age: int) -> float:
     """Tanaka (2001): 208 - 0.7*age. A population estimate, not a measurement."""
     if age <= 0:

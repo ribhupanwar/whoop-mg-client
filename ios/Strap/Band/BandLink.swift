@@ -1070,7 +1070,7 @@ final class BandLink: NSObject, ObservableObject {
         return try await Task.detached(priority: .utility) {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
-            let hrv = Hrv.swsRestingHRV(samples, deepEpochs: deep, minWindowS: 300)
+            let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
             let report = RecoveryDiagnostics.Report(
                 buildRevision: revision, timezone: calendar.timeZone.identifier,
                 lastCompletedHistorySync: sync, assessment: assessment,
@@ -1080,11 +1080,13 @@ final class BandLink: NSObject, ObservableObject {
                 archiveFirstRecordIndex: samples.first?.header.recordIndex,
                 archiveLastRecordIndex: samples.last?.header.recordIndex,
                 archiveSampleCount: samples.count, recomputedHRV: hrv.result,
-                recomputedHRVWindowSeconds: hrv.windowSeconds, recomputedHRVUsedDeepSleep: hrv.isSWS,
+                recomputedHRVWindowSeconds: hrv.windowSeconds, recomputedHRVUsedDeepSleep: hrv.usedSWSFallback,
                 quietWindows: Hrv.restingWindowDiagnostics(samples, minWindowS: 300),
                 deepQuietWindows: Hrv.restingWindowDiagnostics(
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
-                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300), sleepAnalysis: sleepAnalysis,
+                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
+                shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
+                sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
