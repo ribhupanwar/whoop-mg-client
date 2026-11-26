@@ -60,26 +60,27 @@ struct HealthView: View {
     private var skinTemperatureCard: some View {
         let reading = monitor[.temperature]
         let hasDelta = reading.baselineDays >= 7 && reading.value != nil
+        let hasNightlyCandidate = !hasDelta && reading.nightlyTemperatureCandidate != nil
         return VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "thermometer")
                     .font(.system(size: 16, weight: .light))
                     .foregroundStyle(Color.appMuted)
                     .frame(width: 20)
-                Text("SKIN TEMP\n(FROM BASELINE)")
+                Text(hasNightlyCandidate ? "SKIN TEMP\n(NIGHTLY CANDIDATE)" : "SKIN TEMP\n(FROM BASELINE)")
                     .font(StrapTypography.body(10, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(Color.appMuted)
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            Text(hasDelta ? String(format: "%+.1f", reading.value ?? 0) + " °C" : "—")
+            Text(hasDelta ? String(format: "%+.1f", reading.value ?? 0) + " °C" : (reading.nightlyTemperatureCandidate.map { String(format: "%.1f °C", $0) } ?? "—"))
                 .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
-            Text(hasDelta ? "UNVALIDATED CANDIDATE" : reading.statusText)
+            Text(hasDelta || hasNightlyCandidate ? "UNVALIDATED CANDIDATE" : reading.statusText)
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(hasDelta ? Color.appWarn : Color.appMuted)
+                .foregroundStyle(hasDelta || hasNightlyCandidate ? Color.appWarn : Color.appMuted)
             Text(hasDelta ? reading.referenceText : "Personal baseline: \(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)

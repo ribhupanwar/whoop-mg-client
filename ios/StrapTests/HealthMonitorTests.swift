@@ -28,6 +28,8 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertEqual(report.withinCount, 0)
         XCTAssertEqual(report[.oxygen].status, .candidate)
         XCTAssertNil(report[.temperature].value)
+        XCTAssertEqual(report[.temperature].nightlyTemperatureCandidate, 34)
+        XCTAssertFalse(report[.temperature].verifiedWithinRange)
     }
     func testOnlyEarlierDistinctQualifiedNightsCountTowardRange() throws {
         let prior = (-7 ... -1).map { day($0) }
@@ -64,6 +66,7 @@ final class HealthMonitorTests: XCTestCase {
         let missing = HealthMonitor.make(days: [unknownSource] + Array(prior.dropFirst()) + [day(0, temp: 34.6)],
                                          session: session, calendar: calendar)
         XCTAssertEqual(missing[.temperature].baselineDays, 6)
+        XCTAssertEqual(missing[.temperature].nightlyTemperatureCandidate, 34.6)
         XCTAssertNil(missing[.temperature].value)
     }
     func testPreviouslyCommittedVitalsRemainAvailableUntilBoundsChange() {

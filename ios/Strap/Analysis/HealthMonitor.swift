@@ -9,6 +9,7 @@ struct HealthReading {
     let status: Status
     let baselineDays: Int
     let reference: ClosedRange<Double>?
+    var nightlyTemperatureCandidate: Double? = nil
     var verifiedWithinRange: Bool { status == .withinRange }
     var statusText: String {
         switch status {
@@ -65,7 +66,7 @@ enum HealthMonitor {
                 let deviationRange = range.flatMap { raw in center.map { (raw.lowerBound - $0)...(raw.upperBound - $0) } }
                 return HealthReading(vital: vital, value: delta,
                     status: value == nil ? .unavailable : (enough ? .candidate : .calibrating),
-                    baselineDays: values.count, reference: deviationRange)
+                    baselineDays: values.count, reference: deviationRange, nightlyTemperatureCandidate: value)
             }
             let status: HealthReading.Status
             if let value { status = range.map { $0.contains(value) ? .withinRange : .outsideRange } ?? .calibrating }
