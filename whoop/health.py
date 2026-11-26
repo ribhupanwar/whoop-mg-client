@@ -570,15 +570,11 @@ def detect_sleep(
             else:
                 adaptive_threshold = active_median * HR_SLEEP_BASELINE_MULT
             
-            # Dual-band HR confirmation: subtractive gate is primary; multiplicative
-            # gate adds relaxation for deeply quiescent runs.
-            # Normal runs: min() picks stricter subtractive gate.
-            # Deeply quiescent runs: max() picks more permissive multiplicative gate.
-            if deeply_quiescent:
-                effective_threshold = max(primary_threshold, adaptive_threshold)
-            else:
-                effective_threshold = min(primary_threshold, adaptive_threshold)
-            
+            # Stillness alone cannot prove sleep. Keep the established HR-drop
+            # gate until relaxed thresholds have independent validation.
+            # This is consistent with the HR transition splitter.
+            effective_threshold = min(primary_threshold, adaptive_threshold)
+
             if run_median_hr > effective_threshold:
                 if trace_sink:
                     trace_sink({"gate": "hrConfirm", "verdict": "dropped", 
@@ -860,16 +856,22 @@ def detect_sleep(
                     window = [s for s in run
                               if t <= s.unix < t + 60
                               and s.wearing and 35 <= s.heart_rate <= 220]
-                    window_hrs = [float(s.heart_rate) for s in window]
-                    window_moving = sum(1 for s in window
-                                        if s.dynamic_accel_g is not None
-                                        and s.dynamic_accel_g >= 0.015)
-                    if len(window_hrs) >= 30:
-                        window_median = statistics.median(window_hrs)
-                        if window_median >= sleep_hr_ref + 8 and window_moving >= 10:
-                            elevated_minutes += 1
-                        else:
-                            break
+                    # Replayed rows cannot establish extra observed seconds.
+                    hr_by_second = {}
+                    for sample in window:
+                        hr_by_second.setdefault(sample.unix, float(sample.heart_rate))
+                    window_hrs = list(hr_by_second.values())
+                    window_moving = len({s.unix for s in window
+                                         if s.dynamic_accel_g is not None
+                                         and math.isfinite(s.dynamic_accel_g)
+                                         and s.dynamic_accel_g >= 0.015})
+                    if len(window_hrs) < 30:
+                        break  # Missing evidence breaks sustained wake.
+                    window_median = statistics.median(window_hrs)
+                    if window_median >= sleep_hr_ref + 8 and window_moving >= 10:
+                        elevated_minutes += 1
+                    else:
+                        break
                 
                 # Only proceed if we have sustained elevated HR at end (>=10 min = 10 minutes)
                 if elevated_minutes >= 10:
