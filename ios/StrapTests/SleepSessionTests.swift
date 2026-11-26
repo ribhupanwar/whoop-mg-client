@@ -118,10 +118,10 @@ final class SleepSessionTests: XCTestCase {
 
     private let start = 1_800_000_000
 
-    private func sample(_ unix: Int, hr: Int = 55) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
-            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: nil, stepCadence: nil, activityClass: 0,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
@@ -834,7 +834,7 @@ extension SleepSessionTests {
         let base = 1_700_000_000
         func addStretch(_ startOffset: Int, _ count: Int, hr: Int, accel: Double) {
             for i in 0..<count {
-                rows.append(makeSample(base + startOffset + i, hr: hr, accel: accel))
+                rows.append(sample(base + startOffset + i, hr: hr, accel: accel))
             }
         }
         addStretch(0, 600, hr: 85, accel: 0.30)
