@@ -30,6 +30,7 @@ enum StressWindows {
             )
         }
         var buckets: [Int: [Double]] = [:]
+        var coveredSecondsByBucket: [Int: Int] = [:]
         // Replayed BLE archive chunks can repeat a second. Count its RR
         // payload once, otherwise stress confidence is artificially inflated.
         var seenSeconds = Set<Int>()
@@ -42,19 +43,23 @@ enum StressWindows {
             let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
             guard !rr.isEmpty else { continue }
             seenSeconds.insert(sample.unix)
-            buckets[sample.unix / windowSeconds, default: []].append(contentsOf: rr)
+            let bucket = sample.unix / windowSeconds
+            coveredSecondsByBucket[bucket, default: 0] += 1
+            buckets[bucket, default: []].append(contentsOf: rr)
         }
 
         var high = 0
         var medium = 0
         var low = 0
         var scored = 0
-        for rr in buckets.values {
+        var completeCoverage = true
+        for (bucket, rr) in buckets {
             let result = Recovery.stressIndex(
                 lnRMSSD: Hrv.fromRR(rr).lnRMSSD, baseline: baseline
             )
             guard let index = result.index else { continue }
             scored += 1
+            if coveredSecondsByBucket[bucket] != windowSeconds { completeCoverage = false }
             if index >= Recovery.stressHighSD {
                 high += 1
             } else if index >= Recovery.stressElevatedSD {
@@ -75,14 +80,15 @@ enum StressWindows {
             mediumPct: Stats.rounded(100.0 * Double(medium) / total, 1),
             lowPct: Stats.rounded(100.0 * Double(low) / total, 1),
             windows: scored,
-            reason: nil
+            reason: nil,
+            durationCoverageSeconds: completeCoverage ? scored * windowSeconds : nil
         )
     }
 
-    /// Seconds covered by the scored windows — the denominator a share turns
-    /// into a duration.
-    static func scoredSeconds(_ split: StressSplit) -> Double {
-        Double(split.windows) * Double(windowSeconds)
+    /// Do not infer a full elapsed stress duration from sparse RR observations.
+    /// A window can still contribute an estimated stress index without a duration.
+    static func scoredSeconds(_ split: StressSplit) -> Double? {
+        split.durationCoverageSeconds.map(Double.init)
     }
 
     /// The same scored windows as `share`, but kept as an ordered per-window
