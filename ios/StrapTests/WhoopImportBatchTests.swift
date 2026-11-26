@@ -98,3 +98,42 @@ extension WhoopImportBatchTests {
         XCTAssertEqual(rows[0].fields["Notes"], "first\r\nsecond")
     }
 }
+
+extension WhoopImportBatchTests {
+    func testCompactExportRoundTripsWithEmptyCategoriesAndQuotedJournal() throws {
+        let day = DayMetrics(dateKey: "2026-10-01", state: "awake",
+                             restingHR: 60, lnRMSSD: log(40), hrvWindowSeconds: 300,
+                             sleepHours: 0, sleepStartUnix: nil, sleepEndUnix: nil,
+                             strain: 2, steps: nil, restingHRWindowSeconds: 300)
+        let entry = JournalEntry(dateKey: day.dateKey, answers: ["Fixture, question": true],
+                                 notes: "Line 1\nLine 2: \"quoted\"")
+        let files = StrapFourCSVExport.files(days: [day], detected: [], live: [], manual: [], journal: [entry])
+        let url = try StrapFourCSVExport.write(files)
+        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+        let archive = try Archive(url: url, accessMode: .read)
+        XCTAssertEqual(Set(archive.map(\.path)), Set(WhoopCSVImport.sourceCategories.map { $0 + ".csv" }))
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: "StrapCompact-" + UUID().uuidString))
+        defer { defaults.removeObject(forKey: WhoopCSVImport.bundleKey) }
+        let plan = try WhoopImportBatch.prepare(url, defaults: defaults)
+        XCTAssertEqual(plan.csvFiles, 4)
+        XCTAssertEqual(plan.biometricRows.count, 1)
+        XCTAssertEqual(plan.biometricRows.first?.dateKey, day.dateKey)
+        XCTAssertEqual(plan.sources["journal_entries"]?.first?.fields["Notes"], entry.notes)
+        XCTAssertEqual(plan.sources["sleeps"]?.count, 0)
+        XCTAssertEqual(plan.sources["workouts"]?.count, 0)
+        try plan.commit(defaults: defaults)
+        XCTAssertEqual(try WhoopImportBatch.prepare(url, defaults: defaults).added, 0)
+    }
+
+    func testCompactExportDoesNotLabelImportedBiometricsAsMeasured() throws {
+        let imported = DayMetrics(dateKey: "2026-10-01", state: "imported",
+                                  restingHR: 60, lnRMSSD: log(40), hrvWindowSeconds: 0,
+                                  sleepHours: 0, sleepStartUnix: nil, sleepEndUnix: nil,
+                                  strain: nil, steps: nil)
+        let files = StrapFourCSVExport.files(days: [imported], detected: [], live: [], manual: [], journal: [])
+        let inputs = files.map { (String($0.0.dropLast(4)), $0.1) }
+        let plan = try WhoopImportBatch.prepare(inputs, existing: [:])
+        XCTAssertEqual(plan.found, 0)
+        XCTAssertTrue(plan.biometricRows.isEmpty)
+    }
+}
