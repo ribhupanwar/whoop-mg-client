@@ -1038,4 +1038,70 @@ extension Hrv {
             ? (sorted[mid - 1] + sorted[mid]) / 2
             : sorted[mid]
     }
+
+    /// Observation-only multi-window sleep HRV aggregator (OpenStrap / NOOP style).
+    /// Evaluates each 5-minute quiet bucket with RR duration coverage <= 1.10 and
+    /// averages RMSSD across qualifying windows. Does not alter production HRV.
+    static func windowedSleepHRV(
+        _ samples: [V18Sample],
+        quietAccelG: Double = restingQuietAccelG,
+        windowSeconds: Int = 300
+    ) -> (result: HrvResult, windowSeconds: Int, qualifyingWindows: Int, usedSWSFallback: Bool) {
+        guard windowSeconds > 0 else { return (.empty, 0, 0, false) }
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let eligible = uniqueBySecond.values
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+            }
+            .sorted { $0.unix < $1.unix }
+
+        var buckets: [Int: [V18Sample]] = [:]
+        for sample in eligible {
+            buckets[sample.unix / windowSeconds, default: []].append(sample)
+        }
+
+        var windowRMSSDs: [Double] = []
+        var totalSeconds = 0
+        var totalBeats = 0
+        var totalNN = 0
+        for bucketKey in buckets.keys.sorted() {
+            let bucket = buckets[bucketKey]!
+            guard bucket.count >= minCleanBeats else { continue }
+            let rrAll = bucket.flatMap(\.rrIntervalsMS)
+            if let coverage = rrDurationCoverage(rrAll, observedSeconds: bucket.count),
+               coverage > 1.10 {
+                continue
+            }
+            let eval = fromSamples(bucket)
+            guard let rmssd = eval.rmssdMS, rmssd.isFinite, rmssd > 0,
+                  eval.nnBeats >= minCleanBeats else { continue }
+            windowRMSSDs.append(rmssd)
+            totalSeconds += bucket.count
+            totalBeats += eval.beats
+            totalNN += eval.nnBeats
+        }
+
+        guard !windowRMSSDs.isEmpty else {
+            return (.empty, 0, 0, false)
+        }
+        let meanRMSSD = Stats.mean(windowRMSSDs)
+        let summary = HrvResult(
+            beats: totalBeats,
+            nnBeats: totalNN,
+            rmssdMS: meanRMSSD,
+            sdnnMS: nil,
+            pnn50Pct: nil,
+            lnRMSSD: log(meanRMSSD),
+            meanRRMS: nil
+        )
+        return (summary, totalSeconds, windowRMSSDs.count, false)
+    }
 }

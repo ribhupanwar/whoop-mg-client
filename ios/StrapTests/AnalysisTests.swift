@@ -2108,13 +2108,15 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
 
         let prodTie = Hrv.swsRestingHRV(winA + winB1380, deepEpochs: [10_000...11_379, 20_000...21_379], minWindowS: 300)
         let prodPlus1 = Hrv.swsRestingHRV(winA + winB1381, deepEpochs: [10_000...11_379, 20_000...21_380], minWindowS: 300)
-        let prodJump = abs(try XCTUnwrap(prodPlus1.result.rmssdMS) - try XCTUnwrap(prodTie.result.rmssdMS))
-        XCTAssertGreaterThan(prodJump, 10.0)
+        let prodA = try XCTUnwrap(prodPlus1.result.rmssdMS)
+        let prodB = try XCTUnwrap(prodTie.result.rmssdMS)
+        XCTAssertGreaterThan(abs(prodA - prodB), 10.0)
 
         let winTie = Hrv.windowedSleepHRV(winA + winB1380)
         let winPlus1 = Hrv.windowedSleepHRV(winA + winB1381)
-        let winJump = abs(try XCTUnwrap(winPlus1.result.rmssdMS) - try XCTUnwrap(winTie.result.rmssdMS))
-        XCTAssertLessThan(winJump, 1.0)
+        let winAVal = try XCTUnwrap(winPlus1.result.rmssdMS)
+        let winBVal = try XCTUnwrap(winTie.result.rmssdMS)
+        XCTAssertLessThan(abs(winAVal - winBVal), 1.0)
     }
 
     func testOneSecondMotionSpikeSplitsLongestRunWhileWindowedRemainsStable() throws {
@@ -2126,13 +2128,15 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         let epochs = [10_000...11_499, 20_000...20_799]
         let prodIntact = Hrv.swsRestingHRV(winHigh + winLow, deepEpochs: epochs, minWindowS: 300)
         let prodSplit = Hrv.swsRestingHRV(winSplit + winLow, deepEpochs: epochs, minWindowS: 300)
-        let prodDelta = abs(try XCTUnwrap(prodIntact.result.rmssdMS) - try XCTUnwrap(prodSplit.result.rmssdMS))
-        XCTAssertGreaterThan(prodDelta, 15.0)
+        let prodA = try XCTUnwrap(prodIntact.result.rmssdMS)
+        let prodB = try XCTUnwrap(prodSplit.result.rmssdMS)
+        XCTAssertGreaterThan(abs(prodA - prodB), 15.0)
 
         let winIntact = Hrv.windowedSleepHRV(winHigh + winLow)
         let winPerturbed = Hrv.windowedSleepHRV(winSplit + winLow)
-        let winDelta = abs(try XCTUnwrap(winIntact.result.rmssdMS) - try XCTUnwrap(winPerturbed.result.rmssdMS))
-        XCTAssertLessThan(winDelta, 1.0)
+        let winAVal = try XCTUnwrap(winIntact.result.rmssdMS)
+        let winBVal = try XCTUnwrap(winPerturbed.result.rmssdMS)
+        XCTAssertLessThan(abs(winAVal - winBVal), 1.0)
     }
 }
 
