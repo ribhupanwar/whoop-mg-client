@@ -104,6 +104,7 @@ enum RecoveryDiagnostics {
         let quietWindows: [Hrv.RestingWindowDiagnostic]
         let deepQuietWindows: [Hrv.RestingWindowDiagnostic]
         let recomputedRHR: Double?
+        var shadowHrvCandidates: [Hrv.ShadowCandidateSummary]? = nil
         var sleepAnalysis: SleepAnalysis? = nil
         var upcomingSleepPlan: SleepRecommendation? = nil
         let notes = [

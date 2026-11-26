@@ -2138,6 +2138,17 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         let winBVal = try XCTUnwrap(winPerturbed.result.rmssdMS)
         XCTAssertLessThan(abs(winAVal - winBVal), 1.0)
     }
+
+    func testShadowCandidateSummariesPreserveRunBoundariesAndIncludeAllThreeCandidates() throws {
+        let r1 = (0..<350).map { makeSample(10_000 + $0, hr: 65, accel: 0.01, rr: [800]) }
+        let r2 = (0..<350).map { makeSample(10_400 + $0, hr: 65, accel: 0.01, rr: [1200]) }
+        let summaries = Hrv.shadowCandidateSummaries(samples: r1 + r2, deepEpochs: [10_000...10_349])
+        XCTAssertEqual(summaries.count, 3)
+        XCTAssertEqual(summaries.map(\.name), ["windowed_sleep_5m_mean", "stage_independent_quiet_pooled", "pooled_sws"])
+        // Constant intervals in each disconnected run -> pooled RMSSD must be 0.0 (never bridges gap)
+        let quietPooled = try XCTUnwrap(summaries.first { $0.name == "stage_independent_quiet_pooled" })
+        XCTAssertNil(quietPooled.rmssdMS) // rmssd=0 -> filtered out by rmssd > 0 invariant
+    }
 }
 
 // Seeded random number generator for deterministic tests

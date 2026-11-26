@@ -73,12 +73,18 @@ def _is_quiet_eligible(s: SamplePoint, quiet_accel_g: float = QUIET_ACCEL_G) -> 
     )
 
 
+def _rr_rank(rr_ms: tuple[float, ...]) -> tuple[int, int]:
+    valid = sum(1 for v in rr_ms if MIN_RR_MS <= v <= MAX_RR_MS)
+    invalid = len(rr_ms) - valid
+    return (valid, -invalid)
+
+
 def contiguous_runs(samples: Sequence[SamplePoint]) -> list[list[SamplePoint]]:
     """Split sorted unique-second samples into strictly contiguous 1-Hz runs."""
     by_sec: dict[int, SamplePoint] = {}
     for s in samples:
         prev = by_sec.get(s.unix)
-        if prev is None or len(s.rr_ms) > len(prev.rr_ms):
+        if prev is None or _rr_rank(s.rr_ms) > _rr_rank(prev.rr_ms):
             by_sec[s.unix] = s
     ordered = [by_sec[u] for u in sorted(by_sec)]
     runs: list[list[SamplePoint]] = []
@@ -178,12 +184,16 @@ def evaluate_run_centered(
     valid_rr_ms_sum = 0.0
     for s in run:
         raw_beats += len(s.rr_ms)
-        valid = [v for v in s.rr_ms if MIN_RR_MS <= v <= MAX_RR_MS]
-        valid_rr_ms_sum += sum(valid)
-        if valid:
-            curr.extend(valid)
-        else:
+        if not s.rr_ms:
             if curr:
+                segments.append(curr)
+                curr = []
+            continue
+        for v in s.rr_ms:
+            if MIN_RR_MS <= v <= MAX_RR_MS:
+                valid_rr_ms_sum += v
+                curr.append(v)
+            elif curr:
                 segments.append(curr)
                 curr = []
     if curr:
@@ -386,8 +396,8 @@ def run_all_candidates(
     ]
     c4 = _aggregate_stat("4_openstrap_quality_gated_5m_mean", gated_5m, statistics.mean)
 
-    # 5. Pooled deep-sleep RMSSD (all deep runs >= 300s)
-    c5 = _aggregate_pool("5_pooled_sws_rmssd", deep_evals if deep_evals else quiet_evals)
+    # 5. Pooled deep-sleep RMSSD (all deep runs >= 300s; abstain if no deep runs qualify)
+    c5 = _aggregate_pool("5_pooled_sws_rmssd", deep_evals)
 
     # 6. All valid SWS 5-min windows (mean)
     c6 = _aggregate_stat("6_sws_5m_windows_mean", deep_5m, statistics.mean)

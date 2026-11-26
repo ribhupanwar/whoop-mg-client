@@ -1084,7 +1084,9 @@ final class BandLink: NSObject, ObservableObject {
                 quietWindows: Hrv.restingWindowDiagnostics(samples, minWindowS: 300),
                 deepQuietWindows: Hrv.restingWindowDiagnostics(
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
-                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300), sleepAnalysis: sleepAnalysis,
+                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
+                shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
+                sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
