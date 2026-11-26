@@ -426,6 +426,13 @@ private struct StrapWidgetGuideView: View {
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
                     Hint("Displays band-recorded steps and last-sync status. iOS manages the widget refresh schedule.")
+                    Divider()
+                    Text("Daily Health")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("Enable Share health metrics with widgets in App Preferences, then add Daily Health from the widget gallery.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
                 }
                 Panel {
                     SectionTitle("LIVE ACTIVITIES")
