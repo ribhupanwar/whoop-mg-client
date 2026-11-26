@@ -11,18 +11,20 @@ private func stageSample(
     rr: [Int] = [],
     gravity: (Double, Double, Double)? = (0, 0, 1),
     recordIndex: UInt32 = 0,
-    subsecQ15: Int = 0
+    subsecQ15: Int = 0,
+    dynamicAccelG: Double = 0.02,
+    sleepState: Int? = nil
 ) -> V18Sample {
     V18Sample(
         header: BandRecordHeader(
             version: 18, flags: 0x80, recordIndex: recordIndex,
             unix: UInt32(unix), subsecQ15: subsecQ15
         ),
-        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: 0.02,
+        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: dynamicAccelG,
         gravityXG: gravity?.0, gravityYG: gravity?.1, gravityZG: gravity?.2,
         stepCounter: nil, stepCadence: nil, activityClass: nil,
         skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
-        sleepStateByte: nil, sleepState: nil, cardiacFlags: nil, hrQualityFlags: nil,
+        sleepStateByte: nil, sleepState: sleepState, cardiacFlags: nil, hrQualityFlags: nil,
         spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
         signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
     )
@@ -225,7 +227,7 @@ final class SleepStageTests: XCTestCase {
             } else {
                 hr = 58
             }
-            return makeSample(
+            return stageSample(
                 unix: baseUnix + s,
                 hr: hr,
                 rr: [60_000 / hr],
@@ -234,7 +236,7 @@ final class SleepStageTests: XCTestCase {
                 sleepState: 2
             )
         }
-        let period = SleepPeriod(startUnix: baseUnix, endUnix: baseUnix + totalSeconds - 1, quietFraction: 0.98, meanHR: 66)
+        let period = SleepPeriod(startUnix: baseUnix, endUnix: baseUnix + totalSeconds - 1, quietFraction: 0.98, meanHR: 66, wakeEvents: 0)
         let staging = SleepStager.stage(samples: samples, period: period)
         XCTAssertGreaterThan(staging.remMinutes, 20.0)
     }
