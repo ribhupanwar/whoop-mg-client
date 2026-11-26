@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import WidgetKit
+import UserNotifications
 
 /// Single source of truth for the UI. Settings and journal persist to
 /// UserDefaults; band state lives in `BandLink`, which persists its own
@@ -100,7 +101,10 @@ final class AppStore: ObservableObject {
             .map { days, summary, _ in
                 HealthMonitor.make(days: days, session: summary?.latestSleepSession)
             }
-            .sink { [weak self] snapshot in self?.healthMonitor = snapshot }
+            .sink { [weak self] snapshot in
+                self?.healthMonitor = snapshot
+                DispatchQueue.main.async { self?.checkRestingHRTrend() }
+            }
         healthWidgetCancellable = band.objectWillChange
             .throttle(for: .seconds(60), scheduler: RunLoop.main, latest: true)
             .sink { [weak self] _ in
@@ -133,6 +137,40 @@ final class AppStore: ObservableObject {
             }
         }
         band.autoConnectIfNeeded()
+    }
+
+    /// Evaluated only after a completed recorded night, never as a live medical alarm.
+    func checkRestingHRTrend() {
+        guard defaults.bool(forKey: "strap.rhrTrendAlertsEnabled"), !isPreview,
+              !band.isAnalyzingHistory,
+              let night = band.recoveryNight,
+              night.dateKey == JournalStore.dayKey(for: Date()),
+              defaults.string(forKey: "strap.rhrTrendAlert.lastDay") != night.dateKey,
+              RestingHRTrendAlert.isElevated(current: night, prior: band.days) else { return }
+        defaults.set(night.dateKey, forKey: "strap.rhrTrendAlert.lastDay")
+        let content = UNMutableNotificationContent()
+        content.title = "STRAP · Resting heart rate"
+        content.body = "Your recorded resting heart rate is above your recent personal trend. Open STRAP to review."
+        let request = UNNotificationRequest(identifier: "strap.rhrTrend." + night.dateKey, content: content, trigger: nil)
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.defaults.bool(forKey: "strap.rhrTrendAlertsEnabled"),
+                      [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else {
+                    self.defaults.removeObject(forKey: "strap.rhrTrendAlert.lastDay")
+                    return
+                }
+                UNUserNotificationCenter.current().add(request) { error in
+                    if error != nil {
+                        DispatchQueue.main.async {
+                            if self.defaults.string(forKey: "strap.rhrTrendAlert.lastDay") == night.dateKey {
+                                self.defaults.removeObject(forKey: "strap.rhrTrendAlert.lastDay")
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 
     func refreshHealthWidget() {
@@ -621,5 +659,28 @@ struct SleepLifecyclePersistence {
     func save(_ snapshot: SleepLifecycleSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults.set(data, forKey: Self.key)
+    }
+}
+
+
+/// Conservative personal trend notification, not a clinical threshold or diagnosis.
+enum RestingHRTrendAlert {
+    static let minimumPriorNights = 7
+    static let elevationBPM = 10.0
+    static func isElevated(current: DayMetrics, prior: [DayMetrics]) -> Bool {
+        func qualified(_ day: DayMetrics) -> Double? {
+            guard day.state == "sleep", day.sleepDurationReliable == true,
+                  (day.restingHRWindowSeconds ?? 0) >= 300,
+                  let hr = day.restingHR, hr.isFinite, (35...220).contains(hr) else { return nil }
+            return hr
+        }
+        guard let currentHR = qualified(current) else { return false }
+        let groups = Dictionary(grouping: prior.filter { $0.dateKey < current.dateKey }, by: \.dateKey)
+        let values = groups.keys.sorted().suffix(30).compactMap { key -> Double? in
+            guard let rows = groups[key], rows.count == 1, let row = rows.first else { return nil }
+            return qualified(row)
+        }
+        guard values.count >= minimumPriorNights else { return false }
+        return currentHR - Stats.median(values) >= elevationBPM
     }
 }
