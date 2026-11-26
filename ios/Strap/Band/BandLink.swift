@@ -1078,9 +1078,9 @@ final class BandLink: NSObject, ObservableObject {
         let age = Date().timeIntervalSince1970 - Double(point.unix)
         guard age >= 0, age <= 10 * 60 else {
             let diag = StressDiagnostics(
-                baselineMean: baseline?.lnRMSSDMean,
-                baselineSD: baseline?.lnRMSSDSD,
-                baselineDays: baseline?.days ?? 0,
+                baselineMean: baseline.lnRMSSDMean,
+                baselineSD: baseline.lnRMSSDSD,
+                baselineDays: baseline.days,
                 eligibleRRWindows: summary?.stressSeries?.count ?? 0,
                 rejectedRRWindows: 0,
                 unclampedScore: nil,
@@ -1091,9 +1091,9 @@ final class BandLink: NSObject, ObservableObject {
             return StressResult(index: nil, reason: "No recent awake R-R stress window; historical values remain in the chart", diagnostics: diag)
         }
         let diag = StressDiagnostics(
-            baselineMean: baseline?.lnRMSSDMean,
-            baselineSD: baseline?.lnRMSSDSD,
-            baselineDays: baseline?.days ?? 0,
+            baselineMean: baseline.lnRMSSDMean,
+            baselineSD: baseline.lnRMSSDSD,
+            baselineDays: baseline.days,
             eligibleRRWindows: summary?.stressSeries?.count ?? 0,
             rejectedRRWindows: 0,
             unclampedScore: point.index,
