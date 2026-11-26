@@ -788,6 +788,7 @@ struct DataManagementView: View {
 struct NotificationSettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("strap.rhrTrendAlertsEnabled") private var rhrTrendAlertsEnabled = false
     @State private var denied = false
     @State private var permissionStatus: String = "Checking permissions…"
     @State private var authorized = false
@@ -842,8 +843,15 @@ struct NotificationSettingsView: View {
                 }
 
                 Panel {
+                    SectionTitle("RESTING HEART RATE TREND")
+                    Toggle("Resting HR trend alert", isOn: $rhrTrendAlertsEnabled)
+                        .tint(Color.appAccent)
+                    Hint("Optional wellness reminder: at least 10 bpm above the median of seven or more qualifying prior nights. At most once per recorded day; not a medical alarm. iOS notification permission required.")
+                }
+
+                Panel {
                     SectionTitle("LOCAL PRIVACY")
-                    Text("STRAP notification triggers are evaluated and scheduled entirely on your iPhone using UNCalendarNotificationTrigger. No network requests or notification servers are ever contacted.")
+                    Text("STRAP notification triggers are evaluated and scheduled entirely on your iPhone using local notification scheduling. No network requests or notification servers are ever contacted.")
                         .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
                 }
