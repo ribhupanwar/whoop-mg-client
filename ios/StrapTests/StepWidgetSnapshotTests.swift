@@ -17,6 +17,23 @@ final class StepWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(StepWidgetSnapshot.load(defaults: defaults), snapshot)
     }
 
+    func testDailyHealthSnapshotRoundTripAndRemoval() throws {
+        let suite = "strap.health.widget.test." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 27)))
+        let snapshot = HealthWidgetSnapshot(dayKey: "2026-11-27", recovery: 62, sleep: nil,
+            strain: 2.7, battery: 85, savedAt: date)
+        XCTAssertTrue(HealthWidgetSnapshot.save(snapshot, defaults: defaults))
+        XCTAssertEqual(HealthWidgetSnapshot.load(defaults: defaults), snapshot)
+        XCTAssertTrue(snapshot.isForDay(date, calendar: calendar))
+        XCTAssertFalse(snapshot.isForDay(date.addingTimeInterval(86400), calendar: calendar))
+        XCTAssertTrue(HealthWidgetSnapshot.save(nil, defaults: defaults))
+        XCTAssertNil(HealthWidgetSnapshot.load(defaults: defaults))
+    }
+
     func testOldWorkoutLiveActivityDecodesWithoutNewStepFields() throws {
         let legacy = """
         {"heartRate":143,"zone":3,"distanceMeters":1234.0,
