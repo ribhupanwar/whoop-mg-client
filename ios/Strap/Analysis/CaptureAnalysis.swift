@@ -448,8 +448,16 @@ enum DailyAnalysis {
     }
 
     /// Sleep measurements cannot stand in for an awake-quiet stress baseline.
-    static func awakeBaseline(from days: [DayMetrics]) -> Baseline? {
-        let pairs = days.compactMap { day -> (Double, Double)? in
+    static func awakeBaseline(from days: [DayMetrics], before dateKey: String? = nil) -> Baseline? {
+        // Never let the day being scored or duplicated dates build its norm.
+        let groups = Dictionary(grouping: days.filter { day in
+            dateKey.map { day.dateKey < $0 } ?? true
+        }, by: \.dateKey)
+        let distinct = groups.keys.sorted().compactMap { key -> DayMetrics? in
+            guard let rows = groups[key], rows.count == 1 else { return nil }
+            return rows.first
+        }
+        let pairs = distinct.suffix(rollingBaselineDays).compactMap { day -> (Double, Double)? in
             guard let ln = day.awakeLnRMSSD, ln.isFinite,
                   let rhr = day.awakeRestingHR, rhr.isFinite, rhr > 0 else { return nil }
             return (ln, rhr)
