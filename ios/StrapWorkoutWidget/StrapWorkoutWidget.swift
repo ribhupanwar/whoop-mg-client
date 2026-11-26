@@ -98,5 +98,9 @@ private func paceText(_ seconds: Int?) -> String {
 
 @main
 struct StrapWorkoutWidgetBundle: WidgetBundle {
-    var body: some Widget { StrapWorkoutWidget() }
+    var body: some Widget {
+        StrapWorkoutWidget()
+        StrapCapturedStepsLiveWidget()
+        StrapStepsHomeWidget()
+    }
 }
