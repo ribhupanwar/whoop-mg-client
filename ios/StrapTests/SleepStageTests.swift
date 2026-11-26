@@ -76,6 +76,46 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
+
+    // Regression derived from an anonymized 2026-11-26 overnight capture:
+    // RR packets can be absent while HR and motion remain continuously measured.
+    // Missing RR is missing respiratory evidence, not missing sleep time.
+    func testRRDropoutDoesNotEraseMeasuredSleepEpochs() {
+        let (baseline, period) = makeNight(minutes: 90)
+        let withRRDropout = baseline.map { sample -> V18Sample in
+            let second = sample.unix - period.startUnix
+            // 8-minute RR blackout, followed by intermittent 1-in-5 gaps.
+            let absent = (30 * 60..<38 * 60).contains(second)
+                || (second >= 38 * 60 && second % 5 == 0)
+            return V18Sample(
+                header: sample.header, heartRate: sample.heartRate,
+                rrIntervalsMS: absent ? [] : sample.rrIntervalsMS,
+                dynamicAccelG: sample.dynamicAccelG,
+                gravityXG: sample.gravityXG, gravityYG: sample.gravityYG,
+                gravityZG: sample.gravityZG, stepCounter: sample.stepCounter,
+                stepCadence: sample.stepCadence, activityClass: sample.activityClass,
+                skinTempC: sample.skinTempC, tempAux1C: sample.tempAux1C,
+                tempAux2C: sample.tempAux2C, sleepStateByte: sample.sleepStateByte,
+                sleepState: sample.sleepState, cardiacFlags: sample.cardiacFlags,
+                hrQualityFlags: sample.hrQualityFlags,
+                spo2CandidateRaw: sample.spo2CandidateRaw,
+                spo2CandidatePct: sample.spo2CandidatePct,
+                spo2CandidateKind: sample.spo2CandidateKind,
+                signalQualityLogVariance: sample.signalQualityLogVariance,
+                psnrB: sample.psnrB, psnrA: sample.psnrA
+            )
+        }
+        let expected = SleepStager.stage(samples: baseline, period: period)
+        let actual = SleepStager.stage(samples: withRRDropout, period: period)
+        XCTAssertNil(actual.reason)
+        XCTAssertEqual(actual.hrCoverage, expected.hrCoverage, accuracy: 1e-12)
+        XCTAssertEqual(actual.totalMinutes, expected.totalMinutes, accuracy: 1e-9)
+        XCTAssertEqual(actual.segments.first?.startUnix, period.startUnix)
+        XCTAssertEqual(actual.segments.last?.endUnix, period.endUnix + 1)
+        XCTAssertEqual(actual.asleepMinutes + actual.wakeMinutes,
+                       actual.totalMinutes, accuracy: 1e-9)
+    }
+
     func testRespirationDoesNotInterpolateAcrossMissingRRSeconds() throws {
         let first = (0..<45).map { index in
             (t: Double(index), rr: 800.0 + 30 * sin(Double(index) * 1.2))
