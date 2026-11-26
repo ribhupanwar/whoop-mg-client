@@ -1473,6 +1473,11 @@ final class RecoveryTests: XCTestCase {
     }
 
     func testDatedRecoveryEvaluatesRespiratoryBaselineAndPassesToScore() throws {
+        // Keep fixture day keys and timestamps in the same explicit calendar.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let firstDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        let midnight = Int(firstDay.timeIntervalSince1970)
         let priorDays: [DayMetrics] = (1...14).map { dayIndex in
             DayMetrics(
                 dateKey: String(format: "2026-11-%02d", dayIndex),
@@ -1481,8 +1486,8 @@ final class RecoveryTests: XCTestCase {
                 lnRMSSD: 4.0,
                 hrvWindowSeconds: 300,
                 sleepHours: 8.0,
-                sleepStartUnix: 1_700_000_000 + dayIndex * 86400,
-                sleepEndUnix: 1_700_000_000 + dayIndex * 86400 + 28800,
+                sleepStartUnix: midnight + (dayIndex - 1) * 86400,
+                sleepEndUnix: midnight + (dayIndex - 1) * 86400 + 28800,
                 strain: 10.0,
                 steps: 5000,
                 sleepDurationReliable: true,
@@ -1496,8 +1501,8 @@ final class RecoveryTests: XCTestCase {
             lnRMSSD: 4.0,
             hrvWindowSeconds: 300,
             sleepHours: 8.0,
-            sleepStartUnix: 1_700_000_000 + 15 * 86400,
-            sleepEndUnix: 1_700_000_000 + 15 * 86400 + 28800,
+            sleepStartUnix: midnight + 14 * 86400,
+            sleepEndUnix: midnight + 14 * 86400 + 28800,
             strain: 10.0,
             steps: 5000,
             sleepDurationReliable: true,
@@ -1506,9 +1511,12 @@ final class RecoveryTests: XCTestCase {
         let assessment = DatedRecovery.evaluate(
             day: sickDay,
             priorDays: priorDays,
-            date: Date(timeIntervalSince1970: TimeInterval(1_700_000_000 + 15 * 86400 + 28800)),
-            sleepNeedHours: 8.0
+            date: Date(timeIntervalSince1970: TimeInterval(midnight + 14 * 86400 + 28800)),
+            sleepNeedHours: 8.0,
+            calendar: calendar
         )
+        XCTAssertEqual(assessment.dateKey, sickDay.dateKey)
+        XCTAssertEqual(assessment.baselineDays.count, 14)
         XCTAssertEqual(assessment.result.score, 58.5)
         let breakdown = try XCTUnwrap(RecoveryDiagnostics.Breakdown(assessment: assessment))
         XCTAssertEqual(breakdown.respiratoryRate, 16.0)
