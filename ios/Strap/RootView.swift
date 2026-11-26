@@ -61,6 +61,8 @@ private final class AppStoreOwner: ObservableObject {
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
+    @AppStorage("strap.navigationGlass") private var navigationGlass = false
+    @AppStorage("strap.healthWidgetEnabled") private var healthWidgetEnabled = false
     private var preferredAppearance: ColorScheme? {
         switch appearanceMode {
         case "dark": return .dark
@@ -140,6 +142,7 @@ struct RootView: View {
             else { store.band.persistLiveRRArchive(force: true) }
         }
         .onAppear {
+            store.refreshHealthWidget()
             AppOpenDayTracker.recordOpen()
             if UserDefaults.standard.bool(forKey: DailyLocalBackup.enabledKey) {
                 let preferences = UserDefaults.standard.dictionaryRepresentation()
@@ -166,7 +169,7 @@ struct RootView: View {
         .tint(.appAccent)
         .font(StrapTypography.body(15))
         .environmentObject(store)
-        .preferredColorScheme(.dark)
+        .onChange(of: healthWidgetEnabled) { _, _ in store.refreshHealthWidget() }
     }
 
     private var floatingNavigation: some View {
@@ -203,7 +206,14 @@ struct RootView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color(hex: 0x171E22).opacity(0.95), in: RoundedRectangle(cornerRadius: 28))
+            .background {
+                if navigationGlass {
+                    RoundedRectangle(cornerRadius: 28).fill(Color.clear)
+                        .strapLiquidGlass(cornerRadius: 28)
+                } else {
+                    RoundedRectangle(cornerRadius: 28).fill(Color(hex: 0x171E22).opacity(0.95))
+                }
+            }
             .overlay(RoundedRectangle(cornerRadius: 28)
                 .strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
             Button { showCoach = true } label: {
