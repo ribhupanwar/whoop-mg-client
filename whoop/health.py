@@ -1280,14 +1280,31 @@ def _rr_segments(samples: list[V18Sample]) -> list[list[tuple[int, int]]]:
     Short gaps are tolerated because a single missed beat does not move the
     estimate, but a multi-second gap starts a new segment.
     """
-    ordered = sorted(samples, key=lambda s: s.unix)
+    # Match the native path: retain one payload per second, ranking valid
+    # beats ahead of padding or malformed words. A tie retains the first.
+    def quality(sample: V18Sample) -> tuple[int, int]:
+        valid = sum(MIN_RR_MS <= v <= MAX_RR_MS for v in sample.rr_intervals_ms)
+        return valid, -(len(sample.rr_intervals_ms) - valid)
+
+    unique: dict[int, V18Sample] = {}
+    for sample in samples:
+        previous = unique.get(sample.unix)
+        if previous is None or quality(sample) > quality(previous):
+            unique[sample.unix] = sample
+    ordered = sorted(unique.values(), key=lambda s: s.unix)
     segments: list[list[tuple[int, int]]] = []
     current: list[tuple[int, int]] = []
     last_unix: int | None = None
     last_span_s = 0.0
     for sample in ordered:
+        motion = sample.dynamic_accel_g
         rr = [v for v in sample.rr_intervals_ms if MIN_RR_MS <= v <= MAX_RR_MS]
-        if not rr:
+        if not sample.wearing or motion is None or not math.isfinite(motion) or not 0 <= motion <= 0.10 or not rr:
+            if current:
+                segments.append(current)
+                current = []
+            last_unix = None
+            last_span_s = 0.0
             continue
         # On a real capture the wall-clock step exceeds the previous record's
         # R-R span by ~0.16 s. A multi-second excess is a dropout, not timing
