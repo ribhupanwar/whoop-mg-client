@@ -195,7 +195,10 @@ enum Respiration {
             let end = min(start + windowSamples, detrended.count)
             let window = Array(detrended[start..<end])
             start += windowSamples
-            guard window.count >= minDistance * 3 else { continue }
+            // A short trailing fragment can contain three accidental peaks and yield
+            // a plausible but unsupported nightly breathing rate. Require at
+            // least half of the intended 5-minute window before estimating.
+            guard window.count >= Int(windowS * resampleHz / 2.0) else { continue }
             let peaks = findPeaks(window, minDistance: minDistance)
             guard peaks.count >= 3 else { continue }
             var intervals = (1..<peaks.count).map {
