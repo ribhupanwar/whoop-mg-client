@@ -164,6 +164,21 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertEqual(points.first?.index, expected)
     }
 
+    func testSeriesPreservesRawDeviationAndLegacyPointsRemainReadable() throws {
+        let samples = window(0)
+        let lnRMSSD = try XCTUnwrap(Hrv.fromRR(samples.flatMap { $0.rrIntervalsMS.map(Double.init) }).lnRMSSD)
+        for deviation in [-4.0, 10.0] {
+            let points = StressWindows.series(samples: samples, baseline: baseline(mean: lnRMSSD + deviation * 0.5))
+            let point = try XCTUnwrap(points.first)
+            XCTAssertEqual(try XCTUnwrap(point.unclampedScore), deviation, accuracy: 0.0001)
+            XCTAssertEqual(point.index, deviation < 0 ? 0.0 : 3.0)
+            XCTAssertEqual(try JSONDecoder().decode(StressPoint.self, from: JSONEncoder().encode(point)), point)
+        }
+        let legacy = try JSONDecoder().decode(StressPoint.self, from: Data(#"{"unix":0,"index":3}"#.utf8))
+        XCTAssertNil(legacy.unclampedScore)
+        XCTAssertEqual(legacy.index, 3)
+    }
+
     func testSeriesRespectsExclusions() {
         let points = StressWindows.series(
             samples: window(0) + window(300),

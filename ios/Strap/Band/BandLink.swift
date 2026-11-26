@@ -1096,8 +1096,8 @@ final class BandLink: NSObject, ObservableObject {
             baselineDays: baseline.days,
             eligibleRRWindows: summary?.stressSeries?.count ?? 0,
             rejectedRRWindows: nil,
-            // The persisted point contains only the clamped score.
-            unclampedScore: nil,
+            // Older persisted points have no raw deviation.
+            unclampedScore: point.unclampedScore,
             finalScore: point.index,
             lastUpdateUnix: point.unix,
             unavailableReason: nil

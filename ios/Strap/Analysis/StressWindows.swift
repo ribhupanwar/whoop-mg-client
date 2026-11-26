@@ -132,10 +132,12 @@ enum StressWindows {
         var points: [StressPoint] = []
         for bucket in buckets.keys.sorted() {
             let rr = buckets[bucket]!
-            guard let index = Recovery.stressIndex(
+            let result = Recovery.stressIndex(
                 lnRMSSD: Hrv.fromRR(rr).lnRMSSD, baseline: baseline
-            ).index else { continue }
-            points.append(StressPoint(unix: bucket * windowSeconds, index: index))
+            )
+            guard let index = result.index else { continue }
+            points.append(StressPoint(unix: bucket * windowSeconds, index: index,
+                                      unclampedScore: result.diagnostics?.unclampedScore))
         }
         return points
     }
