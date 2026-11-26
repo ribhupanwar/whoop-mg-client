@@ -134,6 +134,52 @@ final class LiveRRReplayDedupTests: XCTestCase {
     }
 }
 
+final class OvernightHRVSelectionRegressionTests: XCTestCase {
+    // Synthetic analogue of the 26 Nov diagnostic: a longer deep/quiet run
+    // has lower RMSSD than a shorter quiet run. Do not silently cherry-pick
+    // the higher HRV to match another wearable's displayed value.
+    func testSWSSelectionPrefersLongestEligibleDeepRunNotHighestRMSSD() throws {
+        let longDeep = (0..<1380).map { second in
+            makeSample(10000 + second, hr: 69, accel: 0.01,
+                       rr: [800, second.isMultiple(of: 2) ? 835 : 825])
+        }
+        let shortDeep = (0..<570).map { second in
+            makeSample(12000 + second, hr: 67, accel: 0.01,
+                       rr: [800, second.isMultiple(of: 2) ? 850 : 840])
+        }
+        let longResult = Hrv.fromSamples(longDeep)
+        let shortResult = Hrv.fromSamples(shortDeep)
+        XCTAssertGreaterThan(try XCTUnwrap(shortResult.rmssdMS),
+                             try XCTUnwrap(longResult.rmssdMS))
+        let selected = Hrv.swsRestingHRV(
+            longDeep + shortDeep,
+            deepEpochs: [10000...11379, 12000...12569],
+            minWindowS: 300
+        )
+        XCTAssertTrue(selected.isSWS)
+        XCTAssertEqual(selected.windowSeconds, 1380)
+        XCTAssertEqual(try XCTUnwrap(selected.result.rmssdMS),
+                       try XCTUnwrap(longResult.rmssdMS), accuracy: 0.000001)
+    }
+
+    func testSWSSelectionFallsBackWhenDeepRRUnavailable() throws {
+        let deepWithoutRR = (0..<600).map {
+            makeSample(10000 + $0, hr: 65, accel: 0.01)
+        }
+        let quietWithRR = (0..<600).map {
+            makeSample(12000 + $0, hr: 65, accel: 0.01, rr: [800, 840])
+        }
+        let selected = Hrv.swsRestingHRV(
+            deepWithoutRR + quietWithRR,
+            deepEpochs: [10000...10599],
+            minWindowS: 300
+        )
+        XCTAssertFalse(selected.isSWS)
+        XCTAssertEqual(selected.windowSeconds, 600)
+        XCTAssertNotNil(selected.result.rmssdMS)
+    }
+}
+
 final class HrvTests: XCTestCase {
     func testPrimarySleepWithoutRRDoesNotBorrowNapHRV() throws {
         // A valid nap must not fabricate overnight recovery when the
