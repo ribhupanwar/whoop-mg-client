@@ -1622,6 +1622,21 @@ final class RespirationTests: XCTestCase {
         return samples
     }
 
+    func testRespirationRejectsShortTrailingWindow() {
+        let hz = Respiration.resampleHz
+        let full = Int(Respiration.windowS * hz)
+        let half = full / 2
+        func waveform(_ count: Int) -> [Double] {
+            (0..<count).map { index in
+                sin(2.0 * Double.pi * Double(index) / (4.0 * hz))
+            }
+        }
+        XCTAssertTrue(Respiration.windowRates(waveform(half - 1)).isEmpty)
+        XCTAssertEqual(Respiration.windowRates(waveform(half)).count, 1)
+        XCTAssertEqual(Respiration.windowRates(waveform(full + half - 1)).count, 1)
+        XCTAssertEqual(Respiration.windowRates(waveform(full + half)).count, 2)
+    }
+
     func testFifteenBreathsPerMinuteIsRecovered() {
         let estimate = Respiration.estimate(breathingSamples(beats: 700))
         XCTAssertTrue(estimate.available, estimate.reason ?? "")
