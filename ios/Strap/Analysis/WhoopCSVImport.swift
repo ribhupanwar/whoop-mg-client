@@ -33,14 +33,24 @@ enum WhoopCSVImport {
         func column(_ candidates: [String]) -> Int? {
             names.firstIndex(where: { candidates.contains($0) })
         }
-        guard let date = column(["wakeonset"]) ?? column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)) ?? column(["cycleendtime", "cycleend"]),
+        // A wake column may exist but be empty for an awake-only cycle.
+        // Resolve dates per row, preserving the usual wake-date precedence.
+        let dateColumns = [
+            column(["wakeonset"]),
+            column(["date", "cycledate", "start", "cyclestart", "cyclestarttime", "cycle start", "starttime", "createdat"].map(normalized)),
+            column(["cycleendtime", "cycleend"])
+        ].compactMap { $0 }
+        guard !dateColumns.isEmpty,
               let hrv = column(["hrv", "hrvms", "rmssd", "rmssdms", "heartratevariability", "heartratevariabilityms", "heartratevariabilityrmssd", "heartratevariabilityrmssdms", "heartratevariabilityms", "heartratevariabilitymilliseconds"].map(normalized)),
               let rhr = column(["rhr", "restinghr", "restingheartrate", "restingheartratebpm", "restingheartratebeatsperminute"].map(normalized))
         else { throw ImportError.unsupportedColumns }
-        let required = max(date, max(hrv, rhr))
+        let required = max(hrv, rhr)
         var rows: [String: Row] = [:]
         for record in records.dropFirst() where record.count > required {
-            guard let key = dateKey(record[date]),
+            let key = dateColumns.lazy.compactMap { index in
+                record.indices.contains(index) ? dateKey(record[index]) : nil
+            }.first
+            guard let key,
                   let h = Double(record[hrv].trimmingCharacters(in: .whitespaces)),
                   let r = Double(record[rhr].trimmingCharacters(in: .whitespaces)),
                   h.isFinite, r.isFinite, (5...300).contains(h), (30...130).contains(r)
