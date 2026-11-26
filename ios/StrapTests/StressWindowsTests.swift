@@ -98,10 +98,26 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertEqual(split.reason, "no R-R beats in awake windows")
     }
 
-    func testScoredSecondsUsesFiveMinuteWindows() {
+    func testSparseScoredWindowsDoNotInventElapsedDuration() {
         let split = StressWindows.share(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
         XCTAssertEqual(split.windows, 2)
+        XCTAssertNil(StressWindows.scoredSeconds(split))
+    }
+
+    func testCompleteScoredWindowsExposeElapsedDuration() {
+        let rows = (0..<600).map { sample($0, rr: [1000, 1100]) }
+        let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 2)
         XCTAssertEqual(StressWindows.scoredSeconds(split), 600)
+        let replayed = StressWindows.share(samples: rows + rows, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(StressWindows.scoredSeconds(replayed), 600)
+    }
+
+    func testPartialExcludedWindowCannotClaimFullDuration() {
+        let rows = (0..<300).map { sample($0, rr: [1000, 1100]) }
+        let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605),
+                                        excluded: [(start: 0, end: 59)])
+        XCTAssertNil(StressWindows.scoredSeconds(split))
     }
 
     func testWindowsWithoutBeatsAreSkipped() {
