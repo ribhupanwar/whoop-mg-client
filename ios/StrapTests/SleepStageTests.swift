@@ -212,6 +212,33 @@ final class SleepStageTests: XCTestCase {
         XCTAssertEqual(staging.asleepMinutes + staging.wakeMinutes, staging.totalMinutes, accuracy: 0.001)
     }
 
+    func testLocalHRBaselinePreservesLateNightRemDespiteCircadianHRDrop() {
+        let baseUnix = 1_700_000_000
+        let totalSeconds = 420 * 60
+        let samples: [V18Sample] = (0..<totalSeconds).map { s in
+            let minute = s / 60
+            let hr: Int
+            if minute < 210 {
+                hr = 74
+            } else if (300..<340).contains(minute) {
+                hr = 66 + ((s / 15) % 2 == 0 ? 4 : -4)
+            } else {
+                hr = 58
+            }
+            return makeSample(
+                unix: baseUnix + s,
+                hr: hr,
+                rr: [60_000 / hr],
+                gravity: (0.0, 0.0, 1.0),
+                dynamicAccelG: 0.01,
+                sleepState: 2
+            )
+        }
+        let period = SleepPeriod(startUnix: baseUnix, endUnix: baseUnix + totalSeconds - 1, quietFraction: 0.98, meanHR: 66)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        XCTAssertGreaterThan(staging.remMinutes, 20.0)
+    }
+
     func testOneHourNapRespectsRemLatencyGuard() {
         let (samples, period) = makeNight(minutes: 60)
         let staging = SleepStager.stage(samples: samples, period: period)

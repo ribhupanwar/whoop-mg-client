@@ -32,6 +32,7 @@ as a clinical reading.
 
 from __future__ import annotations
 
+import statistics
 from bisect import bisect_right
 from dataclasses import dataclass, field
 import math
@@ -385,24 +386,47 @@ def _sustained_sleep_onset(labels: list[str]) -> int | None:
     return None
 
 
+def _local_hr_zscores(feats: list[_Epoch], radius_epochs: int = 90) -> list[float]:
+    """Local 90-minute rolling median/SD z-score for HR to remove circadian decay bias."""
+    n = len(feats)
+    out: list[float] = []
+    for i in range(n):
+        hr = feats[i].hr
+        if hr is None:
+            out.append(0.0)
+            continue
+        lo = max(0, i - radius_epochs)
+        hi = min(n, i + radius_epochs)
+        window = [feats[j].hr for j in range(lo, hi) if feats[j].hr is not None]
+        if not window:
+            out.append(0.0)
+            continue
+        med = statistics.median(window)
+        var = sum((x - med) ** 2 for x in window) / len(window)
+        sd = max(1.0, math.sqrt(var))
+        out.append((hr - med) / sd)
+    return out
+
+
 def _stage_epochs(feats: list[_Epoch]) -> list[str]:
     if not feats:
         return []
-    z_hr = _zfun([f.hr for f in feats])
+    local_hr = _local_hr_zscores(feats)
     z_var = _zfun([f.hr_var for f in feats])
     z_move = _zfun([f.move_frac for f in feats])
     z_resp = _zfun([f.resp_reg for f in feats])
     flat_sorted = sorted(v for v in (f.hr_flat11 for f in feats) if v is not None)
 
     emissions: list[dict[str, float]] = []
-    for f in feats:
+    for index, f in enumerate(feats):
+        lhr = local_hr[index]
         gate = DEEP_GATE_SLOPE * max(0.0, _percentile_rank(flat_sorted, f.hr_flat11) - DEEP_GATE_THRESHOLD)
-        awake_cardiac = 0.8 * z_var(f.hr_var) + 0.4 * z_hr(f.hr)
+        awake_cardiac = 0.8 * z_var(f.hr_var) + 0.4 * lhr
         if _motion_quiescent(f):
             awake_cardiac = min(0.0, awake_cardiac)
         emission = {
             "deep": -1.1 * z_var(f.hr_var) - 0.5 * z_move(f.move_frac) - gate + BASE_LOG_PRIOR["deep"],
-            "rem": 0.6 * z_var(f.hr_var) - 0.6 * z_move(f.move_frac) + 0.4 * z_hr(f.hr) + BASE_LOG_PRIOR["rem"],
+            "rem": 0.6 * z_var(f.hr_var) - 0.6 * z_move(f.move_frac) + 0.4 * lhr + BASE_LOG_PRIOR["rem"],
             "light": BASE_LOG_PRIOR["light"],
             "awake": 1.0 * z_move(f.move_frac) + awake_cardiac + BASE_LOG_PRIOR["awake"],
         }
