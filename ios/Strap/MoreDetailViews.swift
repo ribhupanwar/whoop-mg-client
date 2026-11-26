@@ -493,6 +493,9 @@ struct DataManagementView: View {
     @State private var showWhoopImporter = false
     @State private var importingWhoop = false
     @State private var whoopImportStatus = "No WHOOP file imported"
+    @State private var showPortablePreview = false
+    @State private var portableBusy = false
+    @State private var portableStatus: String?
 
     private var backupUnavailable: Bool {
         preparingExport || store.band.isConnected || store.band.isAnalyzingHistory || store.band.isSavingHistory
@@ -538,6 +541,22 @@ struct DataManagementView: View {
                         }
                         .foregroundStyle(Color.appFG)
                         .padding(.vertical, 6)
+                    }
+                }
+
+                Panel {
+                    SectionTitle("WOOP / NOOP PORTABLE BACKUP")
+                    Button {
+                        showPortablePreview = true
+                    } label: {
+                        Label(portableBusy ? "Inspecting…" : "Inspect portable backup", systemImage: "doc.text.magnifyingglass")
+                            .font(StrapTypography.body(13.5, weight: .semibold))
+                            .foregroundStyle(Color.appAccent)
+                    }
+                    .disabled(portableBusy)
+                    Hint("Read-only schema preview for NOOP SQLite or .noopbak. No records are merged. Other Woop formats require validation.")
+                    if let portableStatus {
+                        Text(portableStatus).font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                     }
                 }
 
@@ -687,6 +706,22 @@ struct DataManagementView: View {
         }
         .navigationTitle("Data Import & Export")
         .navigationBarTitleDisplayMode(.inline)
+        .fileImporter(isPresented: $showPortablePreview, allowedContentTypes: [.item]) { result in
+            do {
+                let url = try result.get()
+                let scoped = url.startAccessingSecurityScopedResource()
+                portableBusy = true
+                Task {
+                    defer { portableBusy = false; if scoped { url.stopAccessingSecurityScopedResource() } }
+                    do {
+                        let report = try await Task.detached(priority: .userInitiated) {
+                            try PortableBackupInspection.inspect(url)
+                        }.value
+                        portableStatus = report.description
+                    } catch { portableStatus = error.localizedDescription }
+                }
+            } catch { portableStatus = error.localizedDescription }
+        }
         .fileImporter(isPresented: $showWhoopImporter, allowedContentTypes: [.zip, .commaSeparatedText, .plainText]) { result in
             importWhoopFile(result)
         }
