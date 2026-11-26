@@ -7,14 +7,22 @@ struct StepWidgetSnapshot: Codable, Hashable {
     static let storageKey = "strap.steps.widget.snapshot.v1"
     static let widgetKind = "StrapStepsHomeWidget"
 
+    let recordedDayKey: String
     let recordedMinimum: Int?
     let lastObservedAt: Date?
     let lastIncreaseAt: Date?
     let connectedAtWrite: Bool
     let writtenAt: Date
 
+    var isForToday: Bool {
+        let formatter = DateFormatter()
+        formatter.calendar = .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return recordedDayKey == formatter.string(from: Date())
+    }
+
     var isFresh: Bool {
-        guard connectedAtWrite, let lastObservedAt else { return false }
+        guard isForToday, connectedAtWrite, let lastObservedAt else { return false }
         let age = Date().timeIntervalSince(lastObservedAt)
         return age >= 0 && age <= 10 * 60
     }
