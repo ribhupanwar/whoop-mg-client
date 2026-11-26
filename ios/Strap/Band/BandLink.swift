@@ -531,7 +531,7 @@ final class BandLink: NSObject, ObservableObject {
         let archived = days.first(where: { $0.dateKey == today })?.steps
         let count = DailyStepLedger.bestRecordedMinimum(archive: archived, ledger: captured.steps)
         let snapshot = StepWidgetSnapshot(
-            recordedMinimum: count, lastObservedAt: captured.lastObservedAt,
+            recordedDayKey: today, recordedMinimum: count, lastObservedAt: captured.lastObservedAt,
             lastIncreaseAt: captured.lastIncreaseAt,
             connectedAtWrite: isConnected, writtenAt: now
         )
@@ -2556,6 +2556,9 @@ final class BandLink: NSObject, ObservableObject {
             map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
+        // Publish the final analyzed daily minimum after the persisted sensor
+        // ledger, even when the analysis finishes after the history checkpoint.
+        refreshRecordedTodaySteps()
         let today = JournalStore.dayKey(for: Date())
         if let batch = days.first(where: { $0.dateKey == today })?.strain {
             if let currentLive = liveDayStrain {
