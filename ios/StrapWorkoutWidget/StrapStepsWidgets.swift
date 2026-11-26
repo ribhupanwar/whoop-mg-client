@@ -48,7 +48,7 @@ private struct StrapStepsHomeView: View {
                 Text("STEPS").font(.caption.bold()).tracking(1.5)
             }
             Spacer(minLength: 2)
-            Text(entry.snapshot?.recordedMinimum.map { $0.formatted() } ?? "—")
+            Text((entry.snapshot?.isForToday == true ? entry.snapshot?.recordedMinimum : nil).map { $0.formatted() } ?? "—")
                 .font(.system(size: 30, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .minimumScaleFactor(0.6)
@@ -56,7 +56,7 @@ private struct StrapStepsHomeView: View {
             Text("RECORDED MINIMUM")
                 .font(.system(size: 9, weight: .medium))
                 .foregroundStyle(.secondary)
-            if let snapshot = entry.snapshot, let last = snapshot.lastObservedAt {
+            if let snapshot = entry.snapshot, snapshot.isForToday, let last = snapshot.lastObservedAt {
                 Text(snapshot.isFresh ? "BAND SYNC" : "LAST BAND SYNC")
                     .font(.caption2.bold())
                     .foregroundStyle(snapshot.isFresh ? .green : .orange)
