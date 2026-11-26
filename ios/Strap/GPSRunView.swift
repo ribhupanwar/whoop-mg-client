@@ -1084,7 +1084,7 @@ struct MapPage: View {
         return String(format: "%d:%02d", m, s)
     }
 }
-private enum ActivityPickerCategory: String, CaseIterable, Identifiable {
+enum ActivityPickerCategory: String, CaseIterable, Identifiable {
     case all = "ALL"
     case strain = "STRAIN"
     case recovery = "RECOVERY"
