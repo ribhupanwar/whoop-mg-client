@@ -105,7 +105,7 @@ final class StressWindowsTests: XCTestCase {
     }
 
     func testCompleteScoredWindowsExposeElapsedDuration() {
-        let rows = (0..<600).map { sample($0, rr: [1000, 1100]) }
+        let rows = (0..<600).map { sample($0, rr: [$0 % 2 == 0 ? 800 : 900]) }
         let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605))
         XCTAssertEqual(split.windows, 2)
         XCTAssertEqual(StressWindows.scoredSeconds(split), 600)
