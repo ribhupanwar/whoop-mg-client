@@ -2084,6 +2084,56 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         XCTAssertEqual(extended.acceptedNNCount, production.nnBeats)
         XCTAssertEqual(extended.rawRRCount, production.beats)
     }
+
+    func testWindowedSleepHrvAveragesMultipleWindowsAndRejectsOvercounted() {
+        let w1 = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 820]) }
+        let w2 = (300..<600).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
+        let w3 = (600..<900).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 860]) }
+        let overCounted = (900..<1200).map { makeSample($0, hr: 60, accel: 0.02, rr: [800, 900, 800]) }
+
+        let result = Hrv.windowedSleepHRV(w1 + w2 + w3 + overCounted)
+        XCTAssertEqual(result.qualifyingWindows, 3)
+        XCTAssertFalse(result.usedSWSFallback)
+        XCTAssertNotNil(result.result.rmssdMS)
+        XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
+        XCTAssertEqual(result.windowSeconds, 900)
+    }
+
+    // MARK: - Phase 1 HRV Window-Selection Sensitivity Tests
+
+    func testSingleSecondDurationTiebreakCausesProductionDiscontinuityWhileWindowedIsStable() throws {
+        let winA = (0..<1380).map { makeSample(10_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 850 : 885]) }
+        let winB1380 = (0..<1380).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+        let winB1381 = (0..<1381).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+
+        let prodTie = Hrv.swsRestingHRV(winA + winB1380, deepEpochs: [10_000...11_379, 20_000...21_379], minWindowS: 300)
+        let prodPlus1 = Hrv.swsRestingHRV(winA + winB1381, deepEpochs: [10_000...11_379, 20_000...21_380], minWindowS: 300)
+        let prodJump = abs(try XCTUnwrap(prodPlus1.result.rmssdMS) - try XCTUnwrap(prodTie.result.rmssdMS))
+        XCTAssertGreaterThan(prodJump, 10.0)
+
+        let winTie = Hrv.windowedSleepHRV(winA + winB1380)
+        let winPlus1 = Hrv.windowedSleepHRV(winA + winB1381)
+        let winJump = abs(try XCTUnwrap(winPlus1.result.rmssdMS) - try XCTUnwrap(winTie.result.rmssdMS))
+        XCTAssertLessThan(winJump, 1.0)
+    }
+
+    func testOneSecondMotionSpikeSplitsLongestRunWhileWindowedRemainsStable() throws {
+        let winHigh = (0..<1500).map { makeSample(10_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+        let winLow = (0..<800).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 850 : 880]) }
+        var winSplit = winHigh
+        winSplit[749] = makeSample(10_749, hr: 66, accel: 0.15, rr: [886])
+
+        let epochs = [10_000...11_499, 20_000...20_799]
+        let prodIntact = Hrv.swsRestingHRV(winHigh + winLow, deepEpochs: epochs, minWindowS: 300)
+        let prodSplit = Hrv.swsRestingHRV(winSplit + winLow, deepEpochs: epochs, minWindowS: 300)
+        let prodDelta = abs(try XCTUnwrap(prodIntact.result.rmssdMS) - try XCTUnwrap(prodSplit.result.rmssdMS))
+        XCTAssertGreaterThan(prodDelta, 15.0)
+
+        let winIntact = Hrv.windowedSleepHRV(winHigh + winLow)
+        let winPerturbed = Hrv.windowedSleepHRV(winSplit + winLow)
+        let winDelta = abs(try XCTUnwrap(winIntact.result.rmssdMS) - try XCTUnwrap(winPerturbed.result.rmssdMS))
+        XCTAssertLessThan(winDelta, 1.0)
+    }
 }
 
 // Seeded random number generator for deterministic tests
