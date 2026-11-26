@@ -45,6 +45,36 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertEqual(duplicates[.rhr].baselineDays, 1)
         XCTAssertEqual(duplicates.withinCount, 0)
     }
+    func testDuplicatePriorNightUsesLatestCompletedIntervalRegardlessOfInputOrder() {
+        let prior = (-7 ... -1).map { day($0) }
+        let original = day(-1, rhr: 85)
+        // A later saved revision for the same calendar day. DayMetrics has
+        // immutable fields, so create the revision using its initializer.
+        let revised = DayMetrics(
+            dateKey: original.dateKey, state: original.state,
+            restingHR: original.restingHR, lnRMSSD: original.lnRMSSD,
+            hrvWindowSeconds: original.hrvWindowSeconds,
+            sleepHours: original.sleepHours,
+            sleepStartUnix: original.sleepStartUnix,
+            sleepEndUnix: original.sleepEndUnix.map { $0 + 60 },
+            strain: original.strain, steps: original.steps,
+            sleepDurationReliable: original.sleepDurationReliable,
+            respiratoryRate: original.respiratoryRate,
+            restingHRWindowSeconds: original.restingHRWindowSeconds,
+            respiratoryWindows: original.respiratoryWindows,
+            skinTemperatureC: original.skinTemperatureC,
+            skinTemperatureSeconds: original.skinTemperatureSeconds,
+            skinTemperatureSource: original.skinTemperatureSource,
+            oxygenCandidatePct: original.oxygenCandidatePct)
+        let current = day(0, rhr: 60)
+        let first = HealthMonitor.make(days: prior + [revised, current],
+                                       session: session, calendar: calendar)
+        let second = HealthMonitor.make(days: [revised] + prior + [current],
+                                        session: session, calendar: calendar)
+        XCTAssertEqual(first[.rhr].baselineDays, 7)
+        XCTAssertEqual(first[.rhr].reference, second[.rhr].reference)
+        XCTAssertEqual(first[.rhr].reference?.upperBound, 85)
+    }
     func testOutOfRangeAndInsufficientQualityAreNotNormal() {
         let prior = (-7 ... -1).map { day($0) }
         let report = HealthMonitor.make(days: prior + [day(0, rhr: 76)], session: session, calendar: calendar)

@@ -50,7 +50,16 @@ enum HealthMonitor {
         let readings = HealthVital.allCases.map { vital -> HealthReading in
             let value = current.flatMap { measurement($0, vital: vital) }
             let qualified = prior.filter { measurement($0, vital: vital) != nil }
-            let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
+            let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { earlier, later in
+                // A duplicate saved night must not depend on enumeration order.
+                // Prefer the latest completed interval, then its earliest start.
+                let earlierEnd = earlier.sleepEndUnix ?? Int.min
+                let laterEnd = later.sleepEndUnix ?? Int.min
+                if earlierEnd != laterEnd {
+                    return earlierEnd > laterEnd ? earlier : later
+                }
+                return (earlier.sleepStartUnix ?? Int.max) <= (later.sleepStartUnix ?? Int.max) ? earlier : later
+            })
             let values = distinct.values.sorted { $0.dateKey < $1.dateKey }.suffix(30)
                 .compactMap { measurement($0, vital: vital) }
             let enough = values.count >= 7
