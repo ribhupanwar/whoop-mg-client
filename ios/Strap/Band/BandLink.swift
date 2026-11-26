@@ -1034,10 +1034,13 @@ final class BandLink: NSObject, ObservableObject {
     private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
         let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
         let key = JournalStore.dayKey(for: date, calendar: calendar)
-        return days.last {
+        if let exact = days.last(where: {
             $0.dateKey == key && $0.state == "sleep"
                 && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
+        }) {
+            return exact
         }
+        return days.last { $0.dateKey == key && $0.state == "sleep" }
     }
 
     private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
@@ -1087,7 +1090,12 @@ final class BandLink: NSObject, ObservableObject {
                 recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
                 shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
                 sleepAnalysis: sleepAnalysis,
-                upcomingSleepPlan: upcomingSleepPlan)
+                upcomingSleepPlan: upcomingSleepPlan,
+                respiratoryRate: assessment.day?.respiratoryRate,
+                respiratoryBaseline: assessment.breakdown?.respiratoryBaseline,
+                sleepPerformancePct: assessment.day?.sleepPerformancePct,
+                skinTemperatureC: assessment.day?.skinTemperatureC,
+                oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }
