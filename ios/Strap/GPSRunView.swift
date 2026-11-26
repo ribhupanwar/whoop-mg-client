@@ -22,6 +22,7 @@ struct GPSRunView: View {
     @State private var showDiscardConfirm = false
     @State private var workoutPage: WorkoutPage = .strain
     @State private var hrHistory: [HeartRateSample] = []
+    @State private var lastRecordedHRAt: Date?
 
     private var canRecordGPS: Bool {
         switch selectedActivity {
@@ -91,11 +92,16 @@ struct GPSRunView: View {
                 liveWorkoutView
             }
         }
-        .navigationTitle(recorder.phase == .idle ? "Start Activity" : selectedActivity.label)
+        .navigationTitle((recorder.phase == .idle || recorder.phase == .saved || recorder.phase == .discarded) ? "Start Activity" : (recorder.currentSession?.activityLabel ?? selectedActivity.label))
         .navigationBarTitleDisplayMode(.inline)
         .onReceive(ticker) { _ in
             recorder.tick()
             updateHRHistory()
+            if recorder.phase == .recording, let observed = store.band.lastLiveHRAt,
+               observed != lastRecordedHRAt, let bpm = liveBPM(at: Date()) {
+                recorder.addHeartRateSample(bpm)
+                lastRecordedHRAt = observed
+            }
             WorkoutLiveActivityController.shared.update(
                 session: recorder.currentSession, phase: recorder.phase,
                 heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
@@ -255,6 +261,7 @@ struct GPSRunView: View {
                                 .fixedSize()
                                 .padding(12)
                                 .background(.regularMaterial, in: Capsule())
+                                .disabled(!canRecordGPS)
                                 .accessibilityIdentifier("running.trackRouteToggle")
                         }
                         .padding(12)
@@ -325,6 +332,7 @@ struct GPSRunView: View {
                 // Start Activity button
                 Button {
                     hrHistory.removeAll()
+                    lastRecordedHRAt = store.band.lastLiveHRAt
                     // Pass profile data for accurate calorie/HR/strain calculations
                     recorder.updateProfile(
                         weightKg: store.settings.weightKG,
@@ -343,7 +351,6 @@ struct GPSRunView: View {
                         .padding(18)
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!canRecordGPS && trackRoute)
                 .tint(Color(red: 0.04, green: 0.60, blue: 0.94))
                 .clipShape(Capsule())
                 .padding(18)
@@ -356,6 +363,7 @@ struct GPSRunView: View {
     private func activityPickerRow(_ activity: ActivityKind) -> some View {
         Button {
             selectedActivity = activity
+            if !canRecordGPS { trackRoute = false }
             withAnimation(.easeInOut(duration: 0.2)) { showPicker = false }
         } label: {
             HStack(spacing: 18) {
@@ -436,11 +444,6 @@ struct GPSRunView: View {
 
     private var liveWorkoutView: some View {
         let currentHR = liveBPM(at: Date())
-
-        // Feed HR to recorder
-        if let hr = currentHR {
-            recorder.addHeartRateSample(hr)
-        }
 
         return ZStack(alignment: .top) {
             // Three-page TabView
