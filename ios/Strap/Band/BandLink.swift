@@ -547,7 +547,14 @@ final class BandLink: NSObject, ObservableObject {
                 count, observedAt: captured.lastObservedAt
             )
         }
-        CapturedStepsLiveActivityController.shared.reconcile(snapshot, workoutActive: workoutActive)
+        let measuredHR = LiveHeartRateState.fresh(
+            liveHeartRate, receivedAt: lastLiveHRAt, connected: isConnected, now: now
+        )
+        let estimatedStrain = liveDayStrainDateKey == today ? liveDayStrain : nil
+        CapturedStepsLiveActivityController.shared.reconcile(
+            snapshot, workoutActive: workoutActive,
+            heartRate: measuredHR, estimatedStrain: estimatedStrain
+        )
     }
 
     /// Read the persisted capture across app relaunch, calendar midnight and
@@ -2648,6 +2655,15 @@ final class BandLink: NSObject, ObservableObject {
             }
             recordLiveHR(bpm)
             lastLiveHRAt = Date()
+            // When a verified walking card already exists, update measured HR
+            // at a system-friendly cadence. HR never increments the step count.
+            let today'sStrain = liveDayStrainDateKey == JournalStore.dayKey(for: Date())
+                ? liveDayStrain : nil
+            Task { @MainActor in
+                CapturedStepsLiveActivityController.shared.updateVitals(
+                    heartRate: bpm, estimatedStrain: today'sStrain
+                )
+            }
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
