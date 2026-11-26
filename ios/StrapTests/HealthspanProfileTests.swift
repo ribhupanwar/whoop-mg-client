@@ -9,7 +9,7 @@ final class HealthspanProfileTests: XCTestCase {
         var la = Calendar(identifier: .gregorian)
         la.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
         // 00:30 UTC and 23:30 UTC are distinct UTC dates but the same LA date.
-        let first = Date(timeIntervalSince1970: 1_795_651_800)
+        let first = Date(timeIntervalSince1970: 1_795_681_000)
         let last = first.addingTimeInterval(23 * 3600)
         let observation = HealthspanObservation(value: 50, observedDays: 2,
                                                 firstObserved: first, lastObserved: last)
