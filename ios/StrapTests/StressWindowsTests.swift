@@ -43,6 +43,20 @@ final class StressWindowsTests: XCTestCase {
         Baseline(lnRMSSDMean: mean, lnRMSSDSD: 0.5, rhrMean: 60, rhrSD: 3, days: days)
     }
 
+    func testStressDiagnosticsRetainsRawDeviationBeforeClamping() {
+        let high = Recovery.stressIndex(lnRMSSD: 1, baseline: baseline(mean: 6))
+        XCTAssertEqual(high.index, 3)
+        XCTAssertEqual(high.diagnostics?.unclampedScore, 10)
+        XCTAssertEqual(high.diagnostics?.finalScore, 3)
+        XCTAssertNil(high.diagnostics?.rejectedRRWindows)
+
+        let low = Recovery.stressIndex(lnRMSSD: 6, baseline: baseline(mean: 4))
+        XCTAssertEqual(low.index, 0)
+        XCTAssertEqual(low.diagnostics?.unclampedScore, -4)
+        XCTAssertEqual(low.diagnostics?.finalScore, 0)
+        XCTAssertNil(Recovery.stressIndex(lnRMSSD: nil, baseline: nil).index)
+    }
+
     func testNeedsAwakeBaseline() {
         let split = StressWindows.share(samples: window(0), baseline: nil)
         XCTAssertNil(split.lowPct)
