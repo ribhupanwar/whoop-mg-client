@@ -25,6 +25,10 @@ struct StrapWorkoutWidget: Widget {
                         Text(distanceText(context.state.distanceMeters))
                         Spacer()
                         Text(paceText(context.state.paceSecondsPerKilometer))
+                        if let steps = context.state.steps {
+                            Spacer()
+                            Label(steps.formatted(), systemImage: "figure.walk")
+                        }
                     }
                     .font(.caption)
                 }
@@ -34,7 +38,12 @@ struct StrapWorkoutWidget: Widget {
                     Text(hrText(context.state.heartRate)).monospacedDigit()
                 }
             } compactTrailing: {
-                Text(context.attributes.startedAt, style: .timer).monospacedDigit()
+                if let steps = context.state.steps {
+                    Label(steps.formatted(), systemImage: "figure.walk")
+                        .monospacedDigit()
+                } else {
+                    Text(context.attributes.startedAt, style: .timer).monospacedDigit()
+                }
             } minimal: {
                 Image(systemName: "heart.fill").foregroundStyle(.orange)
             }
@@ -73,7 +82,12 @@ private struct WorkoutLockScreenView: View {
                     Text("DISTANCE").font(.caption2).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity)
                 Divider()
-                Text("STRAP").font(.headline.bold()).tracking(2).frame(maxWidth: .infinity)
+                VStack(spacing: 2) {
+                    Text("STRAP").font(.headline.bold()).tracking(2)
+                    if let steps = context.state.steps {
+                        Text("\(steps.formatted()) STEPS").font(.caption2).monospacedDigit()
+                    }
+                }.frame(maxWidth: .infinity)
                 Divider()
                 VStack {
                     Text(paceText(context.state.paceSecondsPerKilometer)).font(.headline)
