@@ -77,6 +77,17 @@ private func makeNight(
 
 final class SleepStageTests: XCTestCase {
 
+    func testBandWakeEvidenceUsesAbsoluteEpochBoundaries() {
+        let start = alignedBase + 17
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: start, sessionStart: start), 0)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 29, sessionStart: start), 0)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 30, sessionStart: start), 1)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 59, sessionStart: start), 1)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 60, sessionStart: start), 2)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 30, sessionStart: alignedBase), 1)
+    }
+
+
     // Regression derived from an anonymized 2026-11-26 overnight capture:
     // RR packets can be absent while HR and motion remain continuously measured.
     // Missing RR is missing respiratory evidence, not missing sleep time.
