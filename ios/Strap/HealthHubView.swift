@@ -381,6 +381,10 @@ struct HealthHubView: View {
                         LineChart(values: SampleData.stressMiniSeries, color: .appGood,
                                   minY: 0, maxY: 3, height: 60)
                             .frame(width: 150)
+                    } else if let series = store.band.summary?.stressSeries,
+                              !StressDayChart.todayPoints(series).isEmpty {
+                        StressDayChart(points: series)
+                            .frame(width: 120)
                     }
                 }
                 if !demo {
