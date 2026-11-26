@@ -1474,7 +1474,7 @@ final class RecoveryTests: XCTestCase {
 
     func testDeletedWorkoutReturnsItsSamplesToOutsideWorkoutStress() {
         let samples = (0..<600).map { second in
-            makeSample(second, hr: 75, rr: [790, 810, 795, 806])
+            makeSample(second, hr: 75, rr: [second % 2 == 0 ? 790 : 810])
         }
         let workout = ActivitySession(startUnix: 300, endUnix: 599, kind: "workout", steps: 0,
                                       meanHR: 75, walkTicks: 0, runTicks: 0)
