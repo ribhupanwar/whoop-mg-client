@@ -1238,7 +1238,9 @@ final class BandLink: NSObject, ObservableObject {
                 respiratoryBaseline: assessmentBreakdown?.respiratoryBaseline,
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
-                oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
+                oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
+                temperatureFunnel: NightTemperature.funnel(archived, session: session),
+                oxygenCandidateSummary: Recovery.spo2Summary(samples))
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }
