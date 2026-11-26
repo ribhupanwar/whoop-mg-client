@@ -23,12 +23,16 @@ struct HealthspanObservation: Equatable {
     let firstObserved: Date
     let lastObserved: Date
 
-    var isValid: Bool {
+    var isValid: Bool { isValid(calendar: .current) }
+
+    /// Validate day counts in the same calendar used for rolling-window coverage.
+    /// Otherwise observations spanning midnight in another timezone can be
+    /// incorrectly accepted or rejected before missing(_:) checks the window.
+    func isValid(calendar: Calendar) -> Bool {
         guard value.isFinite, observedDays > 0, firstObserved <= lastObserved else { return false }
         // A summary cannot report more distinct observation days than the
         // calendar dates it spans. Apply this to contributor availability too,
         // not only to rolling-window checks in missing(_:minimumDays:windowDays:).
-        let calendar = Calendar.current
         let first = calendar.startOfDay(for: firstObserved)
         let last = calendar.startOfDay(for: lastObserved)
         guard let elapsedDays = calendar.dateComponents([.day], from: first, to: last).day,
@@ -47,7 +51,7 @@ struct HealthspanInputCoverage {
     func missing(_ metric: HealthspanContributor, minimumDays: Int,
                  windowDays: Int, calendar: Calendar = .current) -> Bool {
         guard minimumDays > 0, windowDays >= minimumDays,
-              let observation = observations[metric], observation.isValid,
+              let observation = observations[metric], observation.isValid(calendar: calendar),
               let start = calendar.date(byAdding: .day, value: -(windowDays - 1),
                                         to: calendar.startOfDay(for: asOf)) else { return true }
         // The observation may span longer than the requested window. Rejecting
