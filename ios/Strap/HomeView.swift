@@ -691,7 +691,7 @@ struct HomeView: View {
                     pillColor: stressColor,
                     state: demo ? "LOW" : stress.band.uppercased(),
                     stateColor: stressColor,
-                    detail: demo ? "11:49 · sample" : stress.reason ?? "Awake-quiet estimate"
+                    detail: demo ? "11:49 · sample" : stress.reason ?? (stress.diagnostics?.unclampedScore.map { $0 <= 0 } == true ? "HRV at/above baseline" : "Awake-quiet estimate")
                 )
             }
             .buttonStyle(.plain)
