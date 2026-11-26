@@ -218,4 +218,75 @@ final class StepCounterTests: XCTestCase {
         XCTAssertEqual(restoredCount, 6)
     }
 
+
+    func testPersistentLedgerLargeReplayAndStationaryEvidence() async throws {
+        let suite = "strap.step-ledger.volume." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let reference = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: reference).timeIntervalSince1970)
+        let now = Date(timeIntervalSince1970: Double(start + 14_000))
+        let rows = (0..<12_000).map { sample(start + $0, steps: 100 + $0 * 2) }
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest(rows, calendar: calendar, now: now)
+        await ledger.ingest(Array(rows.reversed()), calendar: calendar, now: now)
+        let moving = await ledger.todaySnapshot(now: now, calendar: calendar)
+        XCTAssertEqual(moving.steps, 23_998)
+        XCTAssertEqual(moving.lastObservedAt, Date(timeIntervalSince1970: Double(start + 11_999)))
+        XCTAssertEqual(moving.lastIncreaseAt, moving.lastObservedAt)
+        let stopped = (12_000...12_030).map { sample(start + $0, steps: 24_098) }
+        await ledger.ingest(stopped, calendar: calendar, now: now)
+        let still = await ledger.todaySnapshot(now: now, calendar: calendar)
+        XCTAssertEqual(still.steps, 23_998)
+        XCTAssertEqual(still.lastObservedAt, Date(timeIntervalSince1970: Double(start + 12_030)))
+        XCTAssertEqual(still.lastIncreaseAt, moving.lastIncreaseAt)
+        let reopened = DailyStepLedger(defaults: defaults)
+        let restored = await reopened.todaySnapshot(now: now, calendar: calendar)
+        XCTAssertEqual(restored, still)
+    }
+
+    func testPersistentLedgerWrapResetGapsAndNoFabricatedSteps() async throws {
+        let suite = "strap.step-ledger.wrap." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest([
+            sample(start, steps: 65_530), sample(start + 1, steps: 65_534),
+            sample(start + 2, steps: 3), sample(start + 100, steps: 1_000),
+            sample(start + 101, steps: 1_002), sample(start + 102, steps: 2),
+            sample(start + 103, steps: 4)
+        ], calendar: calendar, now: now)
+        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: calendar), 13)
+    }
+
+    func testPersistentLedgerStationaryHasNoMovementEvidence() async throws {
+        let suite = "strap.step-ledger.quiet." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest((0..<90).map { sample(start + $0, steps: 500) }, calendar: calendar, now: now)
+        let snapshot = await ledger.todaySnapshot(now: now, calendar: calendar)
+        XCTAssertEqual(snapshot.steps, 0)
+        XCTAssertNil(snapshot.lastIncreaseAt)
+        XCTAssertNotNil(snapshot.lastObservedAt)
+    }
+
+    func testRecordedMinimumNeverAddsOverlappingCaptureWindows() {
+        XCTAssertEqual(DailyStepLedger.bestRecordedMinimum(archive: 500, ledger: 420), 500)
+        XCTAssertEqual(DailyStepLedger.bestRecordedMinimum(archive: 500, ledger: 620), 620)
+        XCTAssertEqual(DailyStepLedger.bestRecordedMinimum(archive: nil, ledger: 5), 5)
+        XCTAssertNil(DailyStepLedger.bestRecordedMinimum(archive: nil, ledger: nil))
+        XCTAssertNil(DailyStepLedger.bestRecordedMinimum(archive: -1, ledger: nil))
+    }
+
 }
