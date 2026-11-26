@@ -1092,7 +1092,7 @@ final class BandLink: NSObject, ObservableObject {
                 sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan,
                 respiratoryRate: assessment.day?.respiratoryRate,
-                respiratoryBaseline: assessment.breakdown?.respiratoryBaseline,
+                respiratoryBaseline: RecoveryDiagnostics.Breakdown(assessment: assessment)?.respiratoryBaseline,
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
