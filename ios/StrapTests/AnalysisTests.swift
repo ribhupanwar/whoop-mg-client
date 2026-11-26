@@ -1473,8 +1473,11 @@ final class RecoveryTests: XCTestCase {
     }
 
     func testDeletedWorkoutReturnsItsSamplesToOutsideWorkoutStress() {
+        // One physiological ~800 ms beat per second; four beats per second
+        // over-counted elapsed time and are correctly rejected by the RR gate.
+        let rrPattern = [790, 810, 795, 806]
         let samples = (0..<600).map { second in
-            makeSample(second, hr: 75, rr: [790, 810, 795, 806])
+            makeSample(second, hr: 75, rr: [rrPattern[second % rrPattern.count]])
         }
         let workout = ActivitySession(startUnix: 300, endUnix: 599, kind: "workout", steps: 0,
                                       meanHR: 75, walkTicks: 0, runTicks: 0)
