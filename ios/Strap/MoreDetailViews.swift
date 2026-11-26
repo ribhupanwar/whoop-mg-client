@@ -893,6 +893,8 @@ struct NotificationSettingsView: View {
 struct AppPreferencesView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
+    @AppStorage("strap.navigationGlass") private var navigationGlass = false
+    @AppStorage("strap.healthWidgetEnabled") private var healthWidgetEnabled = false
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet."
 
@@ -907,6 +909,11 @@ struct AppPreferencesView: View {
                         Text("Dark").tag("dark")
                     }
                     .pickerStyle(.segmented)
+                    Toggle("Liquid Glass navigation", isOn: $navigationGlass)
+                        .tint(Color.appAccent)
+                    Toggle("Share health metrics with widgets", isOn: $healthWidgetEnabled)
+                        .tint(Color.appAccent)
+                    Hint("Off by default. Enabling makes your daily score snapshot available to your installed Home Screen widget. Turning off removes the shared snapshot; iOS controls widget refresh.")
                     Text("Measurements are shown in metric units. Localized times follow your iPhone settings.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
