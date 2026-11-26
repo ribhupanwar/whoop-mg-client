@@ -1,5 +1,6 @@
 import Foundation
 import SwiftUI
+import UIKit
 
 /// The My Dashboard metric rows, shared verbatim by Home and the Dashboard tab
 /// so the ordering can never drift: HRV, RHR, Steps, HR zones 1–3 weekly,
@@ -29,6 +30,9 @@ struct DashboardRows: View {
             }
         }
         .onAppear { store.band.refreshRecordedTodaySteps() }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification)) { _ in
+            store.band.refreshRecordedTodaySteps()
+        }
         .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in
             store.band.refreshRecordedTodaySteps()
         }
@@ -174,7 +178,14 @@ struct DashboardRows: View {
     }
 
     private var stepsDetail: String {
-        todayRecordedSteps != nil ? "today · recorded minimum" : "needs band history sync"
+        guard todayRecordedSteps != nil else { return "needs band history sync" }
+        if !store.band.isConnected { return "recorded minimum · disconnected" }
+        guard let observed = store.band.capturedTodayStepAt else {
+            return "recorded minimum · last historical sync"
+        }
+        return Date().timeIntervalSince(observed) > 10 * 60
+            ? "recorded minimum · stale history"
+            : "today · recorded minimum"
     }
 
     private func zoneText(high: Bool) -> String {
