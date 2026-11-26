@@ -39,3 +39,39 @@ struct StepWidgetSnapshot: Codable, Hashable {
         return true
     }
 }
+
+
+/// Opt-in, dated summary; no raw sensor samples or account identifiers.
+struct HealthWidgetSnapshot: Codable, Equatable {
+    static let storageKey = "strap.health.widget.snapshot.v1"
+    static let widgetKind = "StrapHealthHomeWidget"
+    let dayKey: String
+    let recovery: Double?
+    let sleep: Double?
+    let strain: Double?
+    let battery: Int?
+    let savedAt: Date
+
+    func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return dayKey == formatter.string(from: date)
+    }
+
+    static func load(defaults: UserDefaults? = UserDefaults(suiteName: StepWidgetSnapshot.appGroup)) -> Self? {
+        guard let data = defaults?.data(forKey: storageKey) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+
+    @discardableResult
+    static func save(_ value: Self?, defaults: UserDefaults? = UserDefaults(suiteName: StepWidgetSnapshot.appGroup)) -> Bool {
+        guard let defaults else { return false }
+        guard let value else { defaults.removeObject(forKey: storageKey); return true }
+        guard let data = try? JSONEncoder().encode(value) else { return false }
+        defaults.set(data, forKey: storageKey)
+        return true
+    }
+}
