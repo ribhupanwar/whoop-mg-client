@@ -1,6 +1,7 @@
 import Combine
 import CoreBluetooth
 import Foundation
+import WidgetKit
 
 enum BandStatus: Equatable {
     case unpaired
@@ -220,6 +221,22 @@ final class BandLink: NSObject, ObservableObject {
         summary?.latestSleepSession
     }
     @Published private(set) var days: [DayMetrics] = []
+    /// Persistent captured-step lower bound, never a claimed complete-day total.
+    @Published private(set) var capturedTodayFromLedger: Int?
+    @Published private(set) var capturedTodayStepAt: Date?
+    @Published private(set) var capturedTodayIncreaseAt: Date?
+    @Published private(set) var capturedTodayLedgerDayKey: String?
+    private let dailyStepLedger = DailyStepLedger()
+    private var stepLedgerTask: Task<Void, Never>?
+    private var lastStepWidgetReloadAt = Date.distantPast
+    private var stepLedgerUpdateGeneration = 0
+    private var stepLedgerArchiveHydrated = false
+
+    var recordedTodayFromLedger: Int? {
+        guard capturedTodayLedgerDayKey == JournalStore.dayKey(for: Date()) else { return nil }
+        return capturedTodayFromLedger
+    }
+
     @Published private(set) var drainStats = DrainStats()
     @Published private(set) var lastDataRangeResponse: DataRangeResponse?
     @Published private(set) var isStrapStuck = false
@@ -501,6 +518,86 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("strap-history-v18.json")
     }
 
+    /// Called only after the ledger actor has completed its read/write. Keep
+    /// the Home display, existing workout card and WidgetKit App Group snapshot
+    /// consistent with the same measured band-counter observation.
+    @MainActor
+    private func applyCapturedStepSnapshot(_ captured: DailyStepLedger.TodaySnapshot, now: Date) {
+        capturedTodayFromLedger = captured.steps
+        capturedTodayStepAt = captured.lastObservedAt
+        capturedTodayIncreaseAt = captured.lastIncreaseAt
+        capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+
+        let today = JournalStore.dayKey(for: now)
+        let archived = days.first(where: { $0.dateKey == today })?.steps
+        let count = DailyStepLedger.bestRecordedMinimum(archive: archived, ledger: captured.steps)
+        let snapshot = StepWidgetSnapshot(
+            recordedDayKey: today, recordedMinimum: count, lastObservedAt: captured.lastObservedAt,
+            lastIncreaseAt: captured.lastIncreaseAt,
+            connectedAtWrite: isConnected, writtenAt: now
+        )
+        if snapshot.save(), now.timeIntervalSince(lastStepWidgetReloadAt) >= 60 {
+            lastStepWidgetReloadAt = now
+            WidgetCenter.shared.reloadTimelines(ofKind: StepWidgetSnapshot.widgetKind)
+        }
+
+        let phase = WorkoutRecorder.shared.phase
+        let workoutActive = phase == .recording || phase == .paused
+        if workoutActive {
+            WorkoutLiveActivityController.shared.updateStepCount(
+                count, observedAt: captured.lastObservedAt
+            )
+        }
+        let measuredHR = LiveHeartRateState.fresh(
+            liveHeartRate, receivedAt: lastLiveHRAt, connected: isConnected, now: now
+        )
+        let estimatedStrain = liveDayStrainDateKey == today ? liveDayStrain : nil
+        CapturedStepsLiveActivityController.shared.reconcile(
+            snapshot, workoutActive: workoutActive,
+            heartRate: measuredHR, estimatedStrain: estimatedStrain
+        )
+    }
+
+    /// Read the persisted capture across app relaunch, calendar midnight and
+    /// timezone change. A stale previous-day value is not shown as today's.
+    func refreshRecordedTodaySteps() {
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.applyCapturedStepSnapshot(snapshot, now: now)
+            }
+        }
+    }
+
+    /// The ledger consumes ONLY records durably committed by the history
+    /// writer. Never show unacknowledged raw BLE frames as daily steps.
+    private func ingestDurableStepSamples(_ samples: [V18Sample]) {
+        guard samples.contains(where: { $0.stepCounter != nil }) else { return }
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            await self.dailyStepLedger.ingest(samples, calendar: calendar, now: now)
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.applyCapturedStepSnapshot(snapshot, now: now)
+            }
+        }
+    }
+
     /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
     /// the latest archive so recovery and a live drain cannot overwrite each other.
     private func mergeHistoricalArchive(
@@ -517,6 +614,15 @@ final class BandLink: NSObject, ObservableObject {
                 self.hasUnsavedArchiveRecords = false
                 self.retainedHistoricalSamples = merged.samples
                 self.lastHistoryRecordCount = merged.samples.count
+                // On startup, hydrate from durable history even if no new
+                // packets arrived. Subsequent checkpoints ingest only new
+                // packets; replays are idempotent inside DailyStepLedger.
+                if !self.stepLedgerArchiveHydrated {
+                    self.stepLedgerArchiveHydrated = true
+                    self.ingestDurableStepSamples(merged.samples)
+                } else {
+                    self.ingestDurableStepSamples(incoming)
+                }
                 if historyGeneration == self.historySyncGeneration {
                     self.noteInsertedHistory(merged.progress)
                 }
@@ -627,6 +733,7 @@ final class BandLink: NSObject, ObservableObject {
             central = CBCentralManager(delegate: self, queue: nil)
         }
         recoverSavedCaptures()
+        refreshRecordedTodaySteps()
     }
 
     deinit {
@@ -2358,6 +2465,8 @@ final class BandLink: NSObject, ObservableObject {
                 switch result {
                 case .success(let progress):
                     self.noteInsertedHistory(progress)
+                    // Saved and committed to SQLite; now safe for Home steps.
+                    self.ingestDurableStepSamples(incoming)
                     guard !self.historyPersistenceStalled else {
                         self.pendingHistoryFlushes -= 1
                         self.finishCompletedDrainIfReady()
@@ -2471,6 +2580,9 @@ final class BandLink: NSObject, ObservableObject {
             map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
+        // Publish the final analyzed daily minimum after the persisted sensor
+        // ledger, even when the analysis finishes after the history checkpoint.
+        refreshRecordedTodaySteps()
         let today = JournalStore.dayKey(for: Date())
         if let batch = days.first(where: { $0.dateKey == today })?.strain {
             if let currentLive = liveDayStrain {
@@ -2560,6 +2672,15 @@ final class BandLink: NSObject, ObservableObject {
             }
             recordLiveHR(bpm)
             lastLiveHRAt = Date()
+            // When a verified walking card already exists, update measured HR
+            // at a system-friendly cadence. HR never increments the step count.
+            let todaysStrain = liveDayStrainDateKey == JournalStore.dayKey(for: Date())
+                ? liveDayStrain : nil
+            Task { @MainActor in
+                CapturedStepsLiveActivityController.shared.updateVitals(
+                    heartRate: bpm, estimatedStrain: todaysStrain
+                )
+            }
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
@@ -2830,6 +2951,7 @@ extension BandLink: CBCentralManagerDelegate {
                 pickerMode = false
             }
             status = .poweredOff
+            refreshRecordedTodaySteps()
         case .unauthorized:
             status = .unauthorized
         case .unsupported:
@@ -2917,6 +3039,7 @@ extension BandLink: CBCentralManagerDelegate {
         armHandshakeDeadline(seconds: 40)
         bandName = peripheral.name ?? preferredBandName ?? bandName
         status = .authenticating
+        refreshRecordedTodaySteps()
         lastMessage = "Bluetooth connected; discovering WHOOP services…"
         peripheral.delegate = self
         hrConnectedAt = Date()
@@ -2973,6 +3096,7 @@ extension BandLink: CBCentralManagerDelegate {
         status = .disconnected(
             error.map { $0.localizedDescription } ?? "Strap disconnected"
         )
+        refreshRecordedTodaySteps()
         if wantsConnection || preferredBandID != nil {
             scheduleReconnect()
         }

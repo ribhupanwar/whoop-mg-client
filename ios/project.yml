@@ -98,6 +98,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap.workoutwidget
+        CODE_SIGN_ENTITLEMENTS: StrapWorkoutWidget/StrapWorkoutWidget.entitlements
         GENERATE_INFOPLIST_FILE: "NO"
         SKIP_INSTALL: "YES"
 
