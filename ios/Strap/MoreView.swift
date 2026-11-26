@@ -368,6 +368,15 @@ private struct BackupRestoreSettingsView: View {
                     return
                 }
                 try fm.copyItem(at: archive, to: target)
+                // Validate the external copy itself, not only the sandbox source.
+                // A failed Files-provider copy must never be reported as a usable backup.
+                do {
+                    let inspectedCopy = try StrapBackup.inspect(target)
+                    try? fm.removeItem(at: inspectedCopy.folder)
+                } catch {
+                    try? fm.removeItem(at: target)
+                    throw error
+                }
                 message = "Verified backup exported to " + folder.lastPathComponent
             } else {
                 message = "Verified backup created. Use Share backup ZIP to save it to Files."
