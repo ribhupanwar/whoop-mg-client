@@ -137,3 +137,19 @@ extension WhoopImportBatchTests {
         XCTAssertTrue(plan.biometricRows.isEmpty)
     }
 }
+
+extension WhoopImportBatchTests {
+    func testBiometricDateFallsBackPerRowWithoutChangingWakeDatePrecedence() throws {
+        let csv = """
+        Cycle start time,Cycle end time,Wake onset,Heart rate variability (ms),Resting heart rate (bpm)
+        2026-10-01,,,40,60
+        2026-10-02,,2026-10-03,42,61
+        ,2026-10-04,,43,62
+        ,,,44,63
+        """
+        let rows = try WhoopCSVImport.parse(Data(csv.utf8))
+        XCTAssertEqual(rows.map(\.dateKey), ["2026-10-01", "2026-10-03", "2026-10-04"])
+        XCTAssertEqual(rows.map(\.hrvMS), [40, 42, 43])
+        XCTAssertEqual(rows.map(\.restingHR), [60, 61, 62])
+    }
+}
