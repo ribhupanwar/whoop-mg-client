@@ -53,10 +53,12 @@ enum HealthMonitor {
             let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { earlier, later in
                 // A duplicate saved night must not depend on enumeration order.
                 // Prefer the latest completed interval, then its earliest start.
-                if earlier.sleepEndUnix != later.sleepEndUnix {
-                    return earlier.sleepEndUnix > later.sleepEndUnix ? earlier : later
+                let earlierEnd = earlier.sleepEndUnix ?? Int.min
+                let laterEnd = later.sleepEndUnix ?? Int.min
+                if earlierEnd != laterEnd {
+                    return earlierEnd > laterEnd ? earlier : later
                 }
-                return earlier.sleepStartUnix <= later.sleepStartUnix ? earlier : later
+                return (earlier.sleepStartUnix ?? Int.max) <= (later.sleepStartUnix ?? Int.max) ? earlier : later
             })
             let values = distinct.values.sorted { $0.dateKey < $1.dateKey }.suffix(30)
                 .compactMap { measurement($0, vital: vital) }
