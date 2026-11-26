@@ -3,7 +3,8 @@
 import math
 import unittest
 
-from whoop.health import resp_rate_from_rr
+from whoop.health import _rr_segments, resp_rate_from_rr
+from dataclasses import replace
 from whoop.records import RecordHeader, V18Sample
 
 
@@ -64,6 +65,25 @@ class TestRespRateFromRR(unittest.TestCase):
         self.assertLessEqual(result.breaths_per_min, 17.0)
         self.assertEqual(result.beats, 600)
         self.assertGreaterEqual(result.windows, 2)
+
+    def test_replayed_invalid_padding_cannot_displace_valid_beats(self):
+        good = sample(0, [900, 920])
+        bad = sample(0, [900, 0, 65535])
+        for rows in ([bad, good], [good, bad]):
+            self.assertEqual(_rr_segments(rows), [[(0, 900), (0, 920)]])
+
+    def test_motion_and_missing_rr_are_boundaries(self):
+        left = sample(0, [900])
+        right = sample(2, [920])
+        for middle in (
+            sample(1, []),
+            replace(sample(1, [910]), heart_rate=0),
+            replace(sample(1, [910]), dynamic_accel_g=None),
+            replace(sample(1, [910]), dynamic_accel_g=-0.01),
+            replace(sample(1, [910]), dynamic_accel_g=float("nan")),
+            replace(sample(1, [910]), dynamic_accel_g=0.5),
+        ):
+            self.assertEqual(_rr_segments([left, middle, right]), [[(0, 900)], [(2, 920)]])
 
     def test_out_of_band_breathing_is_rejected(self):
         # 5 breaths/min is a 12 s interval, outside the 2.5-10 s estimator band.
