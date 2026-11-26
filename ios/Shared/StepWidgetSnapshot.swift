@@ -51,6 +51,8 @@ struct HealthWidgetSnapshot: Codable, Equatable {
     let strain: Double?
     let battery: Int?
     let savedAt: Date
+    var stress: Double? = nil
+    var stressObservedAt: Date? = nil
 
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
         let formatter = DateFormatter()
@@ -74,4 +76,33 @@ struct HealthWidgetSnapshot: Codable, Equatable {
         defaults.set(data, forKey: storageKey)
         return true
     }
+}
+
+
+enum HealthWidgetMetric: String, CaseIterable {
+    case recovery, sleep, strain, battery, stress
+    var kind: String { "StrapHealthWidget." + rawValue }
+    var title: String { rawValue.capitalized }
+    var maximum: Double { self == .strain ? 21 : (self == .stress ? 3 : 100) }
+    var suffix: String { self == .strain || self == .stress ? "" : "%" }
+    var decimals: Int { self == .strain || self == .stress ? 1 : 0 }
+    func value(in snapshot: HealthWidgetSnapshot, at date: Date) -> Double? {
+        guard snapshot.isForDay(date) else { return nil }
+        let value: Double?
+        switch self {
+        case .recovery: value = snapshot.recovery
+        case .sleep: value = snapshot.sleep
+        case .strain: value = snapshot.strain
+        case .battery:
+            guard (0...600).contains(date.timeIntervalSince(snapshot.savedAt)) else { return nil }
+            value = snapshot.battery.map(Double.init)
+        case .stress:
+            guard let observed = snapshot.stressObservedAt,
+                  (0...600).contains(date.timeIntervalSince(observed)) else { return nil }
+            value = snapshot.stress
+        }
+        guard let value, value.isFinite, (0...maximum).contains(value) else { return nil }
+        return value
+    }
+    static var kinds: [String] { [HealthWidgetSnapshot.widgetKind] + allCases.map(\.kind) }
 }
