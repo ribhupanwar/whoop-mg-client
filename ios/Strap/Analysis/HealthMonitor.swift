@@ -67,7 +67,10 @@ enum HealthMonitor {
             var range: ClosedRange<Double>?
             if enough, let low = values.min(), let high = values.max() { range = low...high }
             if vital == .oxygen {
-                return HealthReading(vital: vital, value: value, status: value == nil ? .unavailable : .candidate,
+                // Raw v18 oxygen bytes have no validated red/IR calibration. Keep
+                // candidate provenance in DayMetrics, but never surface a
+                // clinical-looking percentage as a measured Health Monitor value.
+                return HealthReading(vital: vital, value: nil, status: value == nil ? .unavailable : .candidate,
                                      baselineDays: values.count, reference: nil)
             }
             if vital == .temperature {
