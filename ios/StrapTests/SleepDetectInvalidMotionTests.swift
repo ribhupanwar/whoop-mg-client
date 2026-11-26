@@ -2,6 +2,22 @@ import XCTest
 @testable import Strap
 
 final class SleepDetectInvalidMotionTests: XCTestCase {
+
+    func testDeepStillnessWithoutHeartRateDropIsNotSleep() {
+        let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
+        let rows = (0..<8400).map { index -> V18Sample in
+            let quiet = (600..<7800).contains(index)
+            return V18Sample(
+                header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(index), unix: UInt32(start + index), subsecQ15: 0),
+                heartRate: quiet ? 75 : 70, rrIntervalsMS: [], dynamicAccelG: quiet ? 0.005 : 0.3,
+                gravityXG: 0, gravityYG: 0, gravityZG: 1, stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil, sleepStateByte: nil, sleepState: nil,
+                cardiacFlags: nil, hrQualityFlags: nil, spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent, signalQualityLogVariance: nil, psnrB: nil, psnrA: nil)
+        }
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty, "Stillness without a heart-rate reduction is not sleep")
+    }
+
     func testTwoHourDaytimeRestNeedsPositiveBandSleepEvidence() {
         let noon = Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 13, minute: 9))!
         let start = Int(noon.timeIntervalSince1970)
