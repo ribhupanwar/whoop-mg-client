@@ -1,6 +1,7 @@
 import Combine
 import CoreBluetooth
 import Foundation
+import WidgetKit
 
 enum BandStatus: Equatable {
     case unpaired
@@ -222,8 +223,11 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var days: [DayMetrics] = []
     /// Persistent captured-step lower bound, never a claimed complete-day total.
     @Published private(set) var capturedTodayFromLedger: Int?
+    @Published private(set) var capturedTodayStepAt: Date?
+    @Published private(set) var capturedTodayIncreaseAt: Date?
     @Published private(set) var capturedTodayLedgerDayKey: String?
     private let dailyStepLedger = DailyStepLedger()
+    private var lastStepWidgetReloadAt = Date.distantPast
     private var stepLedgerUpdateGeneration = 0
     private var stepLedgerArchiveHydrated = false
 
@@ -513,9 +517,41 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("strap-history-v18.json")
     }
 
-    /// Publish the newest captured-step lower bound without blocking the BLE
-    /// callback thread. Re-reading the ledger also refreshes local date/timezone
-    /// changes; a stale previous-day value is never exposed as today's steps.
+    /// Called only after the ledger actor has completed its read/write. Keep
+    /// the Home display, existing workout card and WidgetKit App Group snapshot
+    /// consistent with the same measured band-counter observation.
+    @MainActor
+    private func applyCapturedStepSnapshot(_ captured: DailyStepLedger.TodaySnapshot, now: Date) {
+        capturedTodayFromLedger = captured.steps
+        capturedTodayStepAt = captured.lastObservedAt
+        capturedTodayIncreaseAt = captured.lastIncreaseAt
+        capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+
+        let today = JournalStore.dayKey(for: now)
+        let archived = days.first(where: { $0.dateKey == today })?.steps
+        let count = DailyStepLedger.bestRecordedMinimum(archive: archived, ledger: captured.steps)
+        let snapshot = StepWidgetSnapshot(
+            recordedMinimum: count, lastObservedAt: captured.lastObservedAt,
+            lastIncreaseAt: captured.lastIncreaseAt,
+            connectedAtWrite: isConnected, writtenAt: now
+        )
+        if snapshot.save(), now.timeIntervalSince(lastStepWidgetReloadAt) >= 60 {
+            lastStepWidgetReloadAt = now
+            WidgetCenter.shared.reloadTimelines(ofKind: StepWidgetSnapshot.widgetKind)
+        }
+
+        let phase = WorkoutRecorder.shared.phase
+        let workoutActive = phase == .recording || phase == .paused
+        if workoutActive {
+            WorkoutLiveActivityController.shared.updateStepCount(
+                count, observedAt: captured.lastObservedAt
+            )
+        }
+        CapturedStepsLiveActivityController.shared.reconcile(snapshot, workoutActive: workoutActive)
+    }
+
+    /// Read the persisted capture across app relaunch, calendar midnight and
+    /// timezone change. A stale previous-day value is not shown as today's.
     func refreshRecordedTodaySteps() {
         stepLedgerUpdateGeneration += 1
         let generation = stepLedgerUpdateGeneration
@@ -523,17 +559,16 @@ final class BandLink: NSObject, ObservableObject {
         let calendar = Calendar.current
         Task { [weak self] in
             guard let self else { return }
-            let count = await self.dailyStepLedger.capturedToday(now: now, calendar: calendar)
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
             await MainActor.run {
                 guard self.stepLedgerUpdateGeneration == generation else { return }
-                self.capturedTodayFromLedger = count
-                self.capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+                self.applyCapturedStepSnapshot(snapshot, now: now)
             }
         }
     }
 
-    /// The ledger consumes ONLY samples acknowledged as durably committed by
-    /// the history writer. Never publish raw, unsaved BLE frames as daily steps.
+    /// The ledger consumes ONLY records durably committed by the history
+    /// writer. Never show unacknowledged raw BLE frames as daily steps.
     private func ingestDurableStepSamples(_ samples: [V18Sample]) {
         guard samples.contains(where: { $0.stepCounter != nil }) else { return }
         stepLedgerUpdateGeneration += 1
@@ -543,11 +578,10 @@ final class BandLink: NSObject, ObservableObject {
         Task { [weak self] in
             guard let self else { return }
             await self.dailyStepLedger.ingest(samples, calendar: calendar, now: now)
-            let count = await self.dailyStepLedger.capturedToday(now: now, calendar: calendar)
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
             await MainActor.run {
                 guard self.stepLedgerUpdateGeneration == generation else { return }
-                self.capturedTodayFromLedger = count
-                self.capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+                self.applyCapturedStepSnapshot(snapshot, now: now)
             }
         }
     }
@@ -2881,6 +2915,7 @@ extension BandLink: CBCentralManagerDelegate {
                 pickerMode = false
             }
             status = .poweredOff
+            refreshRecordedTodaySteps()
         case .unauthorized:
             status = .unauthorized
         case .unsupported:
@@ -2968,6 +3003,7 @@ extension BandLink: CBCentralManagerDelegate {
         armHandshakeDeadline(seconds: 40)
         bandName = peripheral.name ?? preferredBandName ?? bandName
         status = .authenticating
+        refreshRecordedTodaySteps()
         lastMessage = "Bluetooth connected; discovering WHOOP services…"
         peripheral.delegate = self
         hrConnectedAt = Date()
@@ -3024,6 +3060,7 @@ extension BandLink: CBCentralManagerDelegate {
         status = .disconnected(
             error.map { $0.localizedDescription } ?? "Strap disconnected"
         )
+        refreshRecordedTodaySteps()
         if wantsConnection || preferredBandID != nil {
             scheduleReconnect()
         }
