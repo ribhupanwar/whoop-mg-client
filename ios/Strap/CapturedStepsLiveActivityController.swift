@@ -12,7 +12,8 @@ final class CapturedStepsLiveActivityController {
     private var lastUpdate = Date.distantPast
     private init() {}
 
-    func reconcile(_ snapshot: StepWidgetSnapshot, workoutActive: Bool) {
+    func reconcile(_ snapshot: StepWidgetSnapshot, workoutActive: Bool,
+                   heartRate: Int? = nil, estimatedStrain: Double? = nil) {
         if workoutActive {
             end()
             return
@@ -41,7 +42,8 @@ final class CapturedStepsLiveActivityController {
 
         let state = CapturedStepsActivityAttributes.ContentState(
             recordedMinimum: count, lastObservedAt: observedAt,
-            isConnected: snapshot.connectedAtWrite
+            isConnected: snapshot.connectedAtWrite,
+            heartRate: heartRate, estimatedStrain: estimatedStrain
         )
         if let active = activity {
             guard state != lastState || now.timeIntervalSince(lastUpdate) >= 60 else { return }
@@ -61,6 +63,21 @@ final class CapturedStepsLiveActivityController {
             } catch {
                 // User/iOS can decline a Live Activity. Home and widgets still work.
             }
+        }
+    }
+
+    /// Fresh live HR is an optional supplement, never a step source.
+    func updateVitals(heartRate: Int?, estimatedStrain: Double?) {
+        guard let active = activity, var state = lastState,
+              Date().timeIntervalSince(lastUpdate) >= 15 else { return }
+        guard state.heartRate != heartRate || state.estimatedStrain != estimatedStrain else { return }
+        state.heartRate = heartRate
+        state.estimatedStrain = estimatedStrain
+        lastState = state
+        lastUpdate = Date()
+        Task {
+            await active.update(ActivityContent(state: state,
+                               staleDate: state.lastObservedAt.addingTimeInterval(120)))
         }
     }
 
