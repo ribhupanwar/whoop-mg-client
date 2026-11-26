@@ -104,7 +104,10 @@ final class HealthMonitorTests: XCTestCase {
         let old = day(0)
         let changed = session.applyingSavedBounds([String(session.sourceStartUnix): [session.startUnix + 30, session.endUnix]])
         XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: changed, calendar: calendar).availableCount, 0)
-        XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: session, calendar: calendar).availableCount, 5)
+        let report = HealthMonitor.make(days: prior + [old], session: session, calendar: calendar)
+        XCTAssertEqual(report.availableCount, 4) // Unvalidated oxygen is not a measured vital.
+        XCTAssertNil(report[.oxygen].value)
+        XCTAssertEqual(report[.oxygen].status, .candidate)
     }
     func testLegacyDayDecodesWithoutInventingTemperatureBaseline() throws {
         let original = day(0)
