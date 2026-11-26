@@ -8,6 +8,7 @@ import unittest
 from whoop.accuracy import (
     BlePacketReplayEngine,
     DecodedRecordEvent,
+    MAX_SEEN_TIMESTAMPS,
     WireImpairmentConfig,
 )
 from whoop.framing import GEN5_PROFILE, build_frame
@@ -149,6 +150,98 @@ Rx: {hex_str[half:]}
 
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0].data.heart_rate, 68)
+
+    def test_duplicate_history_packets_are_suppressed(self) -> None:
+        """Fault condition: duplicate history packets must not yield duplicate records."""
+        inner = make_dummy_v18_inner(unix=1700000050, hr=72)
+        frame = build_frame(inner, profile=GEN5_PROFILE)
+
+        engine = BlePacketReplayEngine(profile=GEN5_PROFILE)
+        chunks = engine.fragment_frame(frame, mtu=20)
+
+        # Re-stream the identical frame (duplicate history packet).
+        stream = chunks + chunks
+        events = list(engine.replay_chunks(stream))
+
+        # Exactly one record emitted despite two identical frames on the wire.
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0].data.heart_rate, 72)
+        self.assertEqual(engine.stats.frames_reassembled, 2)
+        self.assertEqual(engine.stats.duplicate_frames_suppressed, 1)
+        self.assertEqual(engine.stats.v18_decoded, 1)
+
+    def test_reordered_chunks_still_reassemble(self) -> None:
+        """Fault condition: out-of-order chunk delivery must not produce false records.
+
+        FrameReassembler expects in-order chunks within a frame. With MTU large enough
+        for each frame to fit in one chunk, reordering only changes frame arrival order,
+        not chunk order within a frame. All frames must still decode.
+        """
+        inner1 = make_dummy_v18_inner(unix=1700000010, hr=80)
+        inner2 = make_dummy_v18_inner(unix=1700000011, hr=81)
+        frame1 = build_frame(inner1, profile=GEN5_PROFILE)
+        frame2 = build_frame(inner2, profile=GEN5_PROFILE)
+
+        # MTU large enough that each frame is a single chunk.
+        config = WireImpairmentConfig(reorder_depth=4, random_seed=42)
+        engine = BlePacketReplayEngine(impairments=config)
+
+        chunks1 = engine.fragment_frame(frame1, mtu=300)
+        chunks2 = engine.fragment_frame(frame2, mtu=300)
+        self.assertEqual(len(chunks1), 1)
+        self.assertEqual(len(chunks2), 1)
+
+        events = list(engine.replay_chunks(chunks1 + chunks2))
+
+        # Both frames decode regardless of arrival order.
+        self.assertEqual(len(events), 2)
+        hr_values = {e.data.heart_rate for e in events}
+        self.assertEqual(hr_values, {80, 81})
+
+    def test_reconnect_resets_state_and_decodes_subsequent_frames(self) -> None:
+        """Fault condition: periodic reconnect must reset reassembler without losing subsequent frames."""
+        inner1 = make_dummy_v18_inner(unix=1700000010, hr=80)
+        inner2 = make_dummy_v18_inner(unix=1700000011, hr=81)
+        frame1 = build_frame(inner1, profile=GEN5_PROFILE)
+        frame2 = build_frame(inner2, profile=GEN5_PROFILE)
+
+        # Small MTU so each frame = few chunks; reconnect every 2 chunks resets between frames.
+        config = WireImpairmentConfig(reconnect_every_n_chunks=2)
+        engine = BlePacketReplayEngine(impairments=config)
+
+        chunks1 = engine.fragment_frame(frame1, mtu=200)
+        chunks2 = engine.fragment_frame(frame2, mtu=200)
+        all_chunks = chunks1 + chunks2
+
+        events = list(engine.replay_chunks(all_chunks))
+
+        # Reconnect purges in-flight partial frames, but subsequent intact frames decode.
+        self.assertGreaterEqual(len(events), 1)
+        # At least the second frame (after reconnect) should decode.
+        self.assertIn(81, {e.data.heart_rate for e in events})
+        self.assertGreaterEqual(engine.stats.reconnect_events, 1)
+
+    def test_bounded_seen_timestamps_evicts_oldest(self) -> None:
+        """Fault condition: _seen_timestamps must not grow unbounded during long replay."""
+        engine = BlePacketReplayEngine()
+
+        # Emit records with distinct timestamps beyond the cache bound.
+        for i in range(MAX_SEEN_TIMESTAMPS + 100):
+            inner = make_dummy_v18_inner(unix=1700000000 + i, hr=70)
+            frame = build_frame(inner, profile=GEN5_PROFILE)
+            chunks = engine.fragment_frame(frame, mtu=10)
+            list(engine.replay_chunks(chunks))
+
+        # Cache must remain bounded.
+        self.assertLessEqual(len(engine._seen_timestamps), MAX_SEEN_TIMESTAMPS)
+        self.assertLessEqual(len(engine._seen_timestamps_deque), MAX_SEEN_TIMESTAMPS)
+
+        # Oldest timestamps should have been evicted; re-emitting them should produce new records.
+        inner = make_dummy_v18_inner(unix=1700000000, hr=70)
+        frame = build_frame(inner, profile=GEN5_PROFILE)
+        chunks = engine.fragment_frame(frame, mtu=10)
+        events = list(engine.replay_chunks(chunks))
+        self.assertEqual(len(events), 1)  # Re-emitted after eviction, not suppressed
 
 
 if __name__ == "__main__":

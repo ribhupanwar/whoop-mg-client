@@ -360,7 +360,10 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
             break
     seg_start = t
     
-    # Scan with 1-minute sliding window for internal elevations (bathroom breaks, etc.)
+    # Scan with 1-minute sliding window for internal elevations (bathroom breaks, etc.).
+    # Require >= 3 consecutive elevated minutes to split (avoids fragmenting REM
+    # sleep where HR briefly rises but wrist stays still).
+    SUSTAINED_ELEVATED_MINUTES = 3
     t = seg_start
     while t + 60 <= run_end:
         # Check if this minute has elevated HR
@@ -368,6 +371,20 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
         if len(minute_hrs) >= 30:  # At least 30 samples in minute
             minute_median = statistics.median(minute_hrs)
             if minute_median >= elevated_threshold:
+                # Confirm sustained elevation across next SUSTAINED_ELEVATED_MINUTES minutes
+                sustained = 1
+                check_t = t + 60
+                while check_t + 60 <= run_end and sustained < SUSTAINED_ELEVATED_MINUTES:
+                    next_hrs = [hr_by_sec.get(sec) for sec in range(check_t, check_t + 60) if sec in hr_by_sec]
+                    if len(next_hrs) >= 30 and statistics.median(next_hrs) >= elevated_threshold:
+                        sustained += 1
+                    else:
+                        break
+                    check_t += 60
+                if sustained < SUSTAINED_ELEVATED_MINUTES:
+                    # Not sustained - skip ahead past this brief elevation
+                    t += SUSTAINED_ELEVATED_MINUTES * 60
+                    continue
                 # Found sustained elevated HR - split here if segment is long enough
                 seg_duration = t - seg_start
                 if seg_duration >= min_segment_s:
@@ -567,8 +584,14 @@ def detect_sleep(
             else:
                 adaptive_threshold = active_median * HR_SLEEP_BASELINE_MULT
             
-            # Must pass BOTH gates: subtractive primary AND multiplicative adaptive
-            effective_threshold = min(primary_threshold, adaptive_threshold)
+            # Dual-band HR confirmation: subtractive gate is primary; multiplicative
+            # gate adds relaxation for deeply quiescent runs.
+            # Normal runs: min() picks stricter subtractive gate.
+            # Deeply quiescent runs: max() picks more permissive multiplicative gate.
+            if deeply_quiescent:
+                effective_threshold = max(primary_threshold, adaptive_threshold)
+            else:
+                effective_threshold = min(primary_threshold, adaptive_threshold)
             
             if run_median_hr > effective_threshold:
                 if trace_sink:
@@ -843,14 +866,21 @@ def detect_sleep(
                 sleep_hr_ref = statistics.median(run_hrs_all[mid_start:mid_end])
                 
                 # First, check if there's a sustained elevated HR period at the end (>=10 min)
+                # Require motion corroboration: elevated HR without movement is not wake
+                # (e.g., REM sleep, morning cortisol rise). Matches band-state trim
+                # which requires both HR elevation AND motion.
                 elevated_minutes = 0
                 for t in range(run_end_unix - 60, verified_start + min_sleep_s, -60):
-                    window_hrs = [float(s.heart_rate) for s in run
-                                  if t <= s.unix < t + 60
-                                  and s.wearing and 35 <= s.heart_rate <= 220]
+                    window = [s for s in run
+                              if t <= s.unix < t + 60
+                              and s.wearing and 35 <= s.heart_rate <= 220]
+                    window_hrs = [float(s.heart_rate) for s in window]
+                    window_moving = sum(1 for s in window
+                                        if s.dynamic_accel_g is not None
+                                        and s.dynamic_accel_g >= 0.015)
                     if len(window_hrs) >= 30:
                         window_median = statistics.median(window_hrs)
-                        if window_median >= sleep_hr_ref + 8:
+                        if window_median >= sleep_hr_ref + 8 and window_moving >= 10:
                             elevated_minutes += 1
                         else:
                             break
