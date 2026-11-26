@@ -1476,8 +1476,14 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
 
     rates: list[float] = []
     spectral_rates: list[float] = []
+    overcounted_segments = 0
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
+            continue
+        span = segment[-1][0] - segment[0][0] + 1
+        beat_seconds = sum(rr for _, rr in segment) / 1000
+        if beat_seconds > span * 1.05:
+            overcounted_segments += 1
             continue
         times: list[float] = []
         acc = 0.0
@@ -1500,7 +1506,9 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
     if not active_rates:
         return RespRate(
             None,
-            "no usable RSA peak train - needs a continuous still or sleep R-R window",
+            ("no usable RSA peak train - RR beat duration exceeded elapsed recording time"
+             if overcounted_segments else
+             "no usable RSA peak train - needs a continuous still or sleep R-R window"),
             total_beats,
             0,
         )
