@@ -87,11 +87,23 @@ actor DailyStepLedger {
         }
     }
 
+    struct TodaySnapshot: Equatable {
+        let steps: Int?
+        let lastObservedAt: Date?
+        let lastIncreaseAt: Date?
+    }
+
     /// A change of timezone is evaluated from absolute timestamps, not from
     /// the saved day bucket. Unknown observations are never treated as zero.
     func capturedToday(now: Date = Date(), calendar: Calendar = .current) -> Int? {
+        todaySnapshot(now: now, calendar: calendar).steps
+    }
+
+    func todaySnapshot(now: Date = Date(), calendar: Calendar = .current) -> TodaySnapshot {
         let start = calendar.startOfDay(for: now)
-        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else { return nil }
+        guard let end = calendar.date(byAdding: .day, value: 1, to: start) else {
+            return TodaySnapshot(steps: nil, lastObservedAt: nil, lastIncreaseAt: nil)
+        }
         let lower = Int(start.timeIntervalSince1970)
         let upper = Int(end.timeIntervalSince1970)
         var bySecond: [Int: Observation] = [:]
@@ -111,24 +123,29 @@ actor DailyStepLedger {
         var previous: (unix: Int, counter: Int)?
         var captured = 0
         var sawValid = false
+        var lastObservedAt: Date?
+        var lastIncreaseAt: Date?
         for unix in bySecond.keys.sorted() {
             guard let counter = bySecond[unix]?.counter else {
                 previous = nil
                 continue
             }
             sawValid = true
+            lastObservedAt = Date(timeIntervalSince1970: Double(unix))
             if let prior = previous {
                 let seconds = unix - prior.unix
                 if seconds > 0 && seconds <= 10 {
                     let delta = StepCounter.delta(from: prior.counter, to: counter, seconds: seconds)
                     if delta <= StepCounter.maxStepsPerSecond * seconds {
                         captured += delta
+                        if delta > 0 { lastIncreaseAt = Date(timeIntervalSince1970: Double(unix)) }
                     }
                 }
             }
             previous = (unix, counter)
         }
-        return sawValid ? captured : nil
+        return TodaySnapshot(steps: sawValid ? captured : nil,
+                             lastObservedAt: lastObservedAt, lastIncreaseAt: lastIncreaseAt)
     }
 
     /// Two independently verified capture totals must not be added: their
