@@ -128,7 +128,9 @@ enum SleepDetect {
             let deeplyQuiescent = runIsDeeplyQuiescent(run)
             let adaptiveThreshold = deeplyQuiescent ? activeMedian * quiescentHrSleepMult : activeMedian * hrSleepBaselineMult
             
-            // Must pass BOTH gates: subtractive primary AND multiplicative adaptive
+            // Stillness alone cannot prove sleep. Keep the established HR-drop
+            // gate until relaxed thresholds have independent validation.
+            // The stricter threshold also agrees with the HR transition splitter.
             let effectiveThreshold = min(primaryThreshold, adaptiveThreshold)
             let runMedianHR = Stats.median(runHRs)
             guard runMedianHR <= effectiveThreshold else {

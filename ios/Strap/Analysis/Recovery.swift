@@ -168,3 +168,16 @@ enum Recovery {
         100.0 / (1.0 + exp(-z))
     }
 }
+
+/// Stress diagnostic metadata for explaining zero or unavailable stress values.
+struct StressDiagnostics {
+    let baselineMean: Double?
+    let baselineSD: Double?
+    let baselineDays: Int
+    let eligibleRRWindows: Int
+    let rejectedRRWindows: Int
+    let unclampedScore: Double?
+    let finalScore: Double?
+    let lastUpdateUnix: Int?
+    let unavailableReason: String?
+}

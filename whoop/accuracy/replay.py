@@ -17,6 +17,7 @@ from __future__ import annotations
 import random
 import re
 import struct
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Any, Callable, Generator, Iterable, Sequence
 
@@ -35,6 +36,10 @@ from ..records import (
     parse_header,
 )
 
+# Bounded timestamp cache: evicts oldest entries to prevent unbounded memory
+# growth during long replay streams while preserving duplicate suppression.
+MAX_SEEN_TIMESTAMPS = 100_000
+
 
 @dataclass
 class ReplayStats:
@@ -52,6 +57,7 @@ class ReplayStats:
     corrupted_injected: int = 0
     dropped_injected: int = 0
     duplicated_injected: int = 0
+    duplicate_frames_suppressed: int = 0
     reconnect_events: int = 0
 
 
@@ -90,6 +96,11 @@ class BlePacketReplayEngine:
         self.impairments = impairments or WireImpairmentConfig()
         self.reassembler = FrameReassembler(profile=self.profile)
         self.stats = ReplayStats()
+        # Timestamps of already-emitted decoded records, used to suppress
+        # duplicate history packets that survive wire reassembly.
+        # Bounded deque + set: deque provides FIFO eviction order, set provides O(1) membership.
+        self._seen_timestamps_deque: deque[tuple[str, float]] = deque(maxlen=MAX_SEEN_TIMESTAMPS)
+        self._seen_timestamps: set[tuple[str, float]] = set()
         if self.impairments.random_seed is not None:
             self._rng = random.Random(self.impairments.random_seed)
         else:
@@ -99,6 +110,8 @@ class BlePacketReplayEngine:
         """Reset internal reassembler state and statistics."""
         self.reassembler = FrameReassembler(profile=self.profile)
         self.stats = ReplayStats()
+        self._seen_timestamps_deque = deque(maxlen=MAX_SEEN_TIMESTAMPS)
+        self._seen_timestamps = set()
 
     def fragment_frame(self, frame_bytes: bytes, mtu: int | None = None) -> list[bytes]:
         """Split a complete BLE frame into ATT MTU chunks."""
@@ -182,11 +195,27 @@ class BlePacketReplayEngine:
         for inner in frames:
             self.stats.frames_reassembled += 1
             event = self._decode_frame(inner)
+            if event is None:
+                # Duplicate history packet already emitted for this second.
+                self.stats.duplicate_frames_suppressed += 1
+                continue
+            if event.record_type == "v18":
+                self.stats.v18_decoded += 1
+            elif event.record_type == "v26":
+                self.stats.v26_decoded += 1
+            elif event.record_type == "v21":
+                self.stats.v21_decoded += 1
+            else:
+                self.stats.other_frames += 1
             events.append(event)
         return events
 
-    def _decode_frame(self, inner: bytes) -> DecodedRecordEvent:
-        """Route inner frame payload to appropriate record decoder."""
+    def _decode_frame(self, inner: bytes) -> DecodedRecordEvent | None:
+        """Route inner frame payload to the appropriate record decoder.
+
+        Returns None for a duplicate history packet (same record type and timestamp as an
+        already-emitted record) so the caller can suppress it.
+        """
         if len(inner) >= 2 and inner[0] == 0x2F:
             hist_ver = inner[1]
             header = parse_header(inner)
@@ -194,38 +223,46 @@ class BlePacketReplayEngine:
 
             if hist_ver == V18:
                 v18_rec = decode_v18(inner)
-                self.stats.v18_decoded += 1
-                return DecodedRecordEvent(
-                    record_type="v18",
-                    timestamp=v18_rec.header.timestamp,
-                    data=v18_rec,
-                    raw_frame=inner,
-                )
+                if v18_rec is not None:
+                    return self._emit_or_suppress("v18", v18_rec.header.timestamp, v18_rec, inner)
             elif hist_ver == V26:
                 v26_rec = decode_v26(inner)
-                self.stats.v26_decoded += 1
-                return DecodedRecordEvent(
-                    record_type="v26",
-                    timestamp=v26_rec.header.timestamp,
-                    data=v26_rec,
-                    raw_frame=inner,
-                )
+                if v26_rec is not None:
+                    return self._emit_or_suppress("v26", v26_rec.header.timestamp, v26_rec, inner)
             elif hist_ver == V21:
                 v21_rec = decode_v21(inner)
-                self.stats.v21_decoded += 1
-                return DecodedRecordEvent(
-                    record_type="v21",
-                    timestamp=v21_rec.header.timestamp,
-                    data=v21_rec,
-                    raw_frame=inner,
-                )
+                if v21_rec is not None:
+                    return self._emit_or_suppress("v21", v21_rec.header.timestamp, v21_rec, inner)
 
-        self.stats.other_frames += 1
         return DecodedRecordEvent(
             record_type="frame",
             timestamp=0.0,
             data=inner,
             raw_frame=inner,
+        )
+
+    def _emit_or_suppress(
+        self,
+        record_type: str,
+        timestamp: float,
+        data: V18Sample | V26Waveform | IMUBuffer,
+        raw_frame: bytes,
+    ) -> DecodedRecordEvent | None:
+        """Emit each record type once per timestamp; suppress duplicate history packets."""
+        key = (record_type, timestamp)
+        if key in self._seen_timestamps:
+            return None
+        # Evict oldest entry when cache is full to bound memory growth.
+        if len(self._seen_timestamps_deque) >= MAX_SEEN_TIMESTAMPS:
+            oldest = self._seen_timestamps_deque.popleft()
+            self._seen_timestamps.discard(oldest)
+        self._seen_timestamps_deque.append(key)
+        self._seen_timestamps.add(key)
+        return DecodedRecordEvent(
+            record_type=record_type,
+            timestamp=timestamp,
+            data=data,
+            raw_frame=raw_frame,
         )
 
     def replay_chunks(self, chunks: Iterable[bytes]) -> Generator[DecodedRecordEvent, None, None]:

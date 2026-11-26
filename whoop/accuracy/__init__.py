@@ -22,6 +22,7 @@ from .quality import (
 from .replay import (
     BlePacketReplayEngine,
     DecodedRecordEvent,
+    MAX_SEEN_TIMESTAMPS,
     ReplayStats,
     WireImpairmentConfig,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "GhidraEvidence",
     "MetricABComparison",
     "MetricComparison",
+    "MAX_SEEN_TIMESTAMPS",
     "PairedObservation",
     "QualityReport",
     "ReplayStats",

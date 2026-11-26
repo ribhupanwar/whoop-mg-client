@@ -33,7 +33,7 @@ enum SleepDiagnostics {
         guard !rows.isEmpty else { throw ExportError.noSamples }
         let segments = session.staging.segments.sorted { $0.startUnix < $1.startUnix }
         var segmentIndex = 0
-        var result = "window_start_unix,window_end_unix,algorithm_version,unix,record_index,subsec_q15,heart_rate_bpm,rr_ms,dynamic_accel_g,gravity_x_g,gravity_y_g,gravity_z_g,band_state,hr_quality_flags,estimated_stage\n"
+        var result = "window_start_unix,window_end_unix,algorithm_version,unix,record_index,subsec_q15,heart_rate_bpm,rr_ms,dynamic_accel_g,gravity_x_g,gravity_y_g,gravity_z_g,band_state,hr_quality_flags,estimated_stage,skin_temp_c,temp_aux1_c,temp_aux2_c,spo2_candidate_raw,spo2_candidate_pct,spo2_candidate_kind,cardiac_flags,signal_quality_log_variance,step_motion_counter,activity_class,wearing\n"
         func number(_ value: Double?) -> String {
             guard let value, value.isFinite else { return "" }
             return String(value)
@@ -47,7 +47,7 @@ enum SleepDiagnostics {
                 stage = segments[segmentIndex].stage.rawValue
             } else { stage = "" }
             var fields: [String] = []
-            fields.reserveCapacity(15)
+            fields.reserveCapacity(26)
             fields.append(String(session.startUnix))
             fields.append(String(session.endUnix))
             fields.append(String(session.version))
@@ -63,6 +63,17 @@ enum SleepDiagnostics {
             fields.append(sample.sleepState.map { String($0) } ?? "")
             fields.append(sample.hrQualityFlags.map { String($0) } ?? "")
             fields.append(stage)
+            fields.append(number(sample.skinTempC))
+            fields.append(number(sample.tempAux1C))
+            fields.append(number(sample.tempAux2C))
+            fields.append(sample.spo2CandidateRaw.map { String($0) } ?? "")
+            fields.append(sample.spo2CandidatePct.map { String($0) } ?? "")
+            fields.append(sample.spo2CandidateKind.rawValue)
+            fields.append(sample.cardiacFlags.map { String($0) } ?? "")
+            fields.append(number(sample.signalQualityLogVariance))
+            fields.append(sample.stepCounter.map { String($0) } ?? "")
+            fields.append(sample.activityClass.map { String($0) } ?? "")
+            fields.append(sample.wearing ? "1" : "0")
             result += fields.joined(separator: ",") + "\n"
         }
         return result

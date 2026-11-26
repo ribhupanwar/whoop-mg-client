@@ -118,12 +118,12 @@ final class SleepSessionTests: XCTestCase {
 
     private let start = 1_800_000_000
 
-    private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01, stepCounter: Int? = nil) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
             heartRate: hr, rrIntervalsMS: [], dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
-            stepCounter: nil, stepCadence: nil, activityClass: 0,
+            stepCounter: stepCounter, stepCadence: nil, activityClass: 0,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
             sleepStateByte: nil, sleepState: nil, cardiacFlags: nil, hrQualityFlags: nil,
             spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
@@ -217,14 +217,23 @@ final class SleepSessionTests: XCTestCase {
     }
 
     func testDiagnosticCSVUsesEditedBoundsAndDoesNotFillMissingSeconds() throws {
-        let rows = [1700, 1800, 1801, 2000, 3000].map { sample(start + $0) }
+        let rows = [1700, 1800, 1801, 2000, 3000].map {
+            sample(start + $0, stepCounter: $0 == 1801 ? 123 : nil)
+        }
         let edited = SleepSession.make(samples: rows, period: period(3600),
                                        correctedTimes: [start + 1800, start + 3000])
         let csv = try SleepDiagnostics.csv(samples: rows, session: edited)
         let lines = csv.split(separator: "\n")
         XCTAssertEqual(lines.count, 4, "Header plus only three observed in-window samples")
         let values = lines.dropFirst().map { $0.split(separator: ",", omittingEmptySubsequences: false) }
-        XCTAssertTrue(values.allSatisfy { $0.count == 15 })
+        let header = lines[0].split(separator: ",", omittingEmptySubsequences: false)
+        XCTAssertEqual(header.count, 26)
+        XCTAssertTrue(values.allSatisfy { $0.count == header.count })
+        let stepIndex = try XCTUnwrap(header.firstIndex(of: "step_motion_counter"))
+        XCTAssertEqual(values.map { String($0[stepIndex]) }, ["", "123", ""])
+        let tempIndex = try XCTUnwrap(header.firstIndex(of: "skin_temp_c"))
+        let oxygenIndex = try XCTUnwrap(header.firstIndex(of: "spo2_candidate_pct"))
+        XCTAssertTrue(values.allSatisfy { $0[tempIndex].isEmpty && $0[oxygenIndex].isEmpty })
         XCTAssertEqual(values.map { Int($0[3])! }, [start + 1800, start + 1801, start + 2000])
         XCTAssertTrue(values.allSatisfy { $0[7].isEmpty }, "Missing R-R stays empty")
         XCTAssertThrowsError(try SleepDiagnostics.csv(samples: [], session: edited))
@@ -767,8 +776,11 @@ extension SleepSessionTests {
         let csv = try SleepDiagnostics.csv(
             samples: [sample(start + 9), sample(start + 10), sample(start + 15),
                       sample(start + 20), sample(start + 29)], session: session)
-        let stages = csv.split(separator: "\n").dropFirst().map {
-            String($0.split(separator: ",", omittingEmptySubsequences: false).last!)
+        let lines = csv.split(separator: "\n")
+        let header = lines[0].split(separator: ",", omittingEmptySubsequences: false)
+        let stageIndex = try XCTUnwrap(header.firstIndex(of: "estimated_stage"))
+        let stages = lines.dropFirst().map {
+            String($0.split(separator: ",", omittingEmptySubsequences: false)[stageIndex])
         }
         XCTAssertEqual(stages, ["wake", "", "", "light", "light"])
     }
