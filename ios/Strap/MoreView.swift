@@ -15,10 +15,6 @@ struct MoreView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
-                Text("More")
-                    .font(StrapTypography.body(26, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-
                 profileHeaderCard
 
                 // SECTION 1: DEVICE
