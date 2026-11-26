@@ -33,7 +33,8 @@ final class StepWidgetSnapshotTests: XCTestCase {
     func testWalkingLiveActivityContentStateCodable() throws {
         let when = Date(timeIntervalSince1970: 1_700_006_400)
         let state = CapturedStepsActivityAttributes.ContentState(
-            recordedMinimum: 650, lastObservedAt: when, isConnected: true
+            recordedMinimum: 650, lastObservedAt: when, isConnected: true,
+            heartRate: 110, estimatedStrain: 3.2
         )
         let decoded = try JSONDecoder().decode(
             CapturedStepsActivityAttributes.ContentState.self,
