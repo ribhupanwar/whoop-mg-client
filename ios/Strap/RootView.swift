@@ -342,10 +342,6 @@ private struct HumansView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Humans")
-                    .font(StrapTypography.body(26, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-
                 Picker("Community Section", selection: $selectedSegment) {
                     Text("MY TEAMS").tag(0)
                     Text("LEADERBOARDS").tag(1)
@@ -362,7 +358,7 @@ private struct HumansView: View {
                                 .frame(width: 44, height: 44)
                                 .background(Color.appAccent.opacity(0.12), in: Circle())
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("PERSONAL BASELINE CLUB")
+                                Text("YOUR PERSONAL RECORDS")
                                     .font(StrapTypography.body(13, weight: .bold))
                                     .foregroundStyle(Color.appFG)
                                 Text("App-open streak: \(AppOpenStreak.stored().current) days")
@@ -372,7 +368,7 @@ private struct HumansView: View {
                         }
                         .padding(.vertical, 6)
                         Divider().background(Color.appLine)
-                        Text("Cloud team synchronization requires WHOOP server credentials. Your personal records and streaks remain stored privately on-device.")
+                        Text("Community syncing is not connected. Your personal records and streaks remain stored privately on-device.")
                             .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                             .lineSpacing(2)
