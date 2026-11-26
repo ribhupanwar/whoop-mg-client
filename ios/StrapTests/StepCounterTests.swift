@@ -262,7 +262,8 @@ final class StepCounterTests: XCTestCase {
             sample(start + 101, steps: 1_002), sample(start + 102, steps: 2),
             sample(start + 103, steps: 4)
         ], calendar: calendar, now: now)
-        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: calendar), 13)
+        let verified = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(verified, 13)
     }
 
     func testPersistentLedgerStationaryHasNoMovementEvidence() async throws {
