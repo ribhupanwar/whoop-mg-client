@@ -103,7 +103,7 @@ enum Recovery {
                 baselineSD: baseline?.lnRMSSDSD,
                 baselineDays: baseline?.days ?? 0,
                 eligibleRRWindows: 0,
-                rejectedRRWindows: 0,
+                rejectedRRWindows: nil,
                 unclampedScore: nil,
                 finalScore: nil,
                 lastUpdateUnix: lastUpdateUnix,
@@ -121,7 +121,7 @@ enum Recovery {
                 baselineSD: baseline.lnRMSSDSD,
                 baselineDays: baseline.days,
                 eligibleRRWindows: 0,
-                rejectedRRWindows: 0,
+                rejectedRRWindows: nil,
                 unclampedScore: nil,
                 finalScore: nil,
                 lastUpdateUnix: lastUpdateUnix,
@@ -136,7 +136,7 @@ enum Recovery {
                 baselineSD: baseline.lnRMSSDSD,
                 baselineDays: baseline.days,
                 eligibleRRWindows: 0,
-                rejectedRRWindows: 0,
+                rejectedRRWindows: nil,
                 unclampedScore: nil,
                 finalScore: nil,
                 lastUpdateUnix: lastUpdateUnix,
@@ -152,8 +152,8 @@ enum Recovery {
             baselineSD: baseline.lnRMSSDSD,
             baselineDays: baseline.days,
             eligibleRRWindows: 1,
-            rejectedRRWindows: 0,
-            unclampedScore: unclamped,
+            rejectedRRWindows: nil,
+            unclampedScore: deviation.isFinite ? deviation : nil,
             finalScore: final,
             lastUpdateUnix: lastUpdateUnix,
             unavailableReason: nil
@@ -223,7 +223,8 @@ struct StressDiagnostics: Codable, Equatable {
     let baselineSD: Double?
     let baselineDays: Int
     let eligibleRRWindows: Int
-    let rejectedRRWindows: Int
+    // nil until the actual rejected-window count is available from the producer.
+    let rejectedRRWindows: Int?
     let unclampedScore: Double?
     let finalScore: Double?
     let lastUpdateUnix: Int?
