@@ -93,7 +93,7 @@ enum Respiration {
         var uniqueBySecond: [Int: V18Sample] = [:]
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+               !Hrv.preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
@@ -106,7 +106,7 @@ enum Respiration {
         for sample in ordered {
             guard sample.wearing,
                   let motion = sample.dynamicAccelG,
-                  motion <= 0.10 else {
+                  motion.isFinite, (0...0.10).contains(motion) else {
                 if !current.isEmpty { segments.append(current); current = [] }
                 lastUnix = nil
                 lastSpanS = 0
