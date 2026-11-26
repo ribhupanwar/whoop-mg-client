@@ -219,3 +219,58 @@ private struct HealthSnapshotView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
+
+
+struct StrapSingleHealthWidget: Widget {
+    let metric: HealthWidgetMetric
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: metric.kind, provider: HealthTimelineProvider()) { entry in
+            SingleHealthMetricView(metric: metric, entry: entry)
+        }
+        .configurationDisplayName(metric.title)
+        .description("Saved STRAP metric with date and availability; opt-in required.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+private struct SingleHealthMetricView: View {
+    let metric: HealthWidgetMetric
+    let entry: HealthTimelineEntry
+    private var color: Color {
+        switch metric {
+        case .sleep: return .cyan
+        case .recovery: return .green
+        case .strain: return .blue
+        case .battery: return .white
+        case .stress: return .orange
+        }
+    }
+    var body: some View {
+        let value = entry.snapshot.flatMap { metric.value(in: $0, at: entry.date) }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(metric.title.uppercased()).font(.caption2.bold()).tracking(1)
+            Spacer(minLength: 2)
+            ZStack {
+                Circle().stroke(color.opacity(0.18), lineWidth: 7)
+                if let value {
+                    Circle().trim(from: 0, to: CGFloat(min(1, max(0, value / metric.maximum))))
+                        .stroke(color, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                Text(value.map { String(format: metric.decimals == 1 ? "%.1f" : "%.0f", $0) + metric.suffix } ?? "—")
+                    .font(.system(size: 25, weight: .bold)).monospacedDigit().minimumScaleFactor(0.6)
+            }
+            .frame(maxWidth: .infinity, maxHeight: 78)
+            Spacer(minLength: 2)
+            if let snapshot = entry.snapshot, value != nil {
+                Text("Saved " + snapshot.savedAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("No current reading").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .privacySensitive()
+        .foregroundStyle(.white)
+        .containerBackground(for: .widget) { Color(red: 0.06, green: 0.08, blue: 0.11) }
+    }
+}
