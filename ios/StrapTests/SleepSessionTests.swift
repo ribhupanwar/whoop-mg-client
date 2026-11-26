@@ -809,9 +809,9 @@ extension SleepSessionTests {
             }
         }
     }
-    func testLateQuietHistoryExtendsPrematureWakeWithoutExplicitSleepState() throws {
-        // Regression: historical sync completes after an early 06:08 boundary;
-        // 26 more minutes of on-wrist quiet data arrive without sleep(2).
+    func testLateQuietHistoryCannotExtendSavedWakeWithoutConfirmedSleepState() throws {
+        // A new build must not extend the canonical wake merely because
+        // late on-wrist quiet samples arrived with no confirmed sleep state.
         let oldSeconds = 7 * 3600
         let lateSeconds = 26 * 60
         let rows = (0..<(oldSeconds + lateSeconds)).map { sample(start + $0) }
@@ -825,8 +825,8 @@ extension SleepSessionTests {
             previous: [saved], fresh: [replacement],
             coverageStart: start, coverageEnd: start + rows.count - 1, samples: rows)
         XCTAssertEqual(merged.count, 1)
-        XCTAssertEqual(merged[0].endUnix, start + oldSeconds + lateSeconds,
-                       "Quiet measured late history must not be discarded only because sleepState is nil")
+        XCTAssertEqual(merged[0].endUnix, saved.endUnix,
+                       "Unknown-state quiet tail must not move a saved wake boundary")
     }
 
 }
