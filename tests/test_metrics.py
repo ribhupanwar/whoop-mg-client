@@ -407,6 +407,13 @@ class TestWindowedSleepHRV(unittest.TestCase):
         self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
         self.assertEqual(secs, 900)
 
+    def test_windowed_fallback_rejects_impossible_beat_time(self):
+        from whoop.metrics import windowed_sleep_hrv
+        rows = [sample(t, 60, rr=[800, 840], accel=0.01) for t in range(600)]
+        result, seconds, windows, _ = windowed_sleep_hrv(rows, deep_epochs=[(0, 599)])
+        self.assertIsNone(result.rmssd_ms)
+        self.assertEqual((seconds, windows), (0, 0))
+
     def test_rejects_overcounted_5min_window_without_losing_valid_windows(self):
         from whoop.metrics import windowed_sleep_hrv
         # Window 1 (0..299): normal 1 beat/sec -> 40 ms RMSSD
