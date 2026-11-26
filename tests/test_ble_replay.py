@@ -100,6 +100,26 @@ class TestBlePacketReplay(unittest.TestCase):
         self.assertEqual(engine.stats.v26_decoded, 1)
         self.assertEqual(engine.stats.v21_decoded, 1)
 
+    def test_mixed_record_types_at_same_timestamp_are_not_duplicates(self) -> None:
+        frames = [build_frame(make_inner(), profile=GEN5_PROFILE)
+                  for make_inner in (make_dummy_v18_inner, make_dummy_v26_inner, make_dummy_v21_inner)]
+        for sequence in (frames, list(reversed(frames))):
+            engine = BlePacketReplayEngine()
+            events = list(engine.replay_raw_frames(sequence + sequence))
+            self.assertEqual({e.record_type for e in events}, {"v18", "v26", "v21"})
+            self.assertEqual(len(events), 3)
+            self.assertEqual(engine.stats.duplicate_frames_suppressed, 3)
+
+    def test_rejected_history_record_does_not_abort_replay(self) -> None:
+        malformed = bytearray(make_dummy_v18_inner())
+        malformed[1] = V26  # Valid frame CRC, wrong length for V26.
+        bad_frame = build_frame(bytes(malformed), profile=GEN5_PROFILE)
+        good_frame = build_frame(make_dummy_v18_inner(), profile=GEN5_PROFILE)
+        engine = BlePacketReplayEngine()
+        events = list(engine.replay_raw_frames([bad_frame, good_frame]))
+        self.assertEqual([e.record_type for e in events], ["frame", "v18"])
+        self.assertEqual(engine.stats.duplicate_frames_suppressed, 0)
+
     def test_corrupted_chunk_impairment(self) -> None:
         inner = make_dummy_v18_inner(unix=1700000010, hr=80)
         frame = build_frame(inner, profile=GEN5_PROFILE)
