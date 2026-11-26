@@ -1074,11 +1074,13 @@ final class BandLink: NSObject, ObservableObject {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
             let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
+            let assessmentBreakdown = RecoveryDiagnostics.Breakdown(assessment: assessment)
+            let legacyBreakdown = RecoveryDiagnostics.Breakdown(assessment: legacy)
             let report = RecoveryDiagnostics.Report(
                 buildRevision: revision, timezone: calendar.timeZone.identifier,
                 lastCompletedHistorySync: sync, assessment: assessment,
-                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), legacyHomeReplay: legacy,
-                legacyHomeBreakdown: RecoveryDiagnostics.Breakdown(assessment: legacy), session: session,
+                breakdown: assessmentBreakdown, legacyHomeReplay: legacy,
+                legacyHomeBreakdown: legacyBreakdown, session: session,
                 archiveFirstUnix: samples.first?.unix, archiveLastUnix: samples.last?.unix,
                 archiveFirstRecordIndex: samples.first?.header.recordIndex,
                 archiveLastRecordIndex: samples.last?.header.recordIndex,
@@ -1092,7 +1094,7 @@ final class BandLink: NSObject, ObservableObject {
                 sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan,
                 respiratoryRate: assessment.day?.respiratoryRate,
-                respiratoryBaseline: RecoveryDiagnostics.Breakdown(assessment: assessment)?.respiratoryBaseline,
+                respiratoryBaseline: assessmentBreakdown?.respiratoryBaseline,
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
