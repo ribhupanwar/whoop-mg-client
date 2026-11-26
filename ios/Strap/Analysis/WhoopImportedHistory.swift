@@ -56,12 +56,19 @@ enum WhoopImportedHistory {
         var result: [String: WhoopImportedDay] = [:]
         for category in ["physiological_cycles", "sleeps"] {
             for record in sources[category] ?? [] {
-                let fields = Dictionary(record.fields.map { (normalized($0.key), $0.value) }, uniquingKeysWith: { first, _ in first })
+                // Normalized aliases can collide (e.g. "HRV" column variants).
+                // Use stable key ordering and prefer a nonempty value.
+                let fields = Dictionary(record.fields.sorted { $0.key < $1.key }.map {
+                    (normalized($0.key), $0.value)
+                }, uniquingKeysWith: { first, next in
+                    first.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? next : first
+                })
                 func text(_ name: String) -> String? {
                     fields[normalized(name)].flatMap { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : $0 }
                 }
                 if category == "sleeps", let nap = text("Nap"), ["true", "yes", "1"].contains(nap.lowercased()) { continue }
-                guard let key = dateKey(text("Wake onset") ?? text("Cycle start time")) else { continue }
+                guard let key = ["Wake onset", "Cycle start time", "Cycle end time", "Date"]
+                    .lazy.compactMap({ dateKey(text($0)) }).first else { continue }
                 var day = result[key] ?? WhoopImportedDay(dateKey: key)
                 func number(_ name: String, _ range: ClosedRange<Double>) -> Double? {
                     guard let raw = text(name), let value = Double(raw), value.isFinite, range.contains(value) else { return nil }
@@ -69,7 +76,9 @@ enum WhoopImportedHistory {
                 }
                 day.recovery = number("Recovery score %", 0...100) ?? day.recovery
                 day.strain = number("Day Strain", 0...21) ?? day.strain
-                day.hrvMS = number("Heart rate variability (ms)", 0.001...1000) ?? day.hrvMS
+                day.hrvMS = number("Heart rate variability (ms)", 0.001...1000)
+                    ?? number("Heart rate variability (RMSSD ms)", 0.001...1000)
+                    ?? number("HRV (ms)", 0.001...1000) ?? day.hrvMS
                 day.restingHR = number("Resting heart rate (bpm)", 25...230) ?? day.restingHR
                 day.energyKcal = number("Energy burned (cal)", 0...100_000) ?? day.energyKcal
                 day.sleepHours = number("Asleep duration (min)", 0...1440).map { $0 / 60 } ?? day.sleepHours
