@@ -568,6 +568,17 @@ enum SleepDetect {
         var segStart = t
         var segments: [[V18Sample]] = []
 
+        // A leading band-still prefix followed by declared sleep belongs to
+        // the existing overnight onset refinement policy. The internal HR
+        // splitter must not bypass its delay, anchor and coverage guards.
+        // Preserve segStart, and only scan for internal transitions after
+        // the first declared sleep sample when the leading scan stopped on still.
+        if hasBandSleep,
+           run.contains(where: { t <= $0.unix && $0.unix < t + 60 && $0.sleepState == 1 }),
+           let firstDeclaredSleep = run.first(where: { $0.unix >= t && $0.sleepState == 2 }) {
+            t = firstDeclaredSleep.unix
+        }
+
         while t + 180 <= lastUnix {
             if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
                let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
