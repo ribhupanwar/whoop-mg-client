@@ -47,9 +47,25 @@ final class HealthMonitorTests: XCTestCase {
     }
     func testDuplicatePriorNightUsesLatestCompletedIntervalRegardlessOfInputOrder() {
         let prior = (-7 ... -1).map { day($0) }
-        var revised = day(-1, rhr: 85)
-        // A later saved revision for the same calendar day.
-        revised.sleepEndUnix = revised.sleepEndUnix.map { $0 + 60 }
+        let original = day(-1, rhr: 85)
+        // A later saved revision for the same calendar day. DayMetrics has
+        // immutable fields, so create the revision using its initializer.
+        let revised = DayMetrics(
+            dateKey: original.dateKey, state: original.state,
+            restingHR: original.restingHR, lnRMSSD: original.lnRMSSD,
+            hrvWindowSeconds: original.hrvWindowSeconds,
+            sleepHours: original.sleepHours,
+            sleepStartUnix: original.sleepStartUnix,
+            sleepEndUnix: original.sleepEndUnix.map { $0 + 60 },
+            strain: original.strain, steps: original.steps,
+            sleepDurationReliable: original.sleepDurationReliable,
+            respiratoryRate: original.respiratoryRate,
+            restingHRWindowSeconds: original.restingHRWindowSeconds,
+            respiratoryWindows: original.respiratoryWindows,
+            skinTemperatureC: original.skinTemperatureC,
+            skinTemperatureSeconds: original.skinTemperatureSeconds,
+            skinTemperatureSource: original.skinTemperatureSource,
+            oxygenCandidatePct: original.oxygenCandidatePct)
         let current = day(0, rhr: 60)
         let first = HealthMonitor.make(days: prior + [revised, current],
                                        session: session, calendar: calendar)
