@@ -43,6 +43,20 @@ final class StressWindowsTests: XCTestCase {
         Baseline(lnRMSSDMean: mean, lnRMSSDSD: 0.5, rhrMean: 60, rhrSD: 3, days: days)
     }
 
+    func testStressDiagnosticsRetainsRawDeviationBeforeClamping() {
+        let high = Recovery.stressIndex(lnRMSSD: 1, baseline: baseline(mean: 6))
+        XCTAssertEqual(high.index, 3)
+        XCTAssertEqual(high.diagnostics?.unclampedScore, 10)
+        XCTAssertEqual(high.diagnostics?.finalScore, 3)
+        XCTAssertNil(high.diagnostics?.rejectedRRWindows)
+
+        let low = Recovery.stressIndex(lnRMSSD: 6, baseline: baseline(mean: 4))
+        XCTAssertEqual(low.index, 0)
+        XCTAssertEqual(low.diagnostics?.unclampedScore, -4)
+        XCTAssertEqual(low.diagnostics?.finalScore, 0)
+        XCTAssertNil(Recovery.stressIndex(lnRMSSD: nil, baseline: nil).index)
+    }
+
     func testNeedsAwakeBaseline() {
         let split = StressWindows.share(samples: window(0), baseline: nil)
         XCTAssertNil(split.lowPct)
@@ -148,6 +162,21 @@ final class StressWindowsTests: XCTestCase {
         let expected = Recovery.stressIndex(lnRMSSD: lnRMSSD, baseline: baseline(mean: 5.7)).index
         XCTAssertNotNil(expected)
         XCTAssertEqual(points.first?.index, expected)
+    }
+
+    func testSeriesPreservesRawDeviationAndLegacyPointsRemainReadable() throws {
+        let samples = window(0)
+        let lnRMSSD = try XCTUnwrap(Hrv.fromRR(samples.flatMap { $0.rrIntervalsMS.map(Double.init) }).lnRMSSD)
+        for deviation in [-4.0, 10.0] {
+            let points = StressWindows.series(samples: samples, baseline: baseline(mean: lnRMSSD + deviation * 0.5))
+            let point = try XCTUnwrap(points.first)
+            XCTAssertEqual(try XCTUnwrap(point.unclampedScore), deviation, accuracy: 0.0001)
+            XCTAssertEqual(point.index, deviation < 0 ? 0.0 : 3.0)
+            XCTAssertEqual(try JSONDecoder().decode(StressPoint.self, from: JSONEncoder().encode(point)), point)
+        }
+        let legacy = try JSONDecoder().decode(StressPoint.self, from: Data(#"{"unix":0,"index":3}"#.utf8))
+        XCTAssertNil(legacy.unclampedScore)
+        XCTAssertEqual(legacy.index, 3)
     }
 
     func testSeriesRespectsExclusions() {

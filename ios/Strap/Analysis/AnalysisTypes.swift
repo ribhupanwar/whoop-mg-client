@@ -194,6 +194,14 @@ struct StressSplit: Codable, Equatable {
 struct StressPoint: Codable, Equatable {
     let unix: Int
     let index: Double
+    // Older persisted points have no raw deviation; decoding keeps this nil.
+    let unclampedScore: Double?
+
+    init(unix: Int, index: Double, unclampedScore: Double? = nil) {
+        self.unix = unix
+        self.index = index
+        self.unclampedScore = unclampedScore
+    }
 }
 
 struct SleepAnalysis: Codable, Equatable {
@@ -296,6 +304,7 @@ struct RecoveryResult: Codable, Equatable {
 struct StressResult: Codable, Equatable {
     let index: Double?
     let reason: String?
+    let diagnostics: StressDiagnostics?
 
     var band: String {
         guard let index else { return "unavailable" }
