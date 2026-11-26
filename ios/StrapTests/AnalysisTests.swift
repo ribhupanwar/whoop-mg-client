@@ -2163,6 +2163,24 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         XCTAssertEqual(result.windowSeconds, 900)
     }
 
+    func testWindowedSleepHrvFallbackCannotRestoreRejectedBeatDuration() {
+        let inflated = (0..<600).map { makeSample($0, hr: 65, accel: 0.01, rr: [800, 840]) }
+        let result = Hrv.windowedSleepHRV(inflated, deepEpochs: [0...599])
+        XCTAssertNil(result.result.rmssdMS)
+        XCTAssertEqual(result.windowSeconds, 0)
+        XCTAssertEqual(result.qualifyingWindows, 0)
+        let missing = (0..<600).map { makeSample($0, hr: 65, accel: 0.01,
+            rr: $0 < 30 ? [$0.isMultiple(of: 2) ? 800 : 840] : []) }
+        XCTAssertNil(Hrv.windowedSleepHRV(missing).result.rmssdMS)
+    }
+
+    func testNegativeMotionCannotQualifyAsRest() {
+        let rows = (0..<300).map { makeSample($0, hr: 60, accel: -0.1,
+            rr: [$0.isMultiple(of: 2) ? 800 : 840]) }
+        XCTAssertNil(Hrv.restingHeartRate(rows))
+        XCTAssertNil(Hrv.windowedSleepHRV(rows).result.rmssdMS)
+    }
+
     func testWindowedSleepHrvRejectsSparseBucketAndBumpsCacheKey() {
         let dense = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
         let sparseHead = (300..<320).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 950]) }
@@ -2171,7 +2189,7 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         XCTAssertEqual(result.qualifyingWindows, 1)
         XCTAssertEqual(result.windowSeconds, 300)
         XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
-        XCTAssertTrue(HistoryAnalysisCache.dailyKey("2026-11-24").hasPrefix("day-accuracy-v2:"))
+        XCTAssertTrue(HistoryAnalysisCache.dailyKey("2026-11-24").hasPrefix("day-accuracy-v3:"))
     }
 
     // MARK: - Phase 1 HRV Window-Selection Sensitivity Tests
