@@ -52,8 +52,29 @@ struct MoreView: View {
                     .buttonStyle(.plain)
                 }
 
-                // SECTION 2: HEALTH & DATA
-                SectionTitle("HEALTH & DATA")
+                SectionTitle("HEALTH & ACTIVITY")
+                Panel {
+                    NavigationLink(value: Route.sleepCoach) {
+                        moreRow("Sleep Planner", subtitle: "Sleep need, bedtime & wake schedule", icon: "moon.stars")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
+                    NavigationLink(value: Route.journal) {
+                        moreRow("Journal", subtitle: "Daily behaviors and notes", icon: "book.closed")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
+                    NavigationLink { PlanView() } label: {
+                        moreRow("Training Plan", subtitle: "Daily goals and schedule", icon: "calendar")
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                SectionTitle("DATA & INTEGRATIONS")
                 Panel {
                     NavigationLink { AppleHealthImportView() } label: {
                         moreRow(
@@ -113,6 +134,14 @@ struct MoreView: View {
                             subtitle: "Units, display & research features",
                             icon: "gearshape"
                         )
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                SectionTitle("WIDGETS & LIVE ACTIVITIES")
+                Panel {
+                    NavigationLink { StrapWidgetGuideView() } label: {
+                        moreRow("Home Screen Widgets", subtitle: "Captured steps, workout & Dynamic Island", icon: "square.grid.2x2")
                     }
                     .buttonStyle(.plain)
                 }
@@ -378,5 +407,39 @@ private struct BackupRestoreSettingsView: View {
                 message = "Verified backup created. Use Share backup ZIP to save it to Files."
             }
         } catch { message = "Backup failed: " + error.localizedDescription }
+    }
+}
+
+
+/// Discoverability for already shipped WidgetKit / ActivityKit features.
+/// No unsupported widget or refresh behavior is promised.
+private struct StrapWidgetGuideView: View {
+    var body: some View {
+        Screen {
+            VStack(alignment: .leading, spacing: 14) {
+                Panel {
+                    SectionTitle("HOME SCREEN")
+                    Text("Captured Steps")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("Touch and hold your iPhone Home Screen, choose Edit > Add Widget, search for STRAP, and select Captured Steps if available in your installed build.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                    Hint("Displays band-recorded steps and last-sync status. iOS manages the widget refresh schedule.")
+                }
+                Panel {
+                    SectionTitle("LIVE ACTIVITIES")
+                    Text("Workouts & captured steps")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("During a recorded workout, the Lock Screen and Dynamic Island can display available session metrics. A fresh band step-counter increase may start the captured-steps Live Activity when STRAP is running and iOS permits it.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                    Hint("Live Activities depend on your iPhone settings, installed extension and available sensor data. They do not guarantee continuous background updates.")
+                }
+            }
+        }
+        .navigationTitle("Widgets & Live Activities")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
