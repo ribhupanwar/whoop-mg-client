@@ -367,23 +367,40 @@ final class HistoryDatabaseTests: XCTestCase {
         // A directory at the database path makes sqlite_open fail without
         // depending on platform-specific file permissions or disk exhaustion.
         try FileManager.default.createDirectory(at: writer.databaseURL, withIntermediateDirectories: true)
-        let done = expectation(description: "Failed write can be retried without another BLE drain")
+
+        // Keep filesystem repair on the test's own control flow. A callback
+        // arriving after a timeout must not mutate a torn-down test fixture
+        // or report a failure against the next test.
+        let failed = expectation(description: "Initial database write fails")
+        var initial: Result<Int, Error>?
         writer.persistChunk([historySample(1000)], token: "failed") { result in
-            if case .success = result { XCTFail("Fixture must fail the initial write") }
-            do {
-                try FileManager.default.removeItem(at: writer.databaseURL)
-                writer.merge([]) { result in
-                    switch result {
-                    case .success(let rows):
-                        XCTAssertEqual(rows, [historySample(1000)])
-                    case .failure(let error):
-                        XCTFail("Retry lost pending rows: \(error)")
-                    }
-                    done.fulfill()
-                }
-            } catch { XCTFail("Could not repair test path: \(error)"); done.fulfill() }
+            initial = result
+            failed.fulfill()
         }
-        wait(for: [done], timeout: 10)
+        guard XCTWaiter.wait(for: [failed], timeout: 30) == .completed else {
+            XCTFail("Initial write did not complete")
+            return
+        }
+        switch try XCTUnwrap(initial) {
+        case .success:
+            XCTFail("Fixture must fail the initial write")
+            return
+        case .failure:
+            break
+        }
+
+        try FileManager.default.removeItem(at: writer.databaseURL)
+        let retried = expectation(description: "Failed write can be retried without another BLE drain")
+        var retry: Result<[V18Sample], Error>?
+        writer.merge([]) { result in
+            retry = result
+            retried.fulfill()
+        }
+        guard XCTWaiter.wait(for: [retried], timeout: 30) == .completed else {
+            XCTFail("Pending-row retry did not complete")
+            return
+        }
+        XCTAssertEqual(try XCTUnwrap(retry).get(), [historySample(1000)])
     }
 
     func testFailedTransactionRetriesAllPendingChunksWithoutAdvancingCursor() throws {
