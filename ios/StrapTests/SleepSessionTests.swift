@@ -118,10 +118,10 @@ final class SleepSessionTests: XCTestCase {
 
     private let start = 1_800_000_000
 
-    private func sample(_ unix: Int, hr: Int = 55, stepCounter: Int? = nil) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01, stepCounter: Int? = nil) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
-            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: stepCounter, stepCadence: nil, activityClass: 0,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
@@ -839,6 +839,31 @@ extension SleepSessionTests {
         XCTAssertEqual(merged.count, 1)
         XCTAssertEqual(merged[0].endUnix, saved.endUnix,
                        "Unknown-state quiet tail must not move a saved wake boundary")
+    }
+
+    func testThreeMinuteSustainedHRTransitionTrimsAwakeInBedPrefixAndIgnoresOneMinuteSurge() {
+        var rows: [V18Sample] = []
+        let dayStart = Int(Calendar.current.startOfDay(
+            for: Date(timeIntervalSince1970: 1_700_000_000)
+        ).timeIntervalSince1970)
+        let base = dayStart + 23 * 3600
+        func addStretch(_ startOffset: Int, _ count: Int, hr: Int, accel: Double) {
+            for i in 0..<count {
+                rows.append(sample(base + startOffset + i, hr: hr, accel: accel))
+            }
+        }
+        addStretch(0, 600, hr: 85, accel: 0.30)
+        addStretch(600, 2700, hr: 83, accel: 0.01)   // 45m quiet awake-in-bed prefix
+        addStretch(3300, 1500, hr: 60, accel: 0.01)
+        addStretch(4800, 60, hr: 85, accel: 0.01)     // 1-minute surge: must NOT split
+        addStretch(4860, 3840, hr: 60, accel: 0.01)
+        addStretch(8700, 600, hr: 85, accel: 0.30)
+
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertGreaterThanOrEqual(periods[0].startUnix, base + 3300)
+        XCTAssertLessThan(periods[0].startUnix, base + 3600)
+        XCTAssertEqual(periods[0].endUnix, base + 8699)
     }
 
 }

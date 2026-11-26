@@ -21,7 +21,8 @@ final class WorkoutLiveActivityController {
         )
         let initial = WorkoutActivityAttributes.ContentState(
             heartRate: nil, zone: nil, distanceMeters: session.hasGPS ? 0 : nil,
-            paceSecondsPerKilometer: nil, paused: false, lastSampleAt: Date()
+            paceSecondsPerKilometer: nil, steps: nil, stepsObservedAt: nil,
+            paused: false, lastSampleAt: Date()
         )
         Task {
             // Avoid duplicate cards after app recreation.
@@ -43,7 +44,9 @@ final class WorkoutLiveActivityController {
         }
     }
 
-    func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?, distanceMeters: Double, elapsedSeconds: Int) {
+    func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
+                distanceMeters: Double, elapsedSeconds: Int, steps: Int? = nil,
+                stepsObservedAt: Date? = nil) {
         guard let session, let active, active.attributes.sessionID == session.id.uuidString else { return }
         guard phase == .recording || phase == .paused else { return }
         let now = Date()
@@ -58,13 +61,28 @@ final class WorkoutLiveActivityController {
         let state = WorkoutActivityAttributes.ContentState(
             heartRate: bpm, zone: zone,
             distanceMeters: session.hasGPS ? max(0, distanceMeters) : nil,
-            paceSecondsPerKilometer: pace, paused: phase == .paused, lastSampleAt: now
+            paceSecondsPerKilometer: pace, steps: steps, stepsObservedAt: stepsObservedAt,
+            paused: phase == .paused, lastSampleAt: now
         )
         // Rate-limit system updates, but always transmit pause/resume or HR changes after 5s.
         guard lastState?.paused != state.paused || now.timeIntervalSince(lastUpdate) >= 5 else { return }
         lastUpdate = now
         lastState = state
         Task { await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120))) }
+    }
+
+    /// BLE history may finish syncing while the workout screen is backgrounded.
+    /// Keep the running workout card synchronized without starting a second one.
+    func updateStepCount(_ steps: Int?, observedAt: Date?) {
+        guard let active, var state = lastState else { return }
+        guard state.steps != steps || state.stepsObservedAt != observedAt else { return }
+        state.steps = steps
+        state.stepsObservedAt = observedAt
+        lastState = state
+        let now = Date()
+        Task {
+            await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120)))
+        }
     }
 
     func end() {

@@ -139,7 +139,14 @@ jobs:
           # This is NOT an Apple provisioning signature and still needs
           # authorized re-signing on the user's device.
           APP="$RUNNER_TEMP/ipa/Payload/Strap.app"
-          /usr/bin/codesign --force --deep --sign - \
+          WIDGET="$APP/PlugIns/StrapWorkoutWidget.appex"
+          test -d "$WIDGET" || { echo "::error::Missing WidgetKit extension in IPA"; exit 1; }
+          # Sign nested code FIRST with the widget's OWN App Group grant;
+          # --deep during parent signing can replace its entitlements.
+          /usr/bin/codesign --force --sign - \
+            --entitlements ios/StrapWorkoutWidget/StrapWorkoutWidget.entitlements \
+            --generate-entitlement-der "$WIDGET"
+          /usr/bin/codesign --force --sign - \
             --entitlements ios/Strap/Strap.entitlements \
             --generate-entitlement-der "$APP"
           /usr/bin/codesign --verify --deep --strict "$APP"
@@ -148,6 +155,9 @@ jobs:
           # Extract the embedded entitlement into a regular file before checking.
           /usr/bin/codesign -d --entitlements :- "$APP" 2>/dev/null > "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.plist"
           /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.plist" | grep -qx true
+          /usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" "$RUNNER_TEMP/ipa/Strap-embedded-entitlements.plist" | grep -qx group.com.ribhupanwar.strap
+          /usr/bin/codesign -d --entitlements :- "$WIDGET" 2>/dev/null > "$RUNNER_TEMP/ipa/Widget-embedded-entitlements.plist"
+          /usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" "$RUNNER_TEMP/ipa/Widget-embedded-entitlements.plist" | grep -qx group.com.ribhupanwar.strap
           cd "$RUNNER_TEMP/ipa"
           /usr/bin/zip -qry Strap-unsigned.ipa Payload
           shasum -a 256 Strap-unsigned.ipa
@@ -182,6 +192,8 @@ jobs:
                   "source revision": info.get("StrapBuildRevision") == expected_revision,
                   "release version": bool(info.get("CFBundleShortVersionString") and info.get("CFBundleVersion")),
                   "Bluetooth background mode": "bluetooth-central" in info.get("UIBackgroundModes", []),
+                  "live activity entitlement support": info.get("NSSupportsLiveActivities") is True,
+                  "steps WidgetKit extension": app + "PlugIns/StrapWorkoutWidget.appex/Info.plist" in names,
                   "permission usage descriptions": all(
                       info.get(key) for key in ("NSBluetoothAlwaysUsageDescription",
                                               "NSHealthShareUsageDescription", "NSHealthUpdateUsageDescription")
