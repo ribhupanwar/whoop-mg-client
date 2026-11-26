@@ -829,4 +829,25 @@ extension SleepSessionTests {
                        "Unknown-state quiet tail must not move a saved wake boundary")
     }
 
+    func testThreeMinuteSustainedHRTransitionTrimsAwakeInBedPrefixAndIgnoresOneMinuteSurge() {
+        var rows: [V18Sample] = []
+        let base = 1_700_000_000
+        func addStretch(_ startOffset: Int, _ count: Int, hr: Int, accel: Double) {
+            for i in 0..<count {
+                rows.append(makeSample(base + startOffset + i, hr: hr, accel: accel))
+            }
+        }
+        addStretch(0, 600, hr: 85, accel: 0.30)
+        addStretch(600, 2700, hr: 83, accel: 0.01)   // 45m quiet awake-in-bed prefix
+        addStretch(3300, 1500, hr: 60, accel: 0.01)
+        addStretch(4800, 60, hr: 85, accel: 0.01)     // 1-minute surge: must NOT split
+        addStretch(4860, 3840, hr: 60, accel: 0.01)
+        addStretch(8700, 600, hr: 85, accel: 0.30)
+
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertGreaterThanOrEqual(periods[0].startUnix, base + 3300)
+        XCTAssertEqual(periods[0].endUnix, base + 8699)
+    }
+
 }
