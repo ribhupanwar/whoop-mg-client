@@ -128,13 +128,10 @@ enum SleepDetect {
             let deeplyQuiescent = runIsDeeplyQuiescent(run)
             let adaptiveThreshold = deeplyQuiescent ? activeMedian * quiescentHrSleepMult : activeMedian * hrSleepBaselineMult
             
-            // Dual-band HR confirmation: subtractive gate is primary; multiplicative
-            // gate adds relaxation for deeply quiescent runs.
-            // Normal runs: min() picks stricter subtractive gate.
-            // Deeply quiescent runs: max() picks more permissive multiplicative gate.
-            let effectiveThreshold = deeplyQuiescent
-                ? max(primaryThreshold, adaptiveThreshold)
-                : min(primaryThreshold, adaptiveThreshold)
+            // Stillness alone cannot prove sleep. Keep the established HR-drop
+            // gate until relaxed thresholds have independent validation.
+            // The stricter threshold also agrees with the HR transition splitter.
+            let effectiveThreshold = min(primaryThreshold, adaptiveThreshold)
             let runMedianHR = Stats.median(runHRs)
             guard runMedianHR <= effectiveThreshold else {
                 traceSink?(["gate": "hrConfirm", "verdict": "dropped", 
