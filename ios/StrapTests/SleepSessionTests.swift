@@ -831,7 +831,10 @@ extension SleepSessionTests {
 
     func testThreeMinuteSustainedHRTransitionTrimsAwakeInBedPrefixAndIgnoresOneMinuteSurge() {
         var rows: [V18Sample] = []
-        let base = 1_700_000_000
+        let dayStart = Int(Calendar.current.startOfDay(
+            for: Date(timeIntervalSince1970: 1_700_000_000)
+        ).timeIntervalSince1970)
+        let base = dayStart + 23 * 3600
         func addStretch(_ startOffset: Int, _ count: Int, hr: Int, accel: Double) {
             for i in 0..<count {
                 rows.append(sample(base + startOffset + i, hr: hr, accel: accel))
@@ -847,6 +850,7 @@ extension SleepSessionTests {
         let periods = SleepDetect.detect(rows)
         XCTAssertEqual(periods.count, 1)
         XCTAssertGreaterThanOrEqual(periods[0].startUnix, base + 3300)
+        XCTAssertLessThan(periods[0].startUnix, base + 3600)
         XCTAssertEqual(periods[0].endUnix, base + 8699)
     }
 

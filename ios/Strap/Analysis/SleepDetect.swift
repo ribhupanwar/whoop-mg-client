@@ -553,8 +553,12 @@ enum SleepDetect {
             return Stats.median(hrs)
         }
 
+        let hasBandSleep = run.contains { $0.sleepState == 2 }
         var t = firstUnix
         while t + 60 <= lastUnix {
+            if hasBandSleep && run.contains(where: { t <= $0.unix && $0.unix < t + 60 && $0.sleepState == 1 }) {
+                break
+            }
             if let med = minuteMedian(t), med >= elevatedThreshold {
                 t += 60
             } else {
@@ -568,18 +572,22 @@ enum SleepDetect {
             if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
                let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
                let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold {
-                if t - segStart >= minSegmentS {
-                    let seg = run.filter { segStart <= $0.unix && $0.unix < t }
-                    if !seg.isEmpty { segments.append(seg) }
-                }
-                t += 180
-                while t + 60 <= lastUnix {
-                    if let mNext = minuteMedian(t), mNext >= elevatedThreshold {
-                        t += 60
+                var endT = t + 180
+                while endT + 60 <= lastUnix {
+                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold {
+                        endT += 60
                     } else {
                         break
                     }
                 }
+                // Do not split near the end of the night if the remaining resumed sleep
+                // is shorter than minSegmentS (e.g. brief bathroom trip before final wake).
+                guard lastUnix - endT + 1 >= minSegmentS else { break }
+                if t - segStart >= minSegmentS {
+                    let seg = run.filter { segStart <= $0.unix && $0.unix < t }
+                    if !seg.isEmpty { segments.append(seg) }
+                }
+                t = endT
                 segStart = t
             } else {
                 t += 60
