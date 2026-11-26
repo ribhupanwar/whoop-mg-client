@@ -108,3 +108,103 @@ enum WhoopImportBatch {
                     csvFiles: inputs.count, unsupportedFiles: unsupported)
     }
 }
+
+
+/// Compact, portable summary archive. Not a raw-sensor or database backup.
+/// Imported WHOOP values are not promoted to local measurements.
+enum StrapFourCSVExport {
+    static func csv(_ header: [String], rows: [[String]]) -> Data {
+        func quote(_ value: String) -> String {
+            "\"" + value.replacingOccurrences(of: "\"", with: "\"\"") + "\""
+        }
+        let records = ([header] + rows).map { $0.map(quote).joined(separator: ",") }
+        return Data((records.joined(separator: "\r\n") + "\r\n").utf8)
+    }
+
+    static func files(days: [DayMetrics], detected: [ActivitySession],
+                      live: [LiveActivityRecord], manual: [ManualActivity],
+                      journal: [JournalEntry]) -> [(String, Data)] {
+        let iso = ISO8601DateFormatter()
+        iso.timeZone = TimeZone(secondsFromGMT: 0)
+        func time(_ unix: Int?) -> String {
+            guard let unix else { return "" }
+            return iso.string(from: Date(timeIntervalSince1970: Double(unix)))
+        }
+        func number(_ value: Double?) -> String {
+            guard let value, value.isFinite else { return "" }
+            return String(value)
+        }
+        let localDays = days.filter { $0.state != "imported" && $0.state != "whoop-imported" }
+            .sorted { $0.dateKey < $1.dateKey }
+        let cycleHeader = ["Cycle start time", "Cycle timezone", "Resting heart rate (bpm)",
+            "Heart rate variability (ms)", "Day Strain", "Sleep onset", "Wake onset",
+            "Asleep duration (min)", "Sleep performance %", "Respiratory rate (rpm)", "Source"]
+        let cycleRows = localDays.map { day -> [String] in
+            [day.dateKey, "UTC+00:00",
+             number((day.restingHRWindowSeconds ?? 0) > 0 ? day.restingHR : nil),
+             number(day.hrvWindowSeconds > 0 ? day.lnRMSSD.map { exp($0) } : nil),
+             number(day.strain), time(day.sleepStartUnix), time(day.sleepEndUnix.map { $0 + 1 }),
+             number(day.reliableSleepHours.map { $0 * 60 }), number(day.sleepPerformancePct),
+             number((day.respiratoryWindows ?? 0) > 0 ? day.respiratoryRate : nil), "STRAP"]
+        }
+        let sleepHeader = ["Cycle start time", "Cycle timezone", "Sleep onset", "Wake onset",
+                           "Asleep duration (min)", "Sleep performance %", "Source"]
+        let sleepRows = localDays.compactMap { day -> [String]? in
+            guard let start = day.sleepStartUnix, let end = day.sleepEndUnix, end >= start else { return nil }
+            return [day.dateKey, "UTC+00:00", time(start), time(end + 1),
+                    number(day.reliableSleepHours.map { $0 * 60 }), number(day.sleepPerformancePct), "STRAP"]
+        }
+        let workoutHeader = ["Cycle start time", "Cycle timezone", "Workout start time", "Workout end time",
+                             "Activity name", "Duration (min)", "Activity Strain", "Average heart rate (bpm)", "Source", "Record ID"]
+        var workoutRows: [[String]] = detected.map { row in
+            let start = time(row.startUnix)
+            return [String(start.prefix(10)), "UTC+00:00", start, time(row.endUnix + 1),
+                    row.kind, number(row.minutes), number(row.strain), number(row.meanHR),
+                    "STRAP detected", String(row.startUnix)]
+        }
+        workoutRows += live.map { row in
+            [row.dateKey, "UTC+00:00", time(row.startedUnix), time(row.endedUnix), "Live HR",
+             number(row.minutes), "", number(row.meanHR), "STRAP live", row.id.uuidString]
+        }
+        workoutRows += manual.map { row in
+            [row.dateKey, "", "", "", row.name, String(row.minutes), "", "", "STRAP manual", row.id.uuidString]
+        }
+        let journalHeader = ["Cycle start time", "Question text", "Answered yes", "Mood", "Soreness", "Notes", "Source"]
+        var journalRows: [[String]] = []
+        for entry in journal.sorted(by: { $0.dateKey < $1.dateKey }) {
+            let keys = entry.answers.keys.sorted()
+            for key in keys.isEmpty ? [""] : keys {
+                journalRows.append([entry.dateKey, key, entry.answers[key].map { $0 ? "true" : "false" } ?? "",
+                                    entry.mood?.rawValue ?? "", entry.soreness.rawValue, entry.notes, "STRAP"])
+            }
+        }
+        func stable(_ rows: [[String]]) -> [[String]] {
+            var seen = Set<[String]>()
+            return rows.filter { seen.insert($0).inserted }.sorted { $0.lexicographicallyPrecedes($1) }
+        }
+        return [("physiological_cycles.csv", csv(cycleHeader, rows: stable(cycleRows))),
+                ("sleeps.csv", csv(sleepHeader, rows: stable(sleepRows))),
+                ("workouts.csv", csv(workoutHeader, rows: stable(workoutRows))),
+                ("journal_entries.csv", csv(journalHeader, rows: stable(journalRows)))]
+    }
+
+    static func write(_ files: [(String, Data)]) throws -> URL {
+        let fm = FileManager.default
+        let root = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: root, withIntermediateDirectories: true)
+        let url = root.appendingPathComponent("STRAP-data.zip")
+        do {
+            let archive = try Archive(url: url, accessMode: .create)
+            for (name, data) in files {
+                let source = root.appendingPathComponent(name)
+                try data.write(to: source, options: .atomic)
+                try archive.addEntry(with: name, relativeTo: root, compressionMethod: .deflate)
+                try fm.removeItem(at: source)
+            }
+            return url
+        } catch {
+            try? fm.removeItem(at: root)
+            throw error
+        }
+    }
+}
