@@ -146,4 +146,51 @@ final class StepCounterTests: XCTestCase {
         XCTAssertEqual(StepCounter.total(records), 4)
     }
 
+
+    func testPersistentLedgerReplayAndConflict() async throws {
+        let suite = "strap.step-ledger.tests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+        let rows = [sample(start, steps: 100), sample(start + 1, steps: 102),
+                    sample(start + 2, steps: 104), sample(start + 3, steps: 106)]
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest(rows, calendar: calendar, now: now)
+        await ledger.ingest(rows.reversed().map { $0 }, calendar: calendar, now: now)
+        let before = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(before, 6)
+        let restored = DailyStepLedger(defaults: defaults)
+        let persisted = await restored.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(persisted, 6)
+        await restored.ingest([sample(start + 1, steps: 110)], calendar: calendar, now: now)
+        let conflict = await restored.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(conflict, 2)
+        await restored.ingest(rows, calendar: calendar, now: now)
+        let replay = await restored.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(replay, 2)
+    }
+
+    func testPersistentLedgerLocalMidnightAndMissingDay() async throws {
+        let suite = "strap.step-ledger.tests." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+        let ledger = DailyStepLedger(defaults: defaults)
+        let absent = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertNil(absent)
+        await ledger.ingest([sample(start - 1, steps: 100), sample(start, steps: 103),
+                             sample(start + 1, steps: 105)], calendar: calendar, now: now)
+        let today = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(today, 2)
+        let next = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: now))
+        let tomorrow = await ledger.capturedToday(now: next, calendar: calendar)
+        XCTAssertNil(tomorrow)
+    }
+
 }
