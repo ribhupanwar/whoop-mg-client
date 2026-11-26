@@ -220,6 +220,18 @@ final class BandLink: NSObject, ObservableObject {
         summary?.latestSleepSession
     }
     @Published private(set) var days: [DayMetrics] = []
+    /// Persistent captured-step lower bound, never a claimed complete-day total.
+    @Published private(set) var capturedTodayFromLedger: Int?
+    @Published private(set) var capturedTodayLedgerDayKey: String?
+    private let dailyStepLedger = DailyStepLedger()
+    private var stepLedgerUpdateGeneration = 0
+    private var stepLedgerArchiveHydrated = false
+
+    var recordedTodayFromLedger: Int? {
+        guard capturedTodayLedgerDayKey == JournalStore.dayKey(for: Date()) else { return nil }
+        return capturedTodayFromLedger
+    }
+
     @Published private(set) var drainStats = DrainStats()
     @Published private(set) var lastDataRangeResponse: DataRangeResponse?
     @Published private(set) var isStrapStuck = false
@@ -501,6 +513,45 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("strap-history-v18.json")
     }
 
+    /// Publish the newest captured-step lower bound without blocking the BLE
+    /// callback thread. Re-reading the ledger also refreshes local date/timezone
+    /// changes; a stale previous-day value is never exposed as today's steps.
+    func refreshRecordedTodaySteps() {
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        Task { [weak self] in
+            guard let self else { return }
+            let count = await self.dailyStepLedger.capturedToday(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.capturedTodayFromLedger = count
+                self.capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+            }
+        }
+    }
+
+    /// The ledger consumes ONLY samples acknowledged as durably committed by
+    /// the history writer. Never publish raw, unsaved BLE frames as daily steps.
+    private func ingestDurableStepSamples(_ samples: [V18Sample]) {
+        guard samples.contains(where: { $0.stepCounter != nil }) else { return }
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        Task { [weak self] in
+            guard let self else { return }
+            await self.dailyStepLedger.ingest(samples, calendar: calendar, now: now)
+            let count = await self.dailyStepLedger.capturedToday(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.capturedTodayFromLedger = count
+                self.capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+            }
+        }
+    }
+
     /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
     /// the latest archive so recovery and a live drain cannot overwrite each other.
     private func mergeHistoricalArchive(
@@ -517,6 +568,15 @@ final class BandLink: NSObject, ObservableObject {
                 self.hasUnsavedArchiveRecords = false
                 self.retainedHistoricalSamples = merged.samples
                 self.lastHistoryRecordCount = merged.samples.count
+                // On startup, hydrate from durable history even if no new
+                // packets arrived. Subsequent checkpoints ingest only new
+                // packets; replays are idempotent inside DailyStepLedger.
+                if !self.stepLedgerArchiveHydrated {
+                    self.stepLedgerArchiveHydrated = true
+                    self.ingestDurableStepSamples(merged.samples)
+                } else {
+                    self.ingestDurableStepSamples(incoming)
+                }
                 if historyGeneration == self.historySyncGeneration {
                     self.noteInsertedHistory(merged.progress)
                 }
@@ -627,6 +687,7 @@ final class BandLink: NSObject, ObservableObject {
             central = CBCentralManager(delegate: self, queue: nil)
         }
         recoverSavedCaptures()
+        refreshRecordedTodaySteps()
     }
 
     deinit {
@@ -2346,6 +2407,8 @@ final class BandLink: NSObject, ObservableObject {
                 switch result {
                 case .success(let progress):
                     self.noteInsertedHistory(progress)
+                    // Saved and committed to SQLite; now safe for Home steps.
+                    self.ingestDurableStepSamples(incoming)
                     guard !self.historyPersistenceStalled else {
                         self.pendingHistoryFlushes -= 1
                         self.finishCompletedDrainIfReady()
