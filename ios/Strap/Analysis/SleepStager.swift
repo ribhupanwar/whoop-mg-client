@@ -686,17 +686,28 @@ enum SleepStager {
 
     private static func localHRZScores(_ epochs: [Epoch], radiusEpochs: Int = 90) -> [Double] {
         let n = epochs.count
-        return (0..<n).map { index in
-            guard let hr = epochs[index].hr else { return 0 }
-            let lo = max(0, index - radiusEpochs)
-            let hi = min(n, index + radiusEpochs)
+        let radiusSeconds = radiusEpochs * epochS
+        var out = [Double](repeating: 0, count: n)
+        var lo = 0
+        var hi = 0
+        for index in 0..<n {
+            guard let hr = epochs[index].hr else { continue }
+            let tMin = epochs[index].start - radiusSeconds
+            let tMax = epochs[index].start + radiusSeconds
+            while lo < n && epochs[lo].start < tMin {
+                lo += 1
+            }
+            while hi < n && epochs[hi].start < tMax {
+                hi += 1
+            }
             let window = epochs[lo..<hi].compactMap(\.hr)
-            guard !window.isEmpty else { return 0 }
+            guard !window.isEmpty else { continue }
             let median = Stats.median(window)
             let variance = window.reduce(0.0) { $0 + ($1 - median) * ($1 - median) } / Double(window.count)
             let sd = max(1.0, sqrt(variance))
-            return (hr - median) / sd
+            out[index] = (hr - median) / sd
         }
+        return out
     }
 
     private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {

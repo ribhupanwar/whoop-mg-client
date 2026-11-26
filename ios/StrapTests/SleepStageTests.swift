@@ -238,7 +238,15 @@ final class SleepStageTests: XCTestCase {
         }
         let period = SleepPeriod(startUnix: baseUnix, endUnix: baseUnix + totalSeconds - 1, quietFraction: 0.98, meanHR: 66, wakeEvents: 0)
         let staging = SleepStager.stage(samples: samples, period: period)
-        XCTAssertGreaterThan(staging.remMinutes, 20.0)
+        let episodeStart = baseUnix + 300 * 60
+        let episodeEnd = baseUnix + 340 * 60
+        let episodeRemMinutes = staging.segments
+            .filter { $0.stage == .rem }
+            .reduce(0.0) { total, seg in
+                let overlap = max(0, min(seg.endUnix, episodeEnd) - max(seg.startUnix, episodeStart))
+                return total + Double(overlap) / 60.0
+            }
+        XCTAssertGreaterThan(episodeRemMinutes, 20.0)
     }
 
     func testOneHourNapRespectsRemLatencyGuard() {

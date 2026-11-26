@@ -389,14 +389,21 @@ def _sustained_sleep_onset(labels: list[str]) -> int | None:
 def _local_hr_zscores(feats: list[_Epoch], radius_epochs: int = 90) -> list[float]:
     """Local 90-minute rolling median/SD z-score for HR to remove circadian decay bias."""
     n = len(feats)
+    radius_s = radius_epochs * EPOCH_S
     out: list[float] = []
+    lo = 0
+    hi = 0
     for i in range(n):
         hr = feats[i].hr
         if hr is None:
             out.append(0.0)
             continue
-        lo = max(0, i - radius_epochs)
-        hi = min(n, i + radius_epochs)
+        t_min = feats[i].start - radius_s
+        t_max = feats[i].start + radius_s
+        while lo < n and feats[lo].start < t_min:
+            lo += 1
+        while hi < n and feats[hi].start < t_max:
+            hi += 1
         window = [feats[j].hr for j in range(lo, hi) if feats[j].hr is not None]
         if not window:
             out.append(0.0)
