@@ -109,7 +109,8 @@ enum WhoopCSVImport {
         let rows = records.dropFirst().map { values in
             SupplementalRecord(source: category, fields: Dictionary(zip(headers, values), uniquingKeysWith: { _, last in last }))
         }
-        guard !rows.isEmpty else { throw ImportError.noValidRows }
+        // An empty category in a valid four-file export is header-only.
+        // Keep its schema validation, but do not reject the whole archive.
         return rows
     }
 
