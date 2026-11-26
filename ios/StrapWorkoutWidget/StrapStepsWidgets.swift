@@ -223,6 +223,11 @@ private struct HealthSnapshotView: View {
 
 struct StrapSingleHealthWidget: Widget {
     let metric: HealthWidgetMetric
+
+    // Widget requires a public zero-argument initializer for discovery.
+    // The explicit metric initializer is used for each configured widget kind.
+    init() { self.metric = .sleep }
+    init(metric: HealthWidgetMetric) { self.metric = metric }
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: metric.kind, provider: HealthTimelineProvider()) { entry in
             SingleHealthMetricView(metric: metric, entry: entry)
