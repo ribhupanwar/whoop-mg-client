@@ -22,6 +22,13 @@ actor DailyLocalBackup {
         return days == 0 ? nil : ([7, 30].contains(days) ? days : 30)
     }
 
+    /// A remembered success cannot defer a new backup when every archive was
+    /// deleted or moved out of the app's backup directory.
+    static func effectiveLastSuccess(newestArchive: Date?, recordedSuccess: Date?) -> Date? {
+        guard let newestArchive else { return nil }
+        return max(newestArchive, recordedSuccess ?? newestArchive)
+    }
+
     static func isDue(now: Date, lastSuccess: Date?, interval: TimeInterval?) -> Bool {
         guard let interval else { return false }
         guard let lastSuccess else { return true }
@@ -43,7 +50,7 @@ actor DailyLocalBackup {
                 .filter { $0.pathExtension.lowercased() == "zip" && $0.lastPathComponent.hasPrefix("STRAP-backup-") }
             let newest = archives.compactMap { try? $0.resourceValues(forKeys: [.creationDateKey]).creationDate }.max()
             let recorded = UserDefaults.standard.object(forKey: Self.lastSuccessKey) as? Date
-            let lastSuccess = [newest, recorded].compactMap { $0 }.max()
+            let lastSuccess = Self.effectiveLastSuccess(newestArchive: newest, recordedSuccess: recorded)
             guard Self.isDue(now: now, lastSuccess: lastSuccess, interval: cadence) else { return }
             let output = try PersistenceDiagnostics.write(
                 support: support, documents: documents, preferences: preferences,

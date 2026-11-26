@@ -24,6 +24,26 @@ final class DailyLocalBackupScheduleTests: XCTestCase {
         XCTAssertFalse(DailyLocalBackup.isDue(now: now, lastSuccess: now.addingTimeInterval(100), interval: 3_600))
     }
 
+    func testDeletedOrMovedAllArchivesTriggersReplacementBackup() {
+        let now = Date(timeIntervalSince1970: 1_795_600_000)
+        let recentSuccess = now.addingTimeInterval(-60)
+        let last = DailyLocalBackup.effectiveLastSuccess(
+            newestArchive: nil, recordedSuccess: recentSuccess)
+        XCTAssertNil(last, "A remembered success cannot replace a real archive")
+        XCTAssertTrue(DailyLocalBackup.isDue(now: now, lastSuccess: last, interval: 86_400))
+    }
+
+    func testExistingArchivesStillRespectScheduleAndRecordedSuccess() {
+        let now = Date(timeIntervalSince1970: 1_795_600_000)
+        let archive = now.addingTimeInterval(-4_000)
+        let recorded = now.addingTimeInterval(-1_000)
+        XCTAssertEqual(DailyLocalBackup.effectiveLastSuccess(
+            newestArchive: archive, recordedSuccess: recorded), recorded)
+        XCTAssertEqual(DailyLocalBackup.effectiveLastSuccess(
+            newestArchive: archive, recordedSuccess: nil), archive)
+        XCTAssertFalse(DailyLocalBackup.isDue(now: now, lastSuccess: recorded, interval: 3_600))
+    }
+
     func testRetentionDefaultsAndNeverRequestsNegativeDays() throws {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: UUID().uuidString))
         XCTAssertEqual(DailyLocalBackup.retentionDays(defaults), 30)
