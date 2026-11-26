@@ -59,13 +59,17 @@ actor DailyStepLedger {
         for sample in samples {
             guard sample.unix >= cutoff, let counter = sample.stepCounter,
                   (0..<StepCounter.modulus).contains(counter) else { continue }
+            // Off-wrist records are a continuity break, not counted steps.
+            // Retain an invalidation marker so a later replay cannot rejoin
+            // endpoints around that missing on-wrist evidence.
+            let candidate: Int? = sample.wearing ? counter : nil
             if let previous = bySecond[sample.unix] {
-                if previous.counter != counter, previous.counter != nil {
+                if previous.counter != candidate, previous.counter != nil {
                     bySecond[sample.unix] = Observation(unix: sample.unix, counter: nil)
                     changed = true
                 }
             } else {
-                bySecond[sample.unix] = Observation(unix: sample.unix, counter: counter)
+                bySecond[sample.unix] = Observation(unix: sample.unix, counter: candidate)
                 changed = true
             }
         }
