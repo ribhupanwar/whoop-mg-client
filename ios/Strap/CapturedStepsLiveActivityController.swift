@@ -29,7 +29,8 @@ final class CapturedStepsLiveActivityController {
         if !activeWalk {
             // A stale card is not an always-on pedometer. Background suspension
             // can delay cleanup; the ActivityContent staleDate also expires.
-            if let latest = snapshot.lastIncreaseAt, now.timeIntervalSince(latest) > 4 * 60 {
+            if !snapshot.connectedAtWrite || snapshot.lastIncreaseAt == nil
+                || (snapshot.lastIncreaseAt.map { now.timeIntervalSince($0) > 4 * 60 } ?? true) {
                 end()
             }
             return
