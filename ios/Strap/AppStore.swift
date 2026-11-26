@@ -138,7 +138,7 @@ final class AppStore: ObservableObject {
     func refreshHealthWidget() {
         guard defaults.bool(forKey: "strap.healthWidgetEnabled"), !isPreview else {
             if HealthWidgetSnapshot.load() != nil, HealthWidgetSnapshot.save(nil) {
-                WidgetCenter.shared.reloadTimelines(ofKind: HealthWidgetSnapshot.widgetKind)
+                for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
             }
             return
         }
@@ -156,10 +156,13 @@ final class AppStore: ObservableObject {
         let liveStrain = band.liveDayStrainDateKey == key ? band.liveDayStrain : nil
         let strain = valid(liveStrain ?? day?.strain, range: 0...21)
         let battery = band.isConnected ? band.batteryPercent.flatMap { (0...100).contains($0) ? $0 : nil } : nil
+        let stress = band.stress
+        let observed = stress.diagnostics?.lastUpdateUnix.map { Date(timeIntervalSince1970: Double($0)) }
         let snapshot = HealthWidgetSnapshot(dayKey: key, recovery: recovery, sleep: sleep,
-                                            strain: strain, battery: battery, savedAt: now)
+                                            strain: strain, battery: battery, savedAt: now,
+                                            stress: valid(stress.index, range: 0...3), stressObservedAt: observed)
         if HealthWidgetSnapshot.save(snapshot) {
-            WidgetCenter.shared.reloadTimelines(ofKind: HealthWidgetSnapshot.widgetKind)
+            for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
         }
     }
 
