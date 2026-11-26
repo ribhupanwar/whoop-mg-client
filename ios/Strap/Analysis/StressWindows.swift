@@ -6,7 +6,7 @@ import Foundation
 /// not any proprietary algorithm.
 enum StressWindows {
     static let windowSeconds = 300
-    static let maxRestingAccelG = 0.25
+    static let maxRestingAccelG = Hrv.restingQuietAccelG
     // Match the existing five-minute HRV coverage floor, not a WHOOP calibration.
     static let minimumCoveredSeconds = 150
     static let minimumRRDurationSeconds = 75.0
