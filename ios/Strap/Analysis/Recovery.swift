@@ -90,24 +90,72 @@ enum Recovery {
     /// is not "negative stress". The baseline MUST come from awake-quiet
     /// windows: exercise also collapses RMSSD, for metabolic rather than
     /// psychological reasons, so only verified-quiet HRV belongs here.
-    static func stressIndex(lnRMSSD: Double?, baseline: Baseline?) -> StressResult {
+    static func stressIndex(lnRMSSD: Double?, baseline: Baseline?, lastUpdateUnix: Int? = nil) -> StressResult {
         guard let baseline, baseline.days >= minBaselineDays else {
+            let diag = StressDiagnostics(
+                baselineMean: baseline?.lnRMSSDMean,
+                baselineSD: baseline?.lnRMSSDSD,
+                baselineDays: baseline?.days ?? 0,
+                eligibleRRWindows: 0,
+                rejectedRRWindows: 0,
+                unclampedScore: nil,
+                finalScore: nil,
+                lastUpdateUnix: lastUpdateUnix,
+                unavailableReason: "needs at least \(minBaselineDays) days of awake-quiet baseline"
+            )
             return StressResult(
                 index: nil,
-                reason: "needs at least \(minBaselineDays) days of awake-quiet baseline"
+                reason: "needs at least \(minBaselineDays) days of awake-quiet baseline",
+                diagnostics: diag
             )
         }
         guard let lnRMSSD, lnRMSSD.isFinite else {
-            return StressResult(index: nil, reason: "needs HRV from a verified-quiet window")
+            let diag = StressDiagnostics(
+                baselineMean: baseline.lnRMSSDMean,
+                baselineSD: baseline.lnRMSSDSD,
+                baselineDays: baseline.days,
+                eligibleRRWindows: 0,
+                rejectedRRWindows: 0,
+                unclampedScore: nil,
+                finalScore: nil,
+                lastUpdateUnix: lastUpdateUnix,
+                unavailableReason: "needs HRV from a verified-quiet window"
+            )
+            return StressResult(index: nil, reason: "needs HRV from a verified-quiet window", diagnostics: diag)
         }
         guard baseline.lnRMSSDSD.isFinite, baseline.lnRMSSDSD > 0,
               baseline.lnRMSSDMean.isFinite else {
-            return StressResult(index: nil, reason: "baseline has no HRV variation to scale against")
+            let diag = StressDiagnostics(
+                baselineMean: baseline.lnRMSSDMean,
+                baselineSD: baseline.lnRMSSDSD,
+                baselineDays: baseline.days,
+                eligibleRRWindows: 0,
+                rejectedRRWindows: 0,
+                unclampedScore: nil,
+                finalScore: nil,
+                lastUpdateUnix: lastUpdateUnix,
+                unavailableReason: "baseline has no HRV variation to scale against"
+            )
+            return StressResult(index: nil, reason: "baseline has no HRV variation to scale against", diagnostics: diag)
         }
         let deviation = (baseline.lnRMSSDMean - lnRMSSD) / baseline.lnRMSSDSD
+        let unclamped = max(0.0, min(stressMax, deviation))
+        let final = Stats.rounded(unclamped, 2)
+        let diag = StressDiagnostics(
+            baselineMean: baseline.lnRMSSDMean,
+            baselineSD: baseline.lnRMSSDSD,
+            baselineDays: baseline.days,
+            eligibleRRWindows: 1,
+            rejectedRRWindows: 0,
+            unclampedScore: unclamped,
+            finalScore: final,
+            lastUpdateUnix: lastUpdateUnix,
+            unavailableReason: nil
+        )
         return StressResult(
-            index: Stats.rounded(max(0.0, min(stressMax, deviation)), 2),
-            reason: nil
+            index: final,
+            reason: nil,
+            diagnostics: diag
         )
     }
 

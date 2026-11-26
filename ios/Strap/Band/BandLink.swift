@@ -954,14 +954,47 @@ final class BandLink: NSObject, ObservableObject {
             return Recovery.stressIndex(lnRMSSD: nil, baseline: awakeBaseline)
         }
         guard let point = summary?.stressSeries?.last else {
-            return StressResult(index: nil, reason: "Needs recorded awake R-R windows")
+            let diag = StressDiagnostics(
+                baselineMean: baseline.lnRMSSDMean,
+                baselineSD: baseline.lnRMSSDSD,
+                baselineDays: baseline.days,
+                eligibleRRWindows: 0,
+                rejectedRRWindows: 0,
+                unclampedScore: nil,
+                finalScore: nil,
+                lastUpdateUnix: nil,
+                unavailableReason: "Needs recorded awake R-R windows"
+            )
+            return StressResult(index: nil, reason: "Needs recorded awake R-R windows", diagnostics: diag)
         }
         // Historical stress windows are chartable but must not masquerade as live stress.
         let age = Date().timeIntervalSince1970 - Double(point.unix)
         guard age >= 0, age <= 10 * 60 else {
-            return StressResult(index: nil, reason: "No recent awake R-R stress window; historical values remain in the chart")
+            let diag = StressDiagnostics(
+                baselineMean: baseline?.lnRMSSDMean,
+                baselineSD: baseline?.lnRMSSDSD,
+                baselineDays: baseline?.days ?? 0,
+                eligibleRRWindows: summary?.stressSeries?.count ?? 0,
+                rejectedRRWindows: 0,
+                unclampedScore: nil,
+                finalScore: nil,
+                lastUpdateUnix: point.unix,
+                unavailableReason: "No recent awake R-R stress window; historical values remain in the chart"
+            )
+            return StressResult(index: nil, reason: "No recent awake R-R stress window; historical values remain in the chart", diagnostics: diag)
         }
-        return StressResult(index: point.index, reason: nil)
+        let diag = StressDiagnostics(
+            baselineMean: baseline?.lnRMSSDMean,
+            baselineSD: baseline?.lnRMSSDSD,
+            baselineDays: baseline?.days ?? 0,
+            eligibleRRWindows: summary?.stressSeries?.count ?? 0,
+            rejectedRRWindows: 0,
+            unclampedScore: point.index,
+            finalScore: point.index,
+            lastUpdateUnix: point.unix,
+            unavailableReason: nil
+        )
+        return StressResult(index: point.index, reason: nil, diagnostics: diag)
     }
 
     /// Corrected bounds select the sensor samples used for nightly metrics;

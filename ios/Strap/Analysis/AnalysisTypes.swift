@@ -296,6 +296,7 @@ struct RecoveryResult: Codable, Equatable {
 struct StressResult: Codable, Equatable {
     let index: Double?
     let reason: String?
+    let diagnostics: StressDiagnostics?
 
     var band: String {
         guard let index else { return "unavailable" }
