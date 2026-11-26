@@ -227,6 +227,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var capturedTodayIncreaseAt: Date?
     @Published private(set) var capturedTodayLedgerDayKey: String?
     private let dailyStepLedger = DailyStepLedger()
+    private var stepLedgerTask: Task<Void, Never>?
     private var lastStepWidgetReloadAt = Date.distantPast
     private var stepLedgerUpdateGeneration = 0
     private var stepLedgerArchiveHydrated = false
@@ -564,7 +565,9 @@ final class BandLink: NSObject, ObservableObject {
         let generation = stepLedgerUpdateGeneration
         let now = Date()
         let calendar = Calendar.current
-        Task { [weak self] in
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
             guard let self else { return }
             let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
             await MainActor.run {
@@ -582,7 +585,9 @@ final class BandLink: NSObject, ObservableObject {
         let generation = stepLedgerUpdateGeneration
         let now = Date()
         let calendar = Calendar.current
-        Task { [weak self] in
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
             guard let self else { return }
             await self.dailyStepLedger.ingest(samples, calendar: calendar, now: now)
             let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
