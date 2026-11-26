@@ -99,4 +99,51 @@ final class StepCounterTests: XCTestCase {
         ]
         XCTAssertEqual(StepCounter.rate(samples, at: 2) ?? -1, 60, accuracy: 0.001)
     }
+    func testCapturedTodayExcludesYesterdayAndTomorrow() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let today = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: today).timeIntervalSince1970)
+        let samples = [
+            sample(start - 1, steps: 90),
+            sample(start, steps: 100),
+            sample(start + 1, steps: 103),
+            sample(start + 2, steps: 105),
+            sample(start + 86_400, steps: 110)
+        ]
+        XCTAssertEqual(StepCounter.capturedToday(samples, now: today, calendar: calendar), 5)
+    }
+
+    func testCapturedTodayDoesNotClaimMissingHistoryAsZero() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        XCTAssertNil(StepCounter.capturedToday([], now: now, calendar: calendar))
+    }
+
+    func testConflictingSameSecondReplayDoesNotInventSteps() {
+        let records = [
+            sample(10, steps: 100), sample(11, steps: 101),
+            sample(11, steps: 120), sample(12, steps: 122),
+            sample(13, steps: 124)
+        ]
+        // The disputed second is discarded. Only 12 -> 13 is certain.
+        XCTAssertEqual(StepCounter.total(records), 2)
+        XCTAssertEqual(StepCounter.total(records.reversed().map { $0 }), 2)
+    }
+
+    func testRateRejectsConflictingSameSecondReplay() {
+        let records = [sample(10, steps: 100), sample(11, steps: 101),
+                       sample(11, steps: 120), sample(12, steps: 122),
+                       sample(13, steps: 124)]
+        // Only the 12 -> 13 delta is proven; 2 steps over 3 seconds.
+        XCTAssertEqual(StepCounter.rate(records, at: 4) ?? -1, 40, accuracy: 0.001)
+    }
+
+    func testIdenticalSameSecondRetransmissionIsIdempotent() {
+        let records = [sample(10, steps: 100), sample(11, steps: 102),
+                       sample(11, steps: 102), sample(12, steps: 104)]
+        XCTAssertEqual(StepCounter.total(records), 4)
+    }
+
 }

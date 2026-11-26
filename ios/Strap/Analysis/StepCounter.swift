@@ -24,12 +24,31 @@ enum StepCounter {
     static let wrapFloor = 0xF000
     static let wrapCeiling = 0x0FFF
 
+    /// Captured steps within the current local calendar day, not a verified all-day total.
+    /// The preceding sample is intentionally excluded at midnight: carrying a
+    /// delta across the boundary would assign an unknown number of steps to today.
+    static func capturedToday(_ samples: [V18Sample], now: Date = Date(), calendar: Calendar = .current) -> Int? {
+        let start = calendar.startOfDay(for: now).timeIntervalSince1970
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: now)) else { return nil }
+        let end = nextDay.timeIntervalSince1970
+        return total(samples.filter { Double($0.unix) >= start && Double($0.unix) < end })
+    }
+
     /// Steps recorded across a window. nil when no record carried a counter.
     static func total(_ samples: [V18Sample]) -> Int? {
         var total = 0
         var previous: (unix: Int, value: Int)?
         var sawCounter = false
-        for sample in samples.sorted(by: { $0.unix < $1.unix }) {
+        // Conflicting replay values at the same timestamp are ambiguous.
+        // Drop the second and reset the baseline to avoid invented steps.
+        let grouped = Dictionary(grouping: samples.filter { $0.stepCounter != nil }, by: { $0.unix })
+        for second in grouped.keys.sorted() {
+            guard let records = grouped[second], let sample = records.first else { continue }
+            if Set(records.compactMap({ $0.stepCounter })).count > 1 {
+                sawCounter = true
+                previous = nil
+                continue
+            }
             guard let value = sample.stepCounter else { continue }
             sawCounter = true
             guard let before = previous else {
@@ -78,19 +97,9 @@ enum StepCounter {
         guard window.count >= 2, let start = window.first, let last = window.last else {
             return nil
         }
-        var total = 0
-        for (before, after) in zip(window, window.dropFirst()) {
-            let gap = after.unix - before.unix
-            // Do not turn duplicate timestamps or long sync gaps into cadence.
-            // Match total() semantics: only adjacent, continuous counter epochs.
-            guard gap > 0 && gap <= 10,
-                  let beforeSteps = before.stepCounter,
-                  let afterSteps = after.stepCounter else { continue }
-            let steps = delta(from: beforeSteps, to: afterSteps, seconds: gap)
-            if steps <= maxStepsPerSecond * gap {
-                total += steps
-            }
-        }
+        // Reuse the replay-safe total calculation: conflicting same-second
+        // counter payloads must not create a false cadence spike.
+        let total = StepCounter.total(Array(window)) ?? 0
         let span = last.unix - start.unix
         guard span > 0 else { return nil }
         return Double(total) * 60.0 / Double(span)
