@@ -177,4 +177,11 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertEqual(split.windows, 0)
         XCTAssertTrue(StressWindows.series(samples: moving, baseline: baseline(mean: 4.605)).isEmpty)
     }
+
+    func testOvercountedBucketRejectedFromStressWindows() {
+        let overCounted = (0..<300).map { sample($0, rr: [800, 900, 800]) }
+        let split = StressWindows.share(samples: overCounted, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 0)
+        XCTAssertTrue(StressWindows.series(samples: overCounted, baseline: baseline(mean: 4.605)).isEmpty)
+    }
 }

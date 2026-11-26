@@ -35,13 +35,28 @@ enum StressWindows {
         }
         var buckets: [Int: [Double]] = [:]
         var coveredSeconds: [Int: Int] = [:]
+        var firstUnixByBucket: [Int: Int] = [:]
+        var lastUnixByBucket: [Int: Int] = [:]
         for unix in uniqueBySecond.keys.sorted() {
             let sample = uniqueBySecond[unix]!
             let rr = sample.rrIntervalsMS.map(Double.init).filter { (300...2000).contains($0) }
             guard !rr.isEmpty else { continue }
             let bucket = unix / windowSeconds
             coveredSeconds[bucket, default: 0] += 1
+            if firstUnixByBucket[bucket] == nil { firstUnixByBucket[bucket] = unix }
+            lastUnixByBucket[bucket] = unix
             buckets[bucket, default: []].append(contentsOf: rr)
+        }
+        // Reject over-counted buckets whose total beat duration exceeds elapsed span by > 5%.
+        for (bucket, rr) in buckets {
+            if let first = firstUnixByBucket[bucket], let last = lastUnixByBucket[bucket] {
+                let elapsed = max(1, last - first + 1)
+                let totalRRS = rr.reduce(0, +) / 1000.0
+                if totalRRS > Double(elapsed) * 1.05 {
+                    buckets.removeValue(forKey: bucket)
+                    coveredSeconds.removeValue(forKey: bucket)
+                }
+            }
         }
         return (buckets, coveredSeconds)
     }

@@ -1338,11 +1338,12 @@ def _window_rates(detrended: list[float]) -> list[float]:
     window_samples = max(
         min_distance * 3, round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
     )
+    min_window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
     dt = 1.0 / RSA_RESAMPLE_HZ
     rates: list[float] = []
     for start in range(0, len(detrended), window_samples):
         window = detrended[start : start + window_samples]
-        if len(window) < min_distance * 3:
+        if len(window) < min_window_samples:
             continue
         peaks = _find_peaks(window, min_distance)
         if len(peaks) < 3:

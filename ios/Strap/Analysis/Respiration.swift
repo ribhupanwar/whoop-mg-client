@@ -248,14 +248,20 @@ enum Respiration {
             var bins = 0
             var freq = 0.05
             while freq <= ceilingHz + 1e-6 {
+                // Goertzel algorithm: 1 cos + 1 sin per frequency bin instead of 2*N trig calls.
                 let omega = 2.0 * .pi * freq / resampleHz
-                var re = 0.0
-                var im = 0.0
+                let cosW = cos(omega)
+                let sinW = sin(omega)
+                let coeff = 2.0 * cosW
+                var s1 = 0.0
+                var s2 = 0.0
                 for i in 0..<n {
-                    let angle = omega * Double(i)
-                    re += windowed[i] * cos(angle)
-                    im -= windowed[i] * sin(angle)
+                    let s0 = windowed[i] + coeff * s1 - s2
+                    s2 = s1
+                    s1 = s0
                 }
+                let re = s1 - s2 * cosW
+                let im = s2 * sinW
                 let power = re * re + im * im
                 totalPower += power
                 bins += 1

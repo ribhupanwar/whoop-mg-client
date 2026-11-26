@@ -418,6 +418,18 @@ class TestWindowedSleepHRV(unittest.TestCase):
         self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
         self.assertEqual(secs, 300)
 
+    def test_rejects_excessively_sparse_5min_window(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): dense 300s -> 40 ms
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(0, 300)]
+        # Window 2 (300..599): sparse 20s at start + 20s at end (elapsed=300, covered=40 < 150) -> rejected
+        sparse_head = [sample(t, 60, rr=[800 if t % 2 == 0 else 950], accel=0.02) for t in range(300, 320)]
+        sparse_tail = [sample(t, 60, rr=[800 if t % 2 == 0 else 950], accel=0.02) for t in range(580, 600)]
+        res, secs, n_win, _ = windowed_sleep_hrv(w1 + sparse_head + sparse_tail)
+        self.assertEqual(n_win, 1)
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 300)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -542,18 +542,23 @@ enum Hrv {
         var totalNNBeats = 0
         var totalSeconds = 0
 
+        let minCoveredSeconds = max(60, windowSeconds / 2)
+        let minRRDurationS = Double(windowSeconds) * 0.25
+
         for bucket in buckets.keys.sorted() {
             guard let records = buckets[bucket],
+                  records.count >= minCoveredSeconds,
                   let firstUnix = records.first?.unix,
                   let lastUnix = records.last?.unix else { continue }
             let elapsed = lastUnix - firstUnix + 1
-            guard elapsed >= 60 else { continue }
+            guard elapsed >= minCoveredSeconds else { continue }
             let validRRSumMS = records.reduce(0) { acc, s in
                 acc + s.rrIntervalsMS.filter {
                     (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
                 }.reduce(0, +)
             }
-            if Double(validRRSumMS) / 1000.0 > Double(elapsed) * 1.05 {
+            let validRRSumS = Double(validRRSumMS) / 1000.0
+            if validRRSumS < minRRDurationS || validRRSumS > Double(elapsed) * 1.05 {
                 continue
             }
             let res = fromSamples(records)

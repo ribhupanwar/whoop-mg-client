@@ -33,6 +33,9 @@ class MetricABComparison:
 
     metric_name: str
     total_days: int
+    common_paired_days: int
+    baseline_coverage_pct: float
+    candidate_coverage_pct: float
     baseline_stats: ErrorStats | None
     candidate_stats: ErrorStats | None
     mae_delta: float | None  # candidate_mae - baseline_mae (negative = improvement)
@@ -65,19 +68,40 @@ def evaluate_metric_ab(
     observations: Sequence[PairedObservation],
     neutral_tolerance: float = 1e-3,
 ) -> MetricABComparison:
-    """Compare baseline STRAP vs candidate STRAP against WHOOP reference observations."""
-    base_pairs = [
-        (o.whoop_ref, o.baseline_strap)
+    """Compare baseline STRAP vs candidate STRAP on identical paired WHOOP dates."""
+    total_days = len(observations)
+    base_available = sum(
+        1
         for o in observations
-        if o.whoop_ref is not None and o.baseline_strap is not None
-    ]
-    cand_pairs = [
-        (o.whoop_ref, o.candidate_strap)
+        if o.whoop_ref is not None
+        and math.isfinite(o.whoop_ref)
+        and o.baseline_strap is not None
+        and math.isfinite(o.baseline_strap)
+    )
+    cand_available = sum(
+        1
         for o in observations
-        if o.whoop_ref is not None and o.candidate_strap is not None
+        if o.whoop_ref is not None
+        and math.isfinite(o.whoop_ref)
+        and o.candidate_strap is not None
+        and math.isfinite(o.candidate_strap)
+    )
+    base_cov = (100.0 * base_available / total_days) if total_days > 0 else 0.0
+    cand_cov = (100.0 * cand_available / total_days) if total_days > 0 else 0.0
+
+    # Compare strictly on identical paired dates where all three values exist.
+    common = [
+        o
+        for o in observations
+        if o.whoop_ref is not None
+        and math.isfinite(o.whoop_ref)
+        and o.baseline_strap is not None
+        and math.isfinite(o.baseline_strap)
+        and o.candidate_strap is not None
+        and math.isfinite(o.candidate_strap)
     ]
-    base_stats = compute_error_stats(base_pairs)
-    cand_stats = compute_error_stats(cand_pairs)
+    base_stats = compute_error_stats([(o.whoop_ref, o.baseline_strap) for o in common])  # type: ignore[misc]
+    cand_stats = compute_error_stats([(o.whoop_ref, o.candidate_strap) for o in common])  # type: ignore[misc]
 
     mae_delta: float | None = None
     status = "INSUFFICIENT_DATA"
@@ -92,7 +116,10 @@ def evaluate_metric_ab(
 
     return MetricABComparison(
         metric_name=metric_name,
-        total_days=len(observations),
+        total_days=total_days,
+        common_paired_days=len(common),
+        baseline_coverage_pct=round(base_cov, 1),
+        candidate_coverage_pct=round(cand_cov, 1),
         baseline_stats=base_stats,
         candidate_stats=cand_stats,
         mae_delta=mae_delta,

@@ -645,9 +645,14 @@ def windowed_sleep_hrv(
     total_nn_beats = 0
     total_seconds = 0
 
+    min_covered_seconds = max(60, window_seconds // 2)
+    min_rr_duration_s = window_seconds * 0.25
+
     for _, records in sorted(buckets.items()):
+        if len(records) < min_covered_seconds:
+            continue
         elapsed = records[-1].unix - records[0].unix + 1
-        if elapsed < 60:
+        if elapsed < min_covered_seconds:
             continue
         valid_rr_sum_ms = sum(
             v
@@ -655,7 +660,8 @@ def windowed_sleep_hrv(
             for v in r.rr_intervals_ms
             if 300 <= v <= 2000
         )
-        if valid_rr_sum_ms / 1000.0 > elapsed * 1.05:
+        valid_rr_sum_s = valid_rr_sum_ms / 1000.0
+        if valid_rr_sum_s < min_rr_duration_s or valid_rr_sum_s > elapsed * 1.05:
             continue
         res = hrv(records)
         if res.rmssd_ms is None or not math.isfinite(res.rmssd_ms) or res.rmssd_ms <= 0:

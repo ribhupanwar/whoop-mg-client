@@ -2084,6 +2084,31 @@ final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
         XCTAssertEqual(extended.acceptedNNCount, production.nnBeats)
         XCTAssertEqual(extended.rawRRCount, production.beats)
     }
+
+    func testWindowedSleepHrvAveragesMultipleWindowsAndRejectsOvercounted() {
+        let w1 = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 820]) }
+        let w2 = (300..<600).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
+        let w3 = (600..<900).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 860]) }
+        let overCounted = (900..<1200).map { makeSample($0, hr: 60, accel: 0.02, rr: [800, 900, 800]) }
+
+        let result = Hrv.windowedSleepHRV(w1 + w2 + w3 + overCounted)
+        XCTAssertEqual(result.qualifyingWindows, 3)
+        XCTAssertFalse(result.usedSWSFallback)
+        XCTAssertNotNil(result.result.rmssdMS)
+        XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
+        XCTAssertEqual(result.windowSeconds, 900)
+    }
+
+    func testWindowedSleepHrvRejectsSparseBucketAndBumpsCacheKey() {
+        let dense = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
+        let sparseHead = (300..<320).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 950]) }
+        let sparseTail = (580..<600).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 950]) }
+        let result = Hrv.windowedSleepHRV(dense + sparseHead + sparseTail)
+        XCTAssertEqual(result.qualifyingWindows, 1)
+        XCTAssertEqual(result.windowSeconds, 300)
+        XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
+        XCTAssertTrue(HistoryAnalysisCache.dailyKey("2026-11-24").hasPrefix("day-accuracy-v2:"))
+    }
 }
 
 // Seeded random number generator for deterministic tests
