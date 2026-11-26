@@ -2,13 +2,13 @@ import XCTest
 @testable import Strap
 
 final class StepCounterTests: XCTestCase {
-    private func sample(_ unix: Int, steps: Int?) -> V18Sample {
+    private func sample(_ unix: Int, steps: Int?, hr: Int = 70) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(
                 version: 18, flags: 0x80, recordIndex: UInt32(unix),
                 unix: UInt32(unix), subsecQ15: 0
             ),
-            heartRate: 70,
+            heartRate: hr,
             rrIntervalsMS: [],
             dynamicAccelG: 0.02,
             gravityXG: nil,
@@ -288,6 +288,29 @@ final class StepCounterTests: XCTestCase {
         XCTAssertEqual(DailyStepLedger.bestRecordedMinimum(archive: nil, ledger: 5), 5)
         XCTAssertNil(DailyStepLedger.bestRecordedMinimum(archive: nil, ledger: nil))
         XCTAssertNil(DailyStepLedger.bestRecordedMinimum(archive: -1, ledger: nil))
+    }
+
+
+    func testOffWristStepCounterBreaksContinuityInCaptureAndLedger() async throws {
+        let suite = "strap.step-ledger.offwrist." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = Date(timeIntervalSince1970: 1_700_006_400)
+        let start = Int(calendar.startOfDay(for: now).timeIntervalSince1970)
+        let rows = [sample(start, steps: 100),
+                    sample(start + 1, steps: 105, hr: 0), // off wrist
+                    sample(start + 2, steps: 107),
+                    sample(start + 3, steps: 109)]
+        XCTAssertEqual(StepCounter.total(rows), 2)
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest(rows, calendar: calendar, now: now)
+        let count = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(count, 2)
+        await ledger.ingest([sample(start + 1, steps: 105)], calendar: calendar, now: now)
+        let replay = await ledger.capturedToday(now: now, calendar: calendar)
+        XCTAssertEqual(replay, 2)
     }
 
 }
