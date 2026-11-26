@@ -33,10 +33,9 @@ final class StressWindowsTests: XCTestCase {
         )
     }
 
-    /// Ten samples inside one 5-minute bucket. Alternating 1000/1100 ms R-R
-    /// gives RMSSD 100 ms, i.e. lnRMSSD ≈ 4.605.
-    private func window(_ start: Int, rr: [Int] = [1000, 1100]) -> [V18Sample] {
-        (0..<10).map { sample(start + $0 * 30, rr: rr) }
+    /// Realistic one-second density, with 100 ms successive RR differences.
+    private func window(_ start: Int) -> [V18Sample] {
+        (0..<300).map { sample(start + $0, rr: [$0.isMultiple(of: 2) ? 800 : 900]) }
     }
 
     private func baseline(mean: Double, days: Int = 7) -> Baseline {
@@ -113,9 +112,11 @@ final class StressWindowsTests: XCTestCase {
     }
 
     func testSparseScoredWindowsDoNotInventElapsedDuration() {
-        let split = StressWindows.share(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
-        XCTAssertEqual(split.windows, 2)
+        let sparse = (0..<10).map { sample($0 * 30, rr: [800, 900]) }
+        let split = StressWindows.share(samples: sparse, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 0)
         XCTAssertNil(StressWindows.scoredSeconds(split))
+        XCTAssertTrue(StressWindows.series(samples: sparse, baseline: baseline(mean: 4.605)).isEmpty)
     }
 
     func testCompleteScoredWindowsExposeElapsedDuration() {
@@ -128,7 +129,7 @@ final class StressWindowsTests: XCTestCase {
     }
 
     func testPartialExcludedWindowCannotClaimFullDuration() {
-        let rows = (0..<300).map { sample($0, rr: [1000, 1100]) }
+        let rows = window(0)
         let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605),
                                         excluded: [(start: 0, end: 59)])
         XCTAssertNil(StressWindows.scoredSeconds(split))
@@ -158,7 +159,7 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertEqual(points.count, 1)
         // Stress is measured in baseline SDs, not snapped to the high-band threshold.
         // The synthetic alternating RR sequence is filtered before lnRMSSD is scored.
-        let lnRMSSD = Hrv.fromRR(window(0).flatMap { $0.rrIntervalsMS.map(Double.init) }).lnRMSSD
+        let lnRMSSD = Hrv.fromSamples(window(0), rrRange: 300...2000).lnRMSSD
         let expected = Recovery.stressIndex(lnRMSSD: lnRMSSD, baseline: baseline(mean: 5.7)).index
         XCTAssertNotNil(expected)
         XCTAssertEqual(points.first?.index, expected)
@@ -166,7 +167,7 @@ final class StressWindowsTests: XCTestCase {
 
     func testSeriesPreservesRawDeviationAndLegacyPointsRemainReadable() throws {
         let samples = window(0)
-        let lnRMSSD = try XCTUnwrap(Hrv.fromRR(samples.flatMap { $0.rrIntervalsMS.map(Double.init) }).lnRMSSD)
+        let lnRMSSD = try XCTUnwrap(Hrv.fromSamples(samples, rrRange: 300...2000).lnRMSSD)
         for deviation in [-4.0, 10.0] {
             let points = StressWindows.series(samples: samples, baseline: baseline(mean: lnRMSSD + deviation * 0.5))
             let point = try XCTUnwrap(points.first)
@@ -205,6 +206,17 @@ final class StressWindowsTests: XCTestCase {
         let split = StressWindows.share(samples: moving, baseline: baseline(mean: 4.605))
         XCTAssertEqual(split.windows, 0)
         XCTAssertTrue(StressWindows.series(samples: moving, baseline: baseline(mean: 4.605)).isEmpty)
+    }
+
+    func testStressSeriesDoesNotJoinRRThroughMissingSeconds() throws {
+        let first = (0..<100).map { sample($0, rr: [$0.isMultiple(of: 2) ? 800 : 810]) }
+        let second = (200..<300).map { sample($0, rr: [$0.isMultiple(of: 2) ? 1000 : 1010]) }
+        let rows = first + second
+        let hrv = try XCTUnwrap(Hrv.fromSamples(rows, rrRange: 300...2000).lnRMSSD)
+        let norm = baseline(mean: hrv + 0.5)
+        let point = try XCTUnwrap(StressWindows.series(samples: rows, baseline: norm).first)
+        XCTAssertEqual(point.index, 1, accuracy: 0.01)
+        XCTAssertEqual(StressWindows.share(samples: rows, baseline: norm).mediumPct, 100)
     }
 
     func testOvercountedBucketRejectedFromStressWindows() {
