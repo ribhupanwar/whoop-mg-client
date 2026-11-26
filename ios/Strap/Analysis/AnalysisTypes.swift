@@ -179,6 +179,9 @@ struct StressSplit: Codable, Equatable {
     let lowPct: Double?
     let windows: Int
     let reason: String?
+    /// Present only when each scored awake window has complete RR timestamp coverage.
+    /// Older cached splits have no verified duration coverage.
+    var durationCoverageSeconds: Int? = nil
 
     static let unavailable = StressSplit(
         highPct: nil, mediumPct: nil, lowPct: nil, windows: 0,

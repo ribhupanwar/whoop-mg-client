@@ -194,8 +194,8 @@ struct StressView: View {
     }
 
     private func durationText(_ pct: Double?, in split: StressSplit) -> String {
-        guard let pct else { return "—" }
-        let hours = StressWindows.scoredSeconds(split) * pct / 100.0 / 3600.0
+        guard let pct, let seconds = StressWindows.scoredSeconds(split) else { return "—" }
+        let hours = seconds * pct / 100.0 / 3600.0
         return CoachFormat.duration(hours)
     }
 
