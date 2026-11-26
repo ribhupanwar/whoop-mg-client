@@ -218,7 +218,7 @@ enum Recovery {
 }
 
 /// Stress diagnostic metadata for explaining zero or unavailable stress values.
-struct StressDiagnostics {
+struct StressDiagnostics: Codable, Equatable {
     let baselineMean: Double?
     let baselineSD: Double?
     let baselineDays: Int
