@@ -45,6 +45,20 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertEqual(duplicates[.rhr].baselineDays, 1)
         XCTAssertEqual(duplicates.withinCount, 0)
     }
+    func testDuplicatePriorNightUsesLatestCompletedIntervalRegardlessOfInputOrder() {
+        let prior = (-7 ... -1).map { day($0) }
+        var revised = day(-1, rhr: 85)
+        // A later saved revision for the same calendar day.
+        revised.sleepEndUnix += 60
+        let current = day(0, rhr: 60)
+        let first = HealthMonitor.make(days: prior + [revised, current],
+                                       session: session, calendar: calendar)
+        let second = HealthMonitor.make(days: [revised] + prior + [current],
+                                        session: session, calendar: calendar)
+        XCTAssertEqual(first[.rhr].baselineDays, 7)
+        XCTAssertEqual(first[.rhr].reference, second[.rhr].reference)
+        XCTAssertEqual(first[.rhr].reference?.upperBound, 85)
+    }
     func testOutOfRangeAndInsufficientQualityAreNotNormal() {
         let prior = (-7 ... -1).map { day($0) }
         let report = HealthMonitor.make(days: prior + [day(0, rhr: 76)], session: session, calendar: calendar)
