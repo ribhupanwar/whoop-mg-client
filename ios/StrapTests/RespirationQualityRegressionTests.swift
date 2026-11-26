@@ -19,6 +19,15 @@ final class RespirationQualityRegressionTests: XCTestCase {
         }
     }
 
+    func testRespirationRejectsOvercountedBeatTime() {
+        let rows = (0..<600).map { second in
+            row(second, rr: [800, second.isMultiple(of: 2) ? 840 : 880])
+        }
+        let result = Respiration.estimate(rows)
+        XCTAssertNil(result.breathsPerMinute)
+        XCTAssertTrue(result.reason?.contains("exceeded elapsed") == true)
+    }
+
     func testMissingRRAndInvalidMotionSplitSegments() {
         let left = row(0, rr: [900])
         let right = row(2, rr: [920])
