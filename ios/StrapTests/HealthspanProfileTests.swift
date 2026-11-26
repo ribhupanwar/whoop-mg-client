@@ -2,6 +2,25 @@ import XCTest
 @testable import Strap
 
 final class HealthspanProfileTests: XCTestCase {
+
+    func testHealthspanCoverageUsesRequestedCalendarForObservedDays() throws {
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        var la = Calendar(identifier: .gregorian)
+        la.timeZone = try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles"))
+        // 00:30 UTC and 23:30 UTC are distinct UTC dates but the same LA date.
+        let first = Date(timeIntervalSince1970: 1_795_651_800)
+        let last = first.addingTimeInterval(23 * 3600)
+        let observation = HealthspanObservation(value: 50, observedDays: 2,
+                                                firstObserved: first, lastObserved: last)
+        XCTAssertTrue(observation.isValid(calendar: utc))
+        XCTAssertFalse(observation.isValid(calendar: la))
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation],
+                                                asOf: last.addingTimeInterval(60))
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 2, windowDays: 3, calendar: utc))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 2, windowDays: 3, calendar: la))
+    }
+
     func testBirthdayUsesCalendarDaysAndPersistsWithoutTimeZoneShift() throws {
         let india = ProfileBirthDate.calendar(timeZone: try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata")))
         let west = ProfileBirthDate.calendar(timeZone: try XCTUnwrap(TimeZone(identifier: "America/Los_Angeles")))
