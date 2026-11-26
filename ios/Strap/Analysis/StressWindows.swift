@@ -7,6 +7,9 @@ import Foundation
 enum StressWindows {
     static let windowSeconds = 300
     static let maxRestingAccelG = 0.25
+    // Match the existing five-minute HRV coverage floor, not a WHOOP calibration.
+    static let minimumCoveredSeconds = 150
+    static let minimumRRDurationSeconds = 75.0
 
     static func outsideWorkouts(
         samples: [V18Sample], baseline: Baseline?, sleep: [(start: Int, end: Int)],
@@ -19,11 +22,12 @@ enum StressWindows {
     private static func bucketedRR(
         samples: [V18Sample],
         excluded: [(start: Int, end: Int)]
-    ) -> (buckets: [Int: [Double]], coveredSeconds: [Int: Int]) {
+    ) -> (buckets: [Int: [V18Sample]], coveredSeconds: [Int: Int]) {
         var uniqueBySecond: [Int: V18Sample] = [:]
         for sample in samples {
             guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
-            if let accel = sample.dynamicAccelG, accel > maxRestingAccelG { continue }
+            guard let accel = sample.dynamicAccelG, accel.isFinite,
+                  (0...maxRestingAccelG).contains(accel) else { continue }
             if excluded.contains(where: { $0.start <= sample.unix && sample.unix <= $0.end }) {
                 continue
             }
@@ -33,7 +37,7 @@ enum StressWindows {
             }
             uniqueBySecond[sample.unix] = sample
         }
-        var buckets: [Int: [Double]] = [:]
+        var buckets: [Int: [V18Sample]] = [:]
         var coveredSeconds: [Int: Int] = [:]
         var firstUnixByBucket: [Int: Int] = [:]
         var lastUnixByBucket: [Int: Int] = [:]
@@ -45,14 +49,14 @@ enum StressWindows {
             coveredSeconds[bucket, default: 0] += 1
             if firstUnixByBucket[bucket] == nil { firstUnixByBucket[bucket] = unix }
             lastUnixByBucket[bucket] = unix
-            buckets[bucket, default: []].append(contentsOf: rr)
+            buckets[bucket, default: []].append(sample)
         }
         // Reject over-counted buckets whose total beat duration exceeds elapsed span by > 5%.
-        for (bucket, rr) in buckets {
+        for (bucket, records) in buckets {
             if let first = firstUnixByBucket[bucket], let last = lastUnixByBucket[bucket] {
                 let elapsed = max(1, last - first + 1)
-                let totalRRS = rr.reduce(0, +) / 1000.0
-                if totalRRS > Double(elapsed) * 1.05 {
+                let totalRRS = records.flatMap(\.rrIntervalsMS).filter { (300...2000).contains($0) }.reduce(0.0) { $0 + Double($1) } / 1000.0
+                if records.count < minimumCoveredSeconds || totalRRS < minimumRRDurationSeconds || totalRRS > Double(elapsed) * 1.05 {
                     buckets.removeValue(forKey: bucket)
                     coveredSeconds.removeValue(forKey: bucket)
                 }
@@ -84,7 +88,7 @@ enum StressWindows {
         var completeCoverage = true
         for (bucket, rr) in buckets {
             let result = Recovery.stressIndex(
-                lnRMSSD: Hrv.fromRR(rr).lnRMSSD, baseline: baseline
+                lnRMSSD: Hrv.fromSamples(rr, rrRange: 300...2000).lnRMSSD, baseline: baseline
             )
             guard let index = result.index else { continue }
             scored += 1
@@ -133,7 +137,7 @@ enum StressWindows {
         for bucket in buckets.keys.sorted() {
             let rr = buckets[bucket]!
             let result = Recovery.stressIndex(
-                lnRMSSD: Hrv.fromRR(rr).lnRMSSD, baseline: baseline
+                lnRMSSD: Hrv.fromSamples(rr, rrRange: 300...2000).lnRMSSD, baseline: baseline
             )
             guard let index = result.index else { continue }
             points.append(StressPoint(unix: bucket * windowSeconds, index: index,
