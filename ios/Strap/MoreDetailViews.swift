@@ -545,6 +545,23 @@ struct DataManagementView: View {
                 Panel {
                     SectionTitle("STRAP BACKUP & RESTORE")
                     Button {
+                        prepareFourCSVExport()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Export WHOOP-style Data (ZIP)")
+                                .font(StrapTypography.body(13.5, weight: .semibold))
+                            Spacer()
+                        }
+                        .foregroundStyle(Color.appAccent)
+                        .padding(.vertical, 6)
+                    }
+                    .disabled(preparingExport || store.band.isAnalyzingHistory || store.band.isSavingHistory)
+                    Text("Four compact CSV summaries. No raw sensor history; not a full restore backup.")
+                        .font(StrapTypography.body(10.5))
+                        .foregroundStyle(Color.appMuted)
+                    Divider().background(Color.appLine).padding(.vertical, 4)
+                    Button {
                         prepareExport(fullBackup: true)
                     } label: {
                         HStack {
@@ -717,6 +734,31 @@ struct DataManagementView: View {
                 } catch { whoopImportStatus = "Import failed: " + error.localizedDescription }
             }
         } catch { whoopImportStatus = "Import failed: " + error.localizedDescription }
+    }
+
+    private func prepareFourCSVExport() {
+        exportURL = nil
+        exportError = nil
+        exportingBackup = false
+        preparingExport = true
+        let days = store.band.days
+        let allDetected = (store.band.summary?.activities ?? []) + store.detectedBandActivities
+        var seen = Set<Int>()
+        let detected = allDetected.filter {
+            !store.activities.isDetectedDeleted($0) && seen.insert($0.startUnix).inserted
+        }
+        let live = store.liveActivities
+        let manual = store.manualActivities
+        let journal = Array(store.journalEntries.values)
+        Task {
+            defer { preparingExport = false }
+            do {
+                exportURL = try await Task.detached(priority: .userInitiated) {
+                    try StrapFourCSVExport.write(StrapFourCSVExport.files(
+                        days: days, detected: detected, live: live, manual: manual, journal: journal))
+                }.value
+            } catch { exportError = error.localizedDescription }
+        }
     }
 
     private func prepareExport(fullBackup: Bool) {
