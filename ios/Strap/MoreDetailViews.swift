@@ -892,6 +892,7 @@ struct NotificationSettingsView: View {
 
 struct AppPreferencesView: View {
     @EnvironmentObject private var store: AppStore
+    @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet."
 
@@ -899,7 +900,13 @@ struct AppPreferencesView: View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
                 Panel {
-                    SectionTitle("DISPLAY FORMATS")
+                    SectionTitle("APPEARANCE & DISPLAY")
+                    Picker("Appearance", selection: $appearanceMode) {
+                        Text("System").tag("system")
+                        Text("Light").tag("light")
+                        Text("Dark").tag("dark")
+                    }
+                    .pickerStyle(.segmented)
                     Text("Measurements are shown in metric units. Localized times follow your iPhone settings.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
