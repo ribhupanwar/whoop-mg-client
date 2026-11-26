@@ -72,6 +72,12 @@ class TestRespRateFromRR(unittest.TestCase):
         for rows in ([bad, good], [good, bad]):
             self.assertEqual(_rr_segments(rows), [[(0, 900), (0, 920)]])
 
+    def test_respiration_rejects_overcounted_beat_time(self):
+        rows = [sample(i, [800, 840 if i % 2 else 880]) for i in range(600)]
+        result = resp_rate_from_rr(rows)
+        self.assertIsNone(result.breaths_per_min)
+        self.assertIn("exceeded elapsed", result.reason)
+
     def test_motion_and_missing_rr_are_boundaries(self):
         left = sample(0, [900])
         right = sample(2, [920])
