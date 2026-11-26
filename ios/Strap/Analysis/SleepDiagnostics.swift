@@ -71,7 +71,7 @@ enum SleepDiagnostics {
             fields.append(sample.spo2CandidateKind.rawValue)
             fields.append(sample.cardiacFlags.map { String($0) } ?? "")
             fields.append(number(sample.signalQualityLogVariance))
-            fields.append(sample.stepMotionCounter.map { String($0) } ?? "")
+            fields.append(sample.stepCounter.map { String($0) } ?? "")
             fields.append(sample.activityClass.map { String($0) } ?? "")
             fields.append(sample.wearing ? "1" : "0")
             result += fields.joined(separator: ",") + "\n"
