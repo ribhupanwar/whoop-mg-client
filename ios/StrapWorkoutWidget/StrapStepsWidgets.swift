@@ -93,6 +93,13 @@ struct StrapCapturedStepsLiveWidget: Widget {
                     Text("CAPTURED STEPS · MINIMUM")
                         .font(.caption2.bold())
                         .foregroundStyle(.secondary)
+                    if let bpm = context.state.heartRate {
+                        Text("\(bpm) BPM").font(.caption.bold()).foregroundStyle(.orange)
+                    }
+                    if let strain = context.state.estimatedStrain {
+                        Text(String(format: "%.1f EST. STRAIN", strain))
+                            .font(.caption2).foregroundStyle(.secondary)
+                    }
                     Text(context.state.lastObservedAt, style: .relative)
                         .font(.caption2)
                         .foregroundStyle(.secondary)
@@ -116,6 +123,13 @@ struct StrapCapturedStepsLiveWidget: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
                         Text("RECORDED MINIMUM").font(.caption2)
+                        Spacer()
+                        if let bpm = context.state.heartRate {
+                            Text("\(bpm) BPM").font(.caption2)
+                        }
+                        if let strain = context.state.estimatedStrain {
+                            Text(String(format: "%.1f EST STRAIN", strain)).font(.caption2)
+                        }
                         Spacer()
                         Text(context.state.lastObservedAt, style: .relative).font(.caption2)
                     }
