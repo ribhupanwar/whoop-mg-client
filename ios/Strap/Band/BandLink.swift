@@ -2662,11 +2662,11 @@ final class BandLink: NSObject, ObservableObject {
             lastLiveHRAt = Date()
             // When a verified walking card already exists, update measured HR
             // at a system-friendly cadence. HR never increments the step count.
-            let today'sStrain = liveDayStrainDateKey == JournalStore.dayKey(for: Date())
+            let todaysStrain = liveDayStrainDateKey == JournalStore.dayKey(for: Date())
                 ? liveDayStrain : nil
             Task { @MainActor in
                 CapturedStepsLiveActivityController.shared.updateVitals(
-                    heartRate: bpm, estimatedStrain: today'sStrain
+                    heartRate: bpm, estimatedStrain: todaysStrain
                 )
             }
             liveHRNotificationCount += 1
