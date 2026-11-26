@@ -193,4 +193,26 @@ final class StepCounterTests: XCTestCase {
         XCTAssertNil(tomorrow)
     }
 
+
+    func testPersistentLedgerRebucketsWhenTimezoneChanges() async throws {
+        let suite = "strap.step-ledger.timezone." + UUID().uuidString
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        var utc = Calendar(identifier: .gregorian)
+        utc.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        var kolkata = Calendar(identifier: .gregorian)
+        kolkata.timeZone = try XCTUnwrap(TimeZone(identifier: "Asia/Kolkata"))
+        let midnightUTC = 1_700_006_400
+        let now = Date(timeIntervalSince1970: Double(midnightUTC + 60))
+        let ledger = DailyStepLedger(defaults: defaults)
+        await ledger.ingest([sample(midnightUTC - 2, steps: 100),
+                             sample(midnightUTC - 1, steps: 102),
+                             sample(midnightUTC, steps: 104),
+                             sample(midnightUTC + 1, steps: 106)], calendar: utc, now: now)
+        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: utc), 2)
+        XCTAssertEqual(await ledger.capturedToday(now: now, calendar: kolkata), 6)
+        let restored = DailyStepLedger(defaults: defaults)
+        XCTAssertEqual(await restored.capturedToday(now: now, calendar: kolkata), 6)
+    }
+
 }
