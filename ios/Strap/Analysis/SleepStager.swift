@@ -132,7 +132,7 @@ enum SleepStager {
         // for each epoch; preserve the existing 80% up-state wake gate.
         var upSecondsByEpoch: [Int: Int] = [:]
         for sample in records.values where sample.sleepState == 3 {
-            let index = (sample.unix - start) / epochS
+            let index = absoluteEpochIndex(unix: sample.unix, sessionStart: start)
             guard index >= 0, index < epochs.count,
                   epochs[index].start <= sample.unix,
                   sample.unix < epochs[index].end else { continue }
@@ -198,6 +198,13 @@ enum SleepStager {
             remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
             hrCoverage: coverage, reason: coverageReason
         )
+    }
+
+    /// Feature epochs are anchored to absolute 30-second boundaries, with
+    /// a clipped first epoch for non-aligned session starts.
+    static func absoluteEpochIndex(unix: Int, sessionStart: Int) -> Int {
+        let gridStart = sessionStart - ((sessionStart % epochS + epochS) % epochS)
+        return (unix - gridStart) / epochS
     }
 
     // MARK: - Features
