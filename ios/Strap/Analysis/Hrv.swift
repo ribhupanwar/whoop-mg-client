@@ -511,7 +511,7 @@ enum Hrv {
         _ samples: [V18Sample],
         deepEpochs: [ClosedRange<Int>] = [],
         quietAccelG: Double = 0.15,
-        windowSeconds: Int = restingMinWindowS,
+        windowSeconds: Int = 300,
         minBeatsPerWindow: Int = 21
     ) -> (result: HrvResult, windowSeconds: Int, qualifyingWindows: Int, usedSWSFallback: Bool) {
         var uniqueBySecond: [Int: V18Sample] = [:]
