@@ -37,6 +37,20 @@ final class RespirationQualityRegressionTests: XCTestCase {
         XCTAssertTrue(result.reason?.contains("insufficient RR beat-time coverage") == true)
     }
 
+    func testDominantOutOfBandPeakCannotMasqueradeAsInBandRespiration() {
+        let mixed = (0..<1200).map { index -> Double in
+            let t = Double(index) / Respiration.resampleHz
+            return 80 * sin(2 * .pi * 0.45 * t) + 20 * sin(2 * .pi * (17.0 / 60.0) * t)
+        }
+        XCTAssertTrue(Respiration.spectralWindowRates(mixed, medianRRSeconds: 0.8).isEmpty)
+        let inBand = (0..<1200).map { index in
+            80.0 * sin(2 * .pi * (17.0 / 60.0) * Double(index) / Respiration.resampleHz)
+        }
+        let result = Respiration.spectralWindowRates(inBand, medianRRSeconds: 0.8)
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first ?? 0, 17, accuracy: 0.4)
+    }
+
     func testSlowRespirationDoesNotDouble() throws {
         let rows = (0..<900).map { second in
             row(second, rr: [1000 + Int(80 * sin(2 * .pi * 11 * Double(second) / 60))])

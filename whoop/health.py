@@ -1410,7 +1410,9 @@ def _window_rates(detrended: list[float]) -> list[float]:
 def _spectral_window_rates(
     detrended: list[float], median_rr_seconds: float
 ) -> list[float]:
-    ceiling_hz = min(0.40, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.40
+    # Search beyond the publishable band so a dominant out-of-band peak
+    # cannot be hidden by truncating the spectrum at 24 breaths/min.
+    ceiling_hz = min(0.50, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.50
     if ceiling_hz <= 0.16:
         return []
     window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
@@ -1450,7 +1452,7 @@ def _spectral_window_rates(
         if (
             mean_power > 0
             and (best_power / mean_power) >= 2.0
-            and 0.133 <= best_freq <= 0.417
+            and RESP_PLAUSIBLE_MIN_BPM <= best_freq * 60 <= RESP_PLAUSIBLE_MAX_BPM
             and best_freq + 0.005 <= ceiling_hz + 1e-6
         ):
             rates.append(best_freq * 60.0)

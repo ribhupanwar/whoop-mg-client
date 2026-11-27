@@ -263,11 +263,15 @@ enum Respiration {
         return rates
     }
 
-    /// Hann-windowed spectral RSA peak estimator over the 0.15–0.40 Hz HF band
+    /// Hann-windowed spectral RSA: search up to 0.50 Hz (beat-Nyquist limited),
+    /// but publish only peaks in the existing plausible respiratory band.
     /// (Nyquist-bounded by `0.5 / medianRRSeconds`) with SNR >= 2.0 gating.
     /// Avoids the high-frequency jitter bias of time-domain peak picking.
     static func spectralWindowRates(_ detrended: [Double], medianRRSeconds: Double) -> [Double] {
-        let ceilingHz = medianRRSeconds > 0 ? min(0.40, 0.5 / medianRRSeconds) : 0.40
+        // Searching only to 0.40 Hz can hide a dominant out-of-band signal
+        // and falsely publish its weaker in-band peak. Search wider, do not
+        // widen the accepted rate range.
+        let ceilingHz = medianRRSeconds > 0 ? min(0.50, 0.5 / medianRRSeconds) : 0.50
         guard ceilingHz > 0.16 else { return [] }
         let windowSamples = Int((windowS * resampleHz).rounded())
         let minSamples = Int((windowS * resampleHz / 2.0).rounded())
@@ -315,7 +319,7 @@ enum Respiration {
             }
             let meanPower = bins > 0 ? totalPower / Double(bins) : 0.0
             if meanPower > 0, (bestPower / meanPower) >= 2.0,
-               bestFreq >= 0.133, bestFreq <= 0.417,
+               bestFreq * 60 >= plausibleMinBPM, bestFreq * 60 <= plausibleMaxBPM,
                bestFreq + 0.005 <= ceilingHz + 1e-6 {
                 rates.append(bestFreq * 60.0)
             }
