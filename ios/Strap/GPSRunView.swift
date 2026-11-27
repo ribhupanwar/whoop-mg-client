@@ -27,7 +27,6 @@ struct GPSRunView: View {
     @State private var showDiscardConfirm = false
     @State private var workoutPage: WorkoutPage = .strain
     @State private var hrHistory: [HeartRateSample] = []
-    @State private var lastRecordedHRAt: Date?
 
     private var canRecordGPS: Bool {
         switch selectedActivity {
@@ -107,36 +106,6 @@ struct GPSRunView: View {
         .onReceive(ticker) { _ in
             recorder.tick()
             updateHRHistory()
-            if recorder.phase == .recording, let observed = store.band.lastLiveHRAt,
-               observed != lastRecordedHRAt, let bpm = liveBPM(at: Date()) {
-                recorder.addHeartRateSample(bpm)
-                lastRecordedHRAt = observed
-            }
-            WorkoutLiveActivityController.shared.update(
-                session: recorder.currentSession, phase: recorder.phase,
-                heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
-                distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds,
-                steps: store.band.recordedTodayFromLedger, stepsObservedAt: store.band.capturedTodayStepAt
-            )
-        }
-        .onChange(of: recorder.phase) { _, newPhase in
-            if newPhase == .recording, let session = recorder.currentSession {
-                WorkoutLiveActivityController.shared.start(session: session)
-            } else if newPhase == .saved || newPhase == .discarded {
-                WorkoutLiveActivityController.shared.end()
-                if newPhase == .saved, let session = recorder.currentSession, !store.isPreview {
-                    Task { @MainActor in
-                        await LocalWellnessNotice.post(.workout, id: session.id.uuidString) { !store.isPreview }
-                    }
-                }
-            } else if newPhase == .paused {
-                WorkoutLiveActivityController.shared.update(
-                    session: recorder.currentSession, phase: newPhase,
-                    heartRate: liveBPM(at: Date()), maxHeartRate: store.maxHeartRate,
-                    distanceMeters: recorder.distanceMeters, elapsedSeconds: recorder.elapsedSeconds,
-                steps: store.band.recordedTodayFromLedger, stepsObservedAt: store.band.capturedTodayStepAt
-                )
-            }
         }
     }
 

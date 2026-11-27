@@ -10,7 +10,16 @@ final class CapturedStepsLiveActivityController {
     private var activity: Activity<CapturedStepsActivityAttributes>?
     private var lastState: CapturedStepsActivityAttributes.ContentState?
     private var lastUpdate = Date.distantPast
+    private var pendingTask: Task<Void, Never>?
     private init() {}
+
+    private func enqueue(_ work: @escaping @MainActor () async -> Void) {
+        let previous = pendingTask
+        pendingTask = Task { @MainActor in
+            await previous?.value
+            await work()
+        }
+    }
 
     func reconcile(_ snapshot: StepWidgetSnapshot, workoutActive: Bool,
                    heartRate: Int? = nil, estimatedStrain: Double? = nil) {
@@ -49,7 +58,9 @@ final class CapturedStepsLiveActivityController {
             guard state != lastState || now.timeIntervalSince(lastUpdate) >= 60 else { return }
             lastState = state
             lastUpdate = now
-            Task { await active.update(ActivityContent(state: state, staleDate: observedAt.addingTimeInterval(120))) }
+            enqueue {
+                await active.update(ActivityContent(state: state, staleDate: observedAt.addingTimeInterval(120)))
+            }
         } else if UIApplication.shared.applicationState == .active {
             do {
                 let created = try Activity.request(
@@ -75,7 +86,7 @@ final class CapturedStepsLiveActivityController {
         state.estimatedStrain = estimatedStrain
         lastState = state
         lastUpdate = Date()
-        Task {
+        enqueue {
             await active.update(ActivityContent(state: state,
                                staleDate: state.lastObservedAt.addingTimeInterval(120)))
         }
@@ -84,8 +95,8 @@ final class CapturedStepsLiveActivityController {
     func end() {
         activity = nil
         lastState = nil
-        let cards = Activity<CapturedStepsActivityAttributes>.activities
-        Task {
+        enqueue {
+            let cards = Activity<CapturedStepsActivityAttributes>.activities
             for card in cards { await card.end(nil, dismissalPolicy: .immediate) }
         }
     }

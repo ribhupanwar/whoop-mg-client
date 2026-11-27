@@ -228,7 +228,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var capturedTodayLedgerDayKey: String?
     private let dailyStepLedger = DailyStepLedger()
     private var stepLedgerTask: Task<Void, Never>?
-    private var lastStepWidgetReloadAt = Date.distantPast
+    private let stepWidgetCoalescer = WidgetReloadCoalescer(minimumInterval: 60)
     private var stepLedgerUpdateGeneration = 0
     private var stepLedgerArchiveHydrated = false
 
@@ -540,9 +540,10 @@ final class BandLink: NSObject, ObservableObject {
             lastIncreaseAt: captured.lastIncreaseAt,
             connectedAtWrite: isConnected, writtenAt: now
         )
-        if snapshot.save(), now.timeIntervalSince(lastStepWidgetReloadAt) >= 60 {
-            lastStepWidgetReloadAt = now
-            WidgetCenter.shared.reloadTimelines(ofKind: StepWidgetSnapshot.widgetKind)
+        if snapshot.save() {
+            stepWidgetCoalescer.requestReload {
+                WidgetCenter.shared.reloadTimelines(ofKind: StepWidgetSnapshot.widgetKind)
+            }
         }
 
         let phase = WorkoutRecorder.shared.phase

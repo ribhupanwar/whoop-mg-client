@@ -341,6 +341,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                     }
                 }
             }
+            refreshElapsed()
             lastFix = fix
             route.append(fix)
         }

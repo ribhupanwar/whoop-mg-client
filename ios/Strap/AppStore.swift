@@ -36,6 +36,9 @@ final class AppStore: ObservableObject {
     private var monitorCancellable: AnyCancellable?
     private var healthWidgetCancellable: AnyCancellable?
     private var batteryNoticeCancellable: AnyCancellable?
+    private var workoutCoordinator: WorkoutLiveActivityCoordinator?
+    private let healthWidgetCoalescer = WidgetReloadCoalescer(minimumInterval: 60)
+    private var lastSavedHealthWidgetSnapshot: HealthWidgetSnapshot?
     @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
@@ -157,6 +160,13 @@ final class AppStore: ObservableObject {
                 await self?.activateHealthKit(exportBacklog: true)
             }
         }
+        self.workoutCoordinator = WorkoutLiveActivityCoordinator(
+            band: band,
+            recorder: .shared,
+            maxHeartRate: { [weak self] in self?.maxHeartRate },
+            isPreview: { [weak self] in self?.isPreview ?? false },
+            onDayChange: { [weak self] in self?.refreshHealthWidget() }
+        )
         band.autoConnectIfNeeded()
     }
 
@@ -234,8 +244,17 @@ final class AppStore: ObservableObject {
         let snapshot = HealthWidgetSnapshot(dayKey: key, recovery: recovery, sleep: sleep,
                                             strain: strain, battery: battery, savedAt: now,
                                             stress: valid(stress.index, range: 0...3), stressObservedAt: observed)
-        if HealthWidgetSnapshot.save(snapshot) {
-            for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+        let unchanged = lastSavedHealthWidgetSnapshot.map { prev in
+            prev.dayKey == snapshot.dayKey && prev.recovery == snapshot.recovery &&
+            prev.sleep == snapshot.sleep && prev.strain == snapshot.strain &&
+            prev.battery == snapshot.battery && prev.stress == snapshot.stress &&
+            prev.stressObservedAt == snapshot.stressObservedAt
+        } ?? false
+        if !unchanged, HealthWidgetSnapshot.save(snapshot) {
+            lastSavedHealthWidgetSnapshot = snapshot
+            healthWidgetCoalescer.requestReload {
+                for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+            }
         }
     }
 
