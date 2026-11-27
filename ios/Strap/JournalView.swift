@@ -87,35 +87,6 @@ struct JournalView: View {
         }
     }
 
-    private var behaviorPanel: some View {
-        Panel {
-            SectionTitle("Behavior insights")
-            Picker("Compare with", selection: $comparisonMetric) {
-                ForEach(JournalComparisonMetric.allCases, id: \.self) { metric in
-                    Text(metric.rawValue).tag(metric)
-                }
-            }
-            .pickerStyle(.segmented)
-            let rows = JournalQuestion.allCases.compactMap { question in
-                JournalBehaviorComparison.make(question: question,
-                    entries: Array(store.journalEntries.values), days: store.band.days, metric: comparisonMetric)
-            }
-            if rows.isEmpty {
-                Hint("Needs 14 matched recorded days, including at least 5 explicitly answered Yes and 5 No days for a behavior. Unanswered questions are excluded.")
-            } else {
-                ForEach(rows, id: \.question) { row in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(row.question.label).font(StrapTypography.body(13, weight: .bold))
-                        Text("Yes: \(comparisonMetric.format(row.yesMean)) (n=\(row.yesCount)) · No: \(comparisonMetric.format(row.noMean)) (n=\(row.noCount))")
-                            .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
-                    }
-                    .padding(.vertical, 5)
-                }
-                Hint("Compares the next calendar day’s recorded metrics with explicitly logged answers. Observational association only; not a causal effect or score adjustment.")
-            }
-        }
-    }
-
     // MARK: Questions
 
     private var questionsPanel: some View {
