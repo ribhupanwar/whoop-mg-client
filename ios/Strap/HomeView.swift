@@ -174,14 +174,10 @@ struct HomeView: View {
                 }
             }
             .background {
-                if #available(iOS 26.0, *) {
-                    Rectangle()
-                        .fill(.ultraThinMaterial)
-                        .overlay(Color.appCanvasTop.opacity(0.70))
-                        .ignoresSafeArea(edges: .top)
-                } else {
-                    Color.appCanvasTop.opacity(0.98)
-                }
+                // Keep the sticky header opaque and continuous with the app canvas.
+                // iOS 26 ultraThinMaterial produces a gray partition across the top.
+                Color.appCanvasTop
+                    .ignoresSafeArea(edges: .top)
             }
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -872,7 +868,7 @@ struct HomeView: View {
                                 }
                             }
                     }
-                    if detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
+                    if store.band.latestSleepSession == nil && todayNaps.isEmpty && detectedRows.isEmpty && liveRows.isEmpty && manualRows.isEmpty {
                         Text("No activities for this day yet.")
                             .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
