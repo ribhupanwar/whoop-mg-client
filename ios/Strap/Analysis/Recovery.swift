@@ -234,3 +234,45 @@ struct StressDiagnostics: Codable, Equatable {
     let lastUpdateUnix: Int?
     let unavailableReason: String?
 }
+
+
+/// Capture-local, uncalibrated candidate aggregation. Equal weight per
+/// qualifying burst, rather than per candidate second. Not an SpO2 reading.
+struct OxygenWindowEvidence: Equatable {
+    let candidateMean: Double?
+    let observedWindows: Int
+    let acceptedWindows: Int
+    let acceptedSeconds: Int
+
+    static func calculate(_ samples: [V18Sample]) -> Self {
+        let rows = HistoricalCaptureRecovery.merged(samples).values.sorted { $0.unix < $1.unix }
+        var current: [Double] = []
+        var last: Int?
+        var medians: [Double] = []
+        var observed = 0
+        var seconds = 0
+        func finish() {
+            guard last != nil else { return }
+            observed += 1
+            if current.count >= 5 {
+                medians.append(Stats.median(current))
+                seconds += current.count
+            }
+            current.removeAll()
+            last = nil
+        }
+        for row in rows {
+            guard row.wearing else { finish(); continue }
+            guard let raw = row.spo2CandidateRaw, raw != 0 else { continue }
+            if let previous = last, row.unix - previous > 2 { finish() }
+            last = row.unix
+            if row.spo2CandidateKind == .pct, let pct = row.spo2CandidatePct,
+               (70...100).contains(pct) {
+                current.append(Double(pct))
+            }
+        }
+        finish()
+        return Self(candidateMean: medians.isEmpty ? nil : Stats.rounded(Stats.mean(medians), 1),
+                    observedWindows: observed, acceptedWindows: medians.count, acceptedSeconds: seconds)
+    }
+}

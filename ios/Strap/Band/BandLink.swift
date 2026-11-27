@@ -156,6 +156,17 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var commandFailureCount: Int = 0
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
     @Published private(set) var nativeDeepTelemetry = NativeDeepTelemetry()
+    @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
+    @Published private(set) var liveIMURhythm = IMURhythmWindow()
+    @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
+    @Published private(set) var gen5R10Candidate: Gen5R10RawCandidate?
+    @Published private(set) var oxygenWindowEvidence: OxygenWindowEvidence?
+    @Published private(set) var opticalRRComparison: OpticalRRRespirationComparison?
+    @Published private(set) var nativeIMUClassifierReport: NativeIMUClassifierEvidence.Report?
+    @Published private(set) var opticalRRFusion: OpticalRRFusionEvidence?
+    private var completedOpticalBursts: [V26RespiratoryEvidence.Candidate] = []
+    private var pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
+    private var completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
     private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
@@ -881,6 +892,8 @@ final class BandLink: NSObject, ObservableObject {
                                           startedAt: began, lastStepAt: began)
         let databaseURL = archiveWriter.databaseURL
         let samples = retainedHistoricalSamples
+        let imuEvidence = completedIMUClassifierEvidence
+        let opticalBursts = completedOpticalBursts
         let sexSnapshot = sex
         let maxSnapshot = maxHR
         let needSnapshot = needHours
@@ -1044,6 +1057,16 @@ final class BandLink: NSObject, ObservableObject {
             guard !cancellation.isCancelled else { return }
             let scoredDays = freshDays
             let finalFresh = fresh
+            let imuSleep = (finalFresh.sleepSessions ?? []).map {
+                SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                            quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+            }
+            let imuReport = imuEvidence.compare(samples: samples, sleep: imuSleep,
+                                                activities: finalFresh.activities)
+            let fusion = finalFresh.latestSleepSession.flatMap {
+                OpticalRRFusionEvidence.evaluate(opticalBursts, samples: samples,
+                                                  startUnix: $0.startUnix, endUnix: $0.endUnix)
+            }
             let checkpointError = cacheSetupError ?? cache?.lastError
             submittedResult = true
             DispatchQueue.main.async { [weak self] in
@@ -1061,6 +1084,8 @@ final class BandLink: NSObject, ObservableObject {
                 self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
                            editedDays: editedDays)
                 self.summary = finalFresh
+                self.nativeIMUClassifierReport = imuReport
+                self.opticalRRFusion = fusion
                 self.lastSleepAnalysis = report
                 self.persistMetricsSnapshot()
                 self.isAnalyzingHistory = false
@@ -1893,6 +1918,10 @@ final class BandLink: NSObject, ObservableObject {
     private func resetLink() {
         linkGeneration = UUID()
         liveRRSourceWindows = LiveRRSourceWindows()
+        liveIMUTelemetry = nil
+        liveIMURhythm = IMURhythmWindow()
+        dedicatedIMURaw = nil
+        gen5R10Candidate = nil
         passiveECG = nil
         pendingNativeRoutes = RemainingNativeRoutes()
         remainingNativeRoutes = pendingNativeRoutes
@@ -2373,6 +2402,13 @@ final class BandLink: NSObject, ObservableObject {
         pendingHistoryVersionCounts = [:]
         pendingNativeDeepTelemetry = NativeDeepTelemetry()
         nativeDeepTelemetry = pendingNativeDeepTelemetry
+        oxygenWindowEvidence = nil
+        opticalRRComparison = nil
+        pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
+        completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
+        nativeIMUClassifierReport = nil
+        completedOpticalBursts = []
+        opticalRRFusion = nil
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -2467,6 +2503,12 @@ final class BandLink: NSObject, ObservableObject {
         historyUndecodableFrames = pendingHistoryUndecodableFrames
         historyVersionCounts = pendingHistoryVersionCounts
         nativeDeepTelemetry = pendingNativeDeepTelemetry
+        completedIMUClassifierEvidence = pendingIMUClassifierEvidence
+        completedOpticalBursts = pendingNativeDeepTelemetry.respiratoryEvidence.acceptedBursts
+        oxygenWindowEvidence = OxygenWindowEvidence.calculate(samples)
+        opticalRRComparison = pendingNativeDeepTelemetry.respiratoryEvidence.lastAccepted.map {
+            OpticalRRRespirationComparison.compare($0, samples: samples)
+        }
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
         if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
@@ -2767,6 +2809,22 @@ final class BandLink: NSObject, ObservableObject {
             pendingNativeRoutes.recordDataType(type)
             if type == 0x2B || type == 0x34 { publishNativeRoutes() }
         }
+        // Observe the exact R10 candidate passively. Do not divert existing
+        // Type-40 processing on the strength of an unverified layout.
+        if uuid == BandUUID.data, let rawR10 = Gen5R10RawCandidate.decodeVerifiedInner(inner) {
+            gen5R10Candidate = rawR10
+        }
+        if uuid == BandUUID.data, let raw = DedicatedIMURawRecord.decodeVerifiedInner(inner) {
+            dedicatedIMURaw = raw
+        }
+        // OpenStrap protocol: live type-43 uses the same Gen5 IMU shape.
+        // Keep this distinct from historical data, ECG, and measured HR.
+        if uuid == BandUUID.data, type == 0x2B, let motion = Gen5IMUBuffer.decode(inner) {
+            if liveIMUTelemetry.map({ motion.unix > $0.unix }) ?? true {
+                liveIMUTelemetry = NativeDeepTelemetry.Motion(motion)
+                liveIMURhythm.ingest(motion)
+            }
+        }
         if uuid == BandUUID.commandFrom, helloExchange != nil {
             helloExchange?.receive(inner)
             confirmHelloIfReady()
@@ -2853,6 +2911,9 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
             // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
             // Recognize them without inventing heartbeats or marking frames undecodable.
+            if let imu = Gen5IMUBuffer.decode(inner) {
+                pendingIMUClassifierEvidence.ingest(imu)
+            }
             if pendingNativeDeepTelemetry.ingest(inner) || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1

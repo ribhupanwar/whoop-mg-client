@@ -204,6 +204,297 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(deep.v26Frames, 1)
     }
 
+    func testDeepWaveformAndMotionFeatures() throws {
+        var v26 = [UInt8](repeating: 0, count: 76)
+        v26[0] = 0x2F; v26[1] = 26; v26[15] = 100
+        v26[19] = 0xFF; v26[20] = 0x7F
+        v26[21] = 0xFF; v26[22] = 0xFF
+        let pip = try XCTUnwrap(Gen5V26Record.decode(v26)).reconstruction
+        XCTAssertEqual(pip.codes.count, 25)
+        XCTAssertEqual(Array(pip.codes.prefix(3)), [100, 32867, 32866])
+        XCTAssertEqual(pip.firstAmbiguousIndex, 1)
+        XCTAssertEqual(pip.outOfRangeCount, 0)
+        v26[15] = 0xFF; v26[16] = 0xFF; v26[17] = 0x07
+        XCTAssertGreaterThan(try XCTUnwrap(Gen5V26Record.decode(v26)).reconstruction.outOfRangeCount, 0)
+
+        var v22 = [UInt8](repeating: 0, count: 176)
+        v22[0] = 0x2F; v22[1] = 22; v22[13] = 9
+        v22[27] = 0xFF; v22[28] = 0xFF // -1 from anchor zero
+        v22[29] = 1 // wrap back to zero
+        v22[31] = 0x00; v22[32] = 0x80 // negative rail
+        v22[133] = 5
+        let queued = try XCTUnwrap(Gen5V22Record.decode(v22)?.queuedOptical)
+        XCTAssertEqual(queued.channel, 5)
+        XCTAssertTrue(queued.isRetainedChannel)
+        XCTAssertEqual(queued.sampleBits.count, 50)
+        XCTAssertEqual(Array(queued.sampleBits.prefix(3)), [0, UInt32.max, 0])
+        XCTAssertEqual(queued.firstAmbiguousIndex, 3)
+        var deep = NativeDeepTelemetry()
+        XCTAssertTrue(deep.ingest(v22))
+        XCTAssertEqual(deep.tagged?.queuedChannel, 5)
+        XCTAssertEqual(deep.tagged?.queuedSampleCount, 50)
+        v22[14] = 1
+        XCTAssertNil(Gen5V22Record.decode(v22)?.queuedOptical)
+
+        let imu = Gen5IMUBuffer(version: 21, recordIndex: 0, unix: 100, rawSubsecond: 0,
+                                accelerationG: [[1, 2, 1], [0, 0, 0], [0, 0, 0]],
+                                angularVelocityDPS: [[3], [4], [0]])
+        let features = try XCTUnwrap(imu.blockFeatures)
+        XCTAssertEqual(features.magnitudeVariationG, sqrt(2.0 / 9), accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(features.adjacentMagnitudeChangeRMSG), 1, accuracy: 0.000001)
+        XCTAssertEqual(features.meanAngularSpeedDPS, 5, accuracy: 0.000001)
+    }
+
+    func testRawECGCountBoundsAndNativeStatus() throws {
+        var bytes = [UInt8](repeating: 0, count: 1572)
+        bytes[0] = 47; bytes[1] = 16; bytes[24] = 2
+        bytes[21] = 0x34; bytes[22] = 0x12
+        bytes[26] = 0xC2 // flags plus sign bit
+        bytes[29] = 0x01; bytes[30] = 0xFF; bytes[31] = 0xFF
+        bytes[1526] = 1
+        bytes[1527] = 0xFF; bytes[1528] = 0xFF
+        bytes[1549] = 0x02
+        let raw = try XCTUnwrap(MGRawECGPacket.decodeVerifiedInner(bytes))
+        XCTAssertEqual(raw.samples.map(\.code), [-131072, 131071])
+        XCTAssertEqual(raw.samples[0].flagsAndReserved, 0xC0)
+        XCTAssertEqual(raw.leadI, [-1])
+        XCTAssertEqual(raw.leadQ, [2])
+        XCTAssertEqual(raw.status.hrvRelatedRaw, 0x1234)
+        var deep = NativeDeepTelemetry()
+        XCTAssertTrue(deep.ingest(bytes))
+        XCTAssertEqual(deep.rawECGFrames, 1)
+        XCTAssertEqual(deep.rawECGSampleCount, 2)
+        bytes[1526] = 12
+        XCTAssertNil(MGRawECGPacket.decodeVerifiedInner(bytes))
+        bytes[1526] = 0; bytes[24] = 0xF5; bytes[25] = 1
+        XCTAssertNil(MGRawECGPacket.decodeVerifiedInner(bytes))
+
+        var filtered = [UInt8](repeating: 0, count: 228)
+        filtered[0] = 43; filtered[1] = 17
+        filtered[21] = 0x78; filtered[22] = 0x56
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, 0x5678)
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw, 0x5678)
+        filtered[21] = 0xFF; filtered[22] = 0xFF
+        XCTAssertNil(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw)
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, UInt16.max)
+        filtered[21] = 0; filtered[22] = 0
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw, 0)
+    }
+
+    func testR22TagSpecificWindowsAndStaleTail() throws {
+        var bytes = [UInt8](repeating: 0, count: 176)
+        bytes[0] = 47; bytes[1] = 22; bytes[13] = 3
+        bytes[15] = 10; bytes[67] = 20
+        bytes[19] = 0xFF; bytes[20] = 0x7F
+        let dual = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(dual.windows.map(\.firstADC), [10, 20])
+        XCTAssertEqual(dual.windows.map { $0.approximateCodes.count }, [25, 25])
+        XCTAssertEqual(dual.windows[0].firstAmbiguousIndex, 1)
+        bytes[13] = 5; bytes[15] = 42; bytes[23] = 8; bytes[81] = 1; bytes[143] = 99
+        let pip = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(pip.embeddedUnix, 42)
+        XCTAssertEqual(pip.windows.first?.firstADC, 8)
+        XCTAssertEqual(pip.primaryFlagsRaw, 1)
+        bytes[13] = 6
+        bytes[18] = 0; bytes[19] = 0x10
+        let axes = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(axes.accelerationAxesG.map(\.count), [25, 25, 25])
+        XCTAssertEqual(axes.accelerationAxesG[0][0], 1)
+        XCTAssertTrue(axes.windows.isEmpty)
+        XCTAssertNil(axes.embeddedUnix)
+        bytes[14] = 1
+        XCTAssertNil(Gen5V22Record.decode(bytes)?.taggedFields)
+    }
+
+    func testIMURhythmNeedsContiguousFullBlocks() throws {
+        func block(_ second: UInt32, still: Bool = false) -> Gen5IMUBuffer {
+            let x = (0..<100).map { j -> Double in
+                if still { return 1 }
+                let tick = Double(second) + Double(j) / 100
+                return 1 + 0.1 * sin(2 * Double.pi * 2 * tick)
+            }
+            let zero = Array(repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(version: 21, recordIndex: second, unix: second, rawSubsecond: 0,
+                                 accelerationG: [x, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        var rhythm = IMURhythmWindow()
+        for second in 0..<5 { rhythm.ingest(block(UInt32(second))) }
+        rhythm.ingest(block(4))
+        XCTAssertNil(rhythm.candidate)
+        rhythm.ingest(block(5))
+        XCTAssertEqual(try XCTUnwrap(rhythm.candidate).frequencyHz, 2, accuracy: 0.1)
+        rhythm.ingest(block(9))
+        XCTAssertNil(rhythm.candidate)
+        for second in 10...14 { rhythm.ingest(block(UInt32(second), still: true)) }
+        // Reset before an all-still window.
+        rhythm.ingest(block(20, still: true))
+        for second in 21...25 { rhythm.ingest(block(UInt32(second), still: true)) }
+        XCTAssertNil(rhythm.candidate)
+    }
+
+    func testV26ShadowPulseRequiresContinuousClean25HzBlocks() throws {
+        func record(_ second: UInt32, flags: Int = 0x80, clipped: Bool = false) -> Gen5V26Record {
+            let codes = (0..<25).map { i -> Int32 in
+                let time = Double(second) + Double(i) / 25
+                return Int32((1000 * sin(2 * Double.pi * 1.25 * time)).rounded())
+            }
+            var deltas: [Int16] = []
+            for i in 1..<codes.count { deltas.append(Int16(codes[i] - codes[i - 1])) }
+            if clipped { deltas[0] = Int16.max }
+            return Gen5V26Record(header: BandRecordHeader(version: 26, flags: flags,
+                recordIndex: second, unix: second, subsecQ15: 0), pipStateCounter: 0,
+                firstSampleADC: codes[0], opticalDeltas: deltas,
+                channelStateWord: 0, primaryFlagsByte: 0, morphologyByte: 1, alignedTailByte: 0)
+        }
+        var evidence = V26PulseEvidence()
+        for i in 0..<7 { evidence.ingest(record(UInt32(i))) }
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(record(6))
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(record(7))
+        XCTAssertEqual(try XCTUnwrap(evidence.candidate).bpm, 75, accuracy: 2)
+        evidence.ingest(record(8, clipped: true))
+        XCTAssertNil(evidence.candidate)
+        for i in 9...16 { evidence.ingest(record(UInt32(i), flags: 0)) }
+        XCTAssertNil(evidence.candidate)
+    }
+
+    func testV26RespiratoryEvidenceRequiresCleanFullBurst() throws {
+        func block(_ second: UInt32, moving: Bool = false) -> Gen5V26Record {
+            let modulation = sin(2 * Double.pi * Double(second) / 4)
+            let baseline = 5000 + 200 * modulation
+            let amplitude = 1000 + 300 * modulation
+            let codes = (0..<25).map { i -> Int32 in
+                let phase = 2 * Double.pi * Double(i) / 25
+                return Int32((baseline + amplitude * sin(phase)).rounded())
+            }
+            var deltas: [Int16] = []
+            for j in 1..<codes.count { deltas.append(Int16(codes[j] - codes[j - 1])) }
+            return Gen5V26Record(header: BandRecordHeader(version: 26, flags: 0x80,
+                recordIndex: second, unix: second, subsecQ15: 0), pipStateCounter: 0,
+                firstSampleADC: codes[0], opticalDeltas: deltas, accelDeltaG: moving ? 1 : 0.01,
+                channelStateWord: 0, primaryFlagsByte: 0, morphologyByte: 1, alignedTailByte: 0)
+        }
+        var evidence = V26RespiratoryEvidence()
+        for i in 0..<39 { evidence.ingest(block(UInt32(i))) }
+        evidence.ingest(block(38))
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(block(39))
+        XCTAssertEqual(try XCTUnwrap(evidence.candidate).breathsPerMinute, 15, accuracy: 0.01)
+        evidence.ingest(block(40, moving: true))
+        XCTAssertNil(evidence.candidate)
+        for i in 41..<79 { evidence.ingest(block(UInt32(i))) }
+        evidence.ingest(block(80))
+        XCTAssertNil(evidence.candidate)
+    }
+
+    func testDedicatedIMUCountsDoNotReadPaddingOrTrailer() throws {
+        var inner = [UInt8](repeating: 0, count: 40)
+        inner[0] = 52; inner[16] = 2; inner[18] = 1
+        for j in 0..<9 { inner[20 + j * 2] = UInt8(j + 1) }
+        inner[38] = 0xAB
+        let verified = try XCTUnwrap(Gen5Frame.parse(Gen5Frame.build(inner)))
+        let record = try XCTUnwrap(DedicatedIMURawRecord.decodeVerifiedInner(verified))
+        XCTAssertEqual(record.accelerometer, [[1, 2], [3, 4], [5, 6]])
+        XCTAssertEqual(record.gyroscope, [[7], [8], [9]])
+        XCTAssertEqual(record.alignmentBytes, [0xAB, 0])
+        inner[0] = 51
+        XCTAssertNotNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+        inner[16] = 3
+        XCTAssertNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+        inner[16] = 2; inner[0] = 43
+        XCTAssertNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+    }
+
+    func testOxygenWindowMediansHaveEqualWeightAndIgnoreSentinels() {
+        func row(_ unix: UInt32, _ raw: Int) -> V18Sample {
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: unix, unix: unix, subsecQ15: 0),
+                      heartRate: 60, spo2CandidateRaw: raw,
+                      spo2CandidatePct: (70...100).contains(raw) ? raw : nil,
+                      spo2CandidateKind: (70...100).contains(raw) ? .pct : .saturated)
+        }
+        let first = (0..<5).map { row(UInt32(100 + $0), 94) }
+        let second = (0..<20).map { row(UInt32(200 + $0), 98) }
+        let rows = first + second + [row(300, 93), row(301, 128)]
+        let result = OxygenWindowEvidence.calculate(rows + rows)
+        XCTAssertEqual(result.candidateMean, 96)
+        XCTAssertEqual(result.observedWindows, 3)
+        XCTAssertEqual(result.acceptedWindows, 2)
+        XCTAssertEqual(result.acceptedSeconds, 25)
+    }
+
+    func testRespiratoryComparisonRejectsUnalignedRR() {
+        let optical = V26RespiratoryEvidence.Candidate(endUnix: 2000, breathsPerMinute: 15,
+            intensityConcentration: 0.9, amplitudeConcentration: 0.9)
+        let rows = (1000..<1300).map { sec in
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: UInt32(sec), unix: UInt32(sec), subsecQ15: 0),
+                      heartRate: 60, rrIntervalsMS: [1000], dynamicAccelG: 0.01)
+        }
+        let result = OpticalRRRespirationComparison.compare(optical, samples: rows)
+        XCTAssertNil(result.rrRPM)
+        XCTAssertNil(result.agrees)
+        XCTAssertEqual(result.overlappingRRSeconds, 0)
+    }
+
+    func testNativeIMUClassifierEvidenceRequiresExactPairedRecords() {
+        var evidence = NativeIMUClassifierEvidence()
+        let zero = Array(repeating: 0.0, count: 100)
+        let one = Array(repeating: 1.0, count: 100)
+        func block(_ unix: UInt32, index: UInt32? = nil) -> Gen5IMUBuffer {
+            Gen5IMUBuffer(version: 21, recordIndex: index ?? unix, unix: unix, rawSubsecond: 0,
+                          accelerationG: [one, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        let samples = (100..<400).map { sec in
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: UInt32(sec),
+                unix: UInt32(sec), subsecQ15: 0), heartRate: 60, dynamicAccelG: 0)
+        }
+        for sec in 100..<400 { evidence.ingest(block(UInt32(sec))) }
+        evidence.ingest(block(100))
+        evidence.ingest(block(101, index: 999))
+        let sleep = [SleepPeriod(startUnix: 100, endUnix: 399, quietFraction: 1, meanHR: 60, wakeEvents: 0)]
+        let report = evidence.compare(samples: samples, sleep: sleep, activities: [])
+        XCTAssertEqual(report?.pairedSeconds, 299)
+        XCTAssertEqual(report?.sleepAngleWindows, 1)
+        XCTAssertEqual(report?.inactiveSleepWindows, 1)
+        XCTAssertEqual(report?.motionMeanAbsoluteDifferenceG, 0)
+        XCTAssertEqual(evidence.compare(samples: [], sleep: sleep, activities: [])?.pairedSeconds, 0)
+    }
+
+    func testOpticalRRFusionNeedsDistinctAndConsistentWindows() {
+        func row(_ end: UInt32, _ optical: Double, _ rr: Double?) -> OpticalRRRespirationComparison {
+            OpticalRRRespirationComparison(endUnix: end, opticalRPM: optical, rrRPM: rr,
+                                            overlappingRRSeconds: rr == nil ? 0 : 40)
+        }
+        let good = [row(1000, 15, 15), row(1300, 15, 16), row(1600, 15, 14)]
+        XCTAssertEqual(OpticalRRFusionEvidence.aggregate(good).candidateRPM, 15)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate([good[0], good[0], row(1010, 15, 15)]).candidateRPM)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate(good + [row(1900, 15, nil), row(2200, 15, 23)]).candidateRPM)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate([row(1000, 10, 10), row(1300, 16, 16), row(1600, 23, 23)]).candidateRPM)
+    }
+
+    func testGen5R10CandidateRequiresFullSourceDerivedShape() throws {
+        var bytes = [UInt8](repeating: 0, count: 1932)
+        bytes[0] = 0x28
+        bytes[1] = 10
+        bytes[17] = 72
+        bytes[85] = 0xFF
+        bytes[86] = 0xFF
+        bytes[1088] = 55
+        let inner = try XCTUnwrap(Gen5Frame.parse(Gen5Frame.build(bytes)))
+        let record = try XCTUnwrap(Gen5R10RawCandidate.decodeVerifiedInner(inner))
+        XCTAssertEqual(record.rawHeartRate, 72)
+        XCTAssertEqual(record.accelerometer.map(\.count), [100, 100, 100])
+        XCTAssertEqual(record.accelerometer[0][0], -1)
+        XCTAssertEqual(record.gyroscope[2][0], 55)
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(bytes.prefix(96))))
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(bytes.prefix(1928))))
+        bytes[0] = 0x2F
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+        bytes[0] = 0x2B
+        bytes[1] = 21
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

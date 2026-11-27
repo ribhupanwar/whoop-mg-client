@@ -388,11 +388,27 @@ struct HealthView: View {
             Text("Received frames (may include replay) · V20: \(deep.v20Frames) · IMU: \(deep.imuFrames) · V22: \(deep.v22Frames) · V26: \(deep.v26Frames)")
                 .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
+            if deep.rawECGFrames > 0 {
+                Text("R16 raw ECG observations: \(deep.rawECGFrames) · last received \(deep.rawECGSampleCount ?? 0) waveform / \(deep.rawECGLeadCount ?? 0) lead slots (uncalibrated)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let motion = deep.motion {
                 Text("IMU v\(motion.version) · \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(Date(timeIntervalSince1970: Double(motion.unix)).formatted())")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
                 Text(String(format: "Centered acceleration RMS %.3f g · gyro RMS %.1f °/s", motion.centeredAccelerationRMSG, motion.angularVelocityRMSDPS))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                if let features = motion.features {
+                    let change = features.adjacentMagnitudeChangeRMSG.map { String(format: "%.3f g/sample", $0) } ?? "—"
+                    Text(String(format: "Magnitude variation %.3f g · mean rotation %.1f °/s", features.magnitudeVariationG, features.meanAngularSpeedDPS) + " · adjacent change " + change)
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+            if let rhythm = deep.rhythm.candidate {
+                Text(String(format: "Historical IMU rhythm candidate %.2f Hz · correlation %.2f", rhythm.frequencyHz, rhythm.correlation))
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
             }
@@ -409,10 +425,97 @@ struct HealthView: View {
                 Text("V22 latest tag: \(tagged.tag) (\(tagged.known ? "known tag" : "unknown tag")) · unknown frames: \(deep.unknownV22Frames)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let count = tagged.windowCount {
+                    Text("R22 typed optical windows: \(count) · ambiguous: \(tagged.ambiguousWindowCount ?? 0)")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                if let unix = tagged.embeddedUnix {
+                    Text("R22 embedded PIP time: \(Date(timeIntervalSince1970: Double(unix)).formatted())")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                if let count = tagged.accelSamplesPerAxis {
+                    Text("R22 acceleration: \(count) samples per axis")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                if let channel = tagged.queuedChannel, let count = tagged.queuedSampleCount {
+                    let suffix = tagged.firstAmbiguousIndex.map { " · ambiguous from sample \($0)" } ?? ""
+                    Text("V22 v9: channel \(channel) · \(count) reconstructed bit patterns" + (channel == 0 ? "" : " · retained channel") + suffix)
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+            if let evidence = store.band.nativeIMUClassifierReport {
+                let error = evidence.motionMeanAbsoluteDifferenceG.map { String(format: "%.4f g", $0) } ?? "—"
+                Text("Paired IMU/R18: \(evidence.pairedSeconds) seconds · motion difference \(error) (\(evidence.motionComparisonSeconds) pairs)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text("Sleep evidence: \(evidence.sleepPairedSeconds) paired seconds · \(evidence.inactiveSleepWindows)/\(evidence.sleepAngleWindows) inactive orientation windows")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text("Activity evidence: \(evidence.activityHRAndMotionSeconds)/\(evidence.activityPairedSeconds) paired HR + movement seconds · research only")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let fusion = store.band.opticalRRFusion {
+                let rate = fusion.candidateRPM.map { String(format: "%.1f rpm", $0) } ?? "unavailable"
+                Text("Same-night optical/RR fusion candidate: \(rate) · \(fusion.agreedWindows)/\(fusion.attemptedWindows) agreeing windows · unvalidated")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let comparison = store.band.opticalRRComparison {
+                let rr = comparison.rrRPM.map { String(format: "%.1f", $0) } ?? "unavailable"
+                let agreement = comparison.agrees.map { $0 ? "agreement" : "disagreement" } ?? "insufficient overlap"
+                Text(String(format: "Optical %.1f rpm / RR ", comparison.opticalRPM) + rr + " · " + agreement + " · shadow only")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let oxygen = store.band.oxygenWindowEvidence {
+                let value = oxygen.candidateMean.map { String(format: "%.1f", $0) } ?? "—"
+                Text("Oxygen burst candidate: \(value) · \(oxygen.acceptedWindows)/\(oxygen.observedWindows) windows · last capture only, uncalibrated")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let r10 = store.band.gen5R10Candidate {
+                Text("Gen5 R10 candidate: \(r10.accelerometer.first?.count ?? 0) accel / \(r10.gyroscope.first?.count ?? 0) gyro words per axis · unverified wire layout")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let raw = store.band.dedicatedIMURaw {
+                Text("Type-\(raw.packetType) raw IMU candidate: \(raw.accelerometer.first?.count ?? 0) accel / \(raw.gyroscope.first?.count ?? 0) gyro words per axis · scale unverified")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let motion = store.band.liveIMUTelemetry {
+                let measuredAt = Date(timeIntervalSince1970: Double(motion.unix))
+                let age = clock.timeIntervalSince(measuredAt)
+                let recent = store.band.isConnected && age >= 0 && age <= 15
+                Text("Type-43 IMU: \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(recent ? "recent" : "stale")")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let candidate = deep.respiratoryEvidence.candidate {
+                Text(String(format: "V26 optical respiration candidate %.1f rpm · RIIV/RIAV agreement (unvalidated)", candidate.breathsPerMinute))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text(Date(timeIntervalSince1970: Double(candidate.endUnix)).formatted())
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let candidate = deep.pulseEvidence.candidate {
+                Text(String(format: "V26 shadow pulse %.0f bpm · correlation %.2f (unvalidated)", candidate.bpm, candidate.correlation))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
             }
             if let pip = deep.pip {
                 let rms = pip.deltaRMSADC.map { String(format: "%.1f", $0) } ?? "—"
                 Text("V26 PIP: \(pip.deltaCount) optical deltas · delta RMS \(rms) ADC units · \(Date(timeIntervalSince1970: Double(pip.unix)).formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                let suffix = pip.firstAmbiguousIndex.map { " · ambiguous from sample \($0)" } ?? ""
+                Text("Approximate waveform: \(pip.reconstructedCount) codes · \(pip.outOfRangeCount) out of range" + suffix)
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
             }

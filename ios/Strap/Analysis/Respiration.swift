@@ -327,3 +327,84 @@ enum Respiration {
         return rates
     }
 }
+
+
+/// Capture-local shadow corroboration, not a fused production reading.
+/// Require actual RR observations inside the optical interval as well as
+/// the existing RSA estimator's coverage and consensus checks.
+struct OpticalRRRespirationComparison: Equatable {
+    let endUnix: UInt32
+    let opticalRPM: Double
+    let rrRPM: Double?
+    let overlappingRRSeconds: Int
+
+    var agrees: Bool? {
+        rrRPM.map { abs($0 - opticalRPM) <= Respiration.rateAgreementRPM }
+    }
+
+    static func compare(_ optical: V26RespiratoryEvidence.Candidate, samples: [V18Sample]) -> Self {
+        let end = Int(optical.endUnix)
+        let start = end - 299
+        let rows = HistoricalCaptureRecovery.merged(samples.filter { (start...end).contains($0.unix) })
+            .values.sorted { $0.unix < $1.unix }
+        let overlap = rows.filter { row in
+            guard row.unix >= end - 39, row.wearing,
+                  let motion = row.dynamicAccelG, motion.isFinite,
+                  (0...0.10).contains(motion) else { return false }
+            return row.rrIntervalsMS.contains { (300...2000).contains($0) }
+        }.count
+        let rr = overlap >= 32 && rows.count >= 240 ? Respiration.estimate(rows).breathsPerMinute : nil
+        return Self(endUnix: optical.endUnix, opticalRPM: optical.breathsPerMinute,
+                    rrRPM: rr, overlappingRRSeconds: overlap)
+    }
+}
+
+
+/// Conservative research fusion across non-overlapping, same-night RR windows.
+/// Optical and RR are related physiological signals, not independent gold standards.
+/// This candidate cannot replace the validated-production metric without paired
+/// physical reference replay. Missing/disagreeing windows count against consensus.
+struct OpticalRRFusionEvidence: Equatable {
+    let attemptedWindows: Int
+    let agreedWindows: Int
+    let candidateRPM: Double?
+
+    static func aggregate(_ comparisons: [OpticalRRRespirationComparison]) -> Self {
+        var selected: [OpticalRRRespirationComparison] = []
+        for item in comparisons.sorted(by: { $0.endUnix < $1.endUnix }) {
+            if let previous = selected.last, UInt64(item.endUnix) < UInt64(previous.endUnix) + 300 { continue }
+            selected.append(item)
+        }
+        let matching = selected.compactMap { item -> Double? in
+            guard item.agrees == true, let rr = item.rrRPM,
+                  rr.isFinite, item.opticalRPM.isFinite,
+                  (8.0...25.0).contains(rr), (9.0...24.0).contains(item.opticalRPM) else { return nil }
+            return (rr + item.opticalRPM) / 2
+        }
+        guard matching.count >= 3, matching.count * 3 >= selected.count * 2 else {
+            return Self(attemptedWindows: selected.count, agreedWindows: matching.count, candidateRPM: nil)
+        }
+        let center = Stats.median(matching)
+        let coherent = matching.filter { abs($0 - center) <= Respiration.rateAgreementRPM }
+        let rpm = coherent.count >= 3 && coherent.count * 3 >= selected.count * 2
+            ? Stats.rounded(Stats.median(coherent), 1) : nil
+        return Self(attemptedWindows: selected.count, agreedWindows: matching.count, candidateRPM: rpm)
+    }
+
+    static func evaluate(_ candidates: [V26RespiratoryEvidence.Candidate], samples: [V18Sample],
+                         startUnix: Int, endUnix: Int) -> Self? {
+        // endUnix is exclusive (SleepSession convention).
+        var selected: [V26RespiratoryEvidence.Candidate] = []
+        for item in candidates.sorted(by: { $0.endUnix < $1.endUnix }) {
+            let end = Int(item.endUnix)
+            guard end - 299 >= startUnix, end < endUnix else { continue }
+            if let previous = selected.last, UInt64(item.endUnix) < UInt64(previous.endUnix) + 300 { continue }
+            selected.append(item)
+        }
+        guard !selected.isEmpty else { return nil }
+        // At most 24 distinct five-minute comparisons per analysis. Keep
+        // the latest candidates, with all rejected/missing matches counted.
+        let comparisons = selected.suffix(24).map { OpticalRRRespirationComparison.compare($0, samples: samples) }
+        return aggregate(comparisons)
+    }
+}
