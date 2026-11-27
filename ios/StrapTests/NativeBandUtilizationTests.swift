@@ -472,6 +472,29 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertNil(OpticalRRFusionEvidence.aggregate([row(1000, 10, 10), row(1300, 16, 16), row(1600, 23, 23)]).candidateRPM)
     }
 
+    func testGen5R10CandidateRequiresFullSourceDerivedShape() throws {
+        var bytes = [UInt8](repeating: 0, count: 1932)
+        bytes[0] = 0x28
+        bytes[1] = 10
+        bytes[17] = 72
+        bytes[85] = 0xFF
+        bytes[86] = 0xFF
+        bytes[1088] = 55
+        let inner = try XCTUnwrap(Gen5Frame.parse(Gen5Frame.build(bytes)))
+        let record = try XCTUnwrap(Gen5R10RawCandidate.decodeVerifiedInner(inner))
+        XCTAssertEqual(record.rawHeartRate, 72)
+        XCTAssertEqual(record.accelerometer.map(\.count), [100, 100, 100])
+        XCTAssertEqual(record.accelerometer[0][0], -1)
+        XCTAssertEqual(record.gyroscope[2][0], 55)
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(bytes.prefix(96))))
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(bytes.prefix(1928))))
+        bytes[0] = 0x2F
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+        bytes[0] = 0x2B
+        bytes[1] = 21
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

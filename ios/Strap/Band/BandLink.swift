@@ -159,6 +159,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
+    @Published private(set) var gen5R10Candidate: Gen5R10RawCandidate?
     @Published private(set) var oxygenWindowEvidence: OxygenWindowEvidence?
     @Published private(set) var opticalRRComparison: OpticalRRRespirationComparison?
     @Published private(set) var nativeIMUClassifierReport: NativeIMUClassifierEvidence.Report?
@@ -1907,6 +1908,7 @@ final class BandLink: NSObject, ObservableObject {
         liveIMUTelemetry = nil
         liveIMURhythm = IMURhythmWindow()
         dedicatedIMURaw = nil
+        gen5R10Candidate = nil
         passiveECG = nil
         currentBandModel = nil
         commandDeadline?.cancel()
@@ -2771,6 +2773,11 @@ final class BandLink: NSObject, ObservableObject {
     private func handleFrame(_ inner: [UInt8], uuid: CBUUID) {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
+        // Observe the exact R10 candidate passively. Do not divert existing
+        // Type-40 processing on the strength of an unverified layout.
+        if uuid == BandUUID.data, let rawR10 = Gen5R10RawCandidate.decodeVerifiedInner(inner) {
+            gen5R10Candidate = rawR10
+        }
         if uuid == BandUUID.data, let raw = DedicatedIMURawRecord.decodeVerifiedInner(inner) {
             dedicatedIMURaw = raw
         }

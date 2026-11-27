@@ -448,6 +448,11 @@ struct HealthView: View {
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
             }
+            if let r10 = store.band.gen5R10Candidate {
+                Text("Gen5 R10 candidate: \(r10.accelerometer.first?.count ?? 0) accel / \(r10.gyroscope.first?.count ?? 0) gyro words per axis · unverified wire layout")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let raw = store.band.dedicatedIMURaw {
                 Text("Type-\(raw.packetType) raw IMU candidate: \(raw.accelerometer.first?.count ?? 0) accel / \(raw.gyroscope.first?.count ?? 0) gyro words per axis · scale unverified")
                     .font(StrapTypography.body(12))

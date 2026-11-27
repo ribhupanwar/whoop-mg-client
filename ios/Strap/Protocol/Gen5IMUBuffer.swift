@@ -293,3 +293,33 @@ struct NativeIMUClassifierEvidence: Equatable {
                       activityHRAndMotionSeconds: activityMotion)
     }
 }
+
+
+/// APK-parser-derived Maverick/Goose R10 hypothesis, cross-checked against
+/// OpenWHOOP's synthetic payload fixture. No matching physical capture yet.
+/// Do not assign scales, RR, timestamps, or a validated HR measurement.
+struct Gen5R10RawCandidate: Equatable {
+    let packetType: UInt8
+    let rawHeartRate: UInt8
+    let accelerometer: [[Int16]]
+    let gyroscope: [[Int16]]
+
+    static func decodeVerifiedInner(_ bytes: [UInt8]) -> Self? {
+        // Match only the source's exact Gen5 payload hypothesis. Compact
+        // Type-40 k10, Gen4 R10, and historical revision collisions are not it.
+        guard bytes.count == 1932, bytes[1] == 10,
+              bytes[0] == 0x28 || bytes[0] == 0x2B else { return nil }
+        func axes(_ offsets: [Int]) -> [[Int16]] {
+            offsets.map { offset in
+                (0..<100).map { index in
+                    let p = offset + 2 * index
+                    let word = UInt16(bytes[p]) | (UInt16(bytes[p + 1]) << 8)
+                    return Int16(bitPattern: word)
+                }
+            }
+        }
+        return Self(packetType: bytes[0], rawHeartRate: bytes[17],
+                    accelerometer: axes([85, 285, 485]),
+                    gyroscope: axes([688, 888, 1088]))
+    }
+}
