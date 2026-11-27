@@ -55,6 +55,19 @@ private func stretch(
     (0..<seconds).map { makeSample(start + $0, hr: hr, accel: accel, rr: rr) }
 }
 
+// Distribute alternating RR beats over one-second records at the stated HR.
+// Preserve realistic beat duration instead of repeating full intervals each second.
+private func pacedRRStretch(
+    _ start: Int, _ seconds: Int, hr: Int, accel: Double?, rr: [Int]
+) -> [V18Sample] {
+    (0..<seconds).map { second in
+        let firstBeat = second * hr / 60
+        let endBeat = (second + 1) * hr / 60
+        let beats = (firstBeat..<endBeat).map { rr[$0 % rr.count] }
+        return makeSample(start + second, hr: hr, accel: accel, rr: beats)
+    }
+}
+
 private func stream(
     _ start: Int,
     _ seconds: Int,
@@ -204,9 +217,9 @@ final class HrvTests: XCTestCase {
         // primary night's HRV or RHR. This uses only synthetic samples.
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let overnight = stretch(0, 25_200, hr: 60, accel: 0.01, rr: [790, 810])
-        let awake = stretch(26_000, 3_600, hr: 80, accel: 0.15, rr: [750, 750])
-        let nap = stretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [760, 840])
+        let overnight = pacedRRStretch(0, 25_200, hr: 60, accel: 0.01, rr: [990, 1010])
+        let awake = pacedRRStretch(26_000, 3_600, hr: 80, accel: 0.15, rr: [750, 750])
+        let nap = pacedRRStretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [1160, 1240])
         let days = DailyAnalysis.metrics(
             from: overnight + awake + nap, sex: .male, maxHR: 180, calendar: calendar
         )
@@ -1740,8 +1753,8 @@ final class DailyMetricQualityTests: XCTestCase {
     func testEditedWindowAlsoSelectsNightlyBiometrics() throws {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-        let rows = stretch(0, 600, hr: 60, accel: 0.01, rr: [990, 1010])
-            + stretch(600, 600, hr: 75, accel: 0.01, rr: [790, 810])
+        let rows = pacedRRStretch(0, 600, hr: 60, accel: 0.01, rr: [960, 1040])
+            + pacedRRStretch(600, 600, hr: 75, accel: 0.01, rr: [790, 810])
         let period = SleepPeriod(startUnix: 0, endUnix: 1199, quietFraction: 1, meanHR: 67.5, wakeEvents: 0)
         let edited = SleepSession.make(samples: rows, period: period, correctedTimes: [600, 1200])
         let day = try XCTUnwrap(DailyAnalysis.metrics(
