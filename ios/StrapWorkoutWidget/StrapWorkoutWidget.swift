@@ -118,7 +118,9 @@ private func hrText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -
 }
 
 private func statusLabel(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {
-    if context.state.paused { return "PAUSED" }
+    if context.state.paused {
+        return context.state.isConnected == false ? "PAUSED · DISCONNECTED" : "PAUSED"
+    }
     if context.state.isConnected == false { return "BAND DISCONNECTED" }
     if context.isStale { return "STALE · NO FRESH HR" }
     return "ZONE \(context.state.zone.map(String.init) ?? "—")"
@@ -126,8 +128,12 @@ private func statusLabel(_ context: ActivityViewContext<WorkoutActivityAttribute
 
 @ViewBuilder
 private func elapsedTimerView(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> some View {
-    if context.state.paused, let seconds = context.state.elapsedSeconds {
-        Text(formattedElapsed(seconds))
+    if context.state.paused {
+        if let seconds = context.state.elapsedSeconds {
+            Text(formattedElapsed(seconds))
+        } else {
+            Text("—")
+        }
     } else if let anchor = context.state.timerAnchor {
         Text(anchor, style: .timer)
     } else {

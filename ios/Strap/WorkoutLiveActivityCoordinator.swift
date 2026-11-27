@@ -50,14 +50,14 @@ final class WorkoutLiveActivityCoordinator {
     init(
         band: BandLink,
         recorder: WorkoutRecorder = .shared,
-        sink: WorkoutLiveActivitySink = DefaultWorkoutLiveActivitySink(),
+        sink: WorkoutLiveActivitySink? = nil,
         maxHeartRate: @escaping () -> Double? = { nil },
         isPreview: @escaping () -> Bool = { false },
         onDayChange: @escaping () -> Void = {}
     ) {
         self.band = band
         self.recorder = recorder
-        self.sink = sink
+        self.sink = sink ?? DefaultWorkoutLiveActivitySink()
         self.maxHeartRateProvider = maxHeartRate
         self.isPreviewProvider = isPreview
         self.onDayChange = onDayChange
@@ -95,8 +95,9 @@ final class WorkoutLiveActivityCoordinator {
             }
             .store(in: &cancellables)
 
-        band.$isConnected
+        band.$status
             .dropFirst()
+            .map { [weak band] _ in band?.isConnected ?? false }
             .removeDuplicates()
             .receive(on: RunLoop.main)
             .sink { [weak self] connected in

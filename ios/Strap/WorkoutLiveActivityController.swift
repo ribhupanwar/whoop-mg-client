@@ -35,6 +35,10 @@ final class WorkoutLiveActivityController {
             elapsedSeconds: 0, timerAnchor: now, isConnected: isConnected,
             estimatedStrain: nil, paused: false, lastSampleAt: now
         )
+        if lastState == nil {
+            lastState = initial
+            lastUpdate = .distantPast
+        }
         enqueue { [weak self] in
             guard let self else { return }
             if self.active?.attributes.sessionID == id { return }
@@ -56,8 +60,6 @@ final class WorkoutLiveActivityController {
                     return
                 }
             }
-            self.lastState = initial
-            self.lastUpdate = .distantPast
         }
     }
 

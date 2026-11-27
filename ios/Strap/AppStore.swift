@@ -220,6 +220,7 @@ final class AppStore: ObservableObject {
 
     func refreshHealthWidget() {
         guard defaults.bool(forKey: "strap.healthWidgetEnabled"), !isPreview else {
+            lastSavedHealthWidgetSnapshot = nil
             if HealthWidgetSnapshot.load() != nil, HealthWidgetSnapshot.save(nil) {
                 for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
             }

@@ -10,7 +10,7 @@ final class WidgetReloadCoalescer {
     private var trailingTask: Task<Void, Never>?
     private var pendingAction: (@MainActor () -> Void)?
 
-    init(minimumInterval: TimeInterval = 60, now: @escaping () -> Date = Date.init) {
+    nonisolated init(minimumInterval: TimeInterval = 60, now: @escaping () -> Date = Date.init) {
         self.minimumInterval = minimumInterval
         self.now = now
     }
