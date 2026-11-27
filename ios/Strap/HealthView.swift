@@ -417,6 +417,11 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let candidate = deep.pulseEvidence.candidate {
+                Text(String(format: "V26 shadow pulse %.0f bpm · correlation %.2f (unvalidated)", candidate.bpm, candidate.correlation))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let pip = deep.pip {
                 let rms = pip.deltaRMSADC.map { String(format: "%.1f", $0) } ?? "—"
                 Text("V26 PIP: \(pip.deltaCount) optical deltas · delta RMS \(rms) ADC units · \(Date(timeIntervalSince1970: Double(pip.unix)).formatted())")

@@ -326,6 +326,33 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertNil(rhythm.candidate)
     }
 
+    func testV26ShadowPulseRequiresContinuousClean25HzBlocks() throws {
+        func record(_ second: UInt32, flags: Int = 0x80, clipped: Bool = false) -> Gen5V26Record {
+            let codes = (0..<25).map { i -> Int32 in
+                let time = Double(second) + Double(i) / 25
+                return Int32((1000 * sin(2 * Double.pi * 1.25 * time)).rounded())
+            }
+            var deltas: [Int16] = []
+            for i in 1..<codes.count { deltas.append(Int16(codes[i] - codes[i - 1])) }
+            if clipped { deltas[0] = Int16.max }
+            return Gen5V26Record(header: BandRecordHeader(version: 26, flags: flags,
+                recordIndex: second, unix: second, subsecQ15: 0), pipStateCounter: 0,
+                firstSampleADC: codes[0], opticalDeltas: deltas,
+                channelStateWord: 0, primaryFlagsByte: 0, morphologyByte: 1, alignedTailByte: 0)
+        }
+        var evidence = V26PulseEvidence()
+        for i in 0..<7 { evidence.ingest(record(UInt32(i))) }
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(record(6))
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(record(7))
+        XCTAssertEqual(try XCTUnwrap(evidence.candidate).bpm, 75, accuracy: 2)
+        evidence.ingest(record(8, clipped: true))
+        XCTAssertNil(evidence.candidate)
+        for i in 9...16 { evidence.ingest(record(UInt32(i), flags: 0)) }
+        XCTAssertNil(evidence.candidate)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

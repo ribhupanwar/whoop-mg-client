@@ -83,3 +83,86 @@ struct Gen5V26Record: Equatable {
             alignedTailByte: bytes[75])
     }
 }
+
+
+/// Shadow pulse estimator for a narrow, explicitly timed V26 shape. Not a
+/// replacement for measured HR, not beat intervals, and not used by scores.
+/// Independent autocorrelation implementation; constants are provisional.
+struct V26PulseEvidence: Equatable {
+    struct Candidate: Equatable {
+        let unix: UInt32
+        let bpm: Double
+        let correlation: Double
+    }
+    private var previous: Gen5V26Record?
+    private var waveform: [Double] = []
+    private(set) var candidate: Candidate?
+
+    mutating func ingest(_ record: Gen5V26Record) {
+        if let previous, record.header.unix <= previous.header.unix { return }
+        let r = record.reconstruction
+        // 25 declared samples at 25 Hz can fill one second. The 50 Hz
+        // configuration cannot be stitched on a one-second time grid.
+        guard record.header.ppgSampleRateHz == 25, r.codes.count == 25,
+              r.firstAmbiguousIndex == nil, r.outOfRangeCount == 0,
+              record.morphologyByte == 1,
+              !r.codes.contains(where: { $0 == -524288 || $0 == 524287 }) else {
+            previous = nil; waveform.removeAll(); candidate = nil; return
+        }
+        if let last = previous {
+            if UInt64(record.header.unix) != UInt64(last.header.unix) + 1 ||
+                record.header.recordIndex != (last.header.recordIndex &+ 1) ||
+                record.header.subsecQ15 != last.header.subsecQ15 {
+                waveform.removeAll(); candidate = nil
+            }
+        }
+        previous = record
+        waveform.append(contentsOf: r.codes.map(Double.init))
+        if waveform.count > 200 { waveform.removeFirst(waveform.count - 200) }
+        guard waveform.count == 200 else { return }
+        // Reject record-boundary discontinuities rather than interpreting
+        // a repeating block artifact as 60 bpm.
+        var boundary = 0.0, within = 0.0
+        for i in 1..<waveform.count {
+            let change = abs(waveform[i] - waveform[i - 1])
+            if i % 25 == 0 { boundary += change } else { within += change }
+        }
+        guard within > 0, boundary / 7 <= 3 * within / 192 else {
+            candidate = nil; return
+        }
+        let mean = waveform.reduce(0, +) / 200.0
+        let mid = 99.5
+        var xy = 0.0, xx = 0.0
+        for i in waveform.indices {
+            let x = Double(i) - mid
+            xy += x * (waveform[i] - mean)
+            xx += x * x
+        }
+        let slope = xy / xx
+        var centered: [Double] = []
+        for i in waveform.indices {
+            centered.append(waveform[i] - mean - slope * (Double(i) - mid))
+        }
+        var values: [Double] = []
+        for lag in 6...51 {
+            var dot = 0.0, a = 0.0, b = 0.0
+            for j in lag..<centered.count {
+                let x = centered[j]
+                let y = centered[j - lag]
+                dot += x * y; a += x * x; b += y * y
+            }
+            values.append(a > 0 && b > 0 ? dot / sqrt(a * b) : 0)
+        }
+        guard let strongest = values.max(), strongest >= 0.7 else { candidate = nil; return }
+        var chosen: Int?
+        for i in 1..<(values.count - 1) {
+            if values[i] >= 0.9 * strongest, values[i] >= 0.7,
+               values[i] > values[i - 1], values[i] >= values[i + 1] {
+                chosen = i; break
+            }
+        }
+        guard let chosen else { candidate = nil; return }
+        candidate = Candidate(unix: record.header.unix, bpm: 1500.0 / Double(6 + chosen),
+                              correlation: values[chosen])
+    }
+}
