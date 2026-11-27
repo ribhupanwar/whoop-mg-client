@@ -648,12 +648,26 @@ enum SleepDetect {
 
             let isNocturnal = isNocturnalPeriod(current) && isNocturnalPeriod(next)
 
-            guard isNocturnal, gap <= maxAwakeningGapS, combinedSpan <= maxCombinedSleepS else {
+            // Preserve the ordinary 30-minute rule. A modestly longer
+            // overnight interruption can be joined only with substantially
+            // stronger observed evidence on both sides and during the gap.
+            let extendedLimit = 45 * 60
+            guard isNocturnal, combinedSpan <= maxCombinedSleepS,
+                  gap <= max(maxAwakeningGapS, extendedLimit) else {
                 merged.append(current)
                 current = next
                 continue
             }
             let gapSamples = samples.filter { current.endUnix < $0.unix && $0.unix < next.startUnix }
+            if gap > maxAwakeningGapS {
+                guard maxAwakeningGapS == 30 * 60,
+                      confirmedExtendedNocturnalResumption(current, next, gapSamples: gapSamples,
+                                                           samples: samples, quietAccelG: quietAccelG) else {
+                    merged.append(current)
+                    current = next
+                    continue
+                }
+            }
             // A short bathroom break still requires positive on-wrist coverage.
             // Use elapsed seconds so missing records and replays cannot pass the gate.
             let wornSeconds = Set(gapSamples.lazy.filter {
@@ -689,6 +703,46 @@ enum SleepDetect {
         }
         merged.append(current)
         return merged
+    }
+
+    /// Narrow extension for two independently detected nocturnal periods.
+    /// Coarse band state alone is not a physiological sleep stage.
+    private static func confirmedExtendedNocturnalResumption(
+        _ previous: SleepPeriod, _ next: SleepPeriod,
+        gapSamples: [V18Sample], samples: [V18Sample], quietAccelG: Double
+    ) -> Bool {
+        let gap = next.startUnix - previous.endUnix - 1
+        guard gap > 30 * 60, gap <= 45 * 60,
+              previous.durationS >= 60 * 60, next.durationS >= 60 * 60 else { return false }
+        let calendar = Calendar.current
+        let wake = Date(timeIntervalSince1970: Double(previous.endUnix))
+        let resume = Date(timeIntervalSince1970: Double(next.startUnix))
+        guard calendar.isDate(wake, inSameDayAs: resume),
+              calendar.component(.hour, from: wake) < 8,
+              calendar.component(.hour, from: resume) < 8 else { return false }
+
+        func valid(_ row: V18Sample) -> Bool {
+            row.wearing && (35...220).contains(row.heartRate)
+                && row.dynamicAccelG.map { $0.isFinite && $0 >= 0 } == true
+        }
+        let observed = gapSamples.filter(valid)
+        let covered = Set(observed.map(\.unix)).count
+        let quiet = Set(observed.filter { ($0.dynamicAccelG ?? .infinity) <= quietAccelG }.map(\.unix)).count
+        guard covered * 10 >= gap * 9, quiet * 5 >= gap * 4 else { return false }
+
+        // A sustained band sleep hint corroborates each independently detected
+        // period; require unique worn quiet seconds, not retransmission counts.
+        func confirmed(from lower: Int, through upper: Int) -> Bool {
+            let seconds = Set(samples.lazy.filter {
+                lower <= $0.unix && $0.unix <= upper && valid($0)
+                    && $0.sleepState == 2 && ($0.dynamicAccelG ?? .infinity) <= quietAccelG
+            }.map(\.unix))
+            return seconds.count >= 15 * 60
+        }
+        return confirmed(from: max(previous.startUnix, previous.endUnix - 30 * 60 + 1),
+                         through: previous.endUnix)
+            && confirmed(from: next.startUnix,
+                         through: min(next.endUnix, next.startUnix + 30 * 60 - 1))
     }
 
     static func totalHours(_ periods: [SleepPeriod]) -> Double {

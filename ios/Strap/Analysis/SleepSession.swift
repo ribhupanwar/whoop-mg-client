@@ -13,7 +13,8 @@ struct SleepSession: Codable, Equatable {
     // v6 invalidates v5 sleep-stage estimates that could classify prolonged
     // V18 sleepState=3 ("up") as Deep/Light. The retained sensor archive and
     // authoritative manual bed/wake corrections are not modified.
-    static let algorithmVersion = 8
+    // v9: bounded, positively corroborated nocturnal resumption merge.
+    static let algorithmVersion = 9
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
