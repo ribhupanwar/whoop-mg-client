@@ -59,6 +59,18 @@ struct MoreView: View {
                 // SECTION 2: HEALTH & DATA
                 SectionTitle("HEALTH & DATA")
                 Panel {
+                    NavigationLink { JournalView() } label: {
+                        moreRow(
+                            "My Journal",
+                            subtitle: "Daily check-in, mood & personal notes",
+                            icon: "book.closed"
+                        )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("more.journal")
+
+                    Divider().background(Color.appLine)
+
                     NavigationLink { AppleHealthImportView() } label: {
                         moreRow(
                             "Health Integrations",
