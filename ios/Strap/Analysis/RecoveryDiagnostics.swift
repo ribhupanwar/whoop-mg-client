@@ -121,8 +121,8 @@ enum RecoveryDiagnostics {
         let endUnixExclusive: Int
         let observedSeconds: Int
         let eligibleQuietSeconds: Int
-        let bandSleepSeconds: Int
-        let bandUpSeconds: Int
+        let bandState2Seconds: Int
+        let bandState3Seconds: Int
         let estimatedDeepSeconds: Int
         let estimatedWakeSeconds: Int
         let rawBeats: Int
@@ -150,11 +150,12 @@ enum RecoveryDiagnostics {
                 $0.wearing && (35...220).contains($0.heartRate)
                     && $0.dynamicAccelG.map { $0.isFinite && (0...Hrv.restingQuietAccelG).contains($0) } == true
             }.sorted { $0.unix < $1.unix }
-            let rrDuration = eligible.reduce(0.0) { sum, row in
+            let rrDurationMS = eligible.reduce(0) { sum, row in
                 sum + row.rrIntervalsMS.filter {
                     (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
-                }.reduce(0.0) { $0 + Double($1) / 1000 }
+                }.reduce(0, +)
             }
+            let rrDuration = Double(rrDurationMS) / 1000
             let elapsed = eligible.first.flatMap { first in
                 eligible.last.map { $0.unix - first.unix + 1 }
             } ?? 0
@@ -162,7 +163,7 @@ enum RecoveryDiagnostics {
             let gate: String
             if eligible.count < 150 || elapsed < 150 { gate = "insufficient_quiet_coverage" }
             else if rrDuration < 75 { gate = "insufficient_rr_duration" }
-            else if rrDuration > Double(elapsed) * 1.05 { gate = "excess_rr_duration" }
+            else if rrDurationMS > elapsed * 1050 { gate = "excess_rr_duration" }
             else if result.nnBeats < 21 || result.rmssdMS.map({ $0.isFinite && $0 > 0 }) != true {
                 gate = "insufficient_clean_nn"
             } else { gate = "qualifies_primary_bucket" }
@@ -173,8 +174,8 @@ enum RecoveryDiagnostics {
             }
             return HRVWindowEvidence(startUnix: start, endUnixExclusive: end,
                 observedSeconds: rows.count, eligibleQuietSeconds: eligible.count,
-                bandSleepSeconds: rows.filter { $0.sleepState == 2 }.count,
-                bandUpSeconds: rows.filter { $0.sleepState == 3 }.count,
+                bandState2Seconds: rows.filter { $0.sleepState == 2 }.count,
+                bandState3Seconds: rows.filter { $0.sleepState == 3 }.count,
                 estimatedDeepSeconds: stageSeconds(.deep), estimatedWakeSeconds: stageSeconds(.wake),
                 rawBeats: result.beats, cleanBeats: result.nnBeats,
                 rrDurationSeconds: rrDuration,
