@@ -549,11 +549,9 @@ final class BandLink: NSObject, ObservableObject {
 
         let phase = WorkoutRecorder.shared.phase
         let workoutActive = phase == .recording || phase == .paused
-        if workoutActive {
-            WorkoutLiveActivityController.shared.updateStepCount(
-                count, observedAt: captured.lastObservedAt
-            )
-        }
+        // The workout coordinator observes the published ledger snapshot and
+        // sends one coherent ActivityKit state (HR, steps, calories and strain).
+        // Do not refresh stale HR through a second step-only update.
         let measuredHR = LiveHeartRateState.fresh(
             liveHeartRate, receivedAt: lastLiveHRAt, connected: isConnected, now: now
         )
@@ -2016,6 +2014,21 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func retryHistorySync() {
+        readHistory()
+    }
+
+    /// While a verified run/walk is recording, opportunistically request
+    /// recent band history on eligible BLE events. This is not a live step
+    /// sensor or a background timer; use the authenticated normal drain.
+    /// Keep the 90-second minimum and empty-response backoff to avoid
+    /// competing transfers, repeated empty reads or unnecessary battery use.
+    func refreshWorkoutStepHistoryIfNeeded(now: Date = Date()) {
+        guard status.isReady, isConnected, hrBondConfirmed,
+              drainStartedAt == nil, !isSavingHistory, !isAnalyzingHistory else { return }
+        let backoff = min(4.0, pow(2, Double(max(0, min(emptySyncStreak - 2, 2)))))
+        let interval = HistorySyncPolicy.foregroundSeconds * backoff
+        if let lastSyncAttempt, now.timeIntervalSince(lastSyncAttempt) < interval { return }
+        if let observed = capturedTodayStepAt, now.timeIntervalSince(observed) < interval { return }
         readHistory()
     }
 

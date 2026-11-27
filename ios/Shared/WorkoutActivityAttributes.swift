@@ -20,18 +20,31 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         var lastSampleAt: Date
 
         enum CompactMetric: Equatable {
-            case steps, calories, pace, distance, elapsed
+            case steps, calories, pace, distance, strain, elapsed
         }
 
-        /// Rotate only on real state deliveries. ActivityKit may coalesce
-        /// updates; no extension timer or guaranteed update cadence.
-        var compactMetric: CompactMetric {
-            var available: [CompactMetric] = []
-            if steps != nil { available.append(.steps) }
-            if estimatedActiveCalories != nil { available.append(.calories) }
-            if let paceSecondsPerKilometer, (1..<3600).contains(paceSecondsPerKilometer) { available.append(.pace) }
-            if let distanceMeters, distanceMeters.isFinite, distanceMeters > 0 { available.append(.distance) }
-            available.append(.elapsed)
+        /// Rotate only on real ActivityKit state deliveries.
+        func compactMetrics(for kind: DisplayKind, hasGPS: Bool) -> [CompactMetric] {
+            var result: [CompactMetric] = []
+            if kind == .walking, steps != nil { result.append(.steps) }
+            if kind == .running, hasGPS,
+               let paceSecondsPerKilometer, (1..<3600).contains(paceSecondsPerKilometer) {
+                result.append(.pace)
+            }
+            if kind != .other, hasGPS,
+               let distanceMeters, distanceMeters.isFinite, distanceMeters > 0 {
+                result.append(.distance)
+            }
+            if estimatedActiveCalories != nil { result.append(.calories) }
+            if let estimatedStrain, estimatedStrain.isFinite, (0...21).contains(estimatedStrain) {
+                result.append(.strain)
+            }
+            result.append(.elapsed)
+            return result
+        }
+
+        func compactMetric(for kind: DisplayKind, hasGPS: Bool) -> CompactMetric {
+            let available = compactMetrics(for: kind, hasGPS: hasGPS)
             return available[(max(0, elapsedSeconds ?? 0) / 10) % available.count]
         }
     }
@@ -40,4 +53,27 @@ struct WorkoutActivityAttributes: ActivityAttributes {
     var activityName: String
     var startedAt: Date
     var hasGPS: Bool
+    // Optional for existing Live Activities decoded after an update.
+    var activityKind: String? = nil
+
+    enum DisplayKind: Equatable {
+        case running, walking, other
+    }
+
+    var displayKind: DisplayKind {
+        Self.displayKind(activityKind ?? activityName)
+    }
+
+    static func displayKind(_ value: String) -> DisplayKind {
+        switch value.lowercased() {
+        case "run", "running", "outdoorrun", "outdoor run", "trailrun", "trail run",
+             "intervalrun", "interval run", "indoorrun", "indoor run", "treadmill",
+             "trackandfield", "track and field", "strollerjogging", "stroller jogging":
+            return .running
+        case "walk", "walking", "indoorwalk", "indoor walk", "commuting", "dogwalking",
+             "dog walking", "strollerwalking", "stroller walking", "hiking":
+            return .walking
+        default: return .other
+        }
+    }
 }

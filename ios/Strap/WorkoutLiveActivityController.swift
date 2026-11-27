@@ -59,7 +59,7 @@ final class WorkoutLiveActivityController {
         }
         let attributes = WorkoutActivityAttributes(
             sessionID: id, activityName: session.activityLabel,
-            startedAt: session.startedAt, hasGPS: session.hasGPS
+            startedAt: session.startedAt, hasGPS: session.hasGPS, activityKind: session.activityKind
         )
         do {
             let created = try Activity.request(
@@ -82,8 +82,8 @@ final class WorkoutLiveActivityController {
         let now = Date()
         let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
         let zone: Int? = {
-            guard let bpm, let maxHeartRate, maxHeartRate > 0 else { return nil }
-            let ratio = Double(bpm) / maxHeartRate
+            guard let bpm, let maxHeartRate, maxHeartRate.isFinite, maxHeartRate > 0 else { return nil }
+            let ratio = min(1, max(0, Double(bpm) / maxHeartRate))
             return min(5, max(1, Int(ratio / 0.1) - 4))
         }()
         let pace: Int? = session.hasGPS && distanceMeters >= 100 && elapsedSeconds > 0

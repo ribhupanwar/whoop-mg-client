@@ -152,6 +152,7 @@ final class WorkoutLiveActivityCoordinator {
                     sink.start(session: session, isConnected: band.isConnected)
                 }
                 recorder.tick()
+                requestWorkoutStepsIfNeeded(now: Date())
                 pushUpdate()
             }
         case .paused:
@@ -187,6 +188,7 @@ final class WorkoutLiveActivityCoordinator {
            let freshBPM = LiveHeartRateState.fresh(bpm, receivedAt: observedAt, connected: connected, now: now) {
             recorder.addHeartRateSample(freshBPM, observedAt: observedAt)
             lastRecordedHRAt = observedAt
+            requestWorkoutStepsIfNeeded(now: now)
         }
         if recorder.phase == .recording || recorder.phase == .paused {
             recorder.tick()
@@ -194,13 +196,20 @@ final class WorkoutLiveActivityCoordinator {
         }
     }
 
+    private func requestWorkoutStepsIfNeeded(now: Date) {
+        guard !isPreviewProvider(), recorder.phase == .recording,
+              let session = recorder.currentSession else { return }
+        let kind = WorkoutActivityAttributes.displayKind(session.activityKind)
+        guard kind == .walking || kind == .running else { return }
+        band.refreshWorkoutStepHistoryIfNeeded(now: now)
+    }
+
     private func pushUpdate(now: Date = Date(), connectedOverride: Bool? = nil) {
         let connected = connectedOverride ?? band.isConnected
         let freshBPM = LiveHeartRateState.fresh(
             band.liveHeartRate, receivedAt: band.lastLiveHRAt, connected: connected, now: now
         )
-        let today = JournalStore.dayKey(for: now)
-        let estimatedStrain = band.liveDayStrainDateKey == today ? band.liveDayStrain : nil
+        let estimatedStrain = recorder.liveActivityStrain
         sink.update(
             session: recorder.currentSession,
             phase: recorder.phase,
