@@ -124,6 +124,11 @@ struct GPSRunView: View {
                 WorkoutLiveActivityController.shared.start(session: session)
             } else if newPhase == .saved || newPhase == .discarded {
                 WorkoutLiveActivityController.shared.end()
+                if newPhase == .saved, let session = recorder.currentSession, !store.isPreview {
+                    Task { @MainActor in
+                        await LocalWellnessNotice.post(.workout, id: session.id.uuidString) { !store.isPreview }
+                    }
+                }
             } else if newPhase == .paused {
                 WorkoutLiveActivityController.shared.update(
                     session: recorder.currentSession, phase: newPhase,

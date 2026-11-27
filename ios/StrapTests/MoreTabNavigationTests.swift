@@ -79,6 +79,14 @@ final class MoreTabNavigationTests: XCTestCase {
         XCTAssertEqual(MoreMenuItem.backupRestore.metadata.section, "DATA & INTEGRATIONS")
     }
 
+    func testLowBatteryNoticeThresholdRejectsInvalidPercentages() {
+        XCTAssertFalse(LocalWellnessNotice.lowBattery(-1))
+        XCTAssertTrue(LocalWellnessNotice.lowBattery(0))
+        XCTAssertTrue(LocalWellnessNotice.lowBattery(15))
+        XCTAssertFalse(LocalWellnessNotice.lowBattery(16))
+        XCTAssertFalse(LocalWellnessNotice.lowBattery(101))
+    }
+
     func testJournalReminderUsesValidLocalClockComponents() {
         XCTAssertEqual(JournalReminderSchedule.components(minutes: 0).hour, 0)
         XCTAssertEqual(JournalReminderSchedule.components(minutes: 0).minute, 0)

@@ -826,6 +826,9 @@ struct NotificationSettingsView: View {
     @AppStorage("strap.rhrTrendAlertsEnabled") private var rhrTrendAlertsEnabled = false
     @AppStorage("strap.journalReminderEnabled") private var journalReminderEnabled = false
     @AppStorage("strap.journalReminderMinutes") private var journalReminderMinutes = 480
+    @AppStorage("strap.lowBatteryNoticeEnabled") private var lowBatteryNoticeEnabled = false
+    @AppStorage("strap.recoveryRecapNoticeEnabled") private var recoveryRecapNoticeEnabled = false
+    @AppStorage("strap.workoutSavedNoticeEnabled") private var workoutSavedNoticeEnabled = false
     @State private var denied = false
     @State private var permissionStatus: String = "Checking permissions…"
     @State private var authorized = false
@@ -877,6 +880,19 @@ struct NotificationSettingsView: View {
                             .foregroundStyle(Color.appAccent)
                     }
                     .padding(.vertical, 6)
+                }
+
+                Panel {
+                    SectionTitle("BAND & ACTIVITY")
+                    Toggle("Low band battery reminder", isOn: $lowBatteryNoticeEnabled)
+                        .tint(Color.appAccent)
+                    Hint("At most once per local day for a newly received battery reading of 15% or less while connected and not charging.")
+                    Toggle("Morning recovery recap", isOn: $recoveryRecapNoticeEnabled)
+                        .tint(Color.appAccent)
+                    Hint("Once today's recorded recovery is available.")
+                    Toggle("Workout saved reminder", isOn: $workoutSavedNoticeEnabled)
+                        .tint(Color.appAccent)
+                    Hint("Only after a recording is successfully saved. No personal metrics in notification text.")
                 }
 
                 Panel {
@@ -1365,6 +1381,59 @@ enum JournalReminderSchedule {
             // Keep permission and actual scheduling distinct; the next active
             // scene refresh retries rather than claiming delivery.
             print("STRAP journal reminder scheduling failed: \(error.localizedDescription)")
+        }
+    }
+}
+
+/// Local, generic notices. No biometric values in lock-screen text.
+enum LocalWellnessNotice: String {
+    case battery, recovery, workout
+
+    var enabledKey: String {
+        switch self {
+        case .battery: return "strap.lowBatteryNoticeEnabled"
+        case .recovery: return "strap.recoveryRecapNoticeEnabled"
+        case .workout: return "strap.workoutSavedNoticeEnabled"
+        }
+    }
+    var title: String {
+        switch self {
+        case .battery: return "STRAP · Band battery"
+        case .recovery: return "STRAP · Morning recap"
+        case .workout: return "STRAP · Workout saved"
+        }
+    }
+    var message: String {
+        switch self {
+        case .battery: return "Your band battery is low. Open STRAP to check charging."
+        case .recovery: return "Your recorded recovery is ready to review."
+        case .workout: return "Open STRAP to review your saved session."
+        }
+    }
+    static func lowBattery(_ value: Int) -> Bool { (0...15).contains(value) }
+
+    @MainActor private static var inFlight = Set<String>()
+
+    @MainActor
+    static func post(_ kind: Self, id: String, defaults: UserDefaults = .standard,
+                     stillValid: () -> Bool) async {
+        let key = "strap.localNotice.last." + kind.rawValue
+        let requestID = "strap.localNotice." + kind.rawValue + "." + id
+        guard defaults.bool(forKey: kind.enabledKey), defaults.string(forKey: key) != id,
+              stillValid(), inFlight.insert(requestID).inserted else { return }
+        defer { inFlight.remove(requestID) }
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        guard !Task.isCancelled, defaults.bool(forKey: kind.enabledKey), stillValid(),
+              [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else { return }
+        let content = UNMutableNotificationContent()
+        content.title = kind.title
+        content.body = kind.message
+        do {
+            try await center.add(UNNotificationRequest(identifier: requestID, content: content, trigger: nil))
+            defaults.set(id, forKey: key)
+        } catch {
+            // A failed submission remains eligible for a later fresh event.
         }
     }
 }
