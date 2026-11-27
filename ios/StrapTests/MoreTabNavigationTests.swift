@@ -79,6 +79,15 @@ final class MoreTabNavigationTests: XCTestCase {
         XCTAssertEqual(MoreMenuItem.backupRestore.metadata.section, "DATA & INTEGRATIONS")
     }
 
+    func testJournalReminderUsesValidLocalClockComponents() {
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: 0).hour, 0)
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: 0).minute, 0)
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: 1439).hour, 23)
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: 1439).minute, 59)
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: -1).hour, 8)
+        XCTAssertEqual(JournalReminderSchedule.components(minutes: 1440).hour, 8)
+    }
+
     func testWakeAlarmPersistenceThroughBandAlarms() {
         let originalEnabled = WakeAlarm.isEnabled
         let originalMinutes = WakeAlarm.wakeMinutes

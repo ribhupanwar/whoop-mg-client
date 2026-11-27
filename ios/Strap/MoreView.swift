@@ -490,7 +490,7 @@ struct StrapGuidedBreathingView: View {
 
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
                     let elapsed = startedAt.map { max(0, Int(timeline.date.timeIntervalSince($0))) } ?? 0
-                    let remaining = max(0, durationMinutes * 60 - elapsed)
+                    let remaining = completed ? 0 : max(0, durationMinutes * 60 - elapsed)
                     let inhale = elapsed % 8 < 4
                     VStack(spacing: 16) {
                         Circle()

@@ -7,6 +7,7 @@ struct GPSRunView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("strap.workout.keepScreenOn") private var keepScreenOn = false
     @State private var previousIdleTimer: Bool?
+    @State private var workoutScreenVisible = false
     @EnvironmentObject private var store: AppStore
     @State private var selectedWorkout: WorkoutSession?
     @State private var exportURL: URL?
@@ -98,8 +99,8 @@ struct GPSRunView: View {
         }
         .navigationTitle((recorder.phase == .idle || recorder.phase == .saved || recorder.phase == .discarded) ? "Start Activity" : (recorder.currentSession?.activityLabel ?? selectedActivity.label))
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { updateIdleTimer() }
-        .onDisappear { restoreIdleTimer() }
+        .onAppear { workoutScreenVisible = true; updateIdleTimer() }
+        .onDisappear { workoutScreenVisible = false; restoreIdleTimer() }
         .onChange(of: scenePhase) { _, _ in updateIdleTimer() }
         .onChange(of: keepScreenOn) { _, _ in updateIdleTimer() }
         .onChange(of: recorder.phase) { _, _ in updateIdleTimer() }
@@ -135,7 +136,7 @@ struct GPSRunView: View {
     }
 
     private func updateIdleTimer() {
-        if keepScreenOn && scenePhase == .active && recorder.phase == .recording {
+        if workoutScreenVisible && keepScreenOn && scenePhase == .active && recorder.phase == .recording {
             if previousIdleTimer == nil { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled }
             UIApplication.shared.isIdleTimerDisabled = true
         } else {

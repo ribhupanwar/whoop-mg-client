@@ -63,6 +63,8 @@ struct RootView: View {
     @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
     @AppStorage("strap.navigationGlass") private var navigationGlass = false
     @AppStorage("strap.healthWidgetEnabled") private var healthWidgetEnabled = false
+    @AppStorage("strap.journalReminderEnabled") private var journalReminderEnabled = false
+    @AppStorage("strap.journalReminderMinutes") private var journalReminderMinutes = 480
     private var preferredAppearance: ColorScheme? {
         switch appearanceMode {
         case "dark": return .dark
@@ -170,6 +172,11 @@ struct RootView: View {
         .font(StrapTypography.body(15))
         .environmentObject(store)
         .onChange(of: healthWidgetEnabled) { _, _ in store.refreshHealthWidget() }
+        .task(id: "\(journalReminderEnabled):\(journalReminderMinutes):\(scenePhase)") {
+            if scenePhase == .active {
+                await JournalReminderSchedule.refresh(enabled: journalReminderEnabled, minutes: journalReminderMinutes)
+            }
+        }
     }
 
     private var floatingNavigation: some View {

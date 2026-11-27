@@ -824,6 +824,8 @@ struct NotificationSettingsView: View {
     @Environment(\.openURL) private var openURL
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("strap.rhrTrendAlertsEnabled") private var rhrTrendAlertsEnabled = false
+    @AppStorage("strap.journalReminderEnabled") private var journalReminderEnabled = false
+    @AppStorage("strap.journalReminderMinutes") private var journalReminderMinutes = 480
     @State private var denied = false
     @State private var permissionStatus: String = "Checking permissions…"
     @State private var authorized = false
@@ -878,6 +880,25 @@ struct NotificationSettingsView: View {
                 }
 
                 Panel {
+                    SectionTitle("JOURNAL REMINDER")
+                    Toggle("Daily journal reminder", isOn: $journalReminderEnabled)
+                        .tint(Color.appAccent)
+                    if journalReminderEnabled {
+                        DatePicker("Reminder time", selection: Binding(
+                            get: {
+                                let parts = JournalReminderSchedule.components(minutes: journalReminderMinutes)
+                                return Calendar.current.date(bySettingHour: parts.hour ?? 8, minute: parts.minute ?? 0, second: 0, of: Date()) ?? Date()
+                            },
+                            set: { date in
+                                let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+                                journalReminderMinutes = (parts.hour ?? 8) * 60 + (parts.minute ?? 0)
+                            }
+                        ), displayedComponents: .hourAndMinute)
+                    }
+                    Hint("Uses iPhone local time and notification permission. The reminder does not read or change your journal answers.")
+                }
+
+                Panel {
                     SectionTitle("RESTING HEART RATE TREND")
                     Toggle("Resting HR trend alert", isOn: $rhrTrendAlertsEnabled)
                         .tint(Color.appAccent)
@@ -926,6 +947,7 @@ struct NotificationSettingsView: View {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, _ in
             DispatchQueue.main.async {
                 checkPermission()
+                Task { await JournalReminderSchedule.refresh(enabled: journalReminderEnabled, minutes: journalReminderMinutes) }
             }
         }
     }
@@ -1307,6 +1329,42 @@ struct DiagnosticsSupportView: View {
                 }.value
             } catch { exportError = error.localizedDescription }
             preparingExport = false
+        }
+    }
+}
+
+/// A single opt-in repeating local notification. No health data in its content.
+enum JournalReminderSchedule {
+    static let identifier = "strap.journal.dailyReminder"
+
+    static func components(minutes: Int) -> DateComponents {
+        let safe = (0..<1440).contains(minutes) ? minutes : 480
+        return DateComponents(hour: safe / 60, minute: safe % 60)
+    }
+
+    @MainActor
+    static func refresh(enabled: Bool, minutes: Int) async {
+        let center = UNUserNotificationCenter.current()
+        if !enabled {
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            return
+        }
+        let settings = await center.notificationSettings()
+        guard !Task.isCancelled else { return }
+        guard [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else {
+            center.removePendingNotificationRequests(withIdentifiers: [identifier])
+            return
+        }
+        let content = UNMutableNotificationContent()
+        content.title = "STRAP Journal"
+        content.body = "Take a moment for your daily check-in."
+        let trigger = UNCalendarNotificationTrigger(dateMatching: components(minutes: minutes), repeats: true)
+        do {
+            try await center.add(UNNotificationRequest(identifier: identifier, content: content, trigger: trigger))
+        } catch {
+            // Keep permission and actual scheduling distinct; the next active
+            // scene refresh retries rather than claiming delivery.
+            print("STRAP journal reminder scheduling failed: \(error.localizedDescription)")
         }
     }
 }
