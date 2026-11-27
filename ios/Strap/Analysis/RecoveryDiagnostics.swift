@@ -145,6 +145,7 @@ enum RecoveryDiagnostics {
         var skinTemperatureC: Double? = nil
         var oxygenCandidatePct: Double? = nil
         var stageDecisionEvidence: [SleepStager.StageDecisionEvidence]? = nil
+        var personalNightContext: SleepEndResumptionExperiment.PersonalNightContext? = nil
         let notes = [
             "Assessment uses persisted daily measurements. Window diagnostics are independently recomputed from the current archive.",
             "Legacy Home replay uses the earlier day-row selection with today's retained history. It cannot recover deleted or subsequently changed inputs.",

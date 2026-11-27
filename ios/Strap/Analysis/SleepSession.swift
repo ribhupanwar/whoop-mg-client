@@ -15,7 +15,8 @@ struct SleepSession: Codable, Equatable {
     // authoritative manual bed/wake corrections are not modified.
     // v9: bounded, positively corroborated nocturnal resumption merge.
     // v10: distinguish missing motion from observed stillness during staging.
-    static let algorithmVersion = 10
+    // v11: preserve corroborated nocturnal sleep through internal HR elevations.
+    static let algorithmVersion = 11
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int

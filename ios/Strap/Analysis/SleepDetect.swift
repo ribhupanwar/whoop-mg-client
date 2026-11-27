@@ -98,7 +98,8 @@ enum SleepDetect {
             guard fullDuration >= minSleepS else { continue }
 
             let runSegments = splitRunAtHRTransitions(
-                fullRun, activeMedian: activeMedian, hrDropBPM: hrDropBPM, minSegmentS: minSleepS
+                fullRun, activeMedian: activeMedian, hrDropBPM: hrDropBPM,
+                minSegmentS: minSleepS, quietAccelG: effectiveQuietAccelG
             )
             for run in runSegments {
                 let duration = run[run.count - 1].unix - run[0].unix + 1
@@ -534,7 +535,8 @@ enum SleepDetect {
         _ run: [V18Sample],
         activeMedian: Double,
         hrDropBPM: Double,
-        minSegmentS: Int = 1800
+        minSegmentS: Int = 1800,
+        quietAccelG: Double = SleepDetect.quietAccelG
     ) -> [[V18Sample]] {
         guard let firstUnix = run.first?.unix, let lastUnix = run.last?.unix,
               lastUnix - firstUnix + 1 >= minSegmentS else { return [run] }
@@ -556,6 +558,40 @@ enum SleepDetect {
         }
 
         let hasBandSleep = run.contains { $0.sleepState == 2 }
+
+        // An internal elevated HR minute is not independently a wake label.
+        // Coarse firmware sleep plus dense measured quiet motion can corroborate
+        // continuing overnight sleep, including a resumed segment. Limit the
+        // exception to established sleep and modest HR elevation; never change
+        // the leading-onset, daytime, terminal-wake or off-wrist gates.
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: Date(timeIntervalSince1970: Double(firstUnix)))
+        let nocturnal = hour >= 22 || hour < 8
+        var corroborated = Set<Int>()
+        for row in run where row.wearing && (35...220).contains(row.heartRate) && row.sleepState == 2 {
+            if let motion = row.dynamicAccelG, motion.isFinite, motion >= 0, motion <= quietAccelG {
+                corroborated.insert(row.unix)
+            }
+        }
+        var confirmedAt: Int?
+        if nocturnal {
+            var consecutive = 0
+            var previous: Int?
+            for second in corroborated.sorted() {
+                consecutive = previous.map { second == $0 + 1 } == true ? consecutive + 1 : 1
+                if consecutive >= 300 { confirmedAt = second; break }
+                previous = second
+            }
+        }
+        func elevatedForInternalSplit(_ minute: Int) -> Bool {
+            guard let median = minuteMedian(minute), median >= elevatedThreshold else { return false }
+            if let confirmedAt, minute > confirmedAt, median <= activeMedian + autonomicOnsetThresholdBPM {
+                let quietSleepSeconds = (minute..<(minute + 60)).filter { corroborated.contains($0) }.count
+                if quietSleepSeconds >= 48 { return false }
+            }
+            return true
+        }
+
         var t = firstUnix
         while t + 60 <= lastUnix {
             if hasBandSleep && run.contains(where: { t <= $0.unix && $0.unix < t + 60 && $0.sleepState == 1 }) {
@@ -582,12 +618,12 @@ enum SleepDetect {
         }
 
         while t + 180 <= lastUnix {
-            if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
-               let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
-               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold {
+            if elevatedForInternalSplit(t),
+               elevatedForInternalSplit(t + 60),
+               elevatedForInternalSplit(t + 120) {
                 var endT = t + 180
                 while endT + 60 <= lastUnix {
-                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold {
+                    if elevatedForInternalSplit(endT) {
                         endT += 60
                     } else {
                         break

@@ -147,6 +147,48 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         XCTAssertEqual(detected.first?.endUnix, end - 1)
     }
 
+    // An elevated-HR interval in positively corroborated resumed sleep
+    // must not leave a tail shorter than the normal 60-minute duration gate.
+    func testInternalHRSpikeDoesNotDiscardConfirmedResumedSleep() throws {
+        let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 2)))
+        let start = Int(date.timeIntervalSince1970)
+        let wake = start + 3 * 3600
+        let resume = wake + 32 * 60
+        let end = resume + 70 * 60
+        let baseline = ((start - 1800)..<start).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.2, state: 0)
+        }
+        let first = (start..<wake).map { makeV18Sample(unix: $0, hr: 82, accel: 0.01) }
+        let gap = (wake..<resume).map {
+            makeV18Sample(unix: $0, hr: $0 < wake + 180 ? 100 : 85,
+                          accel: $0 < wake + 60 ? 0.2 : 0.02, state: 3)
+        }
+        let resumed = (resume..<end).map {
+            makeV18Sample(unix: $0, hr: (resume + 600..<resume + 1560).contains($0) ? 97 : 87,
+                          accel: 0.01, state: 2)
+        }
+        let terminal = (end..<(end + 1560)).map {
+            makeV18Sample(unix: $0, hr: 88, accel: 0.02, state: 3)
+        }
+        let detected = SleepDetect.detect(baseline + first + gap + resumed + terminal)
+        XCTAssertEqual(detected.count, 1)
+        XCTAssertEqual(detected.first?.startUnix, start)
+        XCTAssertEqual(detected.first?.endUnix, end - 1)
+
+        // The same high HR with no sleep corroboration remains a split.
+        let noHint = (resume..<end).map {
+            makeV18Sample(unix: $0, hr: (resume + 600..<resume + 1560).contains($0) ? 97 : 87,
+                          accel: 0.01, state: 3)
+        }
+        let split = SleepDetect.splitRunAtHRTransitions(first + gap + noHint + terminal,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertFalse(split.contains { run in
+            run.first.map { $0.unix <= resume + 600 } == true &&
+                run.last.map { $0.unix >= resume + 1560 } == true
+        })
+    }
+
     func testLongAwakeningDoesNotMergeIntoSingleSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200
