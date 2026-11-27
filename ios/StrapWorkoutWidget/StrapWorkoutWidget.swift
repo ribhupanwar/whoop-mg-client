@@ -11,7 +11,7 @@ struct StrapWorkoutWidget: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(hrText(context.state.heartRate), systemImage: "heart.fill")
+                    Label(hrText(context), systemImage: "heart.fill")
                         .foregroundStyle(.orange)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
