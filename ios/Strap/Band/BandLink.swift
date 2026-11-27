@@ -751,7 +751,7 @@ final class BandLink: NSObject, ObservableObject {
             BackgroundSyncScheduler.shared.setSyncHandler { [weak self] completion in
                 DispatchQueue.main.async {
                     guard let self else { completion(false); return }
-                    guard self.isReady else { completion(false); return }
+                    guard self.status.isReady else { completion(false); return }
                     self.backgroundSyncCompletion?(false)
                     self.backgroundSyncCompletion = completion
                     self.readHistory()
