@@ -584,12 +584,36 @@ struct DashboardMetricIcon: View {
     let symbol: String
     var body: some View {
         ZStack {
-            if symbol == "heart.pulse" {
-                Image(systemName: "heart")
-                    .font(.system(size: 20, weight: .ultraLight))
-                Image(systemName: "waveform.path.ecg")
-                    .font(.system(size: 12, weight: .light))
-                    .offset(x: 3, y: 1)
+            if symbol == "waveform.path.ecg" {
+                Image("health_hrv")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 19, height: 19)
+            } else if symbol == "heart.pulse" {
+                Image("health_heart_rate")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 19, height: 19)
+            } else if symbol == "lungs" {
+                Image("health_respiratory")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 19, height: 19)
+            } else if symbol == "flame" {
+                Image("health_strain")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 19, height: 19)
+            } else if symbol == "figure.walk" {
+                Image(systemName: "figure.walk")
+                    .font(.system(size: 19, weight: .light))
+            } else if symbol == "dumbbell" {
+                Image(systemName: "dumbbell.fill")
+                    .font(.system(size: 15, weight: .light))
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: 19, weight: .ultraLight))
@@ -660,7 +684,7 @@ struct MetricRow: View {
         .padding(.horizontal, AppLayout.cardInset)
         .frame(minHeight: AppLayout.dashboardRowHeight)
         .background(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).fill(LinearGradient.dashboardCard))
-        .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.25), lineWidth: 0.5))
         .padding(.bottom, AppLayout.dashboardRowSpacing)
         .accessibilityElement(children: .combine)
     }

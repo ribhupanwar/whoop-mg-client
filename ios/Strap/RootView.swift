@@ -180,26 +180,25 @@ struct RootView: View {
     }
 
     private var floatingNavigation: some View {
-        // WHOOP-reference navigation: four tabs with a separate circular accessory.
-        // The selected tab is legible without relying on glass blur alone.
+        // WHOOP-reference navigation: four tabs with a separate rounded-square accessory.
+        // Blue-gray translucent appearance matching reference width and height.
         HStack(spacing: 8) {
             HStack(spacing: 0) {
                 ForEach(AppTab.allCases, id: \.self) { item in
                     let selected = tab == item
                     Button { tab = item } label: {
-                        VStack(spacing: 4) {
+                        VStack(spacing: 3) {
                             Image(systemName: selected ? item.selectedIcon : item.icon)
-                                .font(.system(size: 20, weight: selected ? .semibold : .regular))
-                                .frame(height: 24)
+                                .font(.system(size: 19, weight: selected ? .semibold : .regular))
+                                .frame(height: 22)
                             Text(item.label)
-                                .font(StrapTypography.body(10, weight: selected ? .bold : .semibold))
+                                .font(StrapTypography.body(9.5, weight: selected ? .bold : .medium))
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .foregroundStyle(selected ? Color.white : Color(hex: 0x6B7882))
+                        .foregroundStyle(selected ? Color.white : Color(hex: 0x7E8B94))
                         .frame(maxWidth: .infinity)
-                        .frame(minHeight: 52)
-
+                        .frame(minHeight: 50)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
@@ -211,43 +210,45 @@ struct RootView: View {
                     .accessibilityAddTraits(selected ? .isSelected : [])
                 }
             }
-            .padding(.horizontal, 7)
-            .padding(.vertical, 5)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
             .background {
                 if navigationGlass {
-                    RoundedRectangle(cornerRadius: 28).fill(Color.clear)
-                        .strapLiquidGlass(cornerRadius: 28)
+                    RoundedRectangle(cornerRadius: 26).fill(Color.clear)
+                        .strapLiquidGlass(cornerRadius: 26)
                 } else {
-                    RoundedRectangle(cornerRadius: 28).fill(Color(hex: 0x171E22).opacity(0.95))
+                    RoundedRectangle(cornerRadius: 26).fill(Color(hex: 0x1A2228).opacity(0.94))
                 }
             }
-            .overlay(RoundedRectangle(cornerRadius: 28)
-                .strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
+            .overlay(RoundedRectangle(cornerRadius: 26)
+                .strokeBorder(Color(hex: 0x36424A).opacity(0.55), lineWidth: 0.5))
+
             Button { showCoach = true } label: {
                 ZStack {
                     Circle()
                         .strokeBorder(Color(hex: 0x6661B9).opacity(0.7), lineWidth: 1.4)
-                        .frame(width: 43, height: 43)
+                        .frame(width: 38, height: 38)
                     Circle()
                         .trim(from: 0.05, to: 0.79)
                         .stroke(Color(hex: 0x7995F7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
-                        .frame(width: 43, height: 43)
+                        .frame(width: 38, height: 38)
                     WhoopWGlyph(color: .white)
-                        .frame(width: 25, height: 25)
+                        .frame(width: 22, height: 22)
                 }
-                .frame(width: 54, height: 54)
-                .background(Color(hex: 0x171E2B).opacity(0.98), in: Circle())
-                .overlay(Circle().strokeBorder(Color(hex: 0x3E385A).opacity(0.8), lineWidth: 0.6))
+                .frame(width: 50, height: 50)
+                .background(Color(hex: 0x181F27).opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(hex: 0x3E4854).opacity(0.65), lineWidth: 0.6))
+                .shadow(color: Color(hex: 0x5C6BC0).opacity(0.20), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("STRAP AI Coach")
             .accessibilityHint("Open coaching chat and model settings")
             .accessibilityIdentifier("nav.aiCoach")
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 16)
         .padding(.bottom, 5)
-        .padding(.top, 5)
+        .padding(.top, 4)
     }
 
 }

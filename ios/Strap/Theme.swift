@@ -42,8 +42,8 @@ extension Color {
     static let appDemoFlagBG = Color(hex: 0x2A2114)
     static let appButtonFill = Color(hex: 0x2A3339)         // Action pill buttons (+ ADD ACTIVITY)
     static let appNavBarBG = Color(hex: 0x171E22).opacity(0.92) // Translucent tab bar
-    static let appCustomizeStart = Color(red: 0.93, green: 0.39, blue: 0.86)
-    static let appCustomizeEnd = Color(red: 0.65, green: 0.28, blue: 0.87)
+    static let appCustomizeStart = Color(hex: 0xFF9E80)         // Reference peach-to-purple
+    static let appCustomizeEnd = Color(hex: 0x8E24AA)
 }
 
 /// Shared geometry keeps cards and metric rows aligned across tabs.
@@ -54,9 +54,9 @@ enum AppLayout {
     static let cardSpacing: CGFloat = 14
     static let metricRadius: CGFloat = 15
 
-    static let dashboardRowHeight: CGFloat = 54
-    static let dashboardRowSpacing: CGFloat = 11
-    static let dashboardRowRadius: CGFloat = 11
+    static let dashboardRowHeight: CGFloat = 60
+    static let dashboardRowSpacing: CGFloat = 12
+    static let dashboardRowRadius: CGFloat = 12
 
     // Ring Geometry Constants (WHOOP Reference Specification)
     static let heroRingDiameter: CGFloat = 84.0
@@ -75,8 +75,8 @@ extension LinearGradient {
     }
 
     static var dashboardCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x363E41), Color(hex: 0x282C2F)],
-                       startPoint: .topLeading, endPoint: .bottomTrailing)
+        LinearGradient(colors: [Color(hex: 0x2E3539), Color(hex: 0x222629)],
+                       startPoint: .top, endPoint: .bottom)
     }
 
     static var appCanvas: LinearGradient {
