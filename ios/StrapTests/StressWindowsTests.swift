@@ -42,6 +42,17 @@ final class StressWindowsTests: XCTestCase {
         Baseline(lnRMSSDMean: mean, lnRMSSDSD: 0.5, rhrMean: 60, rhrSD: 3, days: days)
     }
 
+    func testCanonicalMovingRecordCannotBeReplacedByQuietReplay() {
+        let quiet = window(0)
+        let moving = quiet.map { row in
+            V18Sample(header: row.header, heartRate: 100,
+                      rrIntervalsMS: [400, 450], dynamicAccelG: 0.65)
+        }
+        let norm = baseline(mean: 4.605)
+        XCTAssertTrue(StressWindows.series(samples: quiet + moving, baseline: norm).isEmpty)
+        XCTAssertEqual(StressWindows.share(samples: moving + quiet, baseline: norm).windows, 0)
+    }
+
     func testStressDiagnosticsRetainsRawDeviationBeforeClamping() {
         let high = Recovery.stressIndex(lnRMSSD: 1, baseline: baseline(mean: 6))
         XCTAssertEqual(high.index, 3)

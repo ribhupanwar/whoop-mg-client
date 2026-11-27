@@ -416,6 +416,10 @@ struct HealthView: View {
                 Text("V20 raw optical payload: \(optical.bytes) bytes · \(Date(timeIntervalSince1970: Double(optical.unix)).formatted())")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                let quality = deep.opticalQuality
+                Text("V20 sample quality · invalid: \(quality.invalidSamples) · at ADC rails: \(quality.saturatedSamples) · flatline slots: \(quality.flatlineSlots)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
             }
             if let tagged = deep.tagged {
                 Text("V22 latest tag: \(tagged.tag) (\(tagged.known ? "known tag" : "unknown tag")) · unknown frames: \(deep.unknownV22Frames)")

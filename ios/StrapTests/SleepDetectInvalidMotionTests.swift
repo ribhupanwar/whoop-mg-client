@@ -34,6 +34,44 @@ final class SleepDetectInvalidMotionTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty, "Desk rest with an HR drop is not confirmed daytime sleep")
     }
 
+    func testMissingMotionDoesNotSupplyActiveReference() {
+        let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
+        var rows: [V18Sample] = []
+        for i in 0..<7800 {
+            let header = BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0)
+            let hr: Int = i < 600 ? 100 : 55
+            let motion: Double? = i < 600 ? nil : 0.01
+            let state: Int = i < 600 ? 0 : 2
+            rows.append(V18Sample(header: header, heartRate: hr,
+                                  dynamicAccelG: motion, sleepState: state))
+        }
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
+    func testSleepReplayAndMissingMotionDoNotInventDisturbances() throws {
+        let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
+        var rows: [V18Sample] = []
+        for i in 0..<8400 {
+            let asleep = (600..<7800).contains(i)
+            let missing = (3000..<3030).contains(i)
+            let header = BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0)
+            let hr: Int = asleep ? 55 : 100
+            let motion: Double? = missing ? nil : (asleep ? 0.01 : 0.3)
+            let state: Int = asleep ? 2 : 3
+            rows.append(V18Sample(header: header, heartRate: hr,
+                                  dynamicAccelG: motion, sleepState: state))
+        }
+        let original = try XCTUnwrap(SleepDetect.detect(rows).first)
+        let replayed = try XCTUnwrap(SleepDetect.detect(rows + rows).first)
+        XCTAssertEqual(original.startUnix, replayed.startUnix)
+        XCTAssertEqual(original.endUnix, replayed.endUnix)
+        XCTAssertEqual(original.wakeEvents, 0)
+        XCTAssertEqual(original.wakeEvents, replayed.wakeEvents)
+        XCTAssertEqual(original.quietFraction, replayed.quietFraction)
+    }
+
     func testInvalidAccelerationCannotBecomeQuietSleepEvidence() {
         let start = 1_800_000_000
         func make(_ second: Int, accel: Double) -> V18Sample {

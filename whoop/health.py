@@ -307,7 +307,9 @@ def _is_gravity_sparse(samples: list[V18Sample]) -> bool:
     """
     if not samples:
         return True
-    grav_seconds = len(set(s.unix for s in samples if s.dynamic_accel_g is not None))
+    grav_seconds = len({s.unix for s in samples if s.wearing and 35 <= s.heart_rate <= 220
+                        and s.dynamic_accel_g is not None and math.isfinite(s.dynamic_accel_g)
+                        and s.dynamic_accel_g >= 0})
     hr_seconds = len(set(s.unix for s in samples if s.wearing))
     if hr_seconds == 0:
         return True
@@ -485,6 +487,21 @@ def _off_wrist_fraction(run: list[V18Sample], samples: list[V18Sample]) -> float
     return len(off_wrist_seconds) / run_duration
 
 
+def _canonical_sleep_rows(samples: list[V18Sample]) -> list[V18Sample]:
+    """Use the same whole-record replay preference as Swift history selection."""
+    def priority(s):
+        valid = sum(MIN_RR_MS <= r <= MAX_RR_MS for r in s.rr_intervals_ms)
+        return (25 <= s.heart_rate <= 230, valid,
+                -(len(s.rr_intervals_ms) - valid), s.dynamic_accel_g is not None,
+                -s.header.record_index)
+    by_second = {}
+    for row in samples:
+        old = by_second.get(row.unix)
+        if old is None or priority(row) > priority(old):
+            by_second[row.unix] = row
+    return sorted(by_second.values(), key=lambda row: row.unix)
+
+
 def detect_sleep(
     samples: list[V18Sample],
     quiet_accel_g: float = QUIET_ACCEL_G,
@@ -514,10 +531,10 @@ def detect_sleep(
     - Terminal wake trimming (sustained band-up + HR/motion transition)
     - Leading awake trimming (sustained band-up at overnight onset)
     """
-    ordered = sorted(samples, key=lambda s: s.unix)
+    ordered = _canonical_sleep_rows(samples)
     if not ordered:
         return []
-    
+
     sparse = _is_gravity_sparse(ordered)
     if sparse and trace_sink:
         trace_sink({"gate": "sparseBridge", "verdict": "sparse", "gravityCoverageRatio": 
@@ -529,13 +546,16 @@ def detect_sleep(
     if sparse:
         effective_quiet_accel = 0.10  # Lower threshold for sparse gravity
     
-    quiet = [
-        s.dynamic_accel_g is not None and s.dynamic_accel_g <= effective_quiet_accel
-        for s in ordered
-    ]
-    active_hrs = [
-        float(s.heart_rate) for s, q in zip(ordered, quiet) if not q and s.wearing
-    ]
+    def valid_motion(s):
+        return (s.wearing and 35 <= s.heart_rate <= 220
+                and s.dynamic_accel_g is not None and math.isfinite(s.dynamic_accel_g)
+                and s.dynamic_accel_g >= 0)
+
+    def measured_movement(s):
+        return valid_motion(s) and s.dynamic_accel_g > effective_quiet_accel
+
+    quiet = [valid_motion(s) and s.dynamic_accel_g <= effective_quiet_accel for s in ordered]
+    active_hrs = [float(s.heart_rate) for s in ordered if measured_movement(s)]
     if not active_hrs:
         if trace_sink:
             trace_sink({"gate": "hrConfirm", "verdict": "dropped", "reason": "noActiveSeconds"})
@@ -979,7 +999,7 @@ def detect_sleep(
             last_moving_unix = None
             for idx in verified_indices:
                 u = ordered[idx].unix
-                if not quiet[idx]:
+                if measured_movement(ordered[idx]):
                     if last_moving_unix is not None:
                         if u == last_moving_unix + 1:
                             moving_seconds += 1
