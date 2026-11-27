@@ -25,6 +25,11 @@ final class MoreTabNavigationTests: XCTestCase {
         let bandAlarms = BandAlarmsView().environmentObject(store)
         XCTAssertNotNil(bandAlarms)
 
+        // Additional existing destinations exposed by the consolidated More tab
+        XCTAssertNotNil(JournalView().environmentObject(store))
+        XCTAssertNotNil(PlanView().environmentObject(store))
+        XCTAssertNotNil(StrapWidgetGuideView())
+
         // 4. Health Integrations
         let healthIntegrations = AppleHealthImportView()
         XCTAssertNotNil(healthIntegrations)
@@ -55,36 +60,22 @@ final class MoreTabNavigationTests: XCTestCase {
     }
 
     func testMoreTabSectionsAndRowTitlesAreUnique() {
-        // Enumerate expected More tab entries
-        let entries: [(section: String, title: String, icon: String)] = [
-            ("DEVICE", "Device Settings", "radiowaves.right"),
-            ("DEVICE", "Connection & Sync", "arrow.triangle.2.circlepath"),
-            ("DEVICE", "Band Alarms", "alarm"),
-            ("HEALTH & DATA", "Health Integrations", "link"),
-            ("HEALTH & DATA", "Data Import & Export", "externaldrive"),
-            ("HEALTH & DATA", "Health & Activity Settings", "figure.run"),
-            ("PREFERENCES", "Notifications", "bell"),
-            ("PREFERENCES", "App Preferences", "gearshape"),
-            ("ABOUT", "App Information", "info.circle"),
-            ("ABOUT", "Diagnostics & Support", "wrench.and.screwdriver")
-        ]
-
-        // Verify total row count is exactly 10
-        XCTAssertEqual(entries.count, 10, "More tab must contain exactly 10 unique rows")
-
-        // Verify all row titles are unique
-        let titles = entries.map { $0.title }
-        let uniqueTitles = Set(titles)
-        XCTAssertEqual(titles.count, uniqueTitles.count, "Every More tab row title must be unique")
-
-        // Verify all icons are unique
-        let icons = entries.map { $0.icon }
-        let uniqueIcons = Set(icons)
-        XCTAssertEqual(icons.count, uniqueIcons.count, "Every More tab row icon must be unique")
-
-        // Verify sections
-        let sections = Set(entries.map { $0.section })
-        XCTAssertEqual(sections, ["DEVICE", "HEALTH & DATA", "PREFERENCES", "ABOUT"])
+        let entries = MoreMenuItem.allCases
+        XCTAssertEqual(entries.count, 15)
+        XCTAssertEqual(Set(entries.map { $0.metadata.title }).count, entries.count)
+        XCTAssertEqual(Set(entries.map { $0.metadata.icon }).count, entries.count)
+        XCTAssertEqual(Set(entries.map { $0.accessibilityID }).count, entries.count)
+        let counts = Dictionary(grouping: entries, by: { $0.metadata.section }).mapValues { $0.count }
+        XCTAssertEqual(counts, [
+            "DEVICE": 3,
+            "HEALTH & ACTIVITY": 3,
+            "DATA & INTEGRATIONS": 4,
+            "PREFERENCES": 2,
+            "WIDGETS & LIVE ACTIVITIES": 1,
+            "ABOUT": 2
+        ])
+        XCTAssertEqual(MoreMenuItem.journal.accessibilityID, "more.journal")
+        XCTAssertEqual(MoreMenuItem.backupRestore.metadata.section, "DATA & INTEGRATIONS")
     }
 
     func testWakeAlarmPersistenceThroughBandAlarms() {
