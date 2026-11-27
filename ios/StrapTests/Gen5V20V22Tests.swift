@@ -55,8 +55,9 @@ final class Gen5V20V22Tests: XCTestCase {
         XCTAssertEqual(block.detectorA.offset, -800)
         XCTAssertEqual(block.detectorA.samples, [-524_288, 524_287, nil])
         XCTAssertTrue(block.detectorB.isFlatline)
-        var quality = Gen5V20DrainQuality()
-        quality.record(record)
+        var deep = NativeDeepTelemetry()
+        XCTAssertTrue(deep.ingest(bytes))
+        let quality = deep.opticalQuality
         XCTAssertEqual(quality.frames, 1)
         XCTAssertEqual(quality.invalidSamples, 1)
         XCTAssertEqual(quality.saturatedSamples, 2)

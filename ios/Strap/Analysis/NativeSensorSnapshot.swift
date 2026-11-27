@@ -6,7 +6,11 @@ struct NativeSensorSnapshot: Equatable, Codable {
     static let unavailablePSNR = -128
     static let validCadenceRange = 0...250
 
+    /// Latest observation across sources, for diagnostics only.
     let observedAt: Date
+    let sampleObservedAt: Date?
+    let contactObservedAt: Date?
+    let sampleWearing: Bool?
     let source: String
     let wristContact: WristContactState
     let wristStateRaw: UInt16?
@@ -36,6 +40,28 @@ struct NativeSensorSnapshot: Equatable, Codable {
     func isFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
         let age = now.timeIntervalSince(observedAt)
         return age >= 0 && age <= maxAge
+    }
+
+    private static func fresh(_ date: Date?, at now: Date, maxAge: TimeInterval) -> Bool {
+        guard let date else { return false }
+        let age = now.timeIntervalSince(date)
+        return age >= 0 && age <= maxAge
+    }
+
+    func isSampleFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
+        Self.fresh(sampleObservedAt, at: now, maxAge: maxAge)
+    }
+
+    func isContactFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
+        Self.fresh(contactObservedAt, at: now, maxAge: maxAge)
+    }
+
+    /// V18 history can be delivered late. Never use receipt/contact time to
+    /// make a stale measured cadence appear live, and never invent cadence.
+    func recentStepCadence(at now: Date, connected: Bool, maxAge: TimeInterval = 15) -> Int? {
+        guard connected, sampleWearing == true, wristContact != .offWrist,
+              wristContact != .uncertain, isSampleFresh(at: now, maxAge: maxAge) else { return nil }
+        return stepCadenceSPM
     }
 
     static func sanitizedPSNR(_ raw: Int?) -> Int? {
@@ -79,8 +105,13 @@ struct NativeSensorSnapshot: Equatable, Codable {
         }()
         let wristContact = preferFallbackContact ? fallbackWristState : (statusPacket?.contactState ?? fallbackWristState)
         let wristStateRaw = preferFallbackContact ? nil : statusPacket?.wristStateRaw
+        let selectedContactDate = preferFallbackContact ? fallbackWristObservedAt
+            : (statusPacket == nil ? fallbackWristObservedAt : statusObservedAt)
         return NativeSensorSnapshot(
             observedAt: observedAt,
+            sampleObservedAt: sampleDate,
+            contactObservedAt: selectedContactDate,
+            sampleWearing: latestSample?.wearing,
             source: source,
             wristContact: wristContact,
             wristStateRaw: wristStateRaw,
@@ -94,5 +125,111 @@ struct NativeSensorSnapshot: Equatable, Codable {
             spo2CandidateRaw: latestSample?.spo2CandidateRaw,
             spo2CandidateKind: latestSample?.spo2CandidateKind ?? .absent
         )
+    }
+}
+
+
+/// Historical deep-record measurements, kept separate from 1 Hz biometrics.
+/// Counts are received frames in this drain, including replay; latest means
+/// newest band timestamp, not receipt time. Raw data remains in the capture.
+struct NativeDeepTelemetry: Equatable {
+    struct Motion: Equatable {
+        let version: UInt8
+        let unix: UInt32
+        let accelerationSamples: Int
+        let gyroSamples: Int
+        let centeredAccelerationRMSG: Double
+        let angularVelocityRMSDPS: Double
+
+        init(_ record: Gen5IMUBuffer) {
+            version = record.version
+            unix = record.unix
+            accelerationSamples = record.accelerationG.first?.count ?? 0
+            gyroSamples = record.angularVelocityDPS.first?.count ?? 0
+            // Remove per-axis mean (including static gravity); do not infer
+            // cadence, sleep stages or orientation from one historical block.
+            centeredAccelerationRMSG = Self.vectorRMS(record.accelerationG, centered: true)
+            angularVelocityRMSDPS = Self.vectorRMS(record.angularVelocityDPS, centered: false)
+        }
+
+        private static func vectorRMS(_ axes: [[Double]], centered: Bool) -> Double {
+            guard let count = axes.first?.count, count > 0 else { return 0 }
+            let sum = axes.reduce(0.0) { total, axis in
+                let mean = centered ? axis.reduce(0, +) / Double(count) : 0
+                return total + axis.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) }
+            }
+            return sqrt(sum / Double(count))
+        }
+    }
+
+    struct Optical: Equatable {
+        let unix: UInt32
+        let bytes: Int
+    }
+
+    struct Tagged: Equatable {
+        let unix: UInt32
+        let tag: UInt8
+        let known: Bool
+    }
+
+    struct PIP: Equatable {
+        let unix: UInt32
+        let deltaCount: Int
+        let deltaRMSADC: Double?
+        let firstADC: Int32
+        let accelerationDeltaG: Double?
+
+        init(_ record: Gen5V26Record) {
+            unix = record.header.unix
+            deltaCount = record.opticalDeltas.count
+            let squares = record.opticalDeltas.reduce(0.0) { total, value in
+                total + Double(value) * Double(value)
+            }
+            deltaRMSADC = deltaCount > 0 ? sqrt(squares / Double(deltaCount)) : nil
+            firstADC = record.firstSampleADC
+            accelerationDeltaG = record.accelDeltaG
+        }
+    }
+
+    private(set) var opticalQuality = Gen5V20DrainQuality()
+    var v20Frames: Int { opticalQuality.frames }
+    private(set) var imuFrames = 0
+    private(set) var v22Frames = 0
+    private(set) var unknownV22Frames = 0
+    private(set) var v26Frames = 0
+    private(set) var optical: Optical?
+    private(set) var motion: Motion?
+    private(set) var tagged: Tagged?
+    private(set) var pip: PIP?
+
+    /// Called only for validated historical frame routes. Returns true for
+    /// recognized deep records (including unresolved v22 tags).
+    mutating func ingest(_ inner: [UInt8]) -> Bool {
+        if let record = Gen5V26Record.decode(inner) {
+            v26Frames += 1
+            if pip.map({ record.header.unix >= $0.unix }) ?? true {
+                pip = PIP(record)
+            }
+        } else if let record = Gen5IMUBuffer.decode(inner) {
+            imuFrames += 1
+            if motion.map({ record.unix >= $0.unix }) ?? true {
+                motion = Motion(record)
+            }
+        } else if let record = Gen5V20Record.decode(inner) {
+            opticalQuality.record(record)
+            if optical.map({ record.header.unix >= $0.unix }) ?? true {
+                optical = Optical(unix: record.header.unix, bytes: record.rawBody.count)
+            }
+        } else if let record = Gen5V22Record.decode(inner) {
+            v22Frames += 1
+            if !record.hasKnownLayout { unknownV22Frames += 1 }
+            if tagged.map({ record.header.unix >= $0.unix }) ?? true {
+                tagged = Tagged(unix: record.header.unix, tag: record.tag, known: record.hasKnownLayout)
+            }
+        } else {
+            return false
+        }
+        return true
     }
 }

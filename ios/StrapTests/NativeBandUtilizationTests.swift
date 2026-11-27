@@ -94,6 +94,31 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(snapshot?.observedAt, t2)
     }
 
+    func testFreshContactCannotRefreshHistoricalCadenceOrOpticalSample() throws {
+        let measured = Date(timeIntervalSince1970: 1_700_000_000)
+        let now = measured.addingTimeInterval(1200)
+        let sample = V18Sample(
+            header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: 1,
+                                     unix: UInt32(measured.timeIntervalSince1970), subsecQ15: 0),
+            heartRate: 140, stepCadence: 176, psnrA: 12)
+        let snapshot = try XCTUnwrap(NativeSensorSnapshot.build(
+            latestSample: sample, statusPacket: nil, statusObservedAt: nil,
+            fallbackWristState: .onWrist, fallbackWristObservedAt: now))
+        XCTAssertEqual(snapshot.sampleObservedAt, measured)
+        XCTAssertEqual(snapshot.contactObservedAt, now)
+        XCTAssertTrue(snapshot.isContactFresh(at: now))
+        XCTAssertFalse(snapshot.isSampleFresh(at: now))
+        XCTAssertNil(snapshot.recentStepCadence(at: now, connected: true))
+        XCTAssertEqual(snapshot.recentStepCadence(at: measured.addingTimeInterval(15), connected: true), 176)
+        XCTAssertNil(snapshot.recentStepCadence(at: measured.addingTimeInterval(16), connected: true))
+        XCTAssertNil(snapshot.recentStepCadence(at: measured.addingTimeInterval(-1), connected: true))
+        XCTAssertNil(snapshot.recentStepCadence(at: measured, connected: false))
+        let offWrist = try XCTUnwrap(NativeSensorSnapshot.build(
+            latestSample: sample, statusPacket: nil, statusObservedAt: nil,
+            fallbackWristState: .offWrist, fallbackWristObservedAt: measured))
+        XCTAssertNil(offWrist.recentStepCadence(at: measured, connected: true))
+    }
+
     func testNativeCadenceRejectsOutOfRangeValues() {
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(0), 0)
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(180), 180)
@@ -121,6 +146,62 @@ final class NativeBandUtilizationTests: XCTestCase {
         let decoded = V18Decoder.decode(inner)
         XCTAssertNotNil(decoded)
         XCTAssertNil(decoded?.skinTempC, "-5000 (-50.00 C) sentinel must decode to nil")
+    }
+
+    func testNativeDeepTelemetryRoutesAllLayoutsWithoutInventingBiometrics() throws {
+        func frame(_ version: UInt8, _ size: Int, unix: UInt8 = 100) -> [UInt8] {
+            var bytes = [UInt8](repeating: 0, count: size)
+            bytes[0] = 0x2F
+            bytes[1] = version
+            bytes[7] = unix
+            return bytes
+        }
+        var deep = NativeDeepTelemetry()
+        let optical = frame(20, 2128)
+        XCTAssertTrue(deep.ingest(optical))
+        XCTAssertEqual(deep.optical?.bytes, 2115)
+        XCTAssertTrue(deep.ingest(frame(20, 2128, unix: 90)))
+        XCTAssertEqual(deep.optical?.unix, 100)
+        XCTAssertEqual(deep.v20Frames, 2)
+
+        var imu = frame(21, 1232)
+        imu[16] = 2
+        imu[622] = 1
+        imu[21] = 0x10 // +1 g
+        imu[23] = 0xF0 // -1 g
+        imu[633] = 0x40 // +1000 dps
+        XCTAssertTrue(deep.ingest(imu))
+        let motion = try XCTUnwrap(deep.motion)
+        XCTAssertEqual(motion.accelerationSamples, 2)
+        XCTAssertEqual(motion.gyroSamples, 1)
+        XCTAssertEqual(motion.centeredAccelerationRMSG, 1, accuracy: 0.000001)
+        XCTAssertEqual(motion.angularVelocityRMSDPS, 1000, accuracy: 0.000001)
+        var still = imu
+        still[23] = 0x10
+        XCTAssertTrue(deep.ingest(still))
+        XCTAssertEqual(try XCTUnwrap(deep.motion).centeredAccelerationRMSG, 0, accuracy: 0.000001)
+
+        var tagged = frame(22, 176)
+        tagged[13] = 3
+        XCTAssertTrue(deep.ingest(tagged))
+        XCTAssertEqual(deep.tagged?.known, true)
+        tagged[13] = 255
+        XCTAssertTrue(deep.ingest(tagged))
+        XCTAssertEqual(deep.tagged?.known, false)
+        XCTAssertEqual(deep.unknownV22Frames, 1)
+
+        var pip = frame(26, 76)
+        pip[19] = 0xFF; pip[20] = 0xFF // -1 ADC delta
+        XCTAssertTrue(deep.ingest(pip))
+        XCTAssertEqual(deep.pip?.deltaCount, 24)
+        XCTAssertEqual(try XCTUnwrap(deep.pip?.deltaRMSADC), sqrt(1.0 / 24), accuracy: 0.000001)
+        for raw in [optical, imu, tagged, pip] {
+            XCTAssertNil(V18Decoder.decode(raw))
+        }
+        XCTAssertFalse(deep.ingest(frame(18, 110)))
+        XCTAssertFalse(deep.ingest(Array(imu.dropLast())))
+        XCTAssertEqual(deep.imuFrames, 2)
+        XCTAssertEqual(deep.v26Frames, 1)
     }
 
     func testBackgroundSyncSchedulerRequestConfiguration() {
