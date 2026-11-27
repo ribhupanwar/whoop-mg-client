@@ -114,6 +114,76 @@ enum RecoveryDiagnostics {
         }
     }
 
+    /// Observation-only five-minute breakdown. Does not select a preferred
+    /// score, alter the estimator, or modify stored recovery.
+    struct HRVWindowEvidence: Encodable {
+        let startUnix: Int
+        let endUnixExclusive: Int
+        let observedSeconds: Int
+        let eligibleQuietSeconds: Int
+        let bandState2Seconds: Int
+        let bandState3Seconds: Int
+        let estimatedDeepSeconds: Int
+        let estimatedWakeSeconds: Int
+        let rawBeats: Int
+        let cleanBeats: Int
+        let rrDurationSeconds: Double
+        let rrDurationCoverage: Double?
+        let candidateRMSSD: Double?
+        let productionBucketGate: String
+    }
+
+    static func hrvWindowEvidence(samples: [V18Sample], session: SleepSession) -> [HRVWindowEvidence] {
+        guard session.startUnix < session.endUnix else { return [] }
+        var unique: [Int: V18Sample] = [:]
+        for row in samples where session.startUnix <= row.unix && row.unix < session.endUnix {
+            if let old = unique[row.unix],
+               !Hrv.preferRetransmittedRR(row.rrIntervalsMS, over: old.rrIntervalsMS) { continue }
+            unique[row.unix] = row
+        }
+        let groups = Dictionary(grouping: unique.values, by: { $0.unix / 300 })
+        return groups.keys.sorted().compactMap { bucket -> HRVWindowEvidence? in
+            guard let rows = groups[bucket] else { return nil }
+            let start = max(session.startUnix, bucket * 300)
+            let end = min(session.endUnix, (bucket + 1) * 300)
+            let eligible = rows.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && $0.dynamicAccelG.map { $0.isFinite && (0...Hrv.restingQuietAccelG).contains($0) } == true
+            }.sorted { $0.unix < $1.unix }
+            let rrDurationMS = eligible.reduce(0) { sum, row in
+                sum + row.rrIntervalsMS.filter {
+                    (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+                }.reduce(0, +)
+            }
+            let rrDuration = Double(rrDurationMS) / 1000
+            let elapsed = eligible.first.flatMap { first in
+                eligible.last.map { $0.unix - first.unix + 1 }
+            } ?? 0
+            let result = Hrv.fromSamples(eligible)
+            let gate: String
+            if eligible.count < 150 || elapsed < 150 { gate = "insufficient_quiet_coverage" }
+            else if rrDuration < 75 { gate = "insufficient_rr_duration" }
+            else if rrDurationMS > elapsed * 1050 { gate = "excess_rr_duration" }
+            else if result.nnBeats < 21 || result.rmssdMS.map({ $0.isFinite && $0 > 0 }) != true {
+                gate = "insufficient_clean_nn"
+            } else { gate = "qualifies_primary_bucket" }
+            func stageSeconds(_ stage: SleepStage) -> Int {
+                rows.filter { row in session.staging.segments.contains {
+                    $0.stage == stage && $0.startUnix <= row.unix && row.unix < $0.endUnix
+                } }.count
+            }
+            return HRVWindowEvidence(startUnix: start, endUnixExclusive: end,
+                observedSeconds: rows.count, eligibleQuietSeconds: eligible.count,
+                bandState2Seconds: rows.filter { $0.sleepState == 2 }.count,
+                bandState3Seconds: rows.filter { $0.sleepState == 3 }.count,
+                estimatedDeepSeconds: stageSeconds(.deep), estimatedWakeSeconds: stageSeconds(.wake),
+                rawBeats: result.beats, cleanBeats: result.nnBeats,
+                rrDurationSeconds: rrDuration,
+                rrDurationCoverage: elapsed > 0 ? rrDuration / Double(elapsed) : nil,
+                candidateRMSSD: result.rmssdMS, productionBucketGate: gate)
+        }
+    }
+
     struct Report: Encodable {
         let calculationVersion = "strap-dated-recovery-v1"
         let createdAt = Date()
@@ -137,6 +207,7 @@ enum RecoveryDiagnostics {
         let deepQuietWindows: [Hrv.RestingWindowDiagnostic]
         let recomputedRHR: Double?
         var shadowHrvCandidates: [Hrv.ShadowCandidateSummary]? = nil
+        var hrvWindowEvidence: [HRVWindowEvidence]? = nil
         var sleepAnalysis: SleepAnalysis? = nil
         var upcomingSleepPlan: SleepRecommendation? = nil
         var respiratoryRate: Double? = nil

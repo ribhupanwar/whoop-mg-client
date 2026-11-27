@@ -1236,6 +1236,7 @@ final class BandLink: NSObject, ObservableObject {
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
                 recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
                 shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
+                hrvWindowEvidence: RecoveryDiagnostics.hrvWindowEvidence(samples: samples, session: session),
                 sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan,
                 respiratoryRate: assessment.day?.respiratoryRate,
