@@ -176,11 +176,15 @@ enum Recovery {
         // Each recorded second contributes at most one candidate to the mean.
         // Prefer an eligible on-wrist reading over a duplicate off-wrist or
         // diagnostic record; equal-quality replays retain the first record.
+        func isEligible(_ sample: V18Sample) -> Bool {
+            guard sample.wearing, let pct = sample.spo2CandidatePct else { return false }
+            return (V18Decoder.spo2CandidateMin...V18Decoder.spo2CandidateMax).contains(pct)
+        }
         var bySecond: [Int: V18Sample] = [:]
         for sample in samples {
-            let eligible = sample.wearing && sample.spo2CandidatePct != nil
+            let eligible = isEligible(sample)
             if let previous = bySecond[sample.unix] {
-                let previousEligible = previous.wearing && previous.spo2CandidatePct != nil
+                let previousEligible = isEligible(previous)
                 if !eligible || previousEligible { continue }
             }
             bySecond[sample.unix] = sample

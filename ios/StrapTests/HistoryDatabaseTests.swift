@@ -50,6 +50,36 @@ final class HistoryDatabaseTests: XCTestCase {
         XCTAssertNil(NightTemperature.measure(negativeMotion, session: session).celsius)
         XCTAssertEqual(NightTemperature.measure(bad, session: session).seconds, 0)
     }
+    func testNightTemperatureFunnelCountsFirstFailureAndReplay() {
+        let rows = (1000..<1300).map { historySample($0) }
+        let session = SleepSession.make(samples: rows, period: SleepPeriod(startUnix: 1000, endUnix: 1299,
+            quietFraction: 1, meanHR: 60, wakeEvents: 0))
+        let bad = [
+            historySample(1000, hr: 0),
+            historySample(1001, hr: 30),
+            historySample(1002, motion: nil),
+            historySample(1003, motion: -0.01),
+            historySample(1004, motion: 10),
+            historySample(1005, temp: nil),
+            historySample(1006, temp: .nan)
+        ]
+        let good = Array(rows.dropFirst(7))
+        let funnel = NightTemperature.funnel(bad + good + good + [historySample(999)], session: session)
+        XCTAssertTrue(funnel.hasSession)
+        XCTAssertEqual(funnel.uniqueSeconds, 300)
+        XCTAssertEqual(funnel.rejectedWearing, 1)
+        XCTAssertEqual(funnel.rejectedHR, 1)
+        XCTAssertEqual(funnel.rejectedMissingMotion, 1)
+        XCTAssertEqual(funnel.rejectedInvalidMotion, 1)
+        XCTAssertEqual(funnel.rejectedActiveMotion, 1)
+        XCTAssertEqual(funnel.rejectedMissingTemperature, 1)
+        XCTAssertEqual(funnel.rejectedInvalidTemperature, 1)
+        XCTAssertEqual(funnel.eligibleSeconds, 293)
+        XCTAssertNil(funnel.candidateCelsius)
+        XCTAssertEqual(funnel.inSessionRecords, 593)
+        XCTAssertFalse(NightTemperature.funnel(good, session: nil).hasSession)
+    }
+
     private var directory: URL!
     private var url: URL { directory.appendingPathComponent("history.sqlite") }
     override func setUpWithError() throws {
