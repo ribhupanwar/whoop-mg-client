@@ -14,7 +14,8 @@ struct SleepSession: Codable, Equatable {
     // V18 sleepState=3 ("up") as Deep/Light. The retained sensor archive and
     // authoritative manual bed/wake corrections are not modified.
     // v9: bounded, positively corroborated nocturnal resumption merge.
-    static let algorithmVersion = 9
+    // v10: distinguish missing motion from observed stillness during staging.
+    static let algorithmVersion = 10
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
