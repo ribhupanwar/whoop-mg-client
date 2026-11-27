@@ -61,6 +61,10 @@ private final class AppStoreOwner: ObservableObject {
 struct RootView: View {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
+    @AppStorage("strap.navigationGlass") private var navigationGlass = false
+    @AppStorage("strap.healthWidgetEnabled") private var healthWidgetEnabled = false
+    @AppStorage("strap.journalReminderEnabled") private var journalReminderEnabled = false
+    @AppStorage("strap.journalReminderMinutes") private var journalReminderMinutes = 480
     private var preferredAppearance: ColorScheme? {
         switch appearanceMode {
         case "dark": return .dark
@@ -140,6 +144,7 @@ struct RootView: View {
             else { store.band.persistLiveRRArchive(force: true) }
         }
         .onAppear {
+            store.refreshHealthWidget()
             AppOpenDayTracker.recordOpen()
             if UserDefaults.standard.bool(forKey: DailyLocalBackup.enabledKey) {
                 let preferences = UserDefaults.standard.dictionaryRepresentation()
@@ -166,7 +171,12 @@ struct RootView: View {
         .tint(.appAccent)
         .font(StrapTypography.body(15))
         .environmentObject(store)
-        .preferredColorScheme(.dark)
+        .onChange(of: healthWidgetEnabled) { _, _ in store.refreshHealthWidget() }
+        .task(id: "\(journalReminderEnabled):\(journalReminderMinutes):\(scenePhase)") {
+            if scenePhase == .active {
+                await JournalReminderSchedule.refresh(enabled: journalReminderEnabled, minutes: journalReminderMinutes)
+            }
+        }
     }
 
     private var floatingNavigation: some View {
@@ -203,7 +213,14 @@ struct RootView: View {
             }
             .padding(.horizontal, 7)
             .padding(.vertical, 5)
-            .background(Color(hex: 0x171E22).opacity(0.95), in: RoundedRectangle(cornerRadius: 28))
+            .background {
+                if navigationGlass {
+                    RoundedRectangle(cornerRadius: 28).fill(Color.clear)
+                        .strapLiquidGlass(cornerRadius: 28)
+                } else {
+                    RoundedRectangle(cornerRadius: 28).fill(Color(hex: 0x171E22).opacity(0.95))
+                }
+            }
             .overlay(RoundedRectangle(cornerRadius: 28)
                 .strokeBorder(Color(hex: 0x2D373E).opacity(0.50), lineWidth: 0.5))
             Button { showCoach = true } label: {
@@ -342,10 +359,6 @@ private struct HumansView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Humans")
-                    .font(StrapTypography.body(26, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-
                 Picker("Community Section", selection: $selectedSegment) {
                     Text("MY TEAMS").tag(0)
                     Text("LEADERBOARDS").tag(1)
@@ -362,7 +375,7 @@ private struct HumansView: View {
                                 .frame(width: 44, height: 44)
                                 .background(Color.appAccent.opacity(0.12), in: Circle())
                             VStack(alignment: .leading, spacing: 3) {
-                                Text("PERSONAL BASELINE CLUB")
+                                Text("YOUR PERSONAL RECORDS")
                                     .font(StrapTypography.body(13, weight: .bold))
                                     .foregroundStyle(Color.appFG)
                                 Text("App-open streak: \(AppOpenStreak.stored().current) days")
@@ -372,7 +385,7 @@ private struct HumansView: View {
                         }
                         .padding(.vertical, 6)
                         Divider().background(Color.appLine)
-                        Text("Cloud team synchronization requires WHOOP server credentials. Your personal records and streaks remain stored privately on-device.")
+                        Text("Community syncing is not connected. Your personal records and streaks remain stored privately on-device.")
                             .font(StrapTypography.body(11))
                             .foregroundStyle(Color.appMuted)
                             .lineSpacing(2)

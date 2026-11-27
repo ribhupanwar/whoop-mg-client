@@ -39,3 +39,70 @@ struct StepWidgetSnapshot: Codable, Hashable {
         return true
     }
 }
+
+
+/// Opt-in, dated summary; no raw sensor samples or account identifiers.
+struct HealthWidgetSnapshot: Codable, Equatable {
+    static let storageKey = "strap.health.widget.snapshot.v1"
+    static let widgetKind = "StrapHealthHomeWidget"
+    let dayKey: String
+    let recovery: Double?
+    let sleep: Double?
+    let strain: Double?
+    let battery: Int?
+    let savedAt: Date
+    var stress: Double? = nil
+    var stressObservedAt: Date? = nil
+
+    func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
+        let formatter = DateFormatter()
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return dayKey == formatter.string(from: date)
+    }
+
+    static func load(defaults: UserDefaults? = UserDefaults(suiteName: StepWidgetSnapshot.appGroup)) -> Self? {
+        guard let data = defaults?.data(forKey: storageKey) else { return nil }
+        return try? JSONDecoder().decode(Self.self, from: data)
+    }
+
+    @discardableResult
+    static func save(_ value: Self?, defaults: UserDefaults? = UserDefaults(suiteName: StepWidgetSnapshot.appGroup)) -> Bool {
+        guard let defaults else { return false }
+        guard let value else { defaults.removeObject(forKey: storageKey); return true }
+        guard let data = try? JSONEncoder().encode(value) else { return false }
+        defaults.set(data, forKey: storageKey)
+        return true
+    }
+}
+
+
+enum HealthWidgetMetric: String, CaseIterable {
+    case recovery, sleep, strain, battery, stress
+    var kind: String { "StrapHealthWidget." + rawValue }
+    var title: String { rawValue.capitalized }
+    var maximum: Double { self == .strain ? 21 : (self == .stress ? 3 : 100) }
+    var suffix: String { self == .strain || self == .stress ? "" : "%" }
+    var decimals: Int { self == .strain || self == .stress ? 1 : 0 }
+    func value(in snapshot: HealthWidgetSnapshot, at date: Date) -> Double? {
+        guard snapshot.isForDay(date) else { return nil }
+        let value: Double?
+        switch self {
+        case .recovery: value = snapshot.recovery
+        case .sleep: value = snapshot.sleep
+        case .strain: value = snapshot.strain
+        case .battery:
+            guard (0...600).contains(date.timeIntervalSince(snapshot.savedAt)) else { return nil }
+            value = snapshot.battery.map(Double.init)
+        case .stress:
+            guard let observed = snapshot.stressObservedAt,
+                  (0...600).contains(date.timeIntervalSince(observed)) else { return nil }
+            value = snapshot.stress
+        }
+        guard let value, value.isFinite, (0...maximum).contains(value) else { return nil }
+        return value
+    }
+    static var kinds: [String] { [HealthWidgetSnapshot.widgetKind] + allCases.map(\.kind) }
+}

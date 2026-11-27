@@ -1,5 +1,7 @@
 import Foundation
 import Combine
+import WidgetKit
+import UserNotifications
 
 /// Single source of truth for the UI. Settings and journal persist to
 /// UserDefaults; band state lives in `BandLink`, which persists its own
@@ -32,6 +34,8 @@ final class AppStore: ObservableObject {
     private var summaryCancellable: AnyCancellable?
     private var healthCancellable: AnyCancellable?
     private var monitorCancellable: AnyCancellable?
+    private var healthWidgetCancellable: AnyCancellable?
+    private var batteryNoticeCancellable: AnyCancellable?
     @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
@@ -98,7 +102,35 @@ final class AppStore: ObservableObject {
             .map { days, summary, _ in
                 HealthMonitor.make(days: days, session: summary?.latestSleepSession)
             }
-            .sink { [weak self] snapshot in self?.healthMonitor = snapshot }
+            .sink { [weak self] snapshot in
+                self?.healthMonitor = snapshot
+                DispatchQueue.main.async {
+                    self?.checkRestingHRTrend()
+                    self?.checkRecoveryRecap()
+                }
+            }
+        // Ignore the publisher's initial cached value. Only newly received
+        // battery updates can trigger a low-battery reminder.
+        batteryNoticeCancellable = band.$batteryPercent.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] fresh in
+                guard let self, let fresh, self.band.isConnected,
+                      !self.band.isCharging, LocalWellnessNotice.lowBattery(fresh), !self.isPreview else { return }
+                let observed = Date()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await LocalWellnessNotice.post(.battery, id: JournalStore.dayKey(for: observed),
+                        defaults: self.defaults) {
+                        self.band.isConnected && !self.band.isCharging && self.band.batteryPercent.map(LocalWellnessNotice.lowBattery) == true
+                            && !self.isPreview && Date().timeIntervalSince(observed) < 60
+                    }
+                }
+            }
+        healthWidgetCancellable = band.objectWillChange
+            .throttle(for: .seconds(60), scheduler: RunLoop.main, latest: true)
+            .sink { [weak self] _ in
+                DispatchQueue.main.async { self?.refreshHealthWidget() }
+            }
         // Fitness comparisons change with saved observations/profile, never
         // with each live pulse or history packet. Work runs on a serial worker.
         fitnessCancellable = Publishers.CombineLatest4($settings, band.$days, $detectedBandActivities, $liveActivities)
@@ -126,6 +158,85 @@ final class AppStore: ObservableObject {
             }
         }
         band.autoConnectIfNeeded()
+    }
+
+    /// Evaluated only after a completed recorded night, never as a live medical alarm.
+    func checkRestingHRTrend() {
+        guard defaults.bool(forKey: "strap.rhrTrendAlertsEnabled"), !isPreview,
+              !band.isAnalyzingHistory,
+              let night = band.recoveryNight,
+              night.dateKey == JournalStore.dayKey(for: Date()),
+              defaults.string(forKey: "strap.rhrTrendAlert.lastDay") != night.dateKey,
+              RestingHRTrendAlert.isElevated(current: night, prior: band.days) else { return }
+        defaults.set(night.dateKey, forKey: "strap.rhrTrendAlert.lastDay")
+        let content = UNMutableNotificationContent()
+        content.title = "STRAP · Resting heart rate"
+        content.body = "Your recorded resting heart rate is above your recent personal trend. Open STRAP to review."
+        let request = UNNotificationRequest(identifier: "strap.rhrTrend." + night.dateKey, content: content, trigger: nil)
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                guard self.defaults.bool(forKey: "strap.rhrTrendAlertsEnabled"),
+                      [.authorized, .provisional, .ephemeral].contains(settings.authorizationStatus) else {
+                    self.defaults.removeObject(forKey: "strap.rhrTrendAlert.lastDay")
+                    return
+                }
+                UNUserNotificationCenter.current().add(request) { error in
+                    if error != nil {
+                        DispatchQueue.main.async {
+                            if self.defaults.string(forKey: "strap.rhrTrendAlert.lastDay") == night.dateKey {
+                                self.defaults.removeObject(forKey: "strap.rhrTrendAlert.lastDay")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func checkRecoveryRecap() {
+        let today = JournalStore.dayKey(for: Date())
+        guard !isPreview, !band.isAnalyzingHistory, band.recoveryNight?.dateKey == today,
+              let score = band.recovery.score, score.isFinite, (0...100).contains(score) else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await LocalWellnessNotice.post(.recovery, id: today, defaults: self.defaults) {
+                !self.isPreview && !self.band.isAnalyzingHistory &&
+                    self.band.recoveryNight?.dateKey == today && JournalStore.dayKey(for: Date()) == today &&
+                    self.band.recovery.score.map { $0.isFinite && (0...100).contains($0) } == true
+            }
+        }
+    }
+
+    func refreshHealthWidget() {
+        guard defaults.bool(forKey: "strap.healthWidgetEnabled"), !isPreview else {
+            if HealthWidgetSnapshot.load() != nil, HealthWidgetSnapshot.save(nil) {
+                for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+            }
+            return
+        }
+        guard !band.isAnalyzingHistory else { return }
+        let now = Date()
+        let key = JournalStore.dayKey(for: now)
+        let night = band.recoveryNight.flatMap { $0.dateKey == key ? $0 : nil }
+        let day = band.days.last { $0.dateKey == key }
+        func valid(_ value: Double?, range: ClosedRange<Double>) -> Double? {
+            guard let value, value.isFinite, range.contains(value) else { return nil }
+            return value
+        }
+        let recovery = night == nil ? nil : valid(band.recovery.score, range: 0...100)
+        let sleep = valid(night?.sleepPerformancePct, range: 0...100)
+        let liveStrain = band.liveDayStrainDateKey == key ? band.liveDayStrain : nil
+        let strain = valid(liveStrain ?? day?.strain, range: 0...21)
+        let battery = band.isConnected ? band.batteryPercent.flatMap { (0...100).contains($0) ? $0 : nil } : nil
+        let stress = band.stress
+        let observed = stress.diagnostics?.lastUpdateUnix.map { Date(timeIntervalSince1970: Double($0)) }
+        let snapshot = HealthWidgetSnapshot(dayKey: key, recovery: recovery, sleep: sleep,
+                                            strain: strain, battery: battery, savedAt: now,
+                                            stress: valid(stress.index, range: 0...3), stressObservedAt: observed)
+        if HealthWidgetSnapshot.save(snapshot) {
+            for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+        }
     }
 
     /// A drain can report the same session twice; the store merges overlaps,
@@ -583,5 +694,28 @@ struct SleepLifecyclePersistence {
     func save(_ snapshot: SleepLifecycleSnapshot) {
         guard let data = try? JSONEncoder().encode(snapshot) else { return }
         defaults.set(data, forKey: Self.key)
+    }
+}
+
+
+/// Conservative personal trend notification, not a clinical threshold or diagnosis.
+enum RestingHRTrendAlert {
+    static let minimumPriorNights = 7
+    static let elevationBPM = 10.0
+    static func isElevated(current: DayMetrics, prior: [DayMetrics]) -> Bool {
+        func qualified(_ day: DayMetrics) -> Double? {
+            guard day.state == "sleep", day.sleepDurationReliable == true,
+                  (day.restingHRWindowSeconds ?? 0) >= 300,
+                  let hr = day.restingHR, hr.isFinite, (35...220).contains(hr) else { return nil }
+            return hr
+        }
+        guard let currentHR = qualified(current) else { return false }
+        let groups = Dictionary(grouping: prior.filter { $0.dateKey < current.dateKey }, by: \.dateKey)
+        let values = groups.keys.sorted().suffix(30).compactMap { key -> Double? in
+            guard let rows = groups[key], rows.count == 1, let row = rows.first else { return nil }
+            return qualified(row)
+        }
+        guard values.count >= minimumPriorNights else { return false }
+        return currentHR - Stats.median(values) >= elevationBPM
     }
 }

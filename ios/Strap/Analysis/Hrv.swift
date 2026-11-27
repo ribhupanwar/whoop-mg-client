@@ -149,6 +149,10 @@ enum Hrv {
     /// Each contiguous run is cleaned independently, preventing a stale
     /// rolling-median reference from leaking across a recording gap.
     static func fromSamples(_ samples: [V18Sample]) -> HrvResult {
+        fromSamples(samples, rrRange: V18Decoder.minRRMS...V18Decoder.maxRRMS)
+    }
+
+    static func fromSamples(_ samples: [V18Sample], rrRange: ClosedRange<Int>) -> HrvResult {
         // Offload may replay a second after reconnect. Count its R-R beats once.
         // Prefer the copy with more beat intervals rather than duplicating data.
         var uniqueBySecond: [Int: V18Sample] = [:]
@@ -161,7 +165,10 @@ enum Hrv {
         }
         let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(ordered)
-        return evaluateRuns(runs) { $0.rrIntervalsMS }
+        return evaluateRuns(runs) { sample in
+            // Keep an invalid beat as a boundary instead of joining its neighbours.
+            sample.rrIntervalsMS.map { rrRange.contains($0) ? $0 : 0 }
+        }
     }
 
     /// Compute RMSSD for live streaming samples across consecutive beats inside
@@ -433,7 +440,7 @@ enum Hrv {
         guard !worn.isEmpty else { return "No valid on-wrist heart-rate seconds" }
         let motion = worn.filter { $0.dynamicAccelG != nil }
         guard !motion.isEmpty else { return "Motion data missing; cannot verify rest" }
-        let quiet = motion.filter { ($0.dynamicAccelG ?? Double.infinity) <= restingQuietAccelG }
+        let quiet = motion.filter { $0.dynamicAccelG.map { $0.isFinite && (0...restingQuietAccelG).contains($0) } == true }
         guard !quiet.isEmpty else { return "No motion-verified quiet seconds" }
         let longest = contiguousRuns(quiet.sorted { $0.unix < $1.unix })
             .map(\.count).max() ?? 0
@@ -458,20 +465,52 @@ enum Hrv {
     static func restingHRV(
         _ samples: [V18Sample],
         quietAccelG: Double = restingQuietAccelG,
-        minWindowS: Int = restingMinWindowS
+        minWindowS: Int = restingMinWindowS,
+        requireRRDuration: Bool = false
     ) -> (result: HrvResult, windowSeconds: Int) {
         let eligible = samples
             .filter {
                 $0.wearing && (35...220).contains($0.heartRate)
-                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                    && $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
             }
             .sorted { $0.unix < $1.unix }
         let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
         // A longer quiet run can contain no R-R data at all. Try each run in
         // duration order instead of letting that run hide a valid measurement.
         for run in runs.sorted(by: { $0.count > $1.count }) {
-            let result = fromSamples(run)
-            if result.rmssdMS != nil { return (result, run.count) }
+            // Production fallback must not resurrect windows rejected by the
+            // primary estimator for missing or duplicated beat time.
+            var candidate = run
+            if requireRRDuration {
+                guard minWindowS > 0 else { continue }
+                // Do not let an incomplete final chunk invalidate a measured prefix.
+                candidate = Array(run.prefix(run.count / minWindowS * minWindowS))
+                guard candidate.count >= minWindowS else { continue }
+                func durationMS(_ rows: [V18Sample]) -> Int {
+                    rows.flatMap(\.rrIntervalsMS)
+                        .filter { (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0) }
+                        .reduce(0, +)
+                }
+                // Also enforce the primary estimator's upper bound at its actual
+                // clock-aligned boundaries. Adjacent sparse data cannot hide overcount.
+                let aligned = Dictionary(grouping: candidate) { $0.unix / minWindowS }
+                guard aligned.values.allSatisfy({ durationMS($0) <= $0.count * 1050 }) else { continue }
+                var valid = true
+                for start in stride(from: 0, to: candidate.count, by: minWindowS) {
+                    let chunk = Array(candidate[start..<(start + minWindowS)])
+                    let duration = durationMS(chunk)
+                    if duration < chunk.count * 250 || duration > chunk.count * 1050 {
+                        valid = false
+                        break
+                    }
+                }
+                guard valid else { continue }
+            }
+            let result = fromSamples(candidate)
+            if let value = result.rmssdMS, value.isFinite,
+               !requireRRDuration || (value > 0 && result.nnBeats >= 21) {
+                return (result, candidate.count)
+            }
         }
         return (.empty, 0)
     }
@@ -484,18 +523,19 @@ enum Hrv {
         _ samples: [V18Sample],
         deepEpochs: [ClosedRange<Int>] = [],
         quietAccelG: Double = restingQuietAccelG,
-        minWindowS: Int = restingMinWindowS
+        minWindowS: Int = restingMinWindowS,
+        requireRRDuration: Bool = false
     ) -> (result: HrvResult, windowSeconds: Int, isSWS: Bool) {
         if !deepEpochs.isEmpty {
             let deepSamples = samples.filter { sample in
                 deepEpochs.contains { $0.contains(sample.unix) }
             }
-            let deepResult = restingHRV(deepSamples, quietAccelG: quietAccelG, minWindowS: minWindowS)
+            let deepResult = restingHRV(deepSamples, quietAccelG: quietAccelG, minWindowS: minWindowS, requireRRDuration: requireRRDuration)
             if let rmssd = deepResult.result.rmssdMS, rmssd.isFinite, rmssd > 0, deepResult.result.nnBeats >= 20 {
                 return (result: deepResult.result, windowSeconds: deepResult.windowSeconds, isSWS: true)
             }
         }
-        let fallback = restingHRV(samples, quietAccelG: quietAccelG, minWindowS: minWindowS)
+        let fallback = restingHRV(samples, quietAccelG: quietAccelG, minWindowS: minWindowS, requireRRDuration: requireRRDuration)
         return (result: fallback.result, windowSeconds: fallback.windowSeconds, isSWS: false)
     }
 
@@ -526,7 +566,7 @@ enum Hrv {
         let eligible = uniqueBySecond.values
             .filter {
                 $0.wearing && (35...220).contains($0.heartRate)
-                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                    && $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
             }
             .sorted { $0.unix < $1.unix }
 
@@ -591,7 +631,7 @@ enum Hrv {
 
         let fallback = swsRestingHRV(samples, deepEpochs: deepEpochs,
                                      quietAccelG: min(quietAccelG, restingQuietAccelG),
-                                     minWindowS: windowSeconds)
+                                     minWindowS: windowSeconds, requireRRDuration: true)
         return (result: fallback.result, windowSeconds: fallback.windowSeconds,
                 qualifyingWindows: fallback.result.rmssdMS != nil ? 1 : 0,
                 usedSWSFallback: fallback.isSWS)
@@ -617,7 +657,7 @@ enum Hrv {
     ) -> [RestingWindowDiagnostic] {
         let eligible = samples.filter {
             $0.wearing && (35...220).contains($0.heartRate)
-                && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                && $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
         }
         // Use the same contiguous-run and RR quality rules as production HRV.
         return contiguousRuns(eligible)
@@ -656,7 +696,7 @@ enum Hrv {
         let eligible = samples
             .filter {
                 $0.wearing && (35...220).contains($0.heartRate)
-                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                    && $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
             }
             .sorted { $0.unix < $1.unix }
         guard windowS > 0 else { return nil }
@@ -1173,7 +1213,7 @@ extension Hrv {
             let eligible = subset
                 .filter {
                     $0.wearing && (35...220).contains($0.heartRate)
-                        && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                        && $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
                 }
                 .sorted { $0.unix < $1.unix }
             let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }

@@ -48,6 +48,17 @@ final class MetricTimelineTests: XCTestCase {
         }
         XCTAssertEqual(DailyAnalysis.awakeBaseline(from: days)?.days, 7)
     }
+    func testAwakeStressBaselineUsesDistinctPriorDaysOnly() {
+        var rows = (1...9).map { day($0) }
+        for index in rows.indices {
+            rows[index].awakeLnRMSSD = log(30 + Double(index))
+            rows[index].awakeRestingHR = 60 + Double(index)
+        }
+        let key = rows[6].dateKey
+        XCTAssertEqual(DailyAnalysis.awakeBaseline(from: rows, before: key)?.days, 6)
+        XCTAssertEqual(DailyAnalysis.awakeBaseline(from: rows + [rows[0]], before: key)?.days, 5)
+        XCTAssertEqual(DailyAnalysis.awakeBaseline(from: rows, before: rows[7].dateKey)?.days, 7)
+    }
     func testCurrentAndFutureDaysCannotSupplyRecoveryBaseline() {
         let sixPrior = (4...9).map { day($0) }
         XCTAssertNil(timeline(sixPrior + [day(10), day(11)]).last?.recovery)

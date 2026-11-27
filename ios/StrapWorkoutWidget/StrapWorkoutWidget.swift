@@ -116,5 +116,11 @@ struct StrapWorkoutWidgetBundle: WidgetBundle {
         StrapWorkoutWidget()
         StrapCapturedStepsLiveWidget()
         StrapStepsHomeWidget()
+        StrapHealthHomeWidget()
+        StrapSingleHealthWidget(metric: .recovery)
+        StrapSingleHealthWidget(metric: .sleep)
+        StrapSingleHealthWidget(metric: .strain)
+        StrapSingleHealthWidget(metric: .battery)
+        StrapSingleHealthWidget(metric: .stress)
     }
 }

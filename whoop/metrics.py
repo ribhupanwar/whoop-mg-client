@@ -176,13 +176,38 @@ def hrv(samples: list[V18Sample]) -> HrvResult:
                 continue
         unique_by_second[s.unix] = s
     ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
-    return hrv_from_rr([float(rr) for s in ordered for rr in s.rr_intervals_ms])
+    # Missing records and empty RR fields break successive-beat continuity.
+    # Pool only within-segment NN differences, not differences between segments.
+    segments = []
+    current = []
+    previous_unix = None
+    for row in ordered:
+        if previous_unix is not None and row.unix != previous_unix + 1 or not row.rr_intervals_ms:
+            if current:
+                segments.append(current)
+                current = []
+        current.extend(float(rr) for rr in row.rr_intervals_ms)
+        previous_unix = row.unix
+    if current:
+        segments.append(current)
+    cleaned = [nn_intervals(segment) for segment in segments]
+    nn = [value for segment in cleaned for value in segment]
+    differences = [b - a for segment in cleaned for a, b in zip(segment, segment[1:])]
+    value = math.sqrt(sum(d * d for d in differences) / len(differences)) if differences else None
+    return HrvResult(
+        beats=sum(len(segment) for segment in segments), nn_beats=len(nn),
+        rmssd_ms=value, sdnn_ms=sdnn(nn),
+        pnn50_pct=100.0 * sum(abs(d) > 50 for d in differences) / len(differences) if differences else None,
+        ln_rmssd=math.log(value) if value is not None and value > 0 else None,
+        mean_rr_ms=statistics.mean(nn) if nn else None,
+    )
 
 
 def resting_hrv(
     samples: list[V18Sample],
     quiet_accel_g: float = 0.10,
     min_window_s: int = 60,
+    require_rr_duration: bool = False,
 ) -> tuple[HrvResult, int]:
     """HRV from the longest verified-quiet contiguous run, and its length.
 
@@ -197,16 +222,41 @@ def resting_hrv(
             s
             for s in samples
             if s.wearing
+            and 35 <= s.heart_rate <= 220
             and s.dynamic_accel_g is not None
-            and s.dynamic_accel_g <= quiet_accel_g
+            and 0 <= s.dynamic_accel_g <= quiet_accel_g
         ),
         key=lambda s: s.unix,
     )
     runs = [r for r in _contiguous_runs(eligible) if len(r) >= min_window_s]
-    if not runs:
+    if min_window_s <= 0:
         return hrv_from_rr([]), 0
-    longest = max(runs, key=len)
-    return hrv(longest), len(longest)
+    for run in sorted(runs, key=len, reverse=True):
+        candidate = run
+        if require_rr_duration:
+            # Keep the complete qualifying prefix; never score the short tail.
+            candidate = run[:len(run) // min_window_s * min_window_s]
+            if len(candidate) < min_window_s:
+                continue
+            def duration_ms(chunk):
+                return sum(v for row in chunk for v in row.rr_intervals_ms
+                           if MIN_RR_MS <= v <= MAX_RR_MS)
+            aligned = {}
+            for row in candidate:
+                aligned.setdefault(row.unix // min_window_s, []).append(row)
+            if any(duration_ms(chunk) > len(chunk) * 1050 for chunk in aligned.values()):
+                continue
+            chunks = (candidate[start:start + min_window_s]
+                      for start in range(0, len(candidate), min_window_s))
+            if not all(len(chunk) * 250 <= duration_ms(chunk) <= len(chunk) * 1050
+                       for chunk in chunks):
+                continue
+        result = hrv(candidate)
+        if result.rmssd_ms is not None and math.isfinite(result.rmssd_ms) and (
+            not require_rr_duration or (result.rmssd_ms > 0 and result.nn_beats >= 21)
+        ):
+            return result, len(candidate)
+    return hrv_from_rr([]), 0
 
 
 def hrv_detailed_diagnostics(
@@ -576,6 +626,7 @@ def sws_resting_hrv(
     deep_epochs: list[tuple[int, int]] | None = None,
     quiet_accel_g: float = 0.10,
     min_window_s: int = 60,
+    require_rr_duration: bool = False,
 ) -> tuple[HrvResult, int, bool]:
     """HRV during Slow Wave Sleep (SWS / deep sleep) epochs.
 
@@ -589,12 +640,12 @@ def sws_resting_hrv(
             if any(start <= s.unix <= end for start, end in deep_epochs)
         ]
         deep_res, deep_len = resting_hrv(
-            deep_samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s
+            deep_samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s, require_rr_duration=require_rr_duration
         )
         if deep_res.rmssd_ms is not None and deep_res.nn_beats >= 20:
             return deep_res, deep_len, True
     fallback_res, fallback_len = resting_hrv(
-        samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s
+        samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s, require_rr_duration=require_rr_duration
     )
     return fallback_res, fallback_len, False
 
@@ -602,7 +653,7 @@ def sws_resting_hrv(
 def windowed_sleep_hrv(
     samples: list[V18Sample],
     deep_epochs: list[tuple[int, int]] | None = None,
-    quiet_accel_g: float = 0.15,
+    quiet_accel_g: float = 0.10,
     window_seconds: int = 300,
     min_beats_per_window: int = 21,
 ) -> tuple[HrvResult, int, int, bool]:
@@ -613,6 +664,8 @@ def windowed_sleep_hrv(
     cleaning (>= 21 clean beats), returning the mean RMSSD across qualifying
     windows. Falls back to sws_resting_hrv when no 5-minute window qualifies.
     """
+    if window_seconds <= 0:
+        return hrv_from_rr([]), 0, 0, False
     unique_by_sec: dict[int, V18Sample] = {}
     for sample in samples:
         prev = unique_by_sec.get(sample.unix)
@@ -628,7 +681,7 @@ def windowed_sleep_hrv(
             for s in unique_by_sec.values()
             if s.wearing
             and 35 <= s.heart_rate <= 220
-            and (s.dynamic_accel_g is not None and s.dynamic_accel_g <= quiet_accel_g)
+            and (s.dynamic_accel_g is not None and 0 <= s.dynamic_accel_g <= quiet_accel_g)
         ),
         key=lambda s: s.unix,
     )
@@ -658,7 +711,7 @@ def windowed_sleep_hrv(
             v
             for r in records
             for v in r.rr_intervals_ms
-            if 300 <= v <= 2000
+            if MIN_RR_MS <= v <= MAX_RR_MS
         )
         valid_rr_sum_s = valid_rr_sum_ms / 1000.0
         if valid_rr_sum_s < min_rr_duration_s or valid_rr_sum_s > elapsed * 1.05:
@@ -695,8 +748,9 @@ def windowed_sleep_hrv(
     fb_res, fb_len, is_sws = sws_resting_hrv(
         samples,
         deep_epochs=deep_epochs,
-        quiet_accel_g=min(quiet_accel_g, 0.08),
+        quiet_accel_g=min(quiet_accel_g, 0.10),
         min_window_s=window_seconds,
+        require_rr_duration=True,
     )
     return fb_res, fb_len, (1 if fb_res.rmssd_ms is not None else 0), is_sws
 
@@ -773,8 +827,10 @@ def resting_heart_rate(
         if s.wearing
         and 35 <= s.heart_rate <= 220
         and s.dynamic_accel_g is not None
-        and s.dynamic_accel_g <= quiet_accel_g
+        and 0 <= s.dynamic_accel_g <= quiet_accel_g
     ]
+    if window_s <= 0:
+        return None
     eligible.sort(key=lambda s: s.unix)
     window_means: list[float] = []
     for run in _contiguous_runs(eligible):

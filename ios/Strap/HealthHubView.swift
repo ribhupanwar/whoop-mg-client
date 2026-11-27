@@ -369,10 +369,10 @@ struct HealthHubView: View {
                             .font(StrapTypography.body(9.5)).tracking(0.6)
                             .foregroundStyle(Color.appMuted)
                         HStack(alignment: .firstTextBaseline, spacing: 4) {
-                            Text(demo ? SampleData.highStressToday : stressText)
+                            Text(demo ? String(format: "%.1f", SampleData.stressGauge) : stressText)
                                 .font(StrapTypography.metric(26, weight: .bold))
                                 .foregroundStyle(Color.appFG)
-                            Text(demo ? "hrs" : "SD")
+                            Text("/ 3")
                                 .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
                         }
                     }
@@ -381,6 +381,10 @@ struct HealthHubView: View {
                         LineChart(values: SampleData.stressMiniSeries, color: .appGood,
                                   minY: 0, maxY: 3, height: 60)
                             .frame(width: 150)
+                    } else if let series = store.band.summary?.stressSeries,
+                              !StressDayChart.todayPoints(series).isEmpty {
+                        StressDayChart(points: series)
+                            .frame(width: 120)
                     }
                 }
                 if !demo {

@@ -1,6 +1,49 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// One metadata source for the production menu labels, icons and UI test identifiers.
+enum MoreMenuItem: String, CaseIterable {
+    case deviceSettings
+    case connectionSync
+    case bandAlarms
+    case sleepPlanner
+    case journal
+    case trainingPlan
+    case guidedBreathing
+    case healthIntegrations
+    case dataImportExport
+    case backupRestore
+    case healthActivitySettings
+    case notifications
+    case appPreferences
+    case homeWidgets
+    case appInformation
+    case diagnosticsSupport
+
+    var metadata: (title: String, icon: String, section: String) {
+        switch self {
+        case .deviceSettings: return ("Device Settings", "radiowaves.right", "DEVICE")
+        case .connectionSync: return ("Connection & Sync", "arrow.triangle.2.circlepath", "DEVICE")
+        case .bandAlarms: return ("Band Alarms", "alarm", "DEVICE")
+        case .sleepPlanner: return ("Sleep Planner", "moon.stars", "HEALTH & ACTIVITY")
+        case .journal: return ("Journal", "book.closed", "HEALTH & ACTIVITY")
+        case .trainingPlan: return ("Training Plan", "calendar", "HEALTH & ACTIVITY")
+        case .guidedBreathing: return ("Guided Breathing", "wind", "HEALTH & ACTIVITY")
+        case .healthIntegrations: return ("Health Integrations", "link", "DATA & INTEGRATIONS")
+        case .dataImportExport: return ("Data Import & Export", "externaldrive", "DATA & INTEGRATIONS")
+        case .backupRestore: return ("Backup & Restore", "externaldrive.badge.timemachine", "DATA & INTEGRATIONS")
+        case .healthActivitySettings: return ("Health & Activity Settings", "figure.run", "DATA & INTEGRATIONS")
+        case .notifications: return ("Notifications", "bell", "PREFERENCES")
+        case .appPreferences: return ("App Preferences", "gearshape", "PREFERENCES")
+        case .homeWidgets: return ("Home Screen Widgets", "square.grid.2x2", "WIDGETS & LIVE ACTIVITIES")
+        case .appInformation: return ("App Information", "info.circle", "ABOUT")
+        case .diagnosticsSupport: return ("Diagnostics & Support", "wrench.and.screwdriver", "ABOUT")
+        }
+    }
+
+    var accessibilityID: String { "more." + rawValue }
+}
+
 /// WHOOP/NOOP-inspired clean More tab hierarchy.
 /// Consolidates all settings, integrations, device controls, diagnostics,
 /// and local data management into four functional sections without repetitive
@@ -15,84 +58,84 @@ struct MoreView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 16) {
-                Text("More")
-                    .font(StrapTypography.body(26, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-
                 profileHeaderCard
 
                 // SECTION 1: DEVICE
                 SectionTitle("DEVICE")
                 Panel {
                     NavigationLink { DeviceSettingsView() } label: {
-                        moreRow(
-                            "Device Settings",
-                            subtitle: deviceSettingsSubtitle,
-                            icon: "radiowaves.right"
-                        )
+                        moreRow(.deviceSettings, subtitle: deviceSettingsSubtitle)
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { ConnectionSyncView() } label: {
-                        moreRow(
-                            "Connection & Sync",
-                            subtitle: store.band.status.title,
-                            icon: "arrow.triangle.2.circlepath"
-                        )
+                        moreRow(.connectionSync, subtitle: store.band.status.title)
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { BandAlarmsView() } label: {
-                        moreRow(
-                            "Band Alarms",
-                            subtitle: bandAlarmsSubtitle,
-                            icon: "alarm"
-                        )
+                        moreRow(.bandAlarms, subtitle: bandAlarmsSubtitle)
                     }
                     .buttonStyle(.plain)
                 }
 
-                // SECTION 2: HEALTH & DATA
-                SectionTitle("HEALTH & DATA")
+                SectionTitle("HEALTH & ACTIVITY")
+                Panel {
+                    NavigationLink(value: Route.sleepCoach) {
+                        moreRow(.sleepPlanner, subtitle: "Sleep need, bedtime & wake schedule")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
+                    NavigationLink(value: Route.journal) {
+                        moreRow(.journal, subtitle: "Daily behaviors and notes")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
+                    NavigationLink { PlanView() } label: {
+                        moreRow(.trainingPlan, subtitle: "Daily goals and schedule")
+                    }
+                    .buttonStyle(.plain)
+
+                    Divider().background(Color.appLine)
+
+                    NavigationLink { StrapGuidedBreathingView() } label: {
+                        moreRow(.guidedBreathing, subtitle: "Optional paced breathing session")
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                SectionTitle("DATA & INTEGRATIONS")
                 Panel {
                     NavigationLink { AppleHealthImportView() } label: {
-                        moreRow(
-                            "Health Integrations",
-                            subtitle: "Apple HealthKit sync & data exchange",
-                            icon: "link"
-                        )
+                        moreRow(.healthIntegrations, subtitle: "Apple HealthKit sync & data exchange")
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { DataManagementView() } label: {
-                        moreRow(
-                            "Data Import & Export",
-                            subtitle: "Backup, restore, WHOOP archive & captures",
-                            icon: "externaldrive"
-                        )
+                        moreRow(.dataImportExport, subtitle: "Backup, restore, WHOOP archive & captures")
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { BackupRestoreSettingsView() } label: {
-                        moreRow("Backup & Restore", subtitle: "Schedule, retention, export & restore", icon: "externaldrive.badge.timemachine")
+                        moreRow(.backupRestore, subtitle: "Schedule, retention, export & restore")
                     }
                     .buttonStyle(.plain)
                     Divider().background(Color.appLine)
 
                     NavigationLink { SettingsView() } label: {
-                        moreRow(
-                            "Health & Activity Settings",
-                            subtitle: "Profile, heart rate zones & sleep need",
-                            icon: "figure.run"
-                        )
+                        moreRow(.healthActivitySettings, subtitle: "Profile, heart rate zones & sleep need")
                     }
                     .buttonStyle(.plain)
                 }
@@ -101,22 +144,22 @@ struct MoreView: View {
                 SectionTitle("PREFERENCES")
                 Panel {
                     NavigationLink { NotificationSettingsView() } label: {
-                        moreRow(
-                            "Notifications",
-                            subtitle: "Wake alarm & schedule alerts",
-                            icon: "bell"
-                        )
+                        moreRow(.notifications, subtitle: "Wake alarm & schedule alerts")
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { AppPreferencesView() } label: {
-                        moreRow(
-                            "App Preferences",
-                            subtitle: "Units, display & research features",
-                            icon: "gearshape"
-                        )
+                        moreRow(.appPreferences, subtitle: "Appearance, widget privacy & research")
+                    }
+                    .buttonStyle(.plain)
+                }
+
+                SectionTitle("WIDGETS & LIVE ACTIVITIES")
+                Panel {
+                    NavigationLink { StrapWidgetGuideView() } label: {
+                        moreRow(.homeWidgets, subtitle: "Health, steps, workouts & Dynamic Island")
                     }
                     .buttonStyle(.plain)
                 }
@@ -125,22 +168,14 @@ struct MoreView: View {
                 SectionTitle("ABOUT")
                 Panel {
                     NavigationLink { AppInfoView() } label: {
-                        moreRow(
-                            "App Information",
-                            subtitle: "Version 1.0 (Build \(BuildInfo.revision))",
-                            icon: "info.circle"
-                        )
+                        moreRow(.appInformation, subtitle: "Version 1.0 (Build \(BuildInfo.revision))")
                     }
                     .buttonStyle(.plain)
 
                     Divider().background(Color.appLine)
 
                     NavigationLink { DiagnosticsSupportView() } label: {
-                        moreRow(
-                            "Diagnostics & Support",
-                            subtitle: "System diagnostics & documentation",
-                            icon: "wrench.and.screwdriver"
-                        )
+                        moreRow(.diagnosticsSupport, subtitle: "System diagnostics & documentation")
                     }
                     .buttonStyle(.plain)
                 }
@@ -165,7 +200,10 @@ struct MoreView: View {
 
     private var deviceSettingsSubtitle: String {
         let name = store.band.bandName ?? store.band.preferredBandName ?? "STRAP Band"
-        let status = store.band.isConnected ? "Connected" : (store.band.preferredBandID == nil ? "Not Paired" : "Disconnected")
+        let connection = store.band.isConnected ? "Connected" : (store.band.preferredBandID == nil ? "Not Paired" : "Disconnected")
+        let status = store.band.isConnected && store.band.batteryPercent != nil
+            ? "\(connection) · \(store.band.batteryPercent.map { String($0) } ?? "")%"
+            : connection
         if let serial = store.band.serialNumber, !serial.isEmpty {
             return "\(name) (SN: \(serial)) · \(status)"
         } else if let model = store.band.modelNumber, !model.isEmpty {
@@ -212,14 +250,15 @@ struct MoreView: View {
         .accessibilityIdentifier("more.profile")
     }
 
-    private func moreRow(_ title: String, subtitle: String? = nil, icon: String) -> some View {
+    private func moreRow(_ item: MoreMenuItem, subtitle: String? = nil) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: icon)
+            Image(systemName: item.metadata.icon)
                 .font(.system(size: 16, weight: .medium))
                 .frame(width: 24)
                 .foregroundStyle(Color.appAccent)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(item.metadata.title)
                     .font(StrapTypography.body(13.5, weight: .semibold))
                     .foregroundStyle(Color.appFG)
                 if let subtitle {
@@ -232,9 +271,12 @@ struct MoreView: View {
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Color.appMuted)
+                .accessibilityHidden(true)
         }
         .padding(.vertical, 9)
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
+        .accessibilityIdentifier(item.accessibilityID)
     }
 }
 
@@ -382,5 +424,106 @@ private struct BackupRestoreSettingsView: View {
                 message = "Verified backup created. Use Share backup ZIP to save it to Files."
             }
         } catch { message = "Backup failed: " + error.localizedDescription }
+    }
+}
+
+
+/// Discoverability for already shipped WidgetKit / ActivityKit features.
+/// No unsupported widget or refresh behavior is promised.
+struct StrapWidgetGuideView: View {
+    var body: some View {
+        Screen {
+            VStack(alignment: .leading, spacing: 14) {
+                Panel {
+                    SectionTitle("HOME SCREEN")
+                    Text("Captured Steps")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("Touch and hold your iPhone Home Screen, choose Edit > Add Widget, search for STRAP, and select Captured Steps if available in your installed build.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                    Hint("Displays band-recorded steps and last-sync status. iOS manages the widget refresh schedule.")
+                    Divider()
+                    Text("Daily Health")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("Enable Share health metrics with widgets in App Preferences, then add Daily Health from the widget gallery.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Panel {
+                    SectionTitle("LIVE ACTIVITIES")
+                    Text("Workouts & captured steps")
+                        .font(StrapTypography.body(16, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("During a recorded workout, the Lock Screen and Dynamic Island can display available session metrics. A fresh band step-counter increase may start the captured-steps Live Activity when STRAP is running and iOS permits it.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                    Hint("Live Activities depend on your iPhone settings, installed extension and available sensor data. They do not guarantee continuous background updates.")
+                }
+            }
+        }
+        .navigationTitle("Widgets & Live Activities")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+/// A local voluntary timer, not a measured stress treatment.
+struct StrapGuidedBreathingView: View {
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var startedAt: Date?
+    @State private var durationMinutes = 2
+    @State private var completed = false
+
+    var body: some View {
+        Screen {
+            Panel {
+                SectionTitle("GUIDED BREATHING")
+                Picker("Duration", selection: $durationMinutes) {
+                    Text("1 min").tag(1)
+                    Text("2 min").tag(2)
+                    Text("5 min").tag(5)
+                }
+                .pickerStyle(.segmented)
+                .disabled(startedAt != nil)
+
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    let elapsed = startedAt.map { max(0, Int(timeline.date.timeIntervalSince($0))) } ?? 0
+                    let remaining = completed ? 0 : max(0, durationMinutes * 60 - elapsed)
+                    let inhale = elapsed % 8 < 4
+                    VStack(spacing: 16) {
+                        Circle()
+                            .fill(Color.appAccent.opacity(0.20))
+                            .overlay(Circle().strokeBorder(Color.appAccent, lineWidth: 2))
+                            .frame(width: 140, height: 140)
+                            .scaleEffect(reduceMotion || startedAt == nil || remaining == 0 ? 1 : (inhale ? 1.15 : 0.85))
+                            .animation(reduceMotion ? nil : .easeInOut(duration: 3), value: inhale)
+                            .accessibilityHidden(true)
+                        Text(completed ? "Session complete" : startedAt == nil ? "Ready" : remaining == 0 ? "Complete" : inhale ? "Breathe in" : "Breathe out")
+                            .font(StrapTypography.body(20, weight: .bold))
+                        Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
+                            .font(StrapTypography.metric(28, weight: .bold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 28)
+                    .onChange(of: remaining) { _, seconds in
+                        if startedAt != nil && seconds == 0 { completed = true; startedAt = nil }
+                    }
+                }
+                Button(startedAt == nil ? "Start session" : "Stop session") {
+                    if startedAt == nil { completed = false; startedAt = Date() }
+                    else { startedAt = nil; completed = false }
+                }
+                .buttonStyle(.borderedProminent)
+                Hint("Breathe comfortably, without forcing or holding your breath. Stop if uncomfortable. This timer does not calculate or change your stress score.")
+            }
+        }
+        .navigationTitle("Guided Breathing")
+        .navigationBarTitleDisplayMode(.inline)
+        .onDisappear { startedAt = nil }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { startedAt = nil }
+        }
     }
 }

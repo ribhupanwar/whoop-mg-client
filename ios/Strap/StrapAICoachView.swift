@@ -70,6 +70,15 @@ struct StrapAICoachView: View {
                     Text(selectedEngine == "Apple (offline)" ? "Private · On-device" : "Cloud AI · optional").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 Spacer()
+                Button {
+                    messages.removeAll()
+                    conversationContext = CoachConversationContext()
+                    question = ""
+                    attachmentSummary = nil
+                    notice = nil
+                } label: {
+                    Image(systemName: "trash").frame(width: 30, height: 30)
+                }.accessibilityLabel("Clear local conversation").disabled(busy)
                 Button { loadCoachKeys(); showAISettings = true } label: {
                     Image(systemName: "slider.horizontal.3").frame(width: 30, height: 30)
                 }.accessibilityLabel("AI model settings").accessibilityIdentifier("coach.settings").disabled(busy)

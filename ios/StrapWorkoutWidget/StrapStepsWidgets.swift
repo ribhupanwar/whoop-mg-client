@@ -149,3 +149,133 @@ struct StrapCapturedStepsLiveWidget: Widget {
         }
     }
 }
+
+
+struct StrapHealthHomeWidget: Widget {
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: HealthWidgetSnapshot.widgetKind, provider: HealthTimelineProvider()) { entry in
+            HealthSnapshotView(entry: entry)
+        }
+        .configurationDisplayName("Daily Health")
+        .description("Opt-in saved recovery, sleep, strain and battery snapshot.")
+        .supportedFamilies([.systemSmall, .systemMedium])
+    }
+}
+
+private struct HealthTimelineEntry: TimelineEntry {
+    let date: Date
+    let snapshot: HealthWidgetSnapshot?
+}
+private struct HealthTimelineProvider: TimelineProvider {
+    func placeholder(in context: Context) -> HealthTimelineEntry { .init(date: Date(), snapshot: nil) }
+    func getSnapshot(in context: Context, completion: @escaping (HealthTimelineEntry) -> Void) {
+        completion(.init(date: Date(), snapshot: HealthWidgetSnapshot.load()))
+    }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<HealthTimelineEntry>) -> Void) {
+        let now = Date()
+        let snapshot = HealthWidgetSnapshot.load()
+        var entries = [HealthTimelineEntry(date: now, snapshot: snapshot)]
+        if let midnight = Calendar.current.dateInterval(of: .day, for: now)?.end {
+            entries.append(.init(date: midnight, snapshot: nil))
+        }
+        completion(Timeline(entries: entries, policy: .after(now.addingTimeInterval(15 * 60))))
+    }
+}
+private struct HealthSnapshotView: View {
+    let entry: HealthTimelineEntry
+    private var current: HealthWidgetSnapshot? {
+        guard let snapshot = entry.snapshot, snapshot.isForDay(entry.date) else { return nil }
+        return snapshot
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("STRAP · DAILY HEALTH").font(.caption2.bold()).tracking(0.5)
+            HStack {
+                metric("SLEEP", current?.sleep, suffix: "%", color: .cyan)
+                metric("RECOVERY", current?.recovery, suffix: "%", color: .green)
+            }
+            HStack {
+                metric("STRAIN", current?.strain, suffix: "", color: .blue)
+                metric("BATTERY", current?.battery.map(Double.init), suffix: "%", color: .white)
+            }
+            if let snapshot = current {
+                Text("SAVED " + snapshot.savedAt.formatted(date: .omitted, time: .shortened))
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+            } else {
+                Text("ENABLE IN MORE · APP PREFERENCES").font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+        }
+        .privacySensitive()
+        .foregroundStyle(.white)
+        .containerBackground(for: .widget) { Color(red: 0.06, green: 0.08, blue: 0.11) }
+    }
+    private func metric(_ label: String, _ value: Double?, suffix: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(label).font(.system(size: 8, weight: .semibold)).foregroundStyle(.secondary)
+            Text(value.map { String(format: suffix.isEmpty ? "%.1f" : "%.0f", $0) + suffix } ?? "—")
+                .font(.system(size: 19, weight: .bold)).monospacedDigit()
+                .foregroundStyle(color).lineLimit(1).minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+
+struct StrapSingleHealthWidget: Widget {
+    let metric: HealthWidgetMetric
+
+    // Widget requires a public zero-argument initializer for discovery.
+    // The explicit metric initializer is used for each configured widget kind.
+    init() { self.metric = .sleep }
+    init(metric: HealthWidgetMetric) { self.metric = metric }
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: metric.kind, provider: HealthTimelineProvider()) { entry in
+            SingleHealthMetricView(metric: metric, entry: entry)
+        }
+        .configurationDisplayName(metric.title)
+        .description("Saved STRAP metric with date and availability; opt-in required.")
+        .supportedFamilies([.systemSmall])
+    }
+}
+
+private struct SingleHealthMetricView: View {
+    let metric: HealthWidgetMetric
+    let entry: HealthTimelineEntry
+    private var color: Color {
+        switch metric {
+        case .sleep: return .cyan
+        case .recovery: return .green
+        case .strain: return .blue
+        case .battery: return .white
+        case .stress: return .orange
+        }
+    }
+    var body: some View {
+        let value = entry.snapshot.flatMap { metric.value(in: $0, at: entry.date) }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(metric.title.uppercased()).font(.caption2.bold()).tracking(1)
+            Spacer(minLength: 2)
+            ZStack {
+                Circle().stroke(color.opacity(0.18), lineWidth: 7)
+                if let value {
+                    Circle().trim(from: 0, to: CGFloat(min(1, max(0, value / metric.maximum))))
+                        .stroke(color, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                }
+                Text(value.map { String(format: metric.decimals == 1 ? "%.1f" : "%.0f", $0) + metric.suffix } ?? "—")
+                    .font(.system(size: 25, weight: .bold)).monospacedDigit().minimumScaleFactor(0.6)
+            }
+            .frame(maxWidth: .infinity, maxHeight: 78)
+            Spacer(minLength: 2)
+            if let snapshot = entry.snapshot, value != nil {
+                Text("Saved " + snapshot.savedAt.formatted(date: .omitted, time: .shortened))
+                    .font(.caption2).foregroundStyle(.secondary)
+            } else {
+                Text("No current reading").font(.caption2).foregroundStyle(.secondary)
+            }
+        }
+        .privacySensitive()
+        .foregroundStyle(.white)
+        .containerBackground(for: .widget) { Color(red: 0.06, green: 0.08, blue: 0.11) }
+    }
+}

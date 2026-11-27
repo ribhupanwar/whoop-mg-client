@@ -950,7 +950,7 @@ final class BandLink: NSObject, ObservableObject {
                 byDay[day.dateKey] = day
             }
             let allDays = byDay.values.sorted { $0.dateKey < $1.dateKey }
-            let awakeNorm = DailyAnalysis.awakeBaseline(from: Array(allDays.suffix(DailyAnalysis.rollingBaselineDays)))
+            let awakeNorm = DailyAnalysis.awakeBaseline(from: allDays, before: JournalStore.dayKey(for: Date(), calendar: calendar))
             let sleepWindows = (fresh.sleepSessions ?? []).map { (start: $0.startUnix, end: $0.endUnix - 1) }
             fresh.awakeStress = StressWindows.share(samples: samples, baseline: awakeNorm, excluded: sleepWindows)
             fresh.outsideWorkoutStress = StressWindows.outsideWorkouts(
@@ -1049,7 +1049,7 @@ final class BandLink: NSObject, ObservableObject {
 
     /// Stress uses verified awake-quiet windows; overnight HRV is a separate baseline.
     var awakeBaseline: Baseline? {
-        DailyAnalysis.awakeBaseline(from: Array(days.suffix(DailyAnalysis.rollingBaselineDays)))
+        DailyAnalysis.awakeBaseline(from: days, before: JournalStore.dayKey(for: Date()))
     }
 
     var sleepBaseline: Baseline? {
