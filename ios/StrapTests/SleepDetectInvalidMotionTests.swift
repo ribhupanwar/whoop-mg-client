@@ -34,6 +34,37 @@ final class SleepDetectInvalidMotionTests: XCTestCase {
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty, "Desk rest with an HR drop is not confirmed daytime sleep")
     }
 
+    func testMissingMotionDoesNotSupplyActiveReference() {
+        let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
+        let rows = (0..<7800).map { i in
+            V18Sample(header: BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0),
+                heartRate: i < 600 ? 100 : 55,
+                dynamicAccelG: i < 600 ? nil : 0.01, sleepState: i < 600 ? 0 : 2)
+        }
+        XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
+    }
+
+    func testSleepReplayAndMissingMotionDoNotInventDisturbances() throws {
+        let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
+        let rows = (0..<8400).map { i in
+            let asleep = (600..<7800).contains(i)
+            let missing = (3000..<3030).contains(i)
+            return V18Sample(header: BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0),
+                heartRate: asleep ? 55 : 100,
+                dynamicAccelG: missing ? nil : (asleep ? 0.01 : 0.3),
+                sleepState: asleep ? 2 : 3)
+        }
+        let original = try XCTUnwrap(SleepDetect.detect(rows).first)
+        let replayed = try XCTUnwrap(SleepDetect.detect(rows + rows).first)
+        XCTAssertEqual(original.startUnix, replayed.startUnix)
+        XCTAssertEqual(original.endUnix, replayed.endUnix)
+        XCTAssertEqual(original.wakeEvents, 0)
+        XCTAssertEqual(original.wakeEvents, replayed.wakeEvents)
+        XCTAssertEqual(original.quietFraction, replayed.quietFraction)
+    }
+
     func testInvalidAccelerationCannotBecomeQuietSleepEvidence() {
         let start = 1_800_000_000
         func make(_ second: Int, accel: Double) -> V18Sample {
