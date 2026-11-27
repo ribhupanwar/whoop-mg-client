@@ -1219,6 +1219,11 @@ final class BandLink: NSObject, ObservableObject {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
             let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
+            var stageEvidence: [SleepStager.StageDecisionEvidence] = []
+            _ = SleepStager.stage(samples: samples, period: SleepPeriod(
+                startUnix: session.startUnix, endUnix: session.endUnix - 1,
+                quietFraction: 0, meanHR: 0, wakeEvents: 0),
+                decisionSink: { stageEvidence = $0 })
             let assessmentBreakdown = RecoveryDiagnostics.Breakdown(assessment: assessment)
             let legacyBreakdown = RecoveryDiagnostics.Breakdown(assessment: legacy)
             let report = RecoveryDiagnostics.Report(
@@ -1245,7 +1250,8 @@ final class BandLink: NSObject, ObservableObject {
                 skinTemperatureC: assessment.day?.skinTemperatureC,
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
                 temperatureFunnel: NightTemperature.funnel(archived, session: session),
-                oxygenCandidateSummary: Recovery.spo2Summary(samples))
+                oxygenCandidateSummary: Recovery.spo2Summary(samples),
+                stageDecisionEvidence: stageEvidence)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }
