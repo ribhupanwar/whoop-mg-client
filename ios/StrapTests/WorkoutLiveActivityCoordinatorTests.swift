@@ -146,11 +146,23 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertNil(decoded.estimatedActiveCalories)
         var rotating = decoded
         rotating.estimatedActiveCalories = 12
+        rotating.estimatedStrain = 2.4
+        XCTAssertEqual(rotating.compactMetrics(for: .running, hasGPS: true),
+                       [.pace, .distance, .calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .walking, hasGPS: true),
+                       [.steps, .distance, .calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .other, hasGPS: false),
+                       [.calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .running, hasGPS: false),
+                       [.calories, .strain, .elapsed])
         rotating.elapsedSeconds = 0
-        XCTAssertEqual(rotating.compactMetric, .steps)
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .steps)
         rotating.elapsedSeconds = 10
-        XCTAssertEqual(rotating.compactMetric, .calories)
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .distance)
         rotating.elapsedSeconds = 20
-        XCTAssertEqual(rotating.compactMetric, .pace)
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .calories)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("indoorWalk"), .walking)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("treadmill"), .running)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("lift"), .other)
     }
 }

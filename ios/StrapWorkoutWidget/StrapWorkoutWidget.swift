@@ -15,29 +15,17 @@ struct StrapWorkoutWidget: Widget {
                         .foregroundStyle(.orange)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    elapsedTimerView(context)
+                    secondaryMetric(context)
                         .monospacedDigit()
                 }
                 DynamicIslandExpandedRegion(.bottom) {
-                    HStack {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(statusLabel(context))
-                            if let steps = context.state.steps {
-                                Text("\(steps.formatted()) DAILY STEPS")
-                            }
-                        }
+                    HStack(spacing: 8) {
+                        Text(statusLabel(context)).lineLimit(1)
                         Spacer()
-                        if context.attributes.hasGPS {
-                            VStack(alignment: .trailing) {
-                                Text(distanceText(context.state.distanceMeters))
-                                Text(paceText(context.state.paceSecondsPerKilometer))
-                            }
-                        }
+                        elapsedTimerView(context).monospacedDigit()
                         Spacer()
-                        VStack(alignment: .trailing) {
-                            Text(calorieText(context.state.estimatedActiveCalories))
-                            Text("EST. ACTIVE KCAL").font(.caption2)
-                        }
+                        Text(strainText(context.state.estimatedStrain) + " EST. STRAIN")
+                            .lineLimit(1).minimumScaleFactor(0.7)
                     }
                     .font(.caption)
                 }
@@ -52,22 +40,7 @@ struct StrapWorkoutWidget: Widget {
                 } else if context.state.paused {
                     elapsedTimerView(context).monospacedDigit()
                 } else {
-                    switch context.state.compactMetric {
-                    case .steps:
-                        Label(context.state.steps?.formatted() ?? "—", systemImage: "figure.walk")
-                            .foregroundStyle(.mint).monospacedDigit()
-                            .accessibilityLabel("Daily steps")
-                    case .calories:
-                        Label(calorieText(context.state.estimatedActiveCalories), systemImage: "flame.fill")
-                            .foregroundStyle(.orange).monospacedDigit()
-                            .accessibilityLabel("Estimated active calories")
-                    case .pace:
-                        Text(paceText(context.state.paceSecondsPerKilometer)).monospacedDigit()
-                    case .distance:
-                        Text(distanceText(context.state.distanceMeters)).monospacedDigit()
-                    case .elapsed:
-                        elapsedTimerView(context).monospacedDigit()
-                    }
+                    secondaryMetric(context)
                 }
             } minimal: {
                 Image(systemName: "heart.fill").foregroundStyle(.orange)
@@ -94,6 +67,19 @@ private struct WorkoutLockScreenView: View {
     }
     var body: some View {
         VStack(spacing: 10) {
+            HStack(spacing: 8) {
+                Image(systemName: activitySymbol(context.attributes.displayKind))
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(zoneColor)
+                    .frame(width: 32, height: 32)
+                    .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 9))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(context.attributes.activityName).font(.subheadline.bold()).lineLimit(1)
+                    Text("STRAP · Live Activity").font(.caption2).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "waveform").foregroundStyle(.secondary)
+            }
             HStack(alignment: .center, spacing: 5) {
                 Image(systemName: "heart.fill").foregroundStyle(zoneColor)
                 Text(hrText(context))
@@ -123,29 +109,46 @@ private struct WorkoutLockScreenView: View {
             }
             .accessibilityHidden(true)
             HStack {
-                Spacer()
                 Text(statusLabel(context))
                     .font(.caption2.bold()).tracking(1).foregroundStyle(zoneColor)
                 Spacer()
+                if context.attributes.displayKind != .other {
+                    Text(strainText(context.state.estimatedStrain) + " EST. STRAIN")
+                        .font(.caption2.bold()).foregroundStyle(.secondary)
+                }
             }
-            HStack {
-                if context.attributes.hasGPS {
-                    metric(distanceText(context.state.distanceMeters), label: "DISTANCE")
-                } else {
+            HStack(spacing: 8) {
+                switch context.attributes.displayKind {
+                case .running:
+                    if context.attributes.hasGPS {
+                        metric(distanceText(context.state.distanceMeters), label: "DISTANCE")
+                        Divider()
+                        metric(paceText(context.state.paceSecondsPerKilometer), label: "PACE / KM")
+                        Divider()
+                    } else {
+                        metric(stepText(context), label: "RECORDED STEPS")
+                        Divider()
+                    }
                     metric(calorieText(context.state.estimatedActiveCalories), label: "EST. ACTIVE KCAL")
+                case .walking:
+                    metric(stepText(context), label: "RECORDED STEPS")
+                    Divider()
+                    if context.attributes.hasGPS {
+                        metric(distanceText(context.state.distanceMeters), label: "DISTANCE")
+                        Divider()
+                    }
+                    metric(calorieText(context.state.estimatedActiveCalories), label: "EST. ACTIVE KCAL")
+                case .other:
+                    metric(calorieText(context.state.estimatedActiveCalories), label: "EST. ACTIVE KCAL")
+                    Divider()
+                    metric(strainText(context.state.estimatedStrain), label: "EST. STRAIN")
                 }
-                Divider()
-                VStack(spacing: 3) {
-                    Text("STRAP").font(.headline.weight(.medium)).tracking(2)
-                    Text(context.attributes.activityName.uppercased())
-                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                }.frame(maxWidth: .infinity)
-                Divider()
-                if context.attributes.hasGPS {
-                    metric(paceText(context.state.paceSecondsPerKilometer), label: "PACE / KM")
-                } else {
-                    metric(context.state.steps?.formatted() ?? "—", label: "DAILY STEPS")
-                }
+            }
+            if context.attributes.displayKind == .walking ||
+                (context.attributes.displayKind == .running && !context.attributes.hasGPS) {
+                Text(stepFreshnessText(context))
+                    .font(.caption2).foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
         }
         .foregroundStyle(.white)
@@ -162,6 +165,60 @@ private struct WorkoutLockScreenView: View {
             Text(label).font(.caption2.bold()).tracking(0.7).foregroundStyle(.secondary)
                 .lineLimit(1).minimumScaleFactor(0.65)
         }.frame(maxWidth: .infinity)
+    }
+}
+
+private func activitySymbol(_ kind: WorkoutActivityAttributes.DisplayKind) -> String {
+    switch kind {
+    case .running: return "figure.run"
+    case .walking: return "figure.walk"
+    case .other: return "dumbbell.fill"
+    }
+}
+
+private func strainText(_ value: Double?) -> String {
+    guard let value, value.isFinite, (0...21).contains(value) else { return "—" }
+    return String(format: "%.1f", value)
+}
+
+private func stepText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {
+    context.state.steps?.formatted() ?? "—"
+}
+
+private func stepFreshnessText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {
+    guard let observed = context.state.stepsObservedAt, context.state.steps != nil else {
+        return "Daily steps · awaiting band history"
+    }
+    return "Daily steps · recorded " + observed.formatted(date: .omitted, time: .shortened)
+}
+
+@ViewBuilder
+private func secondaryMetric(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> some View {
+    if context.isStale || context.state.isConnected == false {
+        Text("STALE").font(.caption2.bold()).foregroundStyle(.orange)
+    } else if context.state.paused {
+        elapsedTimerView(context).monospacedDigit()
+    } else {
+        switch context.state.compactMetric(for: context.attributes.displayKind, hasGPS: context.attributes.hasGPS) {
+        case .steps:
+            Label(stepText(context), systemImage: "figure.walk")
+                .foregroundStyle(.mint).accessibilityLabel("Recorded daily steps")
+                .accessibilityValue(stepText(context))
+        case .calories:
+            Label(calorieText(context.state.estimatedActiveCalories), systemImage: "flame.fill")
+                .foregroundStyle(.orange).accessibilityLabel("Estimated active calories")
+                .accessibilityValue(calorieText(context.state.estimatedActiveCalories))
+        case .pace:
+            Text(paceText(context.state.paceSecondsPerKilometer))
+        case .distance:
+            Text(distanceText(context.state.distanceMeters))
+        case .strain:
+            Text(strainText(context.state.estimatedStrain) + " S")
+                .foregroundStyle(.cyan).accessibilityLabel("Estimated workout strain")
+                .accessibilityValue(strainText(context.state.estimatedStrain))
+        case .elapsed:
+            elapsedTimerView(context)
+        }
     }
 }
 

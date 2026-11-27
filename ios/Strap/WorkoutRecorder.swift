@@ -9,6 +9,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     @Published private(set) var phase: WorkoutPhase = .idle
     @Published private(set) var elapsedSeconds: Int = 0
     @Published private(set) var liveCalories: Int?
+    @Published private(set) var liveActivityStrain: Double?
     @Published private(set) var distanceMeters: Double = 0
     @Published private(set) var splitSeconds: [Int] = []
     @Published private(set) var status: String = "Ready"
@@ -39,6 +40,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private var heartRateSamples: [Int] = []
     private var hrSampleCount: Int = 0
     private var energyTotal = 0.0
+    private var activityTRIMP = 0.0
     private var lastEnergySample: (at: Date, bpm: Int)?
 
     override init() {
@@ -82,7 +84,9 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         heartRateSamples = []
         hrSampleCount = 0
         energyTotal = 0
+        activityTRIMP = 0
         liveCalories = nil
+        liveActivityStrain = nil
         lastEnergySample = nil
 
         startTime = Date()
@@ -177,7 +181,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                 averageHeartRate: averageHeartRate(),
                 maximumHeartRate: maxHeartRate(),
                 calories: liveCalories,
-                activityStrain: calculateActivityStrain(),
+                activityStrain: liveActivityStrain,
                 splits: buildSplits()
             )
             session.route = route.map { loc in
@@ -241,6 +245,16 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         if let previous = lastEnergySample {
             let delta = observedAt.timeIntervalSince(previous.at)
             guard delta > 0 else { return }
+            // Same independent TRIMP scaling as the former saved-workout
+            // estimator, but accumulated only across observed active intervals.
+            if delta <= 30,
+               let maximum = profileMaxHR, let resting = profileRestingHR,
+               maximum.isFinite, resting.isFinite, resting > 0, maximum > resting {
+                let reserve = min(1, max(0, (Double(previous.bpm) - resting) / (maximum - resting)))
+                activityTRIMP += (delta / 60) * reserve * 0.64 * exp(1.92 * reserve)
+                let strain = min(21, activityTRIMP / 10)
+                if strain.isFinite, liveActivityStrain != strain { liveActivityStrain = strain }
+            }
             if delta <= 30,
                let weight = profileWeightKg, let height = profileHeightCm,
                let age = profileAge, let sex = profileSex,
@@ -273,19 +287,6 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private func maxHeartRate() -> Int? {
         guard !heartRateSamples.isEmpty else { return nil }
         return heartRateSamples.max()
-    }
-
-    private func calculateActivityStrain() -> Double? {
-        // Activity-specific strain using simplified Banister TRIMP
-        // Returns nil if insufficient profile data — UI should show "—" and name the gap
-        guard let avgHR = averageHeartRate(), elapsedSeconds > 300 else { return nil }
-        guard let maxHR = profileMaxHR, let restingHR = profileRestingHR else { return nil }
-        let durationMinutes = Double(elapsedSeconds) / 60.0
-        let hrr = (Double(avgHR) - restingHR) / (maxHR - restingHR)
-        guard hrr > 0 else { return 0 }
-        let trimp = durationMinutes * hrr * 0.64 * exp(1.92 * hrr)
-        let strain = min(21.0, trimp / 10.0) // Scale to WHOOP 0-21 range
-        return strain
     }
 
     private func buildSplits() -> [WorkoutSplit] {

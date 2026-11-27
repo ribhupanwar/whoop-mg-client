@@ -217,12 +217,24 @@ final class WorkoutRecorderTests: XCTestCase {
         recorder.start(activity: .run, trackRoute: true)
         // Need > 300 seconds for strain calculation
         recorder.setElapsedForTesting(360)
-        // Add many HR samples
-        for _ in 0..<20 {
-            recorder.addHeartRateSample(140)
+        let start = Date()
+        for second in 0..<20 {
+            recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(Double(second)))
         }
+        let strain = recorder.liveActivityStrain
+        XCTAssertNotNil(strain)
+        XCTAssertGreaterThan(strain ?? 0, 0)
+        recorder.breakEnergyInterval()
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(80))
+        XCTAssertEqual(recorder.liveActivityStrain, strain)
+        recorder.pause()
+        recorder.resume()
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(100))
+        XCTAssertEqual(recorder.liveActivityStrain, strain)
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(200))
+        XCTAssertEqual(recorder.liveActivityStrain, strain)
         recorder.stop(save: true)
-        XCTAssertNotNil(recorder.currentSession?.metrics.activityStrain)
+        XCTAssertEqual(recorder.currentSession?.metrics.activityStrain, strain)
     }
 
     func testHRZoneCalculation() {
