@@ -138,7 +138,10 @@ struct V18Sample: Equatable, Codable {
     var wearing: Bool {
         if heartRate <= 0 { return false }
         // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness
-        if let temp = skinTempC, temp < 25.0, (dynamicAccelG ?? 0) < 0.005 {
+        // Older archives may still contain decoded sentinel temperatures.
+        // Missing or invalid motion is not evidence of tabletop stillness.
+        if let temp = skinTempC, temp.isFinite, (-20.0..<25.0).contains(temp), temp != 0,
+           let motion = dynamicAccelG, motion.isFinite, (0..<0.005).contains(motion) {
             return false
         }
         return true
@@ -330,7 +333,13 @@ enum V18Decoder {
 
     private static func temp(_ bytes: [UInt8], _ offset: Int, scale: Double) -> Double? {
         guard let raw = i16(bytes, offset) else { return nil }
-        return round2(Double(raw) / scale)
+        // A disconnected or unavailable thermistor can emit an integer sentinel.
+        // Never let it masquerade as cold skin and trigger a false off-wrist state.
+        // These are broad sensor-validity bounds, NOT a calibrated body-temperature range.
+        guard raw != Int16.min, raw != Int16.max, raw != 0 else { return nil }
+        let celsius = Double(raw) / scale
+        guard celsius.isFinite, (-20.0...80.0).contains(celsius) else { return nil }
+        return round2(celsius)
     }
 
     static func round4(_ value: Double) -> Double {

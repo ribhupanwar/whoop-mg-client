@@ -239,6 +239,43 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample.stepCounter, 1014)
     }
 
+    func testV18TemperatureSentinelsDoNotForceOffWrist() throws {
+        for raw in [Int16.min, Int16.max, Int16(0), Int16(-5000)] {
+            var inner = bytes(realV18Hex)
+            let bits = UInt16(bitPattern: raw)
+            inner[65] = UInt8(truncatingIfNeeded: bits)
+            inner[66] = UInt8(truncatingIfNeeded: bits >> 8)
+            for byte in 33..<37 { inner[byte] = 0 }
+            // With missing temperature, a valid optical HR must not be
+            // rejected solely because the band is motionless.
+            let sample = try XCTUnwrap(V18Decoder.decode(inner))
+            XCTAssertNil(sample.skinTempC)
+            XCTAssertTrue(sample.wearing)
+        }
+    }
+
+    func testV18ColdTabletopEvidenceStillRejectsContact() throws {
+        var inner = bytes(realV18Hex)
+        let raw = UInt16(2150) // 21.50 C, broad plausible ambient reading
+        inner[65] = UInt8(truncatingIfNeeded: raw)
+        inner[66] = UInt8(truncatingIfNeeded: raw >> 8)
+        for byte in 33..<37 { inner[byte] = 0 }
+        let sample = try XCTUnwrap(V18Decoder.decode(inner))
+        XCTAssertEqual(sample.skinTempC ?? 0, 21.5, accuracy: 0.001)
+        XCTAssertFalse(sample.wearing)
+        let bits = Float(99).bitPattern
+        for byte in 0..<4 {
+            inner[33 + byte] = UInt8(truncatingIfNeeded: bits >> (byte * 8))
+        }
+        let missingMotion = try XCTUnwrap(V18Decoder.decode(inner))
+        XCTAssertNil(missingMotion.dynamicAccelG)
+        XCTAssertTrue(missingMotion.wearing)
+
+        let oldArchive = V18Sample(header: sample.header, heartRate: 94,
+                                   dynamicAccelG: 0, skinTempC: -50)
+        XCTAssertTrue(oldArchive.wearing)
+    }
+
     func testGen5V18UsesHardwareVerifiedHRAtInner14NotGenericInner17() {
         // Gen5 frame header is 8 bytes; absolute byte 22 = inner[14].
         // A generic record map using inner[17] must not override v18.
