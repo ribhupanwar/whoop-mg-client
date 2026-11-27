@@ -510,6 +510,30 @@ class TestV20(unittest.TestCase):
         # Non-1Hz telemetry must not enter the per-second biometric stream
         self.assertIsNone(decode_record(bytes(buf)))
 
+    def test_fifth_block_signed_adc_and_quality(self):
+        buf = bytearray(V20_INNER_LEN)
+        buf[:2] = b"\x2f\x14"
+        struct.pack_into("<H", buf, 15, 25)
+        start = 18 + 4 * 422
+        struct.pack_into("<BBHBHBIh", buf, start, 3, 2, 200, 4, 0, 3, 32, -800)
+        struct.pack_into("<3i", buf, start + 21, -524288, 524287, 524288)
+        struct.pack_into("<3i", buf, start + 221, 7, 7, 7)
+        buf[start + 421] = 0xA5
+
+        record = decode_v20(bytes(buf))
+        self.assertEqual(record.sample_rate_hz, 25)
+        self.assertEqual(record.blocks[0].detector_a.samples, ())
+        block = record.blocks[4]
+        self.assertEqual((block.source_a, block.drive_a, block.reserved), (2, 200, 0xA5))
+        self.assertEqual((block.detector_a.selector, block.detector_a.range, block.detector_a.offset),
+                         (3, 32, -800))
+        self.assertEqual(block.detector_a.samples, (-524288, 524287, None))
+        self.assertEqual(block.detector_a.saturated_sample_count, 2)
+        self.assertFalse(block.detector_a.is_flatline)
+        self.assertTrue(block.detector_b.is_flatline)
+        buf[start] = 51
+        self.assertIsNone(decode_v20(bytes(buf)))
+
     def test_decode_v20_rejection(self):
         buf = bytearray(V20_INNER_LEN)
         buf[0] = 0x2F

@@ -665,6 +665,7 @@ final class BandLink: NSObject, ObservableObject {
     private var pendingHistoryRRDeclared = 0
     private var pendingHistoryRRAccepted = 0
     private var pendingHistoryRRRejected = 0
+    private var pendingOpticalDrainQuality = Gen5V20DrainQuality()
     private var pendingHistoryUndecodableFrames = 0
     private var pendingHistoryVersionCounts: [Int: Int] = [:]
     private var lastHRRecoveryAt: Date?
@@ -2350,6 +2351,7 @@ final class BandLink: NSObject, ObservableObject {
         pendingHistoryRRDeclared = 0
         pendingHistoryRRAccepted = 0
         pendingHistoryRRRejected = 0
+        pendingOpticalDrainQuality = Gen5V20DrainQuality()
         pendingHistoryUndecodableFrames = 0
         pendingHistoryVersionCounts = [:]
         captureWriter?.close()
@@ -2442,6 +2444,10 @@ final class BandLink: NSObject, ObservableObject {
         historyRRRejected = pendingHistoryRRRejected
         historyUndecodableFrames = pendingHistoryUndecodableFrames
         historyVersionCounts = pendingHistoryVersionCounts
+        let optical = pendingOpticalDrainQuality
+        if optical.frames > 0 {
+            BLEDiagnosticLog.shared.log("history v20 frames=\(optical.frames) invalidSamples=\(optical.invalidSamples) saturatedSamples=\(optical.saturatedSamples) flatlineSlots=\(optical.flatlineSlots)")
+        }
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
         if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
@@ -2805,8 +2811,12 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
             // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
             // Recognize them without inventing heartbeats or marking frames undecodable.
+            if let optical = Gen5V20Record.decode(inner) {
+                pendingOpticalDrainQuality.record(optical)
+                return
+            }
             if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil
-                || Gen5V20Record.decode(inner) != nil || Gen5V22Record.decode(inner) != nil
+                || Gen5V22Record.decode(inner) != nil
                 || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1

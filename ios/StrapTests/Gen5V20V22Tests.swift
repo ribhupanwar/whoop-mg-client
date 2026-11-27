@@ -28,6 +28,43 @@ final class Gen5V20V22Tests: XCTestCase {
         XCTAssertNil(V18Decoder.decode(bytes))
     }
 
+    func testGen5V20FifthBlockSignedADCAndDrainQuality() throws {
+        var bytes = [UInt8](repeating: 0, count: 2128)
+        bytes[0] = 47
+        bytes[1] = 20
+        bytes[15] = 25
+        let blockStart = 18 + 4 * 422
+        bytes.replaceSubrange(blockStart..<(blockStart + 14),
+                              with: [3, 2, 200, 0, 4, 0, 0, 3, 32, 0, 0, 0, 224, 252])
+        let a = blockStart + 21
+        bytes.replaceSubrange(a..<(a + 12),
+                              with: [0, 0, 248, 255, 255, 255, 7, 0, 0, 0, 8, 0])
+        let b = blockStart + 221
+        bytes.replaceSubrange(b..<(b + 12), with: [7, 0, 0, 0, 7, 0, 0, 0, 7, 0, 0, 0])
+        bytes[blockStart + 421] = 0xA5
+
+        let record = try XCTUnwrap(Gen5V20Record.decode(bytes))
+        XCTAssertEqual(record.sampleRateHz, 25)
+        XCTAssertTrue(record.blocks[0].detectorA.samples.isEmpty)
+        let block = record.blocks[4]
+        XCTAssertEqual(block.sourceA, 2)
+        XCTAssertEqual(block.driveA, 200)
+        XCTAssertEqual(block.reserved, 0xA5)
+        XCTAssertEqual(block.detectorA.selector, 3)
+        XCTAssertEqual(block.detectorA.range, 32)
+        XCTAssertEqual(block.detectorA.offset, -800)
+        XCTAssertEqual(block.detectorA.samples, [-524_288, 524_287, nil])
+        XCTAssertTrue(block.detectorB.isFlatline)
+        var quality = Gen5V20DrainQuality()
+        quality.record(record)
+        XCTAssertEqual(quality.frames, 1)
+        XCTAssertEqual(quality.invalidSamples, 1)
+        XCTAssertEqual(quality.saturatedSamples, 2)
+        XCTAssertEqual(quality.flatlineSlots, 1)
+        bytes[blockStart] = 51
+        XCTAssertNil(Gen5V20Record.decode(bytes))
+    }
+
     func testGen5V20RejectsInvalidLengthOrVersion() {
         var bytes = [UInt8](repeating: 0, count: 2128)
         bytes[0] = 0x2F

@@ -27,8 +27,8 @@ V18_MIN_READABLE = 109
 V20 = 20
 V20_INNER_LEN = 2128
 V20_NUM_BLOCKS = 5
-V20_BLOCK_LEN = 423
-V20_BODY_START = 13
+V20_BLOCK_LEN = 422
+V20_BODY_START = 18
 
 V22 = 22
 V22_INNER_LEN = 176
@@ -484,9 +484,39 @@ def decode_v21(inner: bytes) -> IMUBuffer | None:
 
 
 @dataclass
+class V20Detector:
+    selector: int
+    range: int
+    offset: int
+    samples: tuple[int | None, ...]
+
+    @property
+    def saturated_sample_count(self) -> int:
+        return sum(sample in (-524288, 524287) for sample in self.samples)
+
+    @property
+    def is_flatline(self) -> bool:
+        return (len(self.samples) > 1 and self.samples[0] is not None
+                and all(sample == self.samples[0] for sample in self.samples))
+
+
+@dataclass
+class V20OpticalBlock:
+    source_a: int
+    drive_a: int
+    source_b: int
+    drive_b: int
+    detector_a: V20Detector
+    detector_b: V20Detector
+    reserved: int
+
+
+@dataclass
 class V20OpticalBuffer:
     header: RecordHeader
     raw_body: bytes
+    sample_rate_hz: int | None
+    blocks: list[V20OpticalBlock]
 
     @property
     def unix(self) -> int:
@@ -494,17 +524,34 @@ class V20OpticalBuffer:
 
 
 def decode_v20(inner: bytes) -> V20OpticalBuffer | None:
-    """Decode a v20 raw optical deep buffer (2128 bytes inner).
-
-    Contains five 422/423-byte optical blocks. Diagnostic optical telemetry,
-    NOT a 1 Hz biometric summary.
-    """
+    """Decode historical Type 47 revision 20 from a CRC-verified inner frame."""
     if len(inner) != V20_INNER_LEN or inner[0] != 0x2F or inner[1] != V20:
         return None
     header = parse_header(inner)
     if header is None:
         return None
-    return V20OpticalBuffer(header=header, raw_body=inner[V20_BODY_START:])
+
+    def detector(metadata: int, data: int, count: int) -> V20Detector:
+        selector, adc_range, offset = struct.unpack_from("<BIh", inner, metadata)
+        raw_samples = struct.unpack_from(f"<{count}i", inner, data)
+        samples = tuple(value if -524288 <= value <= 524287 else None
+                        for value in raw_samples)
+        return V20Detector(selector, adc_range, offset, samples)
+
+    blocks = []
+    for index in range(V20_NUM_BLOCKS):
+        start = V20_BODY_START + index * V20_BLOCK_LEN
+        count, source_a, drive_a, source_b, drive_b = struct.unpack_from("<BBHBH", inner, start)
+        if count > 50:
+            return None
+        blocks.append(V20OpticalBlock(
+            source_a, drive_a, source_b, drive_b,
+            detector(start + 7, start + 21, count),
+            detector(start + 14, start + 221, count),
+            inner[start + 421],
+        ))
+    rate, = struct.unpack_from("<H", inner, 15)
+    return V20OpticalBuffer(header, inner[13:], rate or None, blocks)
 
 
 @dataclass
