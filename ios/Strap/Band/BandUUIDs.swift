@@ -8,6 +8,9 @@ enum BandUUID {
     static let events = CBUUID(string: "fd4b0004-cce1-4033-93ce-002d5875f58a")
     static let data = CBUUID(string: "fd4b0005-cce1-4033-93ce-002d5875f58a")
     static let memfault = CBUUID(string: "fd4b0007-cce1-4033-93ce-002d5875f58a")
+    // Discovery only: no subscription, read or command for unknown roles.
+    static let research08 = CBUUID(string: "fd4b0008-cce1-4033-93ce-002d5875f58a")
+    static let research09 = CBUUID(string: "fd4b0009-cce1-4033-93ce-002d5875f58a")
 
     // Standard Bluetooth SIG Heart Rate Service (0x180D)
     static let heartRateService     = CBUUID(string: "180D")

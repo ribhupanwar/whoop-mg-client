@@ -420,6 +420,9 @@ final class BandLink: NSObject, ObservableObject {
     private var strapReportedNewestUnix: Int?
     private var stuckDetector = StuckStrapDetector(stuckAfterSeconds: 60.0, behindGapSeconds: 300)
     @Published private(set) var passiveECG: MGEcgPacket?
+    @Published private(set) var remainingNativeRoutes = RemainingNativeRoutes()
+    private var pendingNativeRoutes = RemainingNativeRoutes()
+    private var nativeRoutesPublishedAt: Date?
     @Published private(set) var currentBandModel: String?
     private var historySyncGeneration = 0
     private var capturedSamples: [V18Sample] = []
@@ -1881,6 +1884,9 @@ final class BandLink: NSObject, ObservableObject {
     private func resetLink() {
         linkGeneration = UUID()
         passiveECG = nil
+        pendingNativeRoutes = RemainingNativeRoutes()
+        remainingNativeRoutes = pendingNativeRoutes
+        nativeRoutesPublishedAt = nil
         currentBandModel = nil
         commandDeadline?.cancel()
         commandDeadline = nil
@@ -2157,6 +2163,7 @@ final class BandLink: NSObject, ObservableObject {
             guard let self, self.isConnected else { return }
             self.syncWakeAlarm()
             let now = Date()
+            self.publishNativeRoutes(at: now, force: true)
             if let last = self.lastLiveHRAt, now.timeIntervalSince(last) < 10 { return }
             // Never present an old sample as today's live pulse.
             self.liveHeartRate = nil
@@ -2704,8 +2711,23 @@ final class BandLink: NSObject, ObservableObject {
 
     // MARK: - Notifications
 
+    private func publishNativeRoutes(at now: Date = Date(), force: Bool = false) {
+        guard remainingNativeRoutes != pendingNativeRoutes,
+              force || nativeRoutesPublishedAt.map({ now.timeIntervalSince($0) >= 5 }) ?? true else { return }
+        remainingNativeRoutes = pendingNativeRoutes
+        nativeRoutesPublishedAt = now
+    }
+
     private func handleChunk(_ value: Data, uuid: CBUUID) {
         captureWriter?.chunk(value, uuid: uuid.uuidString.lowercased())
+        if uuid == BandUUID.memfault {
+            // Crash/diagnostic transport has no established biometric framing.
+            // Existing raw capture retains the notification; do not reassemble
+            // it as heart rate, history, or a command response.
+            pendingNativeRoutes.recordMemfaultChunk(bytes: value.count)
+            publishNativeRoutes()
+            return
+        }
         let reassembler: FrameReassembler
         if let existing = reassemblers[uuid] {
             reassembler = existing
@@ -2731,6 +2753,10 @@ final class BandLink: NSObject, ObservableObject {
     private func handleFrame(_ inner: [UInt8], uuid: CBUUID) {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
+        if uuid == BandUUID.data {
+            pendingNativeRoutes.recordDataType(type)
+            if type == 0x2B || type == 0x34 { publishNativeRoutes() }
+        }
         if uuid == BandUUID.commandFrom, helloExchange != nil {
             helloExchange?.receive(inner)
             confirmHelloIfReady()
@@ -2743,7 +2769,9 @@ final class BandLink: NSObject, ObservableObject {
             if let statusPacket = WhoopStatusPacket.decode(inner) {
                 handleStatusPacket(statusPacket)
             }
-            if let packet = BandHardwareEventPacket.decode(inner) {
+            else if let packet = BandHardwareEventPacket.decode(inner) {
+                pendingNativeRoutes.recordEvent(packet, at: Date())
+                publishNativeRoutes()
                 handleHardwareEventPacket(packet, innerType: type)
             }
         }
@@ -2751,6 +2779,8 @@ final class BandLink: NSObject, ObservableObject {
         if uuid == BandUUID.data, type == 0x2B, MGEcgPacket.isMG(model: currentBandModel),
            let packet = MGEcgPacket.decodeVerifiedInner(inner), !packet.samples.isEmpty {
             passiveECG = packet
+            pendingNativeRoutes.recordECG(packet, at: Date())
+            publishNativeRoutes()
         }
 
         if type == BandPacket.historicalData {
@@ -3235,7 +3265,7 @@ extension BandLink: CBPeripheralDelegate {
             switch service.uuid {
             case BandUUID.service:
                 peripheral.discoverCharacteristics(
-                    [BandUUID.commandTo] + BandUUID.notifiable, for: service
+                    [BandUUID.commandTo] + BandUUID.notifiable + [BandUUID.research08, BandUUID.research09], for: service
                 )
             case BandUUID.heartRateService:
                 peripheral.discoverCharacteristics([BandUUID.heartRateMeasurement], for: service)
@@ -3261,6 +3291,13 @@ extension BandLink: CBPeripheralDelegate {
                 status = .failed("WHOOP GATT characteristic discovery failed: \(error.localizedDescription)")
             }
             return
+        }
+        if service.uuid == BandUUID.service {
+            let identifiers = (service.characteristics ?? []).map(\.uuid)
+            pendingNativeRoutes.recordCharacteristicDiscovery(
+                found08: identifiers.contains(BandUUID.research08),
+                found09: identifiers.contains(BandUUID.research09))
+            publishNativeRoutes(force: true)
         }
         for characteristic in service.characteristics ?? [] {
             switch characteristic.uuid {

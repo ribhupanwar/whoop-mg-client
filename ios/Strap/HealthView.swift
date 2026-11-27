@@ -295,6 +295,32 @@ struct HealthView: View {
     private var rrDiagnosticPanel: some View {
         Panel {
             SectionTitle("R–R signal diagnostics")
+            let routes = store.band.remainingNativeRoutes
+            Text("Connection-local native routes · 0x2B: \(routes.type43Frames) · 0x34: \(routes.type52Frames)")
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+            Text("Memfault notifications: \(routes.memfaultChunks) · bytes: \(routes.memfaultBytes) (not biometric data)")
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+            if routes.characteristicsChecked {
+                Text("GATT discovery only · 0008: \(routes.advertised08 ? "present" : "not observed") · 0009: \(routes.advertised09 ? "present" : "not observed")")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            Text("Hardware events: \(routes.hardwareEvents) · unknown: \(routes.unknownHardwareEvents)")
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+            if let opcode = routes.lastEventOpcode {
+                Text("Latest hardware event: 0x" + String(format: "%02X", opcode))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let count = routes.lastECGSampleCount, let received = routes.lastECGReceivedAt {
+                Text("Passive MG ECG: \(routes.ecgPackets) packets · latest \(count) raw samples · received \(received.formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Hint("Passive ECG only; no ECG diagnosis or native overnight HRV inference.")
+            }
             if let capture = summary {
                 Text("R–R source packets · Type-40: \(store.band.type40RRPackets) · BLE 2A37: \(store.band.standardRRPackets) · history: \(store.band.historyRRRecords)")
                     .font(StrapTypography.body(12))

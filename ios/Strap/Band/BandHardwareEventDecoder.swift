@@ -148,3 +148,54 @@ struct WhoopStatusPacket: Equatable {
         return nil
     }
 }
+
+
+/// Bounded, connection-local transport diagnostics. Counts are observations,
+/// not unique sensor records. No raw ECG, crash payload, or identifying data.
+struct RemainingNativeRoutes: Equatable {
+    private(set) var memfaultChunks = 0
+    private(set) var memfaultBytes = 0
+    private(set) var type43Frames = 0
+    private(set) var type52Frames = 0
+    private(set) var ecgPackets = 0
+    private(set) var lastECGSampleCount: Int?
+    private(set) var lastECGReceivedAt: Date?
+    private(set) var hardwareEvents = 0
+    private(set) var lastEventOpcode: UInt8?
+    private(set) var lastEventReceivedAt: Date?
+    private(set) var unknownHardwareEvents = 0
+    private(set) var advertised08 = false
+    private(set) var advertised09 = false
+    private(set) var characteristicsChecked = false
+
+    mutating func recordMemfaultChunk(bytes: Int) {
+        guard bytes > 0 else { return }
+        memfaultChunks += 1
+        memfaultBytes += bytes
+    }
+
+    mutating func recordDataType(_ type: UInt8) {
+        if type == 0x2B { type43Frames += 1 }
+        if type == 0x34 { type52Frames += 1 }
+    }
+
+    mutating func recordECG(_ packet: MGEcgPacket, at date: Date) {
+        guard !packet.samples.isEmpty else { return }
+        ecgPackets += 1
+        lastECGSampleCount = packet.samples.count
+        lastECGReceivedAt = date
+    }
+
+    mutating func recordEvent(_ packet: BandHardwareEventPacket, at date: Date) {
+        hardwareEvents += 1
+        if !packet.isKnown { unknownHardwareEvents += 1 }
+        lastEventOpcode = packet.rawOpcode
+        lastEventReceivedAt = date
+    }
+
+    mutating func recordCharacteristicDiscovery(found08: Bool, found09: Bool) {
+        characteristicsChecked = true
+        advertised08 = advertised08 || found08
+        advertised09 = advertised09 || found09
+    }
+}
