@@ -1168,7 +1168,7 @@ struct SleepAnalysisView: View {
     }
 
     private func weeklyCard<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
-        Panel {
+        Panel(gradient: .dashboardCard) {
             CardHead(title: title)
             content()
         }
