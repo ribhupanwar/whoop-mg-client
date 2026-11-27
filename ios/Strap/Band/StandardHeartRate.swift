@@ -9,6 +9,10 @@ enum StandardHeartRate {
         let bytes = [UInt8](data)
         guard bytes.count >= 2 else { return nil }
         let flags = bytes[0]
+        // SIG Heart Rate Measurement: bit 2 means contact detection is
+        // supported; bit 1 is the detected state. Unsupported contact
+        // detection (including a zero flags byte) is not evidence of off-wrist.
+        guard flags & 0x06 != 0x04 else { return nil }
         var index = 1
         let heartRate: Int
         if flags & 0x01 == 0 {

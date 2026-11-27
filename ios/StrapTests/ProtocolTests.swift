@@ -566,6 +566,14 @@ final class StandardHeartRateTests: XCTestCase {
         XCTAssertEqual(reading?.rrMS, [])
     }
 
+    func testContactSupportedButNotDetectedRejectsHRAndRR() {
+        XCTAssertNil(parse([0x04, 72]))
+        XCTAssertNil(parse([0x14, 60, 0x00, 0x04]))
+        XCTAssertEqual(parse([0x16, 60, 0x00, 0x04])?.rrMS, [1000])
+        XCTAssertEqual(parse([0x00, 72])?.heartRate, 72)
+        XCTAssertEqual(parse([0x02, 72])?.heartRate, 72)
+    }
+
     func testUInt16HeartRate() {
         // Flags bit0: HR is two bytes. 0x012C == 300.
         XCTAssertEqual(parse([0x01, 0x2C, 0x01])?.heartRate, 300)
@@ -651,5 +659,44 @@ final class HistoricalOpticalK21DecoderTests: XCTestCase {
         XCTAssertEqual(decoded?.infrared[1][0], -5)
         XCTAssertEqual(decoded?.infrared[2][0], 6)
         XCTAssertEqual(decoded?.infrared[2][99], 0)
+    }
+}
+
+
+final class RemainingNativeRoutesTests: XCTestCase {
+    func testOpaqueRoutesAreCountedWithoutInventingECGOrBiometrics() throws {
+        var routes = RemainingNativeRoutes()
+        routes.recordMemfaultChunk(bytes: 20)
+        routes.recordMemfaultChunk(bytes: 0)
+        routes.recordDataType(0x2B)
+        routes.recordDataType(0x34)
+        routes.recordDataType(0x2F)
+        XCTAssertEqual(routes.memfaultChunks, 1)
+        XCTAssertEqual(routes.memfaultBytes, 20)
+        XCTAssertEqual(routes.type43Frames, 1)
+        XCTAssertEqual(routes.type52Frames, 1)
+        XCTAssertEqual(routes.ecgPackets, 0)
+        XCTAssertNil(routes.lastECGSampleCount)
+        XCTAssertFalse(routes.characteristicsChecked)
+        routes.recordCharacteristicDiscovery(found08: true, found09: false)
+        XCTAssertTrue(routes.characteristicsChecked)
+        XCTAssertTrue(routes.advertised08)
+        XCTAssertFalse(routes.advertised09)
+        let date = Date(timeIntervalSince1970: 100)
+        let known = try XCTUnwrap(BandHardwareEventPacket.decode([0x30, 0, 0x11]))
+        let unknown = try XCTUnwrap(BandHardwareEventPacket.decode([0x30, 0, 0xFF]))
+        routes.recordEvent(known, at: date)
+        routes.recordEvent(unknown, at: date)
+        XCTAssertEqual(routes.hardwareEvents, 2)
+        XCTAssertEqual(routes.unknownHardwareEvents, 1)
+        XCTAssertEqual(routes.lastEventOpcode, 0xFF)
+        XCTAssertEqual(routes.lastEventReceivedAt, date)
+        var bytes = [UInt8](repeating: 0, count: 228)
+        bytes[0] = 0x2B; bytes[1] = 17; bytes[24] = 1
+        let packet = try XCTUnwrap(MGEcgPacket.decodeVerifiedInner(bytes))
+        routes.recordECG(packet, at: date)
+        XCTAssertEqual(routes.ecgPackets, 1)
+        XCTAssertEqual(routes.lastECGSampleCount, 1)
+        XCTAssertEqual(routes.lastECGReceivedAt, date)
     }
 }
