@@ -331,6 +331,35 @@ struct HealthView: View {
                     .foregroundStyle(Color.appMuted)
                 Hint("Read stored history to inspect R–R coverage.")
             }
+            if let sensor = store.band.nativeSensorSnapshot {
+                Divider().overlay(Color.appLine).padding(.vertical, 6)
+                SectionTitle("Native sensor quality & contact")
+                let freshText = sensor.isFresh(at: clock) ? "FRESH" : "STALE"
+                Text("Wrist contact: \(sensor.wristContact.rawValue) (\(freshText)) · source: \(sensor.source)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                if let cap = sensor.capacitiveTouch, let opt = sensor.opticalReflectance, let body = sensor.onBodyPlacement {
+                    Text("Contact bits · cap: \(cap ? "on" : "off") · optical: \(opt ? "on" : "off") · placement: \(body ? "ok" : "off")")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                let psnrA = sensor.psnrA.map { "\($0) dB" } ?? "unavailable"
+                let psnrB = sensor.psnrB.map { "\($0) dB" } ?? "unavailable"
+                let logVar = sensor.signalQualityLogVariance.map { String(format: "%.2f", $0) } ?? "—"
+                Text("Optical pSNR A/B: \(psnrA) / \(psnrB) · logVar: \(logVar)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                if let cadence = sensor.stepCadenceSPM, sensor.isFresh(at: clock) {
+                    Text("Native cadence: \(cadence) spm · activityClass: \(sensor.activityClass.map(String.init) ?? "—")")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+            }
+            if let cmd = store.band.lastCommandResponse {
+                Text("Last band command: \(cmd.commandName) · \(cmd.isSuccess ? "ACK" : "NACK (\(cmd.resultCode))") · failures: \(store.band.commandFailureCount)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
         }
     }
 
