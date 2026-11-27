@@ -184,6 +184,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var archivedLiveRRSamples: [LiveSample] = []
     @Published private(set) var persistedLiveRRCount: Int?
     private var pendingLiveRRRecords: [LiveRRRecord] = []
+    private var liveRRSourceWindows = LiveRRSourceWindows()
     private var liveRRFlushWork: DispatchWorkItem?
     private var liveRRMigrationComplete = false
     @Published private(set) var type40RRPackets = 0
@@ -446,7 +447,13 @@ final class BandLink: NSObject, ObservableObject {
             longest = max(longest, current)
             previous = sample.unix
         }
-        return "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
+        let coverage = liveRRSourceWindows.coverage(at: Int(Date().timeIntervalSince1970))
+        let sources = coverage.map { item in
+            let duration = String(format: "%.1f", item.beatDurationSeconds)
+            return "\(item.source): \(item.validBeats) plausible beats, \(item.observedSeconds)/300 receipt seconds, \(duration)s beat time, longest \(item.longestContiguousSeconds)s"
+        }.joined(separator: " · ")
+        let archive = "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
+        return sources.isEmpty ? archive : archive + "\nRecent source-separated evidence: " + sources + " (not stress scores)"
     }
 
     /// Export the exact retained channels for this displayed night and bounded
@@ -1625,14 +1632,16 @@ final class BandLink: NSObject, ObservableObject {
     private func archiveLiveRR(unix: Int, heartRate: Int, intervals: [Int], source: String) {
         guard !intervals.isEmpty else { return }
         let entry = LiveSample(unix: unix, heartRate: heartRate, rrIntervalsMS: intervals)
-        pendingLiveRRRecords.append(.received(entry, source: source))
+        let received = LiveRRRecord.received(entry, source: source)
+        pendingLiveRRRecords.append(received)
+        liveRRSourceWindows.ingest(received)
         if liveRRFlushWork == nil {
             let work = DispatchWorkItem { [weak self] in self?.persistLiveRRArchive(force: true) }
             liveRRFlushWork = work
             DispatchQueue.main.asyncAfter(deadline: .now() + 5, execute: work)
         }
         if archivedLiveRRSamples.last?.unix == unix {
-            if intervals.count > archivedLiveRRSamples[archivedLiveRRSamples.count - 1].rrIntervalsMS.count {
+            if Hrv.preferRetransmittedRR(intervals, over: archivedLiveRRSamples[archivedLiveRRSamples.count - 1].rrIntervalsMS) {
                 archivedLiveRRSamples[archivedLiveRRSamples.count - 1] = entry
             }
         } else { archivedLiveRRSamples.append(entry) }
@@ -1883,6 +1892,7 @@ final class BandLink: NSObject, ObservableObject {
 
     private func resetLink() {
         linkGeneration = UUID()
+        liveRRSourceWindows = LiveRRSourceWindows()
         passiveECG = nil
         pendingNativeRoutes = RemainingNativeRoutes()
         remainingNativeRoutes = pendingNativeRoutes

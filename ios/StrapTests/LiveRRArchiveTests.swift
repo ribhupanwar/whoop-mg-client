@@ -7,6 +7,30 @@ final class LiveRRArchiveTests: XCTestCase {
         LiveRRRecord(id: id ?? "fixture-\(unix)", source: "synthetic-test", receivedAtUnix: Double(unix) + 0.25,
             sample: LiveSample(unix: unix, heartRate: 60, rrIntervalsMS: [980, 1000]))
     }
+    func testLiveRRSourceCoverageDoesNotMergeTransportsOrInventTime() {
+        var windows = LiveRRSourceWindows()
+        func input(_ unix: Int, _ source: String, _ rr: [Int]) -> LiveRRRecord {
+            LiveRRRecord(id: "\(source)-\(unix)", source: source, receivedAtUnix: Double(unix),
+                         sample: LiveSample(unix: unix, heartRate: 60, rrIntervalsMS: rr))
+        }
+        windows.ingest(input(100, "WHOOP Type-40", [1000]))
+        windows.ingest(input(100, "WHOOP Type-40", [1000, 0]))
+        windows.ingest(input(101, "WHOOP Type-40", [900]))
+        windows.ingest(input(103, "WHOOP Type-40", [800]))
+        windows.ingest(input(100, "Bluetooth 2A37", [1000]))
+        windows.ingest(input(103, "retained-live-RR-preferences", [1000]))
+        let result = windows.coverage(at: 103)
+        XCTAssertEqual(result.count, 2)
+        let native = result.first { $0.source == "WHOOP Type-40" }
+        XCTAssertEqual(native?.validBeats, 3)
+        XCTAssertEqual(native?.observedSeconds, 3)
+        XCTAssertEqual(native?.longestContiguousSeconds, 2)
+        XCTAssertEqual(native?.spanSeconds, 4)
+        XCTAssertEqual(result.first { $0.source == "Bluetooth 2A37" }?.validBeats, 1)
+        XCTAssertTrue(windows.coverage(at: 99).isEmpty)
+        XCTAssertTrue(windows.coverage(at: 403).isEmpty)
+    }
+
     func testDurableHistorySurvivesBeyondAnalysisWindowAndReplayDoesNotDuplicate() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }

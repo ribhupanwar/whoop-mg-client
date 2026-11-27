@@ -23,8 +23,11 @@ enum StressWindows {
         samples: [V18Sample],
         excluded: [(start: Int, end: Int)]
     ) -> (buckets: [Int: [V18Sample]], coveredSeconds: [Int: Int]) {
+        // Select the canonical record before the quiet/contact gates.
+        // Otherwise a quiet stale duplicate can survive after the canonical
+        // moving or missing-RR observation was rejected.
         var uniqueBySecond: [Int: V18Sample] = [:]
-        for sample in samples {
+        for sample in HistoricalCaptureRecovery.merged(samples).values {
             guard sample.wearing, !sample.rrIntervalsMS.isEmpty else { continue }
             guard let accel = sample.dynamicAccelG, accel.isFinite,
                   (0...maxRestingAccelG).contains(accel) else { continue }
