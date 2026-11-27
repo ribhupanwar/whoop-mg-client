@@ -356,6 +356,37 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            let deep = store.band.nativeDeepTelemetry
+            Divider().overlay(Color.appLine).padding(.vertical, 6)
+            SectionTitle("Native deep records · last history sync")
+            Text("Received frames (may include replay) · V20: \(deep.v20Frames) · IMU: \(deep.imuFrames) · V22: \(deep.v22Frames) · V26: \(deep.v26Frames)")
+                .font(StrapTypography.body(12))
+                .foregroundStyle(Color.appMuted)
+            if let motion = deep.motion {
+                Text("IMU v\(motion.version) · \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(Date(timeIntervalSince1970: Double(motion.unix)).formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text(String(format: "Centered acceleration RMS %.3f g · gyro RMS %.1f °/s", motion.centeredAccelerationRMSG, motion.angularVelocityRMSDPS))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let optical = deep.optical {
+                Text("V20 raw optical payload: \(optical.bytes) bytes · \(Date(timeIntervalSince1970: Double(optical.unix)).formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let tagged = deep.tagged {
+                Text("V22 latest tag: \(tagged.tag) (\(tagged.known ? "known tag" : "unknown tag")) · unknown frames: \(deep.unknownV22Frames)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let pip = deep.pip {
+                let rms = pip.deltaRMSADC.map { String(format: "%.1f", $0) } ?? "—"
+                Text("V26 PIP: \(pip.deltaCount) optical deltas · delta RMS \(rms) ADC units · \(Date(timeIntervalSince1970: Double(pip.unix)).formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            Hint("Historical research telemetry, not live or calibrated health metrics. Raw optical and motion frames remain separate from R–R and sleep scores.")
             if let cmd = store.band.lastCommandResponse {
                 Text("Last band command: \(cmd.commandName) · \(cmd.isSuccess ? "ACK" : "NACK (\(cmd.resultCode))") · failures: \(store.band.commandFailureCount)")
                     .font(StrapTypography.body(12))
