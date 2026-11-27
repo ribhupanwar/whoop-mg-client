@@ -275,6 +275,57 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, 0x5678)
     }
 
+    func testR22TagSpecificWindowsAndStaleTail() throws {
+        var bytes = [UInt8](repeating: 0, count: 176)
+        bytes[0] = 47; bytes[1] = 22; bytes[13] = 3
+        bytes[15] = 10; bytes[67] = 20
+        bytes[19] = 0xFF; bytes[20] = 0x7F
+        let dual = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(dual.windows.map(\.firstADC), [10, 20])
+        XCTAssertEqual(dual.windows.map { $0.approximateCodes.count }, [25, 25])
+        XCTAssertEqual(dual.windows[0].firstAmbiguousIndex, 1)
+        bytes[13] = 5; bytes[15] = 42; bytes[23] = 8; bytes[81] = 1; bytes[143] = 99
+        let pip = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(pip.embeddedUnix, 42)
+        XCTAssertEqual(pip.windows.first?.firstADC, 8)
+        XCTAssertEqual(pip.primaryFlagsRaw, 1)
+        bytes[13] = 6
+        bytes[18] = 0; bytes[19] = 0x10
+        let axes = try XCTUnwrap(Gen5V22Record.decode(bytes)?.taggedFields)
+        XCTAssertEqual(axes.accelerationAxesG.map(\.count), [25, 25, 25])
+        XCTAssertEqual(axes.accelerationAxesG[0][0], 1)
+        XCTAssertTrue(axes.windows.isEmpty)
+        XCTAssertNil(axes.embeddedUnix)
+        bytes[14] = 1
+        XCTAssertNil(Gen5V22Record.decode(bytes)?.taggedFields)
+    }
+
+    func testIMURhythmNeedsContiguousFullBlocks() throws {
+        func block(_ second: UInt32, still: Bool = false) -> Gen5IMUBuffer {
+            let x = (0..<100).map { j -> Double in
+                if still { return 1 }
+                let tick = Double(second) + Double(j) / 100
+                return 1 + 0.1 * sin(2 * Double.pi * 2 * tick)
+            }
+            let zero = Array(repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(version: 21, recordIndex: second, unix: second, rawSubsecond: 0,
+                                 accelerationG: [x, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        var rhythm = IMURhythmWindow()
+        for second in 0..<5 { rhythm.ingest(block(UInt32(second))) }
+        rhythm.ingest(block(4))
+        XCTAssertNil(rhythm.candidate)
+        rhythm.ingest(block(5))
+        XCTAssertEqual(try XCTUnwrap(rhythm.candidate).frequencyHz, 2, accuracy: 0.1)
+        rhythm.ingest(block(9))
+        XCTAssertNil(rhythm.candidate)
+        for second in 10...14 { rhythm.ingest(block(UInt32(second), still: true)) }
+        // Reset before an all-still window.
+        rhythm.ingest(block(20, still: true))
+        for second in 21...25 { rhythm.ingest(block(UInt32(second), still: true)) }
+        XCTAssertNil(rhythm.candidate)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

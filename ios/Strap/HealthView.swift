@@ -381,6 +381,11 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let rhythm = deep.rhythm.candidate {
+                Text(String(format: "Historical IMU rhythm candidate %.2f Hz · correlation %.2f", rhythm.frequencyHz, rhythm.correlation))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let optical = deep.optical {
                 Text("V20 raw optical payload: \(optical.bytes) bytes · \(Date(timeIntervalSince1970: Double(optical.unix)).formatted())")
                     .font(StrapTypography.body(12))
@@ -390,6 +395,21 @@ struct HealthView: View {
                 Text("V22 latest tag: \(tagged.tag) (\(tagged.known ? "known tag" : "unknown tag")) · unknown frames: \(deep.unknownV22Frames)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let count = tagged.windowCount {
+                    Text("R22 typed optical windows: \(count) · ambiguous: \(tagged.ambiguousWindowCount ?? 0)")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                if let unix = tagged.embeddedUnix {
+                    Text("R22 embedded PIP time: \(Date(timeIntervalSince1970: Double(unix)).formatted())")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                if let count = tagged.accelSamplesPerAxis {
+                    Text("R22 acceleration: \(count) samples per axis")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
                 if let channel = tagged.queuedChannel, let count = tagged.queuedSampleCount {
                     let suffix = tagged.firstAmbiguousIndex.map { " · ambiguous from sample \($0)" } ?? ""
                     Text("V22 v9: channel \(channel) · \(count) reconstructed bit patterns" + (channel == 0 ? "" : " · retained channel") + suffix)

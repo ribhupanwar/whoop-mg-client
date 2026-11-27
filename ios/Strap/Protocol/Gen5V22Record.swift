@@ -46,6 +46,77 @@ struct Gen5V22Record: Equatable {
                              firstAmbiguousIndex: ambiguous, packedMetadata: u16(116))
     }
 
+    struct OpticalWindow: Equatable {
+        let innerOffset: Int
+        let firstADC: Int32
+        let deltas: [Int16]
+        var firstAmbiguousIndex: Int? {
+            deltas.firstIndex { $0 == Int16.min || $0 == Int16.max }.map { $0 + 1 }
+        }
+        var approximateCodes: [Int64] {
+            var code = Int64(firstADC)
+            var result = [code]
+            for delta in deltas {
+                code += Int64(delta)
+                result.append(code)
+            }
+            return result
+        }
+    }
+
+    struct TaggedFields: Equatable {
+        let windows: [OpticalWindow]
+        let embeddedUnix: UInt32?
+        let motionDeltaRaw: Double?
+        let channelStateRaw: UInt16?
+        let primaryFlagsRaw: UInt8?
+        let accelerationAxesG: [[Double]]
+    }
+
+    /// Capture-backed layouts 1...6 from OpenStrap. Treat a nonzero
+    /// subversion as opaque. In particular, tag 5 carries the earlier PIP
+    /// record's timestamp and must not reuse metadata from its stale tail.
+    var taggedFields: TaggedFields? {
+        guard rawBody.count == 163, rawBody[1] == 0, Self.knownTags.contains(tag) else { return nil }
+        func byte(_ inner: Int) -> UInt8 { rawBody[inner - 13] }
+        func u16(_ inner: Int) -> UInt16 {
+            UInt16(byte(inner)) | UInt16(byte(inner + 1)) << 8
+        }
+        func u32(_ inner: Int) -> UInt32 {
+            UInt32(u16(inner)) | UInt32(u16(inner + 2)) << 16
+        }
+        func float(_ inner: Int) -> Double? {
+            let value = Double(Float(bitPattern: u32(inner)))
+            return value.isFinite ? value : nil
+        }
+        func window(_ offset: Int, _ count: Int) -> OpticalWindow {
+            let deltas = (0..<count).map { Int16(bitPattern: u16(offset + 4 + 2 * $0)) }
+            return OpticalWindow(innerOffset: offset, firstADC: Int32(bitPattern: u32(offset)), deltas: deltas)
+        }
+        switch tag {
+        case 1, 2, 4:
+            return TaggedFields(windows: [window(15, 49)], embeddedUnix: nil,
+                                motionDeltaRaw: float(121), channelStateRaw: u16(137),
+                                primaryFlagsRaw: byte(143), accelerationAxesG: [])
+        case 3:
+            return TaggedFields(windows: [window(15, 24), window(67, 24)], embeddedUnix: nil,
+                                motionDeltaRaw: float(123), channelStateRaw: u16(139),
+                                primaryFlagsRaw: byte(145), accelerationAxesG: [])
+        case 5:
+            return TaggedFields(windows: [window(23, 24)], embeddedUnix: u32(15),
+                                motionDeltaRaw: float(75), channelStateRaw: u16(79),
+                                primaryFlagsRaw: byte(81), accelerationAxesG: [])
+        case 6:
+            let axes = [18, 68, 118].map { start in
+                (0..<25).map { Double(Int16(bitPattern: u16(start + 2 * $0))) / 4096.0 }
+            }
+            return TaggedFields(windows: [], embeddedUnix: nil, motionDeltaRaw: nil,
+                                channelStateRaw: nil, primaryFlagsRaw: nil, accelerationAxesG: axes)
+        default:
+            return nil
+        }
+    }
+
     static func decode(_ bytes: [UInt8]) -> Gen5V22Record? {
         guard bytes.count == innerLength, bytes[0] == 0x2F, bytes[1] == version,
               let header = V18Decoder.header(of: bytes) else { return nil }

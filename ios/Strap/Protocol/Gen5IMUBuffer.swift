@@ -68,3 +68,72 @@ struct Gen5IMUBuffer: Equatable {
             angularVelocityDPS: axes([632, 832, 1032], count: gyroCount, scale: 2000.0 / 32768))
     }
 }
+
+
+/// Bounded, historical rhythm candidate. Full 100 Hz blocks only, no inferred
+/// missing samples; no physiological or step-count consumer. The 6-second
+/// window and correlation threshold are provisional research settings.
+struct IMURhythmWindow: Equatable {
+    struct Candidate: Equatable {
+        let endUnix: UInt32
+        let frequencyHz: Double
+        let correlation: Double
+    }
+
+    private var blocks: [Gen5IMUBuffer] = []
+    private(set) var candidate: Candidate?
+
+    mutating func ingest(_ record: Gen5IMUBuffer) {
+        guard record.version == 21,
+              record.accelerationG.count == 3,
+              record.accelerationG.allSatisfy({ $0.count == 100 && $0.allSatisfy { $0.isFinite } }) else {
+            blocks.removeAll()
+            candidate = nil
+            return
+        }
+        if let last = blocks.last {
+            // Older/replayed seconds cannot advance a continuous window.
+            if record.unix <= last.unix { return }
+            if UInt64(record.unix) != UInt64(last.unix) + 1 ||
+                record.rawSubsecond != last.rawSubsecond ||
+                record.recordIndex != last.recordIndex &+ 1 {
+                blocks.removeAll()
+                candidate = nil
+            }
+        }
+        blocks.append(record)
+        guard blocks.count == 6 else { return }
+        defer { blocks = [record] }
+        var magnitudes: [Double] = []
+        for block in blocks {
+            for j in 0..<100 {
+                let x = block.accelerationG[0][j]
+                let y = block.accelerationG[1][j]
+                let z = block.accelerationG[2][j]
+                let xy = x * x + y * y
+                magnitudes.append(sqrt(xy + z * z))
+            }
+        }
+        let mean = magnitudes.reduce(0, +) / Double(magnitudes.count)
+        let centered = magnitudes.map { $0 - mean }
+        let energy = centered.reduce(0.0) { $0 + $1 * $1 }
+        guard energy > 1e-9 else { candidate = nil; return }
+        // 29...83 samples corresponds approximately to 1.2...3.5 Hz.
+        var correlations: [Double] = []
+        for lag in 28...84 {
+            var cross = 0.0
+            for j in lag..<centered.count { cross += centered[j] * centered[j - lag] }
+            correlations.append(cross / energy)
+        }
+        var bestIndex: Int?
+        for j in 1..<(correlations.count - 1) {
+            guard correlations[j] >= 0.2,
+                  correlations[j] > correlations[j - 1],
+                  correlations[j] >= correlations[j + 1] else { continue }
+            if bestIndex.map({ correlations[j] > correlations[$0] }) ?? true { bestIndex = j }
+        }
+        guard let bestIndex else { candidate = nil; return }
+        candidate = Candidate(endUnix: record.unix, frequencyHz: 100.0 / Double(28 + bestIndex),
+                              correlation: correlations[bestIndex])
+    }
+}

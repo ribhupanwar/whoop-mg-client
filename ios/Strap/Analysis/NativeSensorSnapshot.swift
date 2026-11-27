@@ -176,6 +176,10 @@ struct NativeDeepTelemetry: Equatable {
         let queuedChannel: UInt8?
         let queuedSampleCount: Int?
         let firstAmbiguousIndex: Int?
+        let windowCount: Int?
+        let embeddedUnix: UInt32?
+        let accelSamplesPerAxis: Int?
+        let ambiguousWindowCount: Int?
     }
 
     struct PIP: Equatable {
@@ -204,6 +208,7 @@ struct NativeDeepTelemetry: Equatable {
         }
     }
 
+    private(set) var rhythm = IMURhythmWindow()
     private(set) var rawECGFrames = 0
     private(set) var rawECGSampleCount: Int?
     private(set) var rawECGLeadCount: Int?
@@ -231,6 +236,7 @@ struct NativeDeepTelemetry: Equatable {
             }
         } else if let record = Gen5IMUBuffer.decode(inner) {
             imuFrames += 1
+            rhythm.ingest(record)
             if motion.map({ record.unix >= $0.unix }) ?? true {
                 motion = Motion(record)
             }
@@ -244,9 +250,13 @@ struct NativeDeepTelemetry: Equatable {
             if !record.hasKnownLayout { unknownV22Frames += 1 }
             if tagged.map({ record.header.unix >= $0.unix }) ?? true {
                 let queued = record.queuedOptical
+                let fields = record.taggedFields
                 tagged = Tagged(unix: record.header.unix, tag: record.tag, known: record.hasKnownLayout,
                                 queuedChannel: queued?.channel, queuedSampleCount: queued?.sampleBits.count,
-                                firstAmbiguousIndex: queued?.firstAmbiguousIndex)
+                                firstAmbiguousIndex: queued?.firstAmbiguousIndex,
+                                windowCount: fields?.windows.count, embeddedUnix: fields?.embeddedUnix,
+                                accelSamplesPerAxis: fields?.accelerationAxesG.first?.count,
+                                ambiguousWindowCount: fields?.windows.filter { $0.firstAmbiguousIndex != nil }.count)
             }
         } else {
             return false
