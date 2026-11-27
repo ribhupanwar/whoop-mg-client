@@ -306,6 +306,20 @@ struct StressResult: Codable, Equatable {
     let reason: String?
     let diagnostics: StressDiagnostics?
 
+    /// Historical display only: never promotes a stale score into the live result.
+    /// A new day, future timestamp, invalid value or unavailable baseline stays unavailable.
+    func lastMeasuredPoint(in series: [StressPoint]?, now: Date = Date(),
+                           calendar: Calendar = .current) -> StressPoint? {
+        guard index == nil,
+              let stamp = diagnostics?.lastUpdateUnix,
+              let point = series?.last, point.unix == stamp,
+              point.index.isFinite, (0...3).contains(point.index) else { return nil }
+        let measured = Date(timeIntervalSince1970: Double(stamp))
+        guard now.timeIntervalSince(measured) > 600,
+              calendar.isDate(measured, inSameDayAs: now) else { return nil }
+        return point
+    }
+
     var band: String {
         guard let index else { return "unavailable" }
         if index < Recovery.stressElevatedSD { return "low" }

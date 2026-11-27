@@ -158,6 +158,24 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(persistence.load(), restored)
     }
 
+    func testSleepLifecycleRejectsCompletedSessionReplayAndOverlappingHistory() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = persistence.load()
+        state.confirm(sessionID: "night-1", startUnix: 1000)
+        state.end(sessionID: "night-1", at: 2000)
+        state.finishProcessing(sessionID: "night-1", hasJournalQuestions: false)
+        persistence.save(state)
+        state = persistence.load()
+        let completed = state
+        state.confirm(sessionID: "night-1", startUnix: 1000)
+        XCTAssertEqual(state, completed)
+        state.confirm(sessionID: "reindexed-night", startUnix: 1500)
+        XCTAssertEqual(state, completed)
+        state.confirm(sessionID: "night-2", startUnix: 3000)
+        XCTAssertEqual(state.phase, .detected)
+        XCTAssertEqual(state.sessionID, "night-2")
+    }
+
     func testSleepLifecycleRejectsUnconfirmedAndInvalidTransitions() {
         var state = SleepLifecycleSnapshot()
         state.end(sessionID: "unknown", at: 2000)
@@ -172,6 +190,23 @@ final class JournalStoreTests: XCTestCase {
         state.end(sessionID: "night", at: 1500)
         state.finishProcessing(sessionID: "night", hasJournalQuestions: false)
         XCTAssertEqual(state.phase, .completed)
+    }
+
+    func testAppStoreInitializesSleepLifecycleAndAcknowledgesJournal() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = persistence.load()
+        state.confirm(sessionID: "active-night", startUnix: 5000)
+        state.end(sessionID: "active-night", at: 6000)
+        state.finishProcessing(sessionID: "active-night", hasJournalQuestions: true)
+        persistence.save(state)
+
+        let store = AppStore(defaults: defaults)
+        XCTAssertEqual(store.sleepLifecycle.phase, .journalPending)
+        XCTAssertEqual(store.sleepLifecycle.sessionID, "active-night")
+
+        store.acknowledgeSleepJournal()
+        XCTAssertEqual(store.sleepLifecycle.phase, .completed)
+        XCTAssertTrue(store.sleepLifecycle.journalPresented)
     }
 
 }

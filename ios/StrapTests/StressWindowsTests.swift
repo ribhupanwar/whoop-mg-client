@@ -56,6 +56,30 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertNil(Recovery.stressIndex(lnRMSSD: nil, baseline: nil).index)
     }
 
+    func testLastMeasuredDisplayDoesNotPromoteStaleStressToLive() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let stamp = 1_700_000_000
+        let point = StressPoint(unix: stamp, index: 1.6)
+        let diagnostics = StressDiagnostics(
+            baselineMean: 4, baselineSD: 1, baselineDays: 7, eligibleRRWindows: 1,
+            rejectedRRWindows: nil, unclampedScore: nil, finalScore: nil,
+            lastUpdateUnix: stamp, unavailableReason: "stale"
+        )
+        let result = StressResult(index: nil, reason: "stale", diagnostics: diagnostics)
+        func date(_ offset: Int) -> Date {
+            Date(timeIntervalSince1970: Double(stamp + offset))
+        }
+        XCTAssertEqual(result.lastMeasuredPoint(in: [point], now: date(601), calendar: calendar), point)
+        XCTAssertNil(result.index)
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(600), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(-1), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(86_400), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [StressPoint(unix: stamp, index: 4)], now: date(601), calendar: calendar))
+        XCTAssertNil(StressResult(index: nil, reason: "no baseline", diagnostics: nil)
+            .lastMeasuredPoint(in: [point], now: date(601), calendar: calendar))
+    }
+
     func testNeedsAwakeBaseline() {
         let split = StressWindows.share(samples: window(0), baseline: nil)
         XCTAssertNil(split.lowPct)
@@ -148,10 +172,17 @@ final class StressWindowsTests: XCTestCase {
     func testSeriesOnePointPerScoredWindowInOrder() {
         let points = StressWindows.series(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
         XCTAssertEqual(points.count, 2)
-        XCTAssertEqual(points.map(\.unix), [0, 300])
+        XCTAssertEqual(points.map(\.unix), [299, 599])
         for point in points {
             XCTAssertEqual(point.index, 0.0, accuracy: 0.01, "at the norm the index is 0")
         }
+    }
+
+    func testPartialWindowUsesLastObservedRRNotUnmeasuredBucketEnd() throws {
+        // 200 observed seconds qualify; the other 100 seconds are not measured.
+        let rows = (0..<200).map { sample($0, rr: [$0.isMultiple(of: 2) ? 800 : 900]) }
+        let point = try XCTUnwrap(StressWindows.series(samples: rows, baseline: baseline(mean: 4.605)).first)
+        XCTAssertEqual(point.unix, 199)
     }
 
     func testSeriesReflectsHighStressWindow() {
@@ -186,7 +217,7 @@ final class StressWindowsTests: XCTestCase {
             baseline: baseline(mean: 4.605),
             excluded: [(start: 0, end: 299)]
         )
-        XCTAssertEqual(points.map(\.unix), [300])
+        XCTAssertEqual(points.map(\.unix), [599])
     }
 
     func testHighMotionSamplesExcludedFromRestingStress() {

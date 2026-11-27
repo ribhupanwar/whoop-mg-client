@@ -140,7 +140,10 @@ enum StressWindows {
                 lnRMSSD: Hrv.fromSamples(rr, rrRange: 300...2000).lnRMSSD, baseline: baseline
             )
             guard let index = result.index else { continue }
-            points.append(StressPoint(unix: bucket * windowSeconds, index: index,
+            // Timestamp the last accepted RR observation, not the bucket's opening boundary.
+            // The live freshness guard must not age a just-completed window by up to five minutes.
+            guard let measuredAt = rr.map(\.unix).max() else { continue }
+            points.append(StressPoint(unix: measuredAt, index: index,
                                       unclampedScore: result.diagnostics?.unclampedScore))
         }
         return points

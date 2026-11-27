@@ -28,7 +28,7 @@ struct StressView: View {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
                         .font(StrapTypography.metric(36, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                    Text(demo ? "HIGH · SAMPLE" : (stressIndex == nil ? "UNAVAILABLE" : store.band.stress.band.uppercased()))
+                    Text(demo ? "HIGH · SAMPLE" : (lastMeasured != nil ? "LAST MEASURED" : (stressIndex == nil ? "UNAVAILABLE" : store.band.stress.band.uppercased())))
                         .font(StrapTypography.body(11, weight: .medium))
                         .tracking(1.0)
                         .foregroundStyle(demo ? Color.appWarn : Color.appMuted)
@@ -53,7 +53,7 @@ struct StressView: View {
             if !demo {
                 Text(stressStateText)
                     .font(StrapTypography.body(12, weight: .medium))
-                    .foregroundStyle(stressIndex == nil ? Color.appWarn : Color.appGood)
+                    .foregroundStyle(store.band.stress.index == nil ? Color.appWarn : Color.appGood)
                     .frame(maxWidth: .infinity, alignment: .center)
                     .padding(.top, 10)
             }
@@ -62,7 +62,11 @@ struct StressView: View {
         }
     }
 
-    private var stressIndex: Double? { store.band.stress.index }
+    private var lastMeasured: StressPoint? {
+        store.band.stress.lastMeasuredPoint(in: store.band.summary?.stressSeries)
+    }
+
+    private var stressIndex: Double? { store.band.stress.index ?? lastMeasured?.index }
 
     private var gaugeValue: String {
         guard let index = stressIndex else { return "—" }
@@ -70,6 +74,10 @@ struct StressView: View {
     }
 
     private var stressStateText: String {
+        if let point = lastMeasured {
+            let time = Date(timeIntervalSince1970: Double(point.unix)).formatted(date: .omitted, time: .shortened)
+            return "Stale · last measured at \(time). Waiting for a new qualifying R-R window."
+        }
         if let reason = store.band.stress.reason { return reason }
         if let diagnostics = store.band.stress.diagnostics,
            let deviation = diagnostics.unclampedScore, deviation <= 0 {
