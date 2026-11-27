@@ -152,6 +152,13 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var isBonded: Bool = false
     @Published private(set) var lastDoubleTapAt: Date?
     @Published private(set) var lastWristStateChangeAt: Date?
+    @Published private(set) var lastCommandResponse: BandCommandResult?
+    @Published private(set) var commandFailureCount: Int = 0
+    @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
+    private var lastStatusPacket: WhoopStatusPacket?
+    private var lastStatusObservedAt: Date?
+    private var backgroundSyncCompletion: ((Bool) -> Void)?
+    private var backgroundSyncEnabled = false
     private var wristOffDebounceTask: Task<Void, Never>?
     static let wristOffDebounceInterval: TimeInterval = 45.0
     @Published private(set) var isRebooting = false
@@ -630,6 +637,7 @@ final class BandLink: NSObject, ObservableObject {
                 if historyGeneration == self.historySyncGeneration {
                     self.noteInsertedHistory(merged.progress)
                 }
+                self.refreshNativeSensorSnapshot()
                 completion()
             case .failure(let error):
                 self.hasUnsavedArchiveRecords = true
@@ -738,6 +746,23 @@ final class BandLink: NSObject, ObservableObject {
         }
         recoverSavedCaptures()
         refreshRecordedTodaySteps()
+        if restoreIdentifier != nil {
+            backgroundSyncEnabled = true
+            BackgroundSyncScheduler.shared.setSyncHandler { [weak self] completion in
+                DispatchQueue.main.async {
+                    guard let self else { completion(false); return }
+                    guard self.status.isReady else { completion(false); return }
+                    self.backgroundSyncCompletion?(false)
+                    self.backgroundSyncCompletion = completion
+                    self.readHistory()
+                    if self.drainStartedAt == nil {
+                        self.backgroundSyncCompletion = nil
+                        completion(false)
+                    }
+                }
+            }
+            BackgroundSyncScheduler.shared.scheduleIfPermitted(isPaired: preferredBandID != nil)
+        }
     }
 
     deinit {
@@ -1896,6 +1921,11 @@ final class BandLink: NSObject, ObservableObject {
         wristState = .unknown
         isWearing = false
         isCharging = false
+        lastStatusPacket = nil
+        lastStatusObservedAt = nil
+        backgroundSyncCompletion?(false)
+        backgroundSyncCompletion = nil
+        refreshNativeSensorSnapshot()
         isBonded = false
         lastDoubleTapAt = nil
         lastWristStateChangeAt = nil
@@ -2401,6 +2431,11 @@ final class BandLink: NSObject, ObservableObject {
         let samples = capturedSamples
         capturedSamples = []
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
+        backgroundSyncCompletion?(restoreConnectedState)
+        backgroundSyncCompletion = nil
+        if backgroundSyncEnabled {
+            BackgroundSyncScheduler.shared.scheduleIfPermitted(isPaired: preferredBandID != nil)
+        }
         historyRRRecords = pendingHistoryRRRecords
         historyRRDeclared = pendingHistoryRRDeclared
         historyRRAccepted = pendingHistoryRRAccepted
@@ -2809,17 +2844,15 @@ final class BandLink: NSObject, ObservableObject {
                 historyCompletionReceived = true
                 finishCompletedDrainIfReady()
             }
-        } else if (type == BandPacket.commandResponse || type == BandPacket.puffinCommandResponse), inner.count >= 5 {
-            // WHOOP 5/MG Puffin command response inner structure:
-            // inner[0] = 0x24 (commandResponse) or 0x26 (puffinCommandResponse)
-            // inner[1] = response sequence number
-            // inner[2] = command opcode (e.g. 0x1D for rebootStrap)
-            // inner[3] = origin sequence number
-            // inner[4] = result code (0x01 = SUCCESS, 0x00 = FAILURE)
-            // Note: in raw Gen5 BLE frame, inner[4] resides at byte 12 (+4 shift from 4.0 byte 8).
-            let cmdOpcode = inner[2]
-            let resultCode = inner[4]
-            if cmdOpcode == BandCommand.getDataRange.rawValue {
+        } else if let cmdResult = BandCommandResult.decode(inner) {
+            lastCommandResponse = cmdResult
+            if !cmdResult.isSuccess {
+                commandFailureCount += 1
+            }
+            BLEDiagnosticLog.shared.log(
+                "commandResponse cmd=\(cmdResult.commandName) seq=\(cmdResult.originSequence) result=\(cmdResult.resultCode)"
+            )
+            if cmdResult.commandOpcode == BandCommand.getDataRange.rawValue {
                 let body = Array(inner.dropFirst(5))
                 if let response = DataRangeResponse.decode(body) {
                     lastDataRangeResponse = response
@@ -2828,22 +2861,35 @@ final class BandLink: NSObject, ObservableObject {
                         strapReportedNewestUnix = newest
                     }
                 }
-            } else if cmdOpcode == BandCommand.rebootStrap.rawValue {
-                if resultCode == 1 {
+            } else if cmdResult.commandOpcode == BandCommand.rebootStrap.rawValue {
+                if cmdResult.isSuccess {
                     rebootExpectedDisconnect = true
                     isRebooting = true
                     rebootMessage = "WHOOP acknowledged reboot. Restarting hardware..."
                 } else {
                     isRebooting = false
-                    rebootMessage = "WHOOP refused reboot command (result code \(resultCode))"
+                    rebootMessage = "WHOOP refused reboot command (result code \(cmdResult.resultCode))"
                 }
             }
         }
     }
 
+    private func refreshNativeSensorSnapshot() {
+        nativeSensorSnapshot = NativeSensorSnapshot.build(
+            latestSample: retainedHistoricalSamples.last,
+            statusPacket: lastStatusPacket,
+            statusObservedAt: lastStatusObservedAt,
+            fallbackWristState: wristState,
+            fallbackWristObservedAt: lastWristStateChangeAt
+        )
+    }
+
     private func handleStatusPacket(_ packet: WhoopStatusPacket) {
+        let now = Date()
+        lastStatusPacket = packet
+        lastStatusObservedAt = now
         if let pct = packet.batteryPercent, pct.isFinite, (0...100).contains(pct) {
-            batteryObservedAt = Date()
+            batteryObservedAt = now
             batteryPercent = Int(round(pct))
             BLEDiagnosticLog.shared.log("statusPacket battery=\(pct)% tenths=\(packet.rawBatteryTenths ?? 0)")
         }
@@ -2853,6 +2899,7 @@ final class BandLink: NSObject, ObservableObject {
         if packet.contactState != .unknown {
             applyWearingStateTransition(packet.contactState, source: "statusPacket (raw=0x\(String(format: "%04X", packet.wristStateRaw ?? 0)))")
         }
+        refreshNativeSensorSnapshot()
     }
 
     func applyWearingStateTransition(_ newState: WristContactState, source: String) {

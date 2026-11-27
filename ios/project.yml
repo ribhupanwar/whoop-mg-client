@@ -71,6 +71,9 @@ targets:
         UIBackgroundModes:
           - bluetooth-central
           - location
+          - processing
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.ribhupanwar.strap.history-sync
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ribhupanwar.strap
