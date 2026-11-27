@@ -273,6 +273,12 @@ final class NativeBandUtilizationTests: XCTestCase {
         filtered[0] = 43; filtered[1] = 17
         filtered[21] = 0x78; filtered[22] = 0x56
         XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, 0x5678)
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw, 0x5678)
+        filtered[21] = 0xFF; filtered[22] = 0xFF
+        XCTAssertNil(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw)
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, UInt16.max)
+        filtered[21] = 0; filtered[22] = 0
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.variabilityRaw, 0)
     }
 
     func testR22TagSpecificWindowsAndStaleTail() throws {

@@ -44,6 +44,11 @@ struct NativeECGStatus: Equatable {
     let hrRelatedRaw: UInt8
     let additionalHRRaw: UInt8
     let hrvRelatedRaw: UInt16
+    /// OpenStrap Labrador R17 reserves 0xFFFF for unavailable variability.
+    /// Non-sentinel values remain raw, not RMSSD or milliseconds.
+    var variabilityRaw: UInt16? {
+        hrvRelatedRaw == UInt16.max ? nil : hrvRelatedRaw
+    }
 
     init(inner: [UInt8]) {
         qualityCode = inner[13]
