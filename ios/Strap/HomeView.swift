@@ -1034,11 +1034,20 @@ struct HomeView: View {
             .monospacedDigit()
         let tile = HStack(spacing: 6) {
             if icon == ActivityIconRegistry.sleep || icon == "health_sleep" {
-                Image("health_sleep")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
+                // Dedicated sleep-activity crescent. The health_sleep artwork
+                // has overlapping opaque discs, which become a blob in template mode.
+                Path { path in
+                    path.move(to: CGPoint(x: 10.5, y: 1))
+                    path.addQuadCurve(to: CGPoint(x: 17.5, y: 10), control: CGPoint(x: 17.5, y: 3.7))
+                    path.addCurve(to: CGPoint(x: 1.5, y: 13.7),
+                                  control1: CGPoint(x: 17.5, y: 18.6),
+                                  control2: CGPoint(x: 6.5, y: 20.1))
+                    path.addQuadCurve(to: CGPoint(x: 10.5, y: 1), control: CGPoint(x: 13.7, y: 15.2))
+                    path.closeSubpath()
+                }
+                .fill(Color.white)
+                .frame(width: 18, height: 18)
+                .accessibilityHidden(true)
             } else {
                 Image(systemName: icon).font(.system(size: 14, weight: .medium))
             }
