@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Type-safe registry for custom icon assets in Assets.xcassets.
 /// Replaces SF Symbols where a custom icon provides better visual consistency
@@ -50,7 +51,7 @@ enum IconAsset: String, CaseIterable {
     var sfSymbolFallback: String {
         switch self {
         case .deviceStrapIdle, .deviceStrapConnected, .deviceStrapDisconnected:
-            return "applewatch"
+            return "sensor.fill"
         case .deviceBatteryFull, .deviceBatteryLow, .deviceBatteryCritical, .deviceBatteryCharging:
             return "battery.100"
         case .deviceBleConnected, .deviceBleSearching:
@@ -62,7 +63,7 @@ enum IconAsset: String, CaseIterable {
         case .healthRespiratory:
             return "lungs.fill"
         case .healthBloodOxygen:
-            return "drop.fill"
+            return "o.circle"
         case .healthTemperature:
             return "thermometer"
         case .healthSleep:
@@ -86,7 +87,7 @@ enum IconAsset: String, CaseIterable {
         case .navProfile:
             return "person.fill"
         case .navMore:
-            return "ellipsis"
+            return "ellipsis.circle"
         case .alarmWake:
             return "alarm.fill"
         case .alarmSleepGoal:
@@ -108,14 +109,20 @@ struct IconView: View {
     }
 
     var body: some View {
-        if useCustom {
-            asset.image
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(width: size, height: size)
-        } else {
-            Image(systemName: asset.sfSymbolFallback)
-                .font(.system(size: size * 0.8))
+        Group {
+            if useCustom, UIImage(named: asset.rawValue) != nil {
+                asset.image
+                    .resizable()
+                    .renderingMode(.template)
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: size, height: size)
+            } else {
+                Image(systemName: asset.sfSymbolFallback)
+                    .font(.system(size: size * 0.8))
+                    .frame(width: size, height: size)
+            }
         }
+        .foregroundStyle(Color.appFG)
+        .accessibilityLabel(Text(asset.rawValue.replacingOccurrences(of: "_", with: " ")))
     }
 }

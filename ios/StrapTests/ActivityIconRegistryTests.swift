@@ -3,6 +3,16 @@ import XCTest
 @testable import Strap
 
 final class ActivityIconRegistryTests: XCTestCase {
+    func testIconAssetCatalogAndSemanticFallbacks() {
+        for asset in IconAsset.allCases {
+            XCTAssertNotNil(UIImage(named: asset.rawValue), "Missing bundled icon asset: \(asset.rawValue)")
+            XCTAssertNotNil(UIImage(systemName: asset.sfSymbolFallback), "Invalid fallback: \(asset)")
+        }
+        XCTAssertEqual(IconAsset.healthBloodOxygen.sfSymbolFallback, "o.circle")
+        XCTAssertEqual(IconAsset.deviceStrapIdle.sfSymbolFallback, "sensor.fill")
+        XCTAssertEqual(IconAsset.navMore.sfSymbolFallback, "ellipsis.circle")
+    }
+
     func testMappedLegacySportIDsSelectTheirEstablishedActivityKind() {
         let expected: [(Int, ActivityKind)] = [
             // Core cardio

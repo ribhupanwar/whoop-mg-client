@@ -89,3 +89,6 @@
    Place original 1x/2x/3x PNGs in `ios/Strap/Assets.xcassets/<name>.imageset/Contents.json`. Register in `IconAsset.swift` with required SF Symbol fallback.
 3. **Redistribution Barrier:**  
    Under no circumstances may raw assets extracted from WHOOP IPA binaries be committed to the repository. All shipped artwork must be original creations, licensed SF Symbols, or procedurally rendered SwiftUI paths.
+
+## 27 November #164 icon verification
+The earlier EXACT MATCH claims for SF Symbol substitutes indicate semantic coverage, not proven pixel parity. Existing binary artwork provenance needs a rights review. No extracted third-party images are introduced here. IconView now checks asset presence, uses adaptive template tint, and falls back to semantic SF Symbols. Native tests assert bundled asset availability and fallback validity. Widget, whole-app call-site and light/dark screenshot parity remain pending.
