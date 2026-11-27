@@ -175,13 +175,24 @@ final class WorkoutRecorderTests: XCTestCase {
         recorder.start(activity: .run, trackRoute: true)
         // Simulate > 60 seconds elapsed for calorie calculation
         recorder.setElapsedForTesting(90)
-        // Add enough HR samples
-        for _ in 0..<20 {
-            recorder.addHeartRateSample(140)
+        let start = Date()
+        for second in 0..<20 {
+            recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(Double(second)))
         }
+        let live = recorder.liveCalories
+        XCTAssertNotNil(live)
+        XCTAssertGreaterThan(live ?? 0, 0)
+        recorder.breakEnergyInterval()
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(80))
+        XCTAssertEqual(recorder.liveCalories, live, "Do not bill disconnected time")
+        recorder.pause()
+        recorder.resume()
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(100))
+        XCTAssertEqual(recorder.liveCalories, live, "Do not bill paused time")
+        recorder.addHeartRateSample(140, observedAt: start.addingTimeInterval(200))
+        XCTAssertEqual(recorder.liveCalories, live, "Do not bridge a long missing-data interval")
         recorder.stop(save: true)
-        XCTAssertNotNil(recorder.currentSession?.metrics.calories)
-        XCTAssertGreaterThan(recorder.currentSession?.metrics.calories ?? 0, 0)
+        XCTAssertEqual(recorder.currentSession?.metrics.calories, live)
     }
 
     func testActivityStrainRequiresProfileData() {

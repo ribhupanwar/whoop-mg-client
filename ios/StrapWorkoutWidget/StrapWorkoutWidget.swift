@@ -20,18 +20,23 @@ struct StrapWorkoutWidget: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack {
-                        Text(statusLabel(context))
-                        Spacer()
-                        Text(distanceText(context.state.distanceMeters))
-                        Spacer()
-                        Text(paceText(context.state.paceSecondsPerKilometer))
-                        if let steps = context.state.steps {
-                            Spacer()
-                            Label(steps.formatted(), systemImage: "figure.walk")
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(statusLabel(context))
+                            if let steps = context.state.steps {
+                                Text("\(steps.formatted()) DAILY STEPS")
+                            }
                         }
-                        if let strain = context.state.estimatedStrain {
-                            Spacer()
-                            Text(String(format: "%.1f EST. STRAIN", strain))
+                        Spacer()
+                        if context.attributes.hasGPS {
+                            VStack(alignment: .trailing) {
+                                Text(distanceText(context.state.distanceMeters))
+                                Text(paceText(context.state.paceSecondsPerKilometer))
+                            }
+                        }
+                        Spacer()
+                        VStack(alignment: .trailing) {
+                            Text(calorieText(context.state.estimatedActiveCalories))
+                            Text("EST. ACTIVE KCAL").font(.caption2)
                         }
                     }
                     .font(.caption)
@@ -44,11 +49,25 @@ struct StrapWorkoutWidget: Widget {
             } compactTrailing: {
                 if context.isStale || context.state.isConnected == false {
                     Text("STALE").font(.caption2.bold()).foregroundStyle(.orange)
-                } else if let steps = context.state.steps {
-                    Label(steps.formatted(), systemImage: "figure.walk")
-                        .monospacedDigit()
-                } else {
+                } else if context.state.paused {
                     elapsedTimerView(context).monospacedDigit()
+                } else {
+                    switch context.state.compactMetric {
+                    case .steps:
+                        Label(context.state.steps?.formatted() ?? "—", systemImage: "figure.walk")
+                            .foregroundStyle(.mint).monospacedDigit()
+                            .accessibilityLabel("Daily steps")
+                    case .calories:
+                        Label(calorieText(context.state.estimatedActiveCalories), systemImage: "flame.fill")
+                            .foregroundStyle(.orange).monospacedDigit()
+                            .accessibilityLabel("Estimated active calories")
+                    case .pace:
+                        Text(paceText(context.state.paceSecondsPerKilometer)).monospacedDigit()
+                    case .distance:
+                        Text(distanceText(context.state.distanceMeters)).monospacedDigit()
+                    case .elapsed:
+                        elapsedTimerView(context).monospacedDigit()
+                    }
                 }
             } minimal: {
                 Image(systemName: "heart.fill").foregroundStyle(.orange)
@@ -59,57 +78,95 @@ struct StrapWorkoutWidget: Widget {
 
 private struct WorkoutLockScreenView: View {
     let context: ActivityViewContext<WorkoutActivityAttributes>
+    private var zone: Int? {
+        guard !context.isStale, context.state.isConnected != false else { return nil }
+        return context.state.zone
+    }
+    private var zoneColor: Color {
+        switch zone {
+        case 1: return Color(red: 0.45, green: 0.67, blue: 0.88)
+        case 2: return .mint
+        case 3: return .yellow
+        case 4: return Color(red: 1, green: 0.66, blue: 0.36)
+        case 5: return .red
+        default: return .gray
+        }
+    }
     var body: some View {
         VStack(spacing: 10) {
-            HStack(alignment: .center) {
-                Image(systemName: "heart.fill").foregroundStyle(.orange)
+            HStack(alignment: .center, spacing: 5) {
+                Image(systemName: "heart.fill").foregroundStyle(zoneColor)
                 Text(hrText(context))
                     .font(.system(size: 34, weight: .bold, design: .rounded))
                     .monospacedDigit()
                 Text("bpm").font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                elapsedTimerView(context)
-                    .font(.system(.headline, design: .rounded)).monospacedDigit()
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(.blue.opacity(0.35), in: Capsule())
+                HStack(spacing: 5) {
+                    Image(systemName: "stopwatch").foregroundStyle(.cyan)
+                    elapsedTimerView(context)
+                        .font(.system(.headline, design: .rounded)).monospacedDigit()
+                }
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color(red: 0.08, green: 0.21, blue: 0.32), in: Capsule())
             }
-            HStack(spacing: 3) {
+            HStack(spacing: 2) {
                 ForEach(1...5, id: \.self) { z in
-                    Capsule().fill(z == context.state.zone ? Color.orange : Color.gray.opacity(0.45))
-                        .frame(height: 6)
+                    Capsule()
+                        .fill(z == zone ? zoneColor : Color.gray.opacity(0.55))
+                        .frame(height: 4)
+                        .overlay {
+                            if z == zone {
+                                Circle().fill(.white).frame(width: 10, height: 10)
+                            }
+                        }
                 }
             }
+            .accessibilityHidden(true)
             HStack {
-                Text(statusLabel(context))
-                    .font(.caption2.bold()).foregroundStyle(.orange)
                 Spacer()
-                if let strain = context.state.estimatedStrain {
-                    Text(String(format: "%.1f EST. STRAIN", strain))
-                        .font(.caption2.bold()).foregroundStyle(.secondary)
-                }
+                Text(statusLabel(context))
+                    .font(.caption2.bold()).tracking(1).foregroundStyle(zoneColor)
+                Spacer()
             }
             HStack {
-                VStack {
-                    Text(distanceText(context.state.distanceMeters)).font(.headline)
-                    Text("DISTANCE").font(.caption2).foregroundStyle(.secondary)
+                if context.attributes.hasGPS {
+                    metric(distanceText(context.state.distanceMeters), label: "DISTANCE")
+                } else {
+                    metric(calorieText(context.state.estimatedActiveCalories), label: "EST. ACTIVE KCAL")
+                }
+                Divider()
+                VStack(spacing: 3) {
+                    Text("STRAP").font(.headline.weight(.medium)).tracking(2)
+                    Text(context.attributes.activityName.uppercased())
+                        .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
                 }.frame(maxWidth: .infinity)
                 Divider()
-                VStack(spacing: 2) {
-                    Text("STRAP").font(.headline.bold()).tracking(2)
-                    if let steps = context.state.steps {
-                        Text("\(steps.formatted()) STEPS").font(.caption2).monospacedDigit()
-                    }
-                }.frame(maxWidth: .infinity)
-                Divider()
-                VStack {
-                    Text(paceText(context.state.paceSecondsPerKilometer)).font(.headline)
-                    Text("PACE / KM").font(.caption2).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity)
+                if context.attributes.hasGPS {
+                    metric(paceText(context.state.paceSecondsPerKilometer), label: "PACE / KM")
+                } else {
+                    metric(context.state.steps?.formatted() ?? "—", label: "DAILY STEPS")
+                }
             }
         }
         .foregroundStyle(.white)
         .padding(16)
+        .background {
+            LinearGradient(colors: [zoneColor.opacity(zone == nil ? 0 : 0.29),
+                                    Color(red: 0.06, green: 0.08, blue: 0.11)],
+                           startPoint: .topLeading, endPoint: .trailing)
+        }
     }
+    private func metric(_ value: String, label: String) -> some View {
+        VStack(spacing: 3) {
+            Text(value).font(.headline.bold()).monospacedDigit().lineLimit(1).minimumScaleFactor(0.65)
+            Text(label).font(.caption2.bold()).tracking(0.7).foregroundStyle(.secondary)
+                .lineLimit(1).minimumScaleFactor(0.65)
+        }.frame(maxWidth: .infinity)
+    }
+}
+
+private func calorieText(_ calories: Int?) -> String {
+    calories.map { "\($0) kcal" } ?? "—"
 }
 
 private func hrText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {

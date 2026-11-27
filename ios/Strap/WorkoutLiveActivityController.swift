@@ -77,7 +77,7 @@ final class WorkoutLiveActivityController {
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int? = nil,
                 stepsObservedAt: Date? = nil, isConnected: Bool = true,
-                estimatedStrain: Double? = nil) {
+                estimatedStrain: Double? = nil, estimatedActiveCalories: Int? = nil) {
         guard let session, phase == .recording || phase == .paused else { return }
         let now = Date()
         let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
@@ -96,7 +96,8 @@ final class WorkoutLiveActivityController {
             distanceMeters: session.hasGPS ? max(0, distanceMeters) : nil,
             paceSecondsPerKilometer: pace, steps: steps, stepsObservedAt: stepsObservedAt,
             elapsedSeconds: clampedElapsed, timerAnchor: anchor, isConnected: isConnected,
-            estimatedStrain: estimatedStrain, paused: paused, lastSampleAt: now
+            estimatedStrain: estimatedStrain, estimatedActiveCalories: estimatedActiveCalories,
+            paused: paused, lastSampleAt: now
         )
         let urgentTransition = lastState?.paused != state.paused
             || lastState?.isConnected != state.isConnected
