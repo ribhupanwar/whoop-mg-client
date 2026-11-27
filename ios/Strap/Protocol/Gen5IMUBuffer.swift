@@ -22,13 +22,25 @@ struct Gen5IMUBuffer: Equatable {
         func magnitudes(_ axes: [[Double]]) -> [Double]? {
             guard axes.count == 3, let n = axes.first?.count, n > 0,
                   axes.allSatisfy({ $0.count == n && $0.allSatisfy { $0.isFinite } }) else { return nil }
-            return (0..<n).map { i in
-                sqrt(axes[0][i] * axes[0][i] + axes[1][i] * axes[1][i] + axes[2][i] * axes[2][i])
+            var result: [Double] = []
+            result.reserveCapacity(n)
+            for i in 0..<n {
+                let x = axes[0][i]
+                let y = axes[1][i]
+                let z = axes[2][i]
+                let xy = x * x + y * y
+                result.append(sqrt(xy + z * z))
             }
+            return result
         }
         guard let a = magnitudes(accelerationG), let g = magnitudes(angularVelocityDPS) else { return nil }
         let mean = a.reduce(0, +) / Double(a.count)
-        let variation = sqrt(a.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) } / Double(a.count))
+        var squaredDeviation = 0.0
+        for value in a {
+            let delta = value - mean
+            squaredDeviation += delta * delta
+        }
+        let variation = sqrt(squaredDeviation / Double(a.count))
         let changes = zip(a.dropFirst(), a).map { pair in
             let d = pair.0 - pair.1
             return d * d

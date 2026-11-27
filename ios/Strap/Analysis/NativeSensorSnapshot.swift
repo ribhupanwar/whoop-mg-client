@@ -204,6 +204,9 @@ struct NativeDeepTelemetry: Equatable {
         }
     }
 
+    private(set) var rawECGFrames = 0
+    private(set) var rawECGSampleCount: Int?
+    private(set) var rawECGLeadCount: Int?
     private(set) var v20Frames = 0
     private(set) var imuFrames = 0
     private(set) var v22Frames = 0
@@ -217,7 +220,11 @@ struct NativeDeepTelemetry: Equatable {
     /// Called only for validated historical frame routes. Returns true for
     /// recognized deep records (including unresolved v22 tags).
     mutating func ingest(_ inner: [UInt8]) -> Bool {
-        if let record = Gen5V26Record.decode(inner) {
+        if let record = MGRawECGPacket.decodeVerifiedInner(inner) {
+            rawECGFrames += 1
+            rawECGSampleCount = record.samples.count
+            rawECGLeadCount = record.leadI.count
+        } else if let record = Gen5V26Record.decode(inner) {
             v26Frames += 1
             if pip.map({ record.header.unix >= $0.unix }) ?? true {
                 pip = PIP(record)

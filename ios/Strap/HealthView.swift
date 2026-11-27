@@ -362,6 +362,11 @@ struct HealthView: View {
             Text("Received frames (may include replay) · V20: \(deep.v20Frames) · IMU: \(deep.imuFrames) · V22: \(deep.v22Frames) · V26: \(deep.v26Frames)")
                 .font(StrapTypography.body(12))
                 .foregroundStyle(Color.appMuted)
+            if deep.rawECGFrames > 0 {
+                Text("R16 raw ECG observations: \(deep.rawECGFrames) · last received \(deep.rawECGSampleCount ?? 0) waveform / \(deep.rawECGLeadCount ?? 0) lead slots (uncalibrated)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let motion = deep.motion {
                 Text("IMU v\(motion.version) · \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(Date(timeIntervalSince1970: Double(motion.unix)).formatted())")
                     .font(StrapTypography.body(12))

@@ -245,6 +245,36 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(features.meanAngularSpeedDPS, 5, accuracy: 0.000001)
     }
 
+    func testRawECGCountBoundsAndNativeStatus() throws {
+        var bytes = [UInt8](repeating: 0, count: 1572)
+        bytes[0] = 47; bytes[1] = 16; bytes[24] = 2
+        bytes[21] = 0x34; bytes[22] = 0x12
+        bytes[26] = 0xC2 // flags plus sign bit
+        bytes[29] = 0x01; bytes[30] = 0xFF; bytes[31] = 0xFF
+        bytes[1526] = 1
+        bytes[1527] = 0xFF; bytes[1528] = 0xFF
+        bytes[1549] = 0x02
+        let raw = try XCTUnwrap(MGRawECGPacket.decodeVerifiedInner(bytes))
+        XCTAssertEqual(raw.samples.map(\.code), [-131072, 131071])
+        XCTAssertEqual(raw.samples[0].flagsAndReserved, 0xC0)
+        XCTAssertEqual(raw.leadI, [-1])
+        XCTAssertEqual(raw.leadQ, [2])
+        XCTAssertEqual(raw.status.hrvRelatedRaw, 0x1234)
+        var deep = NativeDeepTelemetry()
+        XCTAssertTrue(deep.ingest(bytes))
+        XCTAssertEqual(deep.rawECGFrames, 1)
+        XCTAssertEqual(deep.rawECGSampleCount, 2)
+        bytes[1526] = 12
+        XCTAssertNil(MGRawECGPacket.decodeVerifiedInner(bytes))
+        bytes[1526] = 0; bytes[24] = 0xF5; bytes[25] = 1
+        XCTAssertNil(MGRawECGPacket.decodeVerifiedInner(bytes))
+
+        var filtered = [UInt8](repeating: 0, count: 228)
+        filtered[0] = 43; filtered[1] = 17
+        filtered[21] = 0x78; filtered[22] = 0x56
+        XCTAssertEqual(MGEcgPacket.decodeVerifiedInner(filtered)?.status?.hrvRelatedRaw, 0x5678)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)
