@@ -330,7 +330,13 @@ enum V18Decoder {
 
     private static func temp(_ bytes: [UInt8], _ offset: Int, scale: Double) -> Double? {
         guard let raw = i16(bytes, offset) else { return nil }
-        return round2(Double(raw) / scale)
+        // A disconnected or unavailable thermistor can emit an integer sentinel.
+        // Never let it masquerade as cold skin and trigger a false off-wrist state.
+        // These are broad sensor-validity bounds, NOT a calibrated body-temperature range.
+        guard raw != Int16.min, raw != Int16.max, raw != 0 else { return nil }
+        let celsius = Double(raw) / scale
+        guard celsius.isFinite, (-20.0...80.0).contains(celsius) else { return nil }
+        return round2(celsius)
     }
 
     static func round4(_ value: Double) -> Double {
