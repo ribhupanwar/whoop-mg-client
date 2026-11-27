@@ -6,7 +6,8 @@ protocol WorkoutLiveActivitySink: AnyObject {
     func start(session: WorkoutSession, isConnected: Bool)
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
-                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?)
+                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?,
+                estimatedActiveCalories: Int?)
     func end()
 }
 
@@ -18,11 +19,13 @@ final class DefaultWorkoutLiveActivitySink: WorkoutLiveActivitySink {
 
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
-                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?) {
+                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?,
+                estimatedActiveCalories: Int?) {
         WorkoutLiveActivityController.shared.update(
             session: session, phase: phase, heartRate: heartRate, maxHeartRate: maxHeartRate,
             distanceMeters: distanceMeters, elapsedSeconds: elapsedSeconds, steps: steps,
-            stepsObservedAt: stepsObservedAt, isConnected: isConnected, estimatedStrain: estimatedStrain
+            stepsObservedAt: stepsObservedAt, isConnected: isConnected, estimatedStrain: estimatedStrain,
+            estimatedActiveCalories: estimatedActiveCalories
         )
     }
 
@@ -112,6 +115,7 @@ final class WorkoutLiveActivityCoordinator {
                     self.pushUpdate(now: Date(), connectedOverride: connected)
                 }
                 if !connected {
+                    self.recorder.breakEnergyInterval()
                     self.band.refreshRecordedTodaySteps()
                 }
             }
@@ -176,11 +180,12 @@ final class WorkoutLiveActivityCoordinator {
     }
 
     func handleLiveHR(bpm: Int?, observedAt: Date?, connected: Bool, now: Date = Date()) {
+        if !connected || bpm.map({ !(35...220).contains($0) }) != false { recorder.breakEnergyInterval() }
         guard let observedAt else { return }
         if recorder.phase == .recording,
            (lastRecordedHRAt.map { observedAt > $0 } ?? true),
            let freshBPM = LiveHeartRateState.fresh(bpm, receivedAt: observedAt, connected: connected, now: now) {
-            recorder.addHeartRateSample(freshBPM)
+            recorder.addHeartRateSample(freshBPM, observedAt: observedAt)
             lastRecordedHRAt = observedAt
         }
         if recorder.phase == .recording || recorder.phase == .paused {
@@ -206,7 +211,8 @@ final class WorkoutLiveActivityCoordinator {
             steps: band.recordedTodayFromLedger,
             stepsObservedAt: band.capturedTodayStepAt,
             isConnected: connected,
-            estimatedStrain: estimatedStrain
+            estimatedStrain: estimatedStrain,
+            estimatedActiveCalories: recorder.liveCalories
         )
     }
 }
