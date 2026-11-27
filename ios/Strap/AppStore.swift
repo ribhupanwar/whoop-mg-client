@@ -22,6 +22,9 @@ final class AppStore: ObservableObject {
     /// Band-detected sessions, kept across syncs so a walk logged yesterday
     /// still shows on yesterday's screen.
     @Published private(set) var detectedBandActivities: [ActivitySession] = []
+    /// Issue #160: Persistent sleep lifecycle state published to UI.
+    @Published private(set) var sleepLifecycle: SleepLifecycleSnapshot
+    private let sleepLifecyclePersistence: SleepLifecyclePersistence
 
     let band = BandLink()
     /// Optional Apple Health export. OFF until the toggle in Settings asks.
@@ -60,6 +63,8 @@ final class AppStore: ObservableObject {
         self.defaults = defaults
         self.journal = JournalStore(defaults: defaults)
         self.activities = ActivityStore(defaults: defaults)
+        self.sleepLifecyclePersistence = SleepLifecyclePersistence(defaults: defaults)
+        self.sleepLifecycle = sleepLifecyclePersistence.load()
         if let data = defaults.data(forKey: "strap.settings.v1"),
            let saved = try? JSONDecoder().decode(AppSettings.self, from: data) {
             self.settings = saved
@@ -96,6 +101,7 @@ final class AppStore: ObservableObject {
         // the new summary rather than the previous one.
         summaryCancellable = band.$summary.sink { [weak self] fresh in
             self?.syncDetectedActivities(fresh)
+            self?.syncSleepLifecycle(fresh)
         }
         healthCancellable = health.objectWillChange.sink { [weak self] _ in
             self?.objectWillChange.send()
@@ -284,6 +290,75 @@ final class AppStore: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Issue #160: Keep the published sleep lifecycle synchronized with confirmed
+    /// sensor sessions without prematurely finalizing or reopening past nights.
+    private func syncSleepLifecycle(_ fresh: CaptureSummary?) {
+        guard let session = fresh?.latestSleepSession else { return }
+        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        let nowUnix = Int(Date().timeIntervalSince1970)
+        let isOngoing = session.canEndNow(lastObservedUnix: fresh?.lastUnix, nowUnix: nowUnix)
+
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if isOngoing {
+                if self.sleepLifecycle.phase == .idle || (self.sleepLifecycle.phase == .completed && self.sleepLifecycle.sessionID != sessionID && session.startUnix >= (self.sleepLifecycle.endedAtUnix ?? 0)) {
+                    self.sleepLifecycle.confirm(sessionID: sessionID, startUnix: session.startUnix)
+                    self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+                }
+            } else if self.sleepLifecycle.phase == .detected && self.sleepLifecycle.sessionID == sessionID {
+                self.sleepLifecycle.end(sessionID: sessionID, at: session.endUnix)
+                let hasQuestions = !self.journalEntries.isEmpty
+                self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
+                self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+            } else if self.sleepLifecycle.phase == .processing && self.sleepLifecycle.sessionID == sessionID {
+                let hasQuestions = !self.journalEntries.isEmpty
+                self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
+                self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+            }
+        }
+    }
+
+    /// Manual End Sleep immediately bounds the active sleep session and triggers
+    /// full recalculation and morning journal progression.
+    func endSleepNow() {
+        guard let session = band.latestSleepSession, let lastUnix = band.summary?.lastUnix else { return }
+        let nowUnix = max(session.startUnix + 60, min(Int(Date().timeIntervalSince1970), lastUnix + 60))
+        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let updated = SleepCorrectionStore.saving([session.startUnix, nowUnix], for: session.sourcePeriod, overrides: overrides)
+        UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
+
+        sleepLifecycle.end(sessionID: sessionID, at: nowUnix)
+        sleepLifecyclePersistence.save(sleepLifecycle)
+        band.notifySleepCorrectionChanged()
+    }
+
+    /// Manually trigger immediate final processing for a detected sleep window.
+    func processSleepNow() {
+        guard let session = band.latestSleepSession else { return }
+        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        sleepLifecycle.end(sessionID: sessionID, at: session.endUnix)
+        let hasQuestions = !journalEntries.isEmpty
+        sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
+        sleepLifecyclePersistence.save(sleepLifecycle)
+        band.notifySleepCorrectionChanged()
+    }
+
+    /// Acknowledge the morning journal prompt to complete the sleep lifecycle.
+    func acknowledgeSleepJournal() {
+        guard let sessionID = sleepLifecycle.sessionID else { return }
+        sleepLifecycle.acknowledgeJournal(sessionID: sessionID)
+        sleepLifecyclePersistence.save(sleepLifecycle)
+    }
+
+    /// Dismisses any stale or lingering pending sleep lifecycle card safely.
+    func dismissSleepLifecycle() {
+        guard let sessionID = sleepLifecycle.sessionID else { return }
+        sleepLifecycle.acknowledgeJournal(sessionID: sessionID)
+        sleepLifecyclePersistence.save(sleepLifecycle)
     }
 
     /// Design preview toggle. OFF (default) == live mode: measured values where

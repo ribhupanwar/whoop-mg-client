@@ -121,6 +121,9 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
+                if store.sleepLifecycle.phase == .detected || store.sleepLifecycle.phase == .processing {
+                    sleepDetectedCard
+                }
                 activitiesCard
                 if dayOffset == 0 { tonightCard }
                 journalCard
@@ -814,6 +817,89 @@ struct HomeView: View {
         return "\(first)’s Day in Review"
     }
 
+    // MARK: Sleep Detected (Issue #160)
+
+    private var sleepDetectedCard: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    SleepCrescentGlyph(size: 16, color: Color.appSleep)
+                    Text("SLEEP DETECTED")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .tracking(0.8)
+                        .foregroundStyle(Color.appSleep)
+                    Spacer()
+                    if store.sleepLifecycle.phase == .processing {
+                        Text("PROCESSING")
+                            .font(StrapTypography.body(10, weight: .bold))
+                            .foregroundStyle(Color.appMuted)
+                    } else {
+                        Text("ACTIVE")
+                            .font(StrapTypography.body(10, weight: .bold))
+                            .foregroundStyle(Color.appAccent)
+                    }
+                }
+
+                if store.sleepLifecycle.phase == .processing {
+                    HStack(spacing: 12) {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .tint(Color.appFG)
+                            .scaleEffect(0.8)
+                        Text("Calculating sleep stages and recovery metrics...")
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appMuted)
+                    }
+                    .padding(.vertical, 4)
+                } else {
+                    let startUnix = store.sleepLifecycle.confirmedStartUnix ?? store.band.latestSleepSession?.startUnix ?? 0
+                    let elapsedSeconds = max(0, Int(Date().timeIntervalSince1970) - startUnix)
+                    let hours = elapsedSeconds / 3600
+                    let minutes = (elapsedSeconds % 3600) / 60
+
+                    HStack(alignment: .bottom) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Started \(Self.sleepClock(startUnix, includeDay: false))")
+                                .font(StrapTypography.body(12))
+                                .foregroundStyle(Color.appMuted)
+                            Text("\(hours)h \(minutes)m in bed")
+                                .font(StrapTypography.metric(20, weight: .bold))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        Spacer()
+                    }
+
+                    HStack(spacing: 10) {
+                        Button {
+                            store.endSleepNow()
+                        } label: {
+                            Text("END SLEEP")
+                                .font(StrapTypography.body(11, weight: .bold))
+                                .tracking(0.7)
+                                .frame(maxWidth: .infinity, minHeight: 38)
+                                .background(Color.appSleep, in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(Color.black)
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            store.processSleepNow()
+                        } label: {
+                            Text("PROCESS SLEEP")
+                                .font(StrapTypography.body(11, weight: .bold))
+                                .tracking(0.7)
+                                .frame(maxWidth: .infinity, minHeight: 38)
+                                .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(Color.appFG)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+    }
+
     // MARK: Today's activities
 
     private var todayNaps: [SleepSession] {
@@ -1037,11 +1123,7 @@ struct HomeView: View {
             .monospacedDigit()
         let tile = HStack(spacing: 6) {
             if icon == ActivityIconRegistry.sleep || icon == "health_sleep" {
-                Image("health_sleep")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 14, height: 14)
+                SleepCrescentGlyph(size: 14, color: .white)
             } else {
                 Image(systemName: icon).font(.system(size: 14, weight: .medium))
             }
@@ -1975,5 +2057,27 @@ enum HomeHistoryRefresh {
         default:
             return true
         }
+    }
+}
+
+/// Dedicated white sleep crescent vector. Resolves template disc clipping
+/// in health_sleep asset while matching the approved WHOOP glyph geometry.
+struct SleepCrescentGlyph: View {
+    var size: CGFloat = 18
+    var color: Color = .white
+
+    var body: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 10.5, y: 1))
+            path.addQuadCurve(to: CGPoint(x: 17.5, y: 10), control: CGPoint(x: 17.5, y: 3.7))
+            path.addCurve(to: CGPoint(x: 1.5, y: 13.7),
+                          control1: CGPoint(x: 17.5, y: 18.6),
+                          control2: CGPoint(x: 6.5, y: 20.1))
+            path.addQuadCurve(to: CGPoint(x: 10.5, y: 1), control: CGPoint(x: 13.7, y: 15.2))
+            path.closeSubpath()
+        }
+        .fill(color)
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
     }
 }

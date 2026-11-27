@@ -192,4 +192,21 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(state.phase, .completed)
     }
 
+    func testAppStoreInitializesSleepLifecycleAndAcknowledgesJournal() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = persistence.load()
+        state.confirm(sessionID: "active-night", startUnix: 5000)
+        state.end(sessionID: "active-night", at: 6000)
+        state.finishProcessing(sessionID: "active-night", hasJournalQuestions: true)
+        persistence.save(state)
+
+        let store = AppStore(defaults: defaults)
+        XCTAssertEqual(store.sleepLifecycle.phase, .journalPending)
+        XCTAssertEqual(store.sleepLifecycle.sessionID, "active-night")
+
+        store.acknowledgeSleepJournal()
+        XCTAssertEqual(store.sleepLifecycle.phase, .completed)
+        XCTAssertTrue(store.sleepLifecycle.journalPresented)
+    }
+
 }
