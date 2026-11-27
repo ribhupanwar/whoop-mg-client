@@ -1121,9 +1121,10 @@ struct HomeView: View {
             .font(StrapTypography.metric(activityDetailSize, weight: .medium))
             .foregroundStyle(Color.appMuted)
             .monospacedDigit()
-        let tile = HStack(spacing: 6) {
-            if icon == ActivityIconRegistry.sleep || icon == "health_sleep" {
-                SleepCrescentGlyph(size: 14, color: .white)
+        let isSleep = icon == ActivityIconRegistry.sleep || icon == "health_sleep"
+        let tile = HStack(spacing: isSleep ? 10 : 6) {
+            if isSleep {
+                SleepCrescentGlyph(size: 18, color: .white)
             } else {
                 Image(systemName: icon).font(.system(size: 14, weight: .medium))
             }
@@ -1133,9 +1134,10 @@ struct HomeView: View {
                 .minimumScaleFactor(0.8)
                 .lineLimit(1)
         }
-        .foregroundStyle(Color.appFG)
+        .foregroundStyle(isSleep ? Color.white : Color.appFG)
         .padding(.horizontal, 8)
-        .frame(width: activityTileWidth, height: 36)
+        .frame(width: isSleep ? activityTileWidth * 96 / 84 : activityTileWidth,
+               height: isSleep ? 40 : 36)
         .background {
             RoundedRectangle(cornerRadius: 8)
                 .fill(LinearGradient(
@@ -2060,24 +2062,39 @@ enum HomeHistoryRefresh {
     }
 }
 
-/// Dedicated white sleep crescent vector. Resolves template disc clipping
-/// in health_sleep asset while matching the approved WHOOP glyph geometry.
+/// Independently drawn crescent, scaled to the actual layout rect.
+/// A fixed-coordinate Path inside a smaller frame previously overflowed
+/// its nominal size and shifted the visible moon relative to the time.
 struct SleepCrescentGlyph: View {
     var size: CGFloat = 18
     var color: Color = .white
 
     var body: some View {
-        Path { path in
-            path.move(to: CGPoint(x: 10.5, y: 1))
-            path.addQuadCurve(to: CGPoint(x: 17.5, y: 10), control: CGPoint(x: 17.5, y: 3.7))
-            path.addCurve(to: CGPoint(x: 1.5, y: 13.7),
-                          control1: CGPoint(x: 17.5, y: 18.6),
-                          control2: CGPoint(x: 6.5, y: 20.1))
-            path.addQuadCurve(to: CGPoint(x: 10.5, y: 1), control: CGPoint(x: 13.7, y: 15.2))
-            path.closeSubpath()
+        SleepCrescentShape()
+            .fill(color)
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}
+
+private struct SleepCrescentShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let side = min(rect.width, rect.height)
+        let origin = CGPoint(x: rect.midX - side / 2, y: rect.midY - side / 2)
+        func point(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            CGPoint(x: origin.x + side * x, y: origin.y + side * y)
         }
-        .fill(color)
-        .frame(width: size, height: size)
-        .accessibilityHidden(true)
+        var path = Path()
+        path.move(to: point(0.70, 0.02))
+        path.addCurve(to: point(0.98, 0.50),
+                      control1: point(0.89, 0.12), control2: point(0.98, 0.31))
+        path.addCurve(to: point(0.48, 0.98),
+                      control1: point(0.98, 0.77), control2: point(0.75, 0.98))
+        path.addCurve(to: point(0.02, 0.77),
+                      control1: point(0.30, 0.98), control2: point(0.12, 0.91))
+        path.addCurve(to: point(0.70, 0.02),
+                      control1: point(0.54, 0.94), control2: point(0.91, 0.49))
+        path.closeSubpath()
+        return path
     }
 }
