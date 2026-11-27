@@ -63,6 +63,21 @@ struct HealthWidgetSnapshot: Codable, Equatable {
         return dayKey == formatter.string(from: date)
     }
 
+    /// Schedule a new rendered entry at the first instant a live metric is stale.
+    /// Preserve the daily metrics until the local-day boundary.
+    func refreshBoundaries(after now: Date, calendar: Calendar = .current) -> [Date] {
+        guard isForDay(now, calendar: calendar),
+              let end = calendar.dateInterval(of: .day, for: now)?.end else { return [] }
+        var boundaries = Set<Date>()
+        if battery != nil {
+            boundaries.insert(savedAt.addingTimeInterval(HealthWidgetMetric.freshnessSeconds))
+        }
+        if stress != nil, let stressObservedAt {
+            boundaries.insert(stressObservedAt.addingTimeInterval(HealthWidgetMetric.freshnessSeconds))
+        }
+        return boundaries.filter { $0 > now && $0 < end }.sorted()
+    }
+
     static func load(defaults: UserDefaults? = UserDefaults(suiteName: StepWidgetSnapshot.appGroup)) -> Self? {
         guard let data = defaults?.data(forKey: storageKey) else { return nil }
         return try? JSONDecoder().decode(Self.self, from: data)
@@ -86,19 +101,20 @@ enum HealthWidgetMetric: String, CaseIterable {
     var maximum: Double { self == .strain ? 21 : (self == .stress ? 3 : 100) }
     var suffix: String { self == .strain || self == .stress ? "" : "%" }
     var decimals: Int { self == .strain || self == .stress ? 1 : 0 }
-    func value(in snapshot: HealthWidgetSnapshot, at date: Date) -> Double? {
-        guard snapshot.isForDay(date) else { return nil }
+    static let freshnessSeconds: TimeInterval = 600
+    func value(in snapshot: HealthWidgetSnapshot, at date: Date, calendar: Calendar = .current) -> Double? {
+        guard snapshot.isForDay(date, calendar: calendar) else { return nil }
         let value: Double?
         switch self {
         case .recovery: value = snapshot.recovery
         case .sleep: value = snapshot.sleep
         case .strain: value = snapshot.strain
         case .battery:
-            guard (0...600).contains(date.timeIntervalSince(snapshot.savedAt)) else { return nil }
+            guard (0..<Self.freshnessSeconds).contains(date.timeIntervalSince(snapshot.savedAt)) else { return nil }
             value = snapshot.battery.map(Double.init)
         case .stress:
             guard let observed = snapshot.stressObservedAt,
-                  (0...600).contains(date.timeIntervalSince(observed)) else { return nil }
+                  (0..<Self.freshnessSeconds).contains(date.timeIntervalSince(observed)) else { return nil }
             value = snapshot.stress
         }
         guard let value, value.isFinite, (0...maximum).contains(value) else { return nil }
