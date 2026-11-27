@@ -13,6 +13,7 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
         let steps: Int?
         let isConnected: Bool
         let estimatedStrain: Double?
+        let estimatedActiveCalories: Int?
     }
 
     var startedSessions: [(WorkoutSession, Bool)] = []
@@ -25,7 +26,7 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
 
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
-                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?) {
+                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?, estimatedActiveCalories: Int?) {
         let zone: Int? = {
             guard let bpm = heartRate, let maxHeartRate, maxHeartRate > 0 else { return nil }
             return min(5, max(1, Int((Double(bpm) / maxHeartRate) / 0.1) - 4))
@@ -39,7 +40,8 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
             elapsedSeconds: elapsedSeconds,
             steps: steps,
             isConnected: isConnected,
-            estimatedStrain: estimatedStrain
+            estimatedStrain: estimatedStrain,
+            estimatedActiveCalories: estimatedActiveCalories
         ))
     }
 
@@ -141,5 +143,26 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertNil(decoded.timerAnchor)
         XCTAssertNil(decoded.isConnected)
         XCTAssertNil(decoded.estimatedStrain)
+        XCTAssertNil(decoded.estimatedActiveCalories)
+        var rotating = decoded
+        rotating.estimatedActiveCalories = 12
+        rotating.estimatedStrain = 2.4
+        XCTAssertEqual(rotating.compactMetrics(for: .running, hasGPS: true),
+                       [.pace, .distance, .calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .walking, hasGPS: true),
+                       [.steps, .distance, .calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .other, hasGPS: false),
+                       [.calories, .strain, .elapsed])
+        XCTAssertEqual(rotating.compactMetrics(for: .running, hasGPS: false),
+                       [.calories, .strain, .elapsed])
+        rotating.elapsedSeconds = 0
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .steps)
+        rotating.elapsedSeconds = 10
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .distance)
+        rotating.elapsedSeconds = 20
+        XCTAssertEqual(rotating.compactMetric(for: .walking, hasGPS: true), .calories)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("indoorWalk"), .walking)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("treadmill"), .running)
+        XCTAssertEqual(WorkoutActivityAttributes.displayKind("lift"), .other)
     }
 }

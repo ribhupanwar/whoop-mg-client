@@ -59,7 +59,7 @@ final class WorkoutLiveActivityController {
         }
         let attributes = WorkoutActivityAttributes(
             sessionID: id, activityName: session.activityLabel,
-            startedAt: session.startedAt, hasGPS: session.hasGPS
+            startedAt: session.startedAt, hasGPS: session.hasGPS, activityKind: session.activityKind
         )
         do {
             let created = try Activity.request(
@@ -77,13 +77,13 @@ final class WorkoutLiveActivityController {
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int? = nil,
                 stepsObservedAt: Date? = nil, isConnected: Bool = true,
-                estimatedStrain: Double? = nil) {
+                estimatedStrain: Double? = nil, estimatedActiveCalories: Int? = nil) {
         guard let session, phase == .recording || phase == .paused else { return }
         let now = Date()
         let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
         let zone: Int? = {
-            guard let bpm, let maxHeartRate, maxHeartRate > 0 else { return nil }
-            let ratio = Double(bpm) / maxHeartRate
+            guard let bpm, let maxHeartRate, maxHeartRate.isFinite, maxHeartRate > 0 else { return nil }
+            let ratio = min(1, max(0, Double(bpm) / maxHeartRate))
             return min(5, max(1, Int(ratio / 0.1) - 4))
         }()
         let pace: Int? = session.hasGPS && distanceMeters >= 100 && elapsedSeconds > 0
@@ -96,7 +96,8 @@ final class WorkoutLiveActivityController {
             distanceMeters: session.hasGPS ? max(0, distanceMeters) : nil,
             paceSecondsPerKilometer: pace, steps: steps, stepsObservedAt: stepsObservedAt,
             elapsedSeconds: clampedElapsed, timerAnchor: anchor, isConnected: isConnected,
-            estimatedStrain: estimatedStrain, paused: paused, lastSampleAt: now
+            estimatedStrain: estimatedStrain, estimatedActiveCalories: estimatedActiveCalories,
+            paused: paused, lastSampleAt: now
         )
         let urgentTransition = lastState?.paused != state.paused
             || lastState?.isConnected != state.isConnected

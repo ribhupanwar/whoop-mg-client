@@ -8,6 +8,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
 
     @Published private(set) var phase: WorkoutPhase = .idle
     @Published private(set) var elapsedSeconds: Int = 0
+    @Published private(set) var liveCalories: Int?
+    @Published private(set) var liveActivityStrain: Double?
     @Published private(set) var distanceMeters: Double = 0
     @Published private(set) var splitSeconds: [Int] = []
     @Published private(set) var status: String = "Ready"
@@ -37,6 +39,9 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
 
     private var heartRateSamples: [Int] = []
     private var hrSampleCount: Int = 0
+    private var energyTotal = 0.0
+    private var activityTRIMP = 0.0
+    private var lastEnergySample: (at: Date, bpm: Int)?
 
     override init() {
         super.init()
@@ -78,6 +83,11 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         lastSplitElapsed = 0
         heartRateSamples = []
         hrSampleCount = 0
+        energyTotal = 0
+        activityTRIMP = 0
+        liveCalories = nil
+        liveActivityStrain = nil
+        lastEnergySample = nil
 
         startTime = Date()
         activeSince = Date()
@@ -129,6 +139,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         accumulated += Date().timeIntervalSince(activeSince ?? Date())
         activeSince = nil
         phase = .paused
+        breakEnergyInterval()
         lastFix = nil
         if gpsEnabled {
             manager.stopUpdatingLocation()
@@ -139,6 +150,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     func resume() {
         guard phase == .paused else { return }
         phase = .recording
+        breakEnergyInterval()
         activeSince = Date()
         lastFix = nil
         if gpsEnabled {
@@ -168,8 +180,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                 distanceMeters: distanceMeters,
                 averageHeartRate: averageHeartRate(),
                 maximumHeartRate: maxHeartRate(),
-                calories: estimateCalories(),
-                activityStrain: calculateActivityStrain(),
+                calories: liveCalories,
+                activityStrain: liveActivityStrain,
                 splits: buildSplits()
             )
             session.route = route.map { loc in
@@ -219,10 +231,52 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         activeSince = Date()
     }
 
-    func addHeartRateSample(_ hr: Int) {
-        guard phase == .recording, (35...220).contains(hr) else { return }
+    func addHeartRateSample(_ hr: Int, observedAt: Date = Date()) {
+        guard phase == .recording else { return }
+        guard (35...220).contains(hr), observedAt.timeIntervalSinceReferenceDate.isFinite else {
+            breakEnergyInterval()
+            return
+        }
         heartRateSamples.append(hr)
         hrSampleCount += 1
+        // Never charge an interval through a pause, invalid reading or
+        // long BLE gap. Use the same established Keytel/BMR/gate as the
+        // analysis engine; accumulate only bounded observed intervals.
+        if let previous = lastEnergySample {
+            let delta = observedAt.timeIntervalSince(previous.at)
+            guard delta > 0 else { return }
+            // Same independent TRIMP scaling as the former saved-workout
+            // estimator, but accumulated only across observed active intervals.
+            if delta <= 30,
+               let maximum = profileMaxHR, let resting = profileRestingHR,
+               maximum.isFinite, resting.isFinite, resting > 0, maximum > resting {
+                let reserve = min(1, max(0, (Double(previous.bpm) - resting) / (maximum - resting)))
+                activityTRIMP += (delta / 60) * reserve * 0.64 * exp(1.92 * reserve)
+                let strain = min(21, activityTRIMP / 10)
+                if strain.isFinite, liveActivityStrain != strain { liveActivityStrain = strain }
+            }
+            if delta <= 30,
+               let weight = profileWeightKg, let height = profileHeightCm,
+               let age = profileAge, let sex = profileSex,
+               let resting = profileRestingHR, let maximum = profileMaxHR,
+               let bmr = Calories.bmrKcalPerDay(weightKg: weight, heightCm: height, age: Double(age), sex: sex),
+               let gate = Calories.gateHR(restingHR: resting, maxHR: maximum) {
+                let rate = Double(previous.bpm) >= gate
+                    ? max(0, Calories.keytelKcalPerS(hr: Double(previous.bpm), maxHR: maximum,
+                                                    weightKg: weight, age: Double(age), sex: sex) - bmr / 86400)
+                    : 0
+                energyTotal += rate * delta
+                if energyTotal.isFinite, energyTotal < Double(Int32.max) {
+                    let rounded = Int(energyTotal.rounded())
+                    if liveCalories != rounded { liveCalories = rounded }
+                }
+            }
+        }
+        lastEnergySample = (observedAt, hr)
+    }
+
+    func breakEnergyInterval() {
+        lastEnergySample = nil
     }
 
     private func averageHeartRate() -> Int? {
@@ -233,38 +287,6 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private func maxHeartRate() -> Int? {
         guard !heartRateSamples.isEmpty else { return nil }
         return heartRateSamples.max()
-    }
-
-    private func estimateCalories() -> Int? {
-        // Calorie estimation using Keytel formula (HR-based) when profile data available
-        // Returns nil if insufficient profile data — UI should show "—" and name the gap
-        guard let avgHR = averageHeartRate(), elapsedSeconds > 60 else { return nil }
-        guard let weightKg = profileWeightKg,
-              let heightCm = profileHeightCm,
-              let age = profileAge,
-              let sex = profileSex,
-              let restingHR = profileRestingHR,
-              let maxHR = profileMaxHR else { return nil }
-
-        let durationMinutes = Double(elapsedSeconds) / 60.0
-        let hr = Double(avgHR)
-        let cappedHR = min(hr, maxHR)
-        let bmr = (10 * weightKg) + (6.25 * heightCm) - (5 * Double(age)) + (sex == .male ? 5 : -161)
-        let activeKcal = (cappedHR - restingHR) / (maxHR - restingHR) * (bmr / 24.0 / 60.0) * durationMinutes
-        return Int(max(0, activeKcal).rounded())
-    }
-
-    private func calculateActivityStrain() -> Double? {
-        // Activity-specific strain using simplified Banister TRIMP
-        // Returns nil if insufficient profile data — UI should show "—" and name the gap
-        guard let avgHR = averageHeartRate(), elapsedSeconds > 300 else { return nil }
-        guard let maxHR = profileMaxHR, let restingHR = profileRestingHR else { return nil }
-        let durationMinutes = Double(elapsedSeconds) / 60.0
-        let hrr = (Double(avgHR) - restingHR) / (maxHR - restingHR)
-        guard hrr > 0 else { return 0 }
-        let trimp = durationMinutes * hrr * 0.64 * exp(1.92 * hrr)
-        let strain = min(21.0, trimp / 10.0) // Scale to WHOOP 0-21 range
-        return strain
     }
 
     private func buildSplits() -> [WorkoutSplit] {
