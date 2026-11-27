@@ -97,6 +97,28 @@ class TestSpo2Candidate(unittest.TestCase):
 
 
 class TestV18(unittest.TestCase):
+    def test_temperature_sentinels_and_measured_stillness(self):
+        for raw in (-32768, 32767, 0, -5000):
+            frame = bytearray(REAL_V18)
+            struct.pack_into("<h", frame, 65, raw)
+            struct.pack_into("<f", frame, 33, 0.0)
+            sample = decode_v18(bytes(frame))
+            self.assertIsNone(sample.skin_temp_c)
+            self.assertTrue(sample.wearing)
+
+        frame = bytearray(REAL_V18)
+        struct.pack_into("<h", frame, 65, 2150)
+        struct.pack_into("<f", frame, 33, 0.0)
+        sample = decode_v18(bytes(frame))
+        self.assertFalse(sample.wearing)
+        struct.pack_into("<f", frame, 33, 99.0)
+        sample = decode_v18(bytes(frame))
+        self.assertIsNone(sample.dynamic_accel_g)
+        self.assertTrue(sample.wearing)
+        # Previously decoded archive values must not imply off-wrist.
+        from dataclasses import replace
+        self.assertTrue(replace(sample, skin_temp_c=-50, dynamic_accel_g=0).wearing)
+
     def test_real_record_fields(self):
         sample = decode_v18(REAL_V18)
         self.assertIsNotNone(sample)

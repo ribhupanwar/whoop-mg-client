@@ -16,6 +16,7 @@ Shared header, inner-relative:
 flags bit 7 set => optical front end at 25 Hz, clear => 50 Hz.
 """
 
+import math
 import struct
 from dataclasses import dataclass, field
 
@@ -183,7 +184,10 @@ class V18Sample:
     def wearing(self) -> bool:
         if self.heart_rate <= 0:
             return False
-        if self.skin_temp_c is not None and self.skin_temp_c < 25.0 and (self.dynamic_accel_g or 0) < 0.005:
+        if (self.skin_temp_c is not None and math.isfinite(self.skin_temp_c)
+                and -20 <= self.skin_temp_c < 25 and self.skin_temp_c != 0
+                and self.dynamic_accel_g is not None and math.isfinite(self.dynamic_accel_g)
+                and 0 <= self.dynamic_accel_g < 0.005):
             return False
         return True
 
@@ -258,7 +262,10 @@ def decode_v18(inner: bytes) -> V18Sample | None:
 
     def temp(offset: int, scale: float) -> float | None:
         raw = _i16(inner, offset)
-        return round(raw / scale, 2) if raw is not None else None
+        if raw is None or raw in (-32768, 32767, 0):
+            return None
+        value = raw / scale
+        return round(value, 2) if -20 <= value <= 80 else None
 
     def signed_byte(offset: int) -> int | None:
         if offset >= len(inner):

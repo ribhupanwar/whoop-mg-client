@@ -138,7 +138,10 @@ struct V18Sample: Equatable, Codable {
     var wearing: Bool {
         if heartRate <= 0 { return false }
         // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness
-        if let temp = skinTempC, temp < 25.0, (dynamicAccelG ?? 0) < 0.005 {
+        // Older archives may still contain decoded sentinel temperatures.
+        // Missing or invalid motion is not evidence of tabletop stillness.
+        if let temp = skinTempC, temp.isFinite, (-20.0..<25.0).contains(temp), temp != 0,
+           let motion = dynamicAccelG, motion.isFinite, (0..<0.005).contains(motion) {
             return false
         }
         return true
