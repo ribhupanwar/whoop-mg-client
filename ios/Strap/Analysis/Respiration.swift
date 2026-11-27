@@ -327,3 +327,34 @@ enum Respiration {
         return rates
     }
 }
+
+
+/// Capture-local shadow corroboration, not a fused production reading.
+/// Require actual RR observations inside the optical interval as well as
+/// the existing RSA estimator's coverage and consensus checks.
+struct OpticalRRRespirationComparison: Equatable {
+    let endUnix: UInt32
+    let opticalRPM: Double
+    let rrRPM: Double?
+    let overlappingRRSeconds: Int
+
+    var agrees: Bool? {
+        rrRPM.map { abs($0 - opticalRPM) <= Respiration.rateAgreementRPM }
+    }
+
+    static func compare(_ optical: V26RespiratoryEvidence.Candidate, samples: [V18Sample]) -> Self {
+        let end = Int(optical.endUnix)
+        let start = end - 299
+        let rows = HistoricalCaptureRecovery.merged(samples.filter { (start...end).contains($0.unix) })
+            .values.sorted { $0.unix < $1.unix }
+        let overlap = rows.filter { row in
+            guard row.unix >= end - 39, row.wearing,
+                  let motion = row.dynamicAccelG, motion.isFinite,
+                  (0...0.10).contains(motion) else { return false }
+            return row.rrIntervalsMS.contains { (300...2000).contains($0) }
+        }.count
+        let rr = overlap >= 32 && rows.count >= 240 ? Respiration.estimate(rows).breathsPerMinute : nil
+        return Self(endUnix: optical.endUnix, opticalRPM: optical.breathsPerMinute,
+                    rrRPM: rr, overlappingRRSeconds: overlap)
+    }
+}

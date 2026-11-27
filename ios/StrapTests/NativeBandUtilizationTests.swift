@@ -423,6 +423,19 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(result.acceptedSeconds, 25)
     }
 
+    func testRespiratoryComparisonRejectsUnalignedRR() {
+        let optical = V26RespiratoryEvidence.Candidate(endUnix: 2000, breathsPerMinute: 15,
+            intensityConcentration: 0.9, amplitudeConcentration: 0.9)
+        let rows = (1000..<1300).map { sec in
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: UInt32(sec), unix: UInt32(sec), subsecQ15: 0),
+                      heartRate: 60, rrIntervalsMS: [1000], dynamicAccelG: 0.01)
+        }
+        let result = OpticalRRRespirationComparison.compare(optical, samples: rows)
+        XCTAssertNil(result.rrRPM)
+        XCTAssertNil(result.agrees)
+        XCTAssertEqual(result.overlappingRRSeconds, 0)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

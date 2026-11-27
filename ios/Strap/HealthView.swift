@@ -417,6 +417,13 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let comparison = store.band.opticalRRComparison {
+                let rr = comparison.rrRPM.map { String(format: "%.1f", $0) } ?? "unavailable"
+                let agreement = comparison.agrees.map { $0 ? "agreement" : "disagreement" } ?? "insufficient overlap"
+                Text(String(format: "Optical %.1f rpm / RR ", comparison.opticalRPM) + rr + " · " + agreement + " · shadow only")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let oxygen = store.band.oxygenWindowEvidence {
                 let value = oxygen.candidateMean.map { String(format: "%.1f", $0) } ?? "—"
                 Text("Oxygen burst candidate: \(value) · \(oxygen.acceptedWindows)/\(oxygen.observedWindows) windows · last capture only, uncalibrated")

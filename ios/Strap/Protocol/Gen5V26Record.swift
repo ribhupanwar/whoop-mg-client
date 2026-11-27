@@ -183,6 +183,7 @@ struct V26RespiratoryEvidence: Equatable {
     private var intensity: [Double] = []
     private var amplitude: [Double] = []
     private(set) var candidate: Candidate?
+    private(set) var lastAccepted: Candidate?
 
     private mutating func reset() {
         last = nil
@@ -229,6 +230,7 @@ struct V26RespiratoryEvidence: Equatable {
                               breathsPerMinute: Double(a.bin) * 60.0 / 40.0,
                               intensityConcentration: a.concentration,
                               amplitudeConcentration: b.concentration)
+        lastAccepted = candidate
     }
 
     /// 40 one-second values yield 1.5 rpm bins; require a prominent interior

@@ -160,6 +160,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
     @Published private(set) var oxygenWindowEvidence: OxygenWindowEvidence?
+    @Published private(set) var opticalRRComparison: OpticalRRRespirationComparison?
     private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
@@ -2364,6 +2365,7 @@ final class BandLink: NSObject, ObservableObject {
         pendingNativeDeepTelemetry = NativeDeepTelemetry()
         nativeDeepTelemetry = pendingNativeDeepTelemetry
         oxygenWindowEvidence = nil
+        opticalRRComparison = nil
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -2459,6 +2461,9 @@ final class BandLink: NSObject, ObservableObject {
         historyVersionCounts = pendingHistoryVersionCounts
         nativeDeepTelemetry = pendingNativeDeepTelemetry
         oxygenWindowEvidence = OxygenWindowEvidence.calculate(samples)
+        opticalRRComparison = pendingNativeDeepTelemetry.respiratoryEvidence.lastAccepted.map {
+            OpticalRRRespirationComparison.compare($0, samples: samples)
+        }
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
         if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
