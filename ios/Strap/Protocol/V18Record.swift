@@ -135,6 +135,21 @@ struct V18Sample: Equatable, Codable {
     }
 
     var unix: Int { Int(header.unix) }
+
+    /// Non-destructive bitfield views of the already-decoded `hrQualityFlags`
+    /// (inner[28]). The decode offset is unchanged (validated on 32,663 real
+    /// captures); these only expose, for troubleshooting, the reported optical
+    /// source and a coarse 4-bit quality counter. Inferred from OpenStrap/protocol
+    /// and device-validation-required; never gate RR/HR on these.
+    var irSourceSelected: Bool? {
+        guard let flags = hrQualityFlags else { return nil }
+        return (flags & 0x10) != 0
+    }
+    var hrQualityCounter: Int? {
+        guard let flags = hrQualityFlags else { return nil }
+        return flags & 0x0F
+    }
+
     var wearing: Bool {
         if heartRate <= 0 { return false }
         // Filter confirmed tabletop artifacts: ambient cold temperature + complete stillness

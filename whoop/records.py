@@ -179,6 +179,24 @@ class V18Sample:
     def unix(self) -> int:
         return self.header.unix
 
+    # The optical-source diagnostics below are non-destructive bitfield views of
+    # the already-decoded inner[28] quality byte. They never move the decode
+    # offset (validated on 32,663 real captures) and never gate RR/HR. They only
+    # expose, for troubleshooting, which detector the band reported and a coarse
+    # 4-bit quality counter. Semantics are inferred from OpenStrap/protocol and
+    # require device validation before any clinical use.
+    @property
+    def ir_source_selected(self) -> bool | None:
+        if self.hr_quality_flags is None:
+            return None
+        return (self.hr_quality_flags & 0x10) != 0
+
+    @property
+    def hr_quality_counter(self) -> int | None:
+        if self.hr_quality_flags is None:
+            return None
+        return self.hr_quality_flags & 0x0F
+
     @property
     def wearing(self) -> bool:
         if self.heart_rate <= 0:

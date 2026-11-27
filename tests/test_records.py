@@ -96,6 +96,32 @@ class TestSpo2Candidate(unittest.TestCase):
         self.assertEqual(sample.spo2_candidate_status, "saturated")
 
 
+class TestOpticalSourceDiagnostics(unittest.TestCase):
+    """Non-destructive bitfield views of inner[28]; never gate HR/RR."""
+
+    def test_real_record_counter_and_source(self):
+        sample = decode_v18(REAL_V18)
+        # inner[28] == 0x04 on the real capture: counter 4, green source.
+        self.assertEqual(sample.hr_quality_flags, 0x04)
+        self.assertEqual(sample.hr_quality_counter, 4)
+        self.assertFalse(sample.ir_source_selected)
+
+    def test_ir_source_bit_is_bit_four(self):
+        frame = bytearray(REAL_V18)
+        frame[28] = 0x15  # bit 4 set, low nibble 5
+        sample = decode_v18(bytes(frame))
+        self.assertEqual(sample.hr_quality_counter, 5)
+        self.assertTrue(sample.ir_source_selected)
+
+    def test_absent_when_quality_byte_missing(self):
+        # hr_quality_flags is only decoded when len(inner) > 28; a truncated
+        # record must report None rather than a fabricated counter of 0.
+        sample = decode_v18(REAL_V18)
+        object.__setattr__(sample, "hr_quality_flags", None)
+        self.assertIsNone(sample.hr_quality_counter)
+        self.assertIsNone(sample.ir_source_selected)
+
+
 class TestV18(unittest.TestCase):
     def test_real_record_fields(self):
         sample = decode_v18(REAL_V18)
