@@ -28,6 +28,23 @@ final class RespirationQualityRegressionTests: XCTestCase {
         XCTAssertTrue(result.reason?.contains("exceeded elapsed") == true)
     }
 
+    func testRespirationRejectsCompressedBeatTime() {
+        let rows = (0..<900).map { second in
+            row(second, rr: [500 + Int(40 * sin(Double(second) * .pi / 4))])
+        }
+        let result = Respiration.estimate(rows)
+        XCTAssertNil(result.breathsPerMinute)
+        XCTAssertTrue(result.reason?.contains("insufficient RR beat-time coverage") == true)
+    }
+
+    func testSlowRespirationDoesNotDouble() throws {
+        let rows = (0..<900).map { second in
+            row(second, rr: [1000 + Int(80 * sin(2 * .pi * 11 * Double(second) / 60))])
+        }
+        let result = Respiration.estimate(rows)
+        XCTAssertEqual(try XCTUnwrap(result.breathsPerMinute), 11, accuracy: 1)
+    }
+
     func testMissingRRAndInvalidMotionSplitSegments() {
         let left = row(0, rr: [900])
         let right = row(2, rr: [920])

@@ -16,6 +16,8 @@ enum Respiration {
     static let plausibleMinBPM = 8.0
     static let plausibleMaxBPM = 25.0
     static let minBeats = 30
+    static let minimumBeatCoverage = 0.80
+    static let rateAgreementRPM = 2.0
 
     static func estimate(_ samples: [V18Sample]) -> RespRate {
         let segments = beatSegments(samples)
@@ -32,6 +34,7 @@ enum Respiration {
         var rates: [Double] = []
         var spectralRates: [Double] = []
         var overcountedSegments = 0
+        var undercoveredSegments = 0
         for segment in segments {
             guard segment.count >= minBeats,
                   let first = segment.first, let last = segment.last else { continue }
@@ -41,6 +44,12 @@ enum Respiration {
             // Use the same upper bound as nightly HRV, not a new physiological threshold.
             guard beatSeconds <= span * 1.05 else {
                 overcountedSegments += 1
+                continue
+            }
+            // Cumulative RR reconstructs time only when the observed beat duration
+            // substantially covers the wall clock. Otherwise it compresses gaps.
+            guard beatSeconds >= span * minimumBeatCoverage else {
+                undercoveredSegments += 1
                 continue
             }
             var times: [Double] = []
@@ -59,13 +68,27 @@ enum Respiration {
             rates.append(contentsOf: windowRates(detrended))
         }
 
-        let activeRates = spectralRates.count >= 3 ? spectralRates : rates
+        // A plausible time-domain peak train alone can be a harmonic or noise.
+        // Use the spectral candidate, and corroborate thin spectral evidence.
+        let activeRates = spectralRates
+        if !activeRates.isEmpty {
+            let center = Stats.median(activeRates)
+            let agreeing = activeRates.filter { abs($0 - center) <= rateAgreementRPM }.count
+            let corroborated = !rates.isEmpty && abs(Stats.median(rates) - center) <= rateAgreementRPM
+            guard agreeing * 2 >= activeRates.count,
+                  activeRates.count >= 3 || corroborated else {
+                return RespRate(breathsPerMinute: nil, reason: "RSA windows disagree or lack independent peak-train corroboration",
+                                beats: totalBeats, windows: activeRates.count)
+            }
+        }
         guard !activeRates.isEmpty else {
             return RespRate(
                 breathsPerMinute: nil,
                 reason: overcountedSegments > 0
                     ? "no usable RSA peak train — RR beat duration exceeded elapsed recording time"
-                    : "no usable RSA peak train — needs a continuous still or sleep R-R window",
+                    : (undercoveredSegments > 0
+                        ? "no usable RSA peak train — insufficient RR beat-time coverage"
+                        : "no usable RSA peak train — needs a continuous still or sleep R-R window"),
                 beats: totalBeats,
                 windows: 0
             )
@@ -285,7 +308,8 @@ enum Respiration {
             }
             let meanPower = bins > 0 ? totalPower / Double(bins) : 0.0
             if meanPower > 0, (bestPower / meanPower) >= 2.0,
-               bestFreq >= 0.133, bestFreq <= 0.417 {
+               bestFreq >= 0.133, bestFreq <= 0.417,
+               bestFreq + 0.005 <= ceilingHz + 1e-6 {
                 rates.append(bestFreq * 60.0)
             }
         }

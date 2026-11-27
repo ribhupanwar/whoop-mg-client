@@ -78,6 +78,16 @@ class TestRespRateFromRR(unittest.TestCase):
         self.assertIsNone(result.breaths_per_min)
         self.assertIn("exceeded elapsed", result.reason)
 
+    def test_compressed_beat_time_is_rejected(self):
+        result = resp_rate_from_rr(rsa_series(0, 900, 11, amplitude_ms=40, base_ms=500))
+        self.assertIsNone(result.breaths_per_min)
+        self.assertIn("insufficient RR beat-time coverage", result.reason)
+
+    def test_slow_respiration_is_not_doubled(self):
+        result = resp_rate_from_rr(rsa_series(0, 900, 11))
+        self.assertIsNotNone(result.breaths_per_min)
+        self.assertAlmostEqual(result.breaths_per_min, 11, delta=1)
+
     def test_motion_and_missing_rr_are_boundaries(self):
         left = sample(0, [900])
         right = sample(2, [920])

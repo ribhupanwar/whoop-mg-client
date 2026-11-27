@@ -257,6 +257,8 @@ enum DailyAnalysis {
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
             }
             struct DayContext: Codable {
+                // Invalidate daily biometric checkpoints without changing saved sleep bounds.
+                let respirationRecipe = 2
                 let key: String
                 let sex: Sex
                 let maxHR: Double?

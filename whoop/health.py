@@ -1451,6 +1451,7 @@ def _spectral_window_rates(
             mean_power > 0
             and (best_power / mean_power) >= 2.0
             and 0.133 <= best_freq <= 0.417
+            and best_freq + 0.005 <= ceiling_hz + 1e-6
         ):
             rates.append(best_freq * 60.0)
     return rates
@@ -1477,6 +1478,7 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
     rates: list[float] = []
     spectral_rates: list[float] = []
     overcounted_segments = 0
+    undercovered_segments = 0
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
             continue
@@ -1484,6 +1486,9 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         beat_seconds = sum(rr for _, rr in segment) / 1000
         if beat_seconds > span * 1.05:
             overcounted_segments += 1
+            continue
+        if beat_seconds < span * 0.80:
+            undercovered_segments += 1
             continue
         times: list[float] = []
         acc = 0.0
@@ -1502,13 +1507,24 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         spectral_rates.extend(_spectral_window_rates(detrended, median_rr_s))
         rates.extend(_window_rates(detrended))
 
-    active_rates = spectral_rates if len(spectral_rates) >= 3 else rates
+    # A plausible peak train alone can be a harmonic or noise. Require
+    # agreement between spectral windows and corroboration for thin evidence.
+    active_rates = spectral_rates
+    if active_rates:
+        center = statistics.median(active_rates)
+        agreeing = sum(abs(rate - center) <= 2.0 for rate in active_rates)
+        corroborated = bool(rates) and abs(statistics.median(rates) - center) <= 2.0
+        if agreeing * 2 < len(active_rates) or (len(active_rates) < 3 and not corroborated):
+            return RespRate(None, "RSA windows disagree or lack independent peak-train corroboration",
+                            total_beats, len(active_rates))
     if not active_rates:
         return RespRate(
             None,
             ("no usable RSA peak train - RR beat duration exceeded elapsed recording time"
              if overcounted_segments else
-             "no usable RSA peak train - needs a continuous still or sleep R-R window"),
+             ("no usable RSA peak train - insufficient RR beat-time coverage"
+              if undercovered_segments else
+              "no usable RSA peak train - needs a continuous still or sleep R-R window")),
             total_beats,
             0,
         )
