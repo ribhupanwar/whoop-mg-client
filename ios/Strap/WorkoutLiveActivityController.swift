@@ -22,13 +22,7 @@ final class WorkoutLiveActivityController {
     }
 
     func start(session: WorkoutSession, isConnected: Bool = true) {
-        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
-        let id = session.id.uuidString
         let now = Date()
-        let attrs = WorkoutActivityAttributes(
-            sessionID: id, activityName: session.activityLabel,
-            startedAt: session.startedAt, hasGPS: session.hasGPS
-        )
         let initial = WorkoutActivityAttributes.ContentState(
             heartRate: nil, zone: nil, distanceMeters: session.hasGPS ? 0 : nil,
             paceSecondsPerKilometer: nil, steps: nil, stepsObservedAt: nil,
@@ -41,25 +35,42 @@ final class WorkoutLiveActivityController {
         }
         enqueue { [weak self] in
             guard let self else { return }
-            if self.active?.attributes.sessionID == id { return }
-            // Avoid duplicate cards after app recreation.
-            for old in Activity<WorkoutActivityAttributes>.activities where old.attributes.sessionID != id {
-                await old.end(nil, dismissalPolicy: .immediate)
-            }
-            if let existing = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id }) {
-                self.active = existing
-            } else {
-                do {
-                    self.active = try Activity.request(
-                        attributes: attrs,
-                        content: ActivityContent(state: initial, staleDate: now.addingTimeInterval(120)),
-                        pushType: nil
-                    )
-                } catch {
-                    // ActivityKit can reject background creation; workout continues normally.
-                    return
-                }
-            }
+            _ = await self.ensureActivity(session: session, state: initial)
+        }
+    }
+
+    /// Run inside the serialized queue. Later eligible updates may retry
+    /// a rejected start or adopt an already-existing card.
+    private func ensureActivity(session: WorkoutSession,
+                                state: WorkoutActivityAttributes.ContentState) async -> Activity<WorkoutActivityAttributes>? {
+        let id = session.id.uuidString
+        if let existing = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id }) {
+            active = existing
+            return existing
+        }
+        active = nil
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return nil }
+        for old in Activity<WorkoutActivityAttributes>.activities where old.attributes.sessionID != id {
+            await old.end(nil, dismissalPolicy: .immediate)
+        }
+        if let existing = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id }) {
+            active = existing
+            return existing
+        }
+        let attributes = WorkoutActivityAttributes(
+            sessionID: id, activityName: session.activityLabel,
+            startedAt: session.startedAt, hasGPS: session.hasGPS
+        )
+        do {
+            let created = try Activity.request(
+                attributes: attributes,
+                content: ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)),
+                pushType: nil
+            )
+            active = created
+            return created
+        } catch {
+            return nil
         }
     }
 
@@ -68,7 +79,6 @@ final class WorkoutLiveActivityController {
                 stepsObservedAt: Date? = nil, isConnected: Bool = true,
                 estimatedStrain: Double? = nil) {
         guard let session, phase == .recording || phase == .paused else { return }
-        let id = session.id.uuidString
         let now = Date()
         let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
         let zone: Int? = {
@@ -96,11 +106,8 @@ final class WorkoutLiveActivityController {
         lastState = state
         enqueue { [weak self] in
             guard let self else { return }
-            if self.active?.attributes.sessionID != id {
-                self.active = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id })
-            }
-            guard let active = self.active, active.attributes.sessionID == id else { return }
-            await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120)))
+            guard let active = await self.ensureActivity(session: session, state: state) else { return }
+            await active.update(ActivityContent(state: state, staleDate: Date().addingTimeInterval(120)))
         }
     }
 

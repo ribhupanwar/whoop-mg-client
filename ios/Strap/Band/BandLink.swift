@@ -160,6 +160,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastHistoryRecordCount = 0
     @Published private(set) var lastHistorySyncAt: Date?
     @Published private(set) var batteryPercent: Int?
+    @Published private(set) var batteryObservedAt: Date?
     @Published private(set) var liveHeartRate: Int?
     @Published private(set) var recentLiveHR: [LiveSample] = []
     @Published private(set) var liveDayStrain: Double?
@@ -1891,6 +1892,7 @@ final class BandLink: NSObject, ObservableObject {
         hrConnectedAt = nil
         lastLiveHRAt = nil
         liveHeartRate = nil
+        batteryObservedAt = nil
         wristOffDebounceTask?.cancel()
         wristOffDebounceTask = nil
         wristState = .unknown
@@ -2827,7 +2829,8 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     private func handleStatusPacket(_ packet: WhoopStatusPacket) {
-        if let pct = packet.batteryPercent {
+        if let pct = packet.batteryPercent, pct.isFinite, (0...100).contains(pct) {
+            batteryObservedAt = Date()
             batteryPercent = Int(round(pct))
             BLEDiagnosticLog.shared.log("statusPacket battery=\(pct)% tenths=\(packet.rawBatteryTenths ?? 0)")
         }
@@ -3322,7 +3325,8 @@ extension BandLink: CBPeripheralDelegate {
                 UserDefaults.standard.set(model, forKey: Keys.cachedModel)
             }
         case BandUUID.batteryLevel:
-            if let value = characteristic.value, let level = value.first {
+            if let value = characteristic.value, let level = value.first, level <= 100 {
+                batteryObservedAt = Date()
                 batteryPercent = Int(level)
             }
         default:

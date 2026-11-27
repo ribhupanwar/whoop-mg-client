@@ -40,7 +40,7 @@ final class StepWidgetSnapshotTests: XCTestCase {
         let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 10)))
         let snapshot = HealthWidgetSnapshot(dayKey: "2026-11-27", recovery: 62, sleep: 80,
             strain: 2.7, battery: 85, savedAt: now, stress: 1.4,
-            stressObservedAt: now.addingTimeInterval(-540))
+            stressObservedAt: now.addingTimeInterval(-540), batteryObservedAt: now)
         let stressExpiry = now.addingTimeInterval(60)
         let batteryExpiry = now.addingTimeInterval(600)
         XCTAssertEqual(snapshot.refreshBoundaries(after: now, calendar: calendar), [stressExpiry, batteryExpiry])
@@ -51,6 +51,24 @@ final class StepWidgetSnapshotTests: XCTestCase {
         XCTAssertEqual(HealthWidgetMetric.recovery.value(in: snapshot, at: batteryExpiry, calendar: calendar), 62)
         XCTAssertTrue(snapshot.refreshBoundaries(after: batteryExpiry, calendar: calendar).isEmpty)
         XCTAssertTrue(snapshot.refreshBoundaries(after: now.addingTimeInterval(86400), calendar: calendar).isEmpty)
+    }
+
+    func testBatteryFreshnessUsesObservationNotSnapshotSave() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 10)))
+        var snapshot = HealthWidgetSnapshot(dayKey: "2026-11-27", recovery: 62, sleep: 80,
+            strain: 2.7, battery: 85, savedAt: now, batteryObservedAt: now.addingTimeInterval(-600))
+        XCTAssertNil(HealthWidgetMetric.battery.value(in: snapshot, at: now, calendar: calendar))
+        XCTAssertTrue(snapshot.refreshBoundaries(after: now, calendar: calendar).isEmpty)
+        snapshot.batteryObservedAt = now
+        XCTAssertEqual(HealthWidgetMetric.battery.value(in: snapshot, at: now, calendar: calendar), 85)
+        XCTAssertEqual(snapshot.refreshBoundaries(after: now, calendar: calendar), [now.addingTimeInterval(600)])
+        snapshot.batteryObservedAt = nil
+        let decoded = try JSONDecoder().decode(HealthWidgetSnapshot.self, from: JSONEncoder().encode(snapshot))
+        XCTAssertNil(decoded.batteryObservedAt)
+        XCTAssertNil(HealthWidgetMetric.battery.value(in: decoded, at: now, calendar: calendar))
+        XCTAssertEqual(HealthWidgetMetric.recovery.value(in: decoded, at: now, calendar: calendar), 62)
     }
 
     func testOldWorkoutLiveActivityDecodesWithoutNewStepFields() throws {
