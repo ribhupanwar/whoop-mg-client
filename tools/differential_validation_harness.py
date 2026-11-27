@@ -186,7 +186,8 @@ def run_differential_harness():
         rsa_samples.append(wr.V18Sample(
             header=wr.RecordHeader(18, 0, sec, 1700000000 + sec, 0),
             heart_rate=60,
-            rr_intervals_ms=[rr_val]
+            rr_intervals_ms=[rr_val],
+            dynamic_accel_g=0.01
         ))
     resp_result = wh.resp_rate_from_rr(rsa_samples)
     py_resp = resp_result.breaths_per_min if resp_result and resp_result.available else None
