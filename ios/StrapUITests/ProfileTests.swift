@@ -28,6 +28,7 @@ final class ProfileTests: XCTestCase {
         let save = app.buttons["profile.save"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable, "Save must remain reachable while the name field is being edited")
         save.tap()
         // Verify the save has completed before leaving the current stack.
         let savedName = app.staticTexts["profile.displayName"]
