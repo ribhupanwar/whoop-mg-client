@@ -47,6 +47,54 @@ def baseline(days=14):
 
 
 class TestSleepDetection(unittest.TestCase):
+    def test_hr_surge_preserves_corroborated_quiet_sleep(self):
+        from whoop.health import _split_run_at_hr_transitions
+
+        start = 1_795_000_000
+        surge_start = start + 3600
+        surge_end = surge_start + 300
+        end = surge_end + 4200
+        first = stretch(start, 3600, 80, 0.01)
+        last = stretch(surge_end, 4200, 80, 0.01)
+        for state, motion, expected in [(2, 0.01, 1), (3, 0.01, 2),
+                                         (2, 0.05, 2), (2, None, 2)]:
+            surge = stretch(surge_start, 300, 97, motion)
+            for row in first + surge + last:
+                row.sleep_state = 2
+            for row in surge:
+                row.sleep_state = state
+            result = _split_run_at_hr_transitions(first + surge + last, 100, 5, 3600)
+            self.assertEqual(len(result), expected)
+            if expected == 1:
+                self.assertEqual(len(result[0]), end - start)
+            else:
+                self.assertEqual([part[0].unix for part in result], [start, surge_end])
+                self.assertEqual([part[-1].unix for part in result], [surge_start - 1, end - 1])
+
+    def test_long_corroborated_hr_rise_retains_qualifying_sleep(self):
+        from datetime import datetime, timezone
+        from whoop.health import _split_run_at_hr_transitions
+
+        start = int(datetime(2025, 2, 10, tzinfo=timezone.utc).timestamp())
+        rise = start + 3600
+        resumed = rise + 3 * 3600
+        end = resumed + 70 * 60
+        run = (stretch(start, 3600, 80, 0.01)
+               + stretch(rise, 3 * 3600, 97, 0.01)
+               + stretch(resumed, 70 * 60, 80, 0.01))
+        for row in run:
+            row.sleep_state = 2
+        expected = _split_run_at_hr_transitions(
+            run, 100, 5, 3600, protect_corroborated_sleep=False)
+        actual = _split_run_at_hr_transitions(run, 100, 5, 3600)
+        self.assertEqual([part[0].unix for part in expected], [start, resumed])
+        self.assertEqual([part[0].unix for part in actual], [start, resumed])
+        self.assertEqual([part[-1].unix for part in actual], [rise - 1, end - 1])
+        periods = detect_sleep(stretch(start - 900, 900, 100, 0.3)
+                               + run + stretch(end, 900, 100, 0.3), min_sleep_s=3600)
+        self.assertEqual([part.start_unix for part in periods], [start, resumed])
+        self.assertEqual([part.end_unix for part in periods], [rise - 1, end - 1])
+
     def test_quiet_period_with_hr_drop_is_sleep(self):
         rows = stretch(0, 600, 100, 0.5)
         rows += stretch(600, 3600, 60, 0.02)

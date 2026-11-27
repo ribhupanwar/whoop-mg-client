@@ -25,6 +25,71 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         )
     }
 
+    func testHRSurgeCannotSplitCorroboratedQuietSleep() {
+        let start = 1_795_000_000
+        let surgeStart = start + 3600
+        let surgeEnd = surgeStart + 300
+        let end = surgeEnd + 4200
+        let first = (start..<surgeStart).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let last = (surgeEnd..<end).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let asleepSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.01, state: 2)
+        }
+        let awakeSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.01, state: 3)
+        }
+        let movingSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.05, state: 2)
+        }
+        let protected = SleepDetect.splitRunAtHRTransitions(first + asleepSurge + last,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(protected.count, 1)
+        XCTAssertEqual(protected.first?.count, end - start)
+        for surge in [awakeSurge, movingSurge] {
+            let split = SleepDetect.splitRunAtHRTransitions(first + surge + last,
+                activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+            XCTAssertEqual(split.compactMap { $0.first?.unix }, [start, surgeEnd])
+            XCTAssertEqual(split.compactMap { $0.last?.unix }, [surgeStart - 1, end - 1])
+        }
+        // Replays cannot turn 100 distinct seconds into 180 seconds of evidence.
+        let partial = Array(asleepSurge.prefix(100)) +
+            Array(repeating: asleepSurge[99], count: 200) +
+            Array(awakeSurge.dropFirst(100))
+        let replayed = SleepDetect.splitRunAtHRTransitions(first + partial + last,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(replayed.count, 2)
+    }
+
+    func testLongCorroboratedHRRiseDoesNotEraseQualifyingSleep() throws {
+        let base = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 0)))
+        let start = Int(base.timeIntervalSince1970)
+        let rise = start + 3600
+        let resumed = rise + 3 * 3600
+        let end = resumed + 70 * 60
+        let first = (start..<rise).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let high = (rise..<resumed).map { makeV18Sample(unix: $0, hr: 97, accel: 0.01) }
+        let last = (resumed..<end).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let run = first + high + last
+        let expected = SleepDetect.splitRunAtHRTransitions(run,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600,
+            protectCorroboratedSleep: false)
+        let actual = SleepDetect.splitRunAtHRTransitions(run,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(expected.compactMap { $0.first?.unix }, [start, resumed])
+        XCTAssertEqual(actual.compactMap { $0.first?.unix }, [start, resumed])
+        XCTAssertEqual(actual.compactMap { $0.last?.unix }, [rise - 1, end - 1])
+        let before = ((start - 900)..<start).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.3, state: 0)
+        }
+        let after = (end..<(end + 900)).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.3, state: 0)
+        }
+        let detected = SleepDetect.detect(before + run + after)
+        XCTAssertEqual(detected.map(\.startUnix), [start, resumed])
+        XCTAssertEqual(detected.map(\.endUnix), [rise - 1, end - 1])
+    }
+
     func testNocturnalBathroomBreakMergesIntoSingleSleepSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200 // Overnight timestamp

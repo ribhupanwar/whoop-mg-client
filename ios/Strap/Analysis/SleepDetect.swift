@@ -534,16 +534,37 @@ enum SleepDetect {
         _ run: [V18Sample],
         activeMedian: Double,
         hrDropBPM: Double,
-        minSegmentS: Int = 1800
+        minSegmentS: Int = 1800,
+        protectCorroboratedSleep: Bool = true
     ) -> [[V18Sample]] {
         guard let firstUnix = run.first?.unix, let lastUnix = run.last?.unix,
               lastUnix - firstUnix + 1 >= minSegmentS else { return [run] }
 
         var hrBySec: [Int: Double] = [:]
+        var quietDeclaredSleepSeconds = Set<Int>()
         for sample in run where sample.wearing && (35...220).contains(sample.heartRate) {
             if hrBySec[sample.unix] == nil {
                 hrBySec[sample.unix] = Double(sample.heartRate)
+                // Same canonical observation as the HR sample. Missing motion
+                // and replayed seconds cannot establish sleep corroboration.
+                if sample.sleepState == 2,
+                   let motion = sample.dynamicAccelG, motion.isFinite,
+                   (0...0.015).contains(motion) {
+                    quietDeclaredSleepSeconds.insert(sample.unix)
+                }
             }
+        }
+        // This veto prevents an HR-only split inside an already detected run.
+        // It does not establish sleep onset, override final wake, or assign stages.
+        var usedProtection = false
+        func corroboratesSleep(_ start: Int, seconds: Int) -> Bool {
+            guard protectCorroboratedSleep else { return false }
+            let count = (start..<(start + seconds)).reduce(0) {
+                $0 + (quietDeclaredSleepSeconds.contains($1) ? 1 : 0)
+            }
+            guard count * 5 >= seconds * 4 else { return false }
+            usedProtection = true
+            return true
         }
         guard hrBySec.count >= minSegmentS / 2 else { return [run] }
 
@@ -584,10 +605,12 @@ enum SleepDetect {
         while t + 180 <= lastUnix {
             if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
                let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
-               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold {
+               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold,
+               !corroboratesSleep(t, seconds: 180) {
                 var endT = t + 180
                 while endT + 60 <= lastUnix {
-                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold {
+                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold,
+                       !corroboratesSleep(endT, seconds: 60) {
                         endT += 60
                     } else {
                         break
@@ -611,7 +634,24 @@ enum SleepDetect {
             let tail = run.filter { segStart <= $0.unix && $0.unix <= lastUnix }
             if !tail.isEmpty { segments.append(tail) }
         }
-        return segments.isEmpty ? [run] : segments
+        let candidates = segments.isEmpty ? [run] : segments
+        // A veto must not turn previously qualifying low-HR sleep into one
+        // long candidate that the unchanged HR-confirmation gate rejects.
+        // In that case restore the original splitter's candidates. Do not
+        // relax the HR gate, and do not recurse with protection enabled.
+        if usedProtection && candidates.contains(where: { candidate in
+            let hrs = candidate.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+            }.map { Double($0.heartRate) }
+            let adaptive = activeMedian * (runIsDeeplyQuiescent(candidate)
+                ? quiescentHrSleepMult : hrSleepBaselineMult)
+            return !hrs.isEmpty && Stats.median(hrs) > min(elevatedThreshold, adaptive)
+        }) {
+            return splitRunAtHRTransitions(run, activeMedian: activeMedian,
+                hrDropBPM: hrDropBPM, minSegmentS: minSegmentS,
+                protectCorroboratedSleep: false)
+        }
+        return candidates
     }
 
     private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {
