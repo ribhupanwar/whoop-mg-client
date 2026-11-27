@@ -148,10 +148,17 @@ final class StressWindowsTests: XCTestCase {
     func testSeriesOnePointPerScoredWindowInOrder() {
         let points = StressWindows.series(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
         XCTAssertEqual(points.count, 2)
-        XCTAssertEqual(points.map(\.unix), [0, 300])
+        XCTAssertEqual(points.map(\.unix), [299, 599])
         for point in points {
             XCTAssertEqual(point.index, 0.0, accuracy: 0.01, "at the norm the index is 0")
         }
+    }
+
+    func testPartialWindowUsesLastObservedRRNotUnmeasuredBucketEnd() throws {
+        // 200 observed seconds qualify; the other 100 seconds are not measured.
+        let rows = (0..<200).map { sample($0, rr: [$0.isMultiple(of: 2) ? 800 : 900]) }
+        let point = try XCTUnwrap(StressWindows.series(samples: rows, baseline: baseline(mean: 4.605)).first)
+        XCTAssertEqual(point.unix, 199)
     }
 
     func testSeriesReflectsHighStressWindow() {
@@ -186,7 +193,7 @@ final class StressWindowsTests: XCTestCase {
             baseline: baseline(mean: 4.605),
             excluded: [(start: 0, end: 299)]
         )
-        XCTAssertEqual(points.map(\.unix), [300])
+        XCTAssertEqual(points.map(\.unix), [599])
     }
 
     func testHighMotionSamplesExcludedFromRestingStress() {
