@@ -494,21 +494,18 @@ struct GPSRunView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-            // Timer header overlay
-            VStack {
-                TimerHeader(
-                    elapsedSeconds: recorder.elapsedSeconds,
-                    currentHR: currentHR,
-                    activityLabel: selectedActivity.label,
-                    activityIcon: selectedActivity.icon,
-                    isPaused: recorder.phase == .paused,
-                    onTap: { showControls = true }
-                )
-                .padding(.top, 8)
-                .padding(.horizontal, 16)
-                Spacer()
-            }
-            .allowsHitTesting(false) // Let taps pass through to TabView, only header intercepts
+            // Only the actual header overlays the pages. Keep its button
+            // tappable; the rest of the TabView remains available for swipes.
+            TimerHeader(
+                elapsedSeconds: recorder.elapsedSeconds,
+                currentHR: currentHR,
+                activityLabel: selectedActivity.label,
+                activityIcon: selectedActivity.icon,
+                isPaused: recorder.phase == .paused,
+                onTap: { showControls = true }
+            )
+            .padding(.top, 8)
+            .padding(.horizontal, 16)
         }
         .confirmationDialog("Workout Controls", isPresented: $showControls, titleVisibility: .visible) {
             if recorder.phase == .recording {
