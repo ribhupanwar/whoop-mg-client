@@ -204,6 +204,47 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(deep.v26Frames, 1)
     }
 
+    func testDeepWaveformAndMotionFeatures() throws {
+        var v26 = [UInt8](repeating: 0, count: 76)
+        v26[0] = 0x2F; v26[1] = 26; v26[15] = 100
+        v26[19] = 0xFF; v26[20] = 0x7F
+        v26[21] = 0xFF; v26[22] = 0xFF
+        let pip = try XCTUnwrap(Gen5V26Record.decode(v26)).reconstruction
+        XCTAssertEqual(pip.codes.count, 25)
+        XCTAssertEqual(Array(pip.codes.prefix(3)), [100, 32867, 32866])
+        XCTAssertEqual(pip.firstAmbiguousIndex, 1)
+        XCTAssertEqual(pip.outOfRangeCount, 0)
+        v26[15] = 0xFF; v26[16] = 0xFF; v26[17] = 0x07
+        XCTAssertGreaterThan(try XCTUnwrap(Gen5V26Record.decode(v26)).reconstruction.outOfRangeCount, 0)
+
+        var v22 = [UInt8](repeating: 0, count: 176)
+        v22[0] = 0x2F; v22[1] = 22; v22[13] = 9
+        v22[27] = 0xFF; v22[28] = 0xFF // -1 from anchor zero
+        v22[29] = 1 // wrap back to zero
+        v22[31] = 0x00; v22[32] = 0x80 // negative rail
+        v22[133] = 5
+        let queued = try XCTUnwrap(Gen5V22Record.decode(v22)?.queuedOptical)
+        XCTAssertEqual(queued.channel, 5)
+        XCTAssertTrue(queued.isRetainedChannel)
+        XCTAssertEqual(queued.sampleBits.count, 50)
+        XCTAssertEqual(Array(queued.sampleBits.prefix(3)), [0, UInt32.max, 0])
+        XCTAssertEqual(queued.firstAmbiguousIndex, 3)
+        var deep = NativeDeepTelemetry()
+        XCTAssertTrue(deep.ingest(v22))
+        XCTAssertEqual(deep.tagged?.queuedChannel, 5)
+        XCTAssertEqual(deep.tagged?.queuedSampleCount, 50)
+        v22[14] = 1
+        XCTAssertNil(Gen5V22Record.decode(v22)?.queuedOptical)
+
+        let imu = Gen5IMUBuffer(version: 21, recordIndex: 0, unix: 100, rawSubsecond: 0,
+                                accelerationG: [[1, 2, 1], [0, 0, 0], [0, 0, 0]],
+                                angularVelocityDPS: [[3], [4], [0]])
+        let features = try XCTUnwrap(imu.blockFeatures)
+        XCTAssertEqual(features.magnitudeVariationG, sqrt(2.0 / 9), accuracy: 0.000001)
+        XCTAssertEqual(try XCTUnwrap(features.adjacentMagnitudeChangeRMSG), 1, accuracy: 0.000001)
+        XCTAssertEqual(features.meanAngularSpeedDPS, 5, accuracy: 0.000001)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

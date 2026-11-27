@@ -140,8 +140,10 @@ struct NativeDeepTelemetry: Equatable {
         let gyroSamples: Int
         let centeredAccelerationRMSG: Double
         let angularVelocityRMSDPS: Double
+        let features: Gen5IMUBuffer.BlockFeatures?
 
         init(_ record: Gen5IMUBuffer) {
+            features = record.blockFeatures
             version = record.version
             unix = record.unix
             accelerationSamples = record.accelerationG.first?.count ?? 0
@@ -171,6 +173,9 @@ struct NativeDeepTelemetry: Equatable {
         let unix: UInt32
         let tag: UInt8
         let known: Bool
+        let queuedChannel: UInt8?
+        let queuedSampleCount: Int?
+        let firstAmbiguousIndex: Int?
     }
 
     struct PIP: Equatable {
@@ -179,6 +184,9 @@ struct NativeDeepTelemetry: Equatable {
         let deltaRMSADC: Double?
         let firstADC: Int32
         let accelerationDeltaG: Double?
+        let reconstructedCount: Int
+        let firstAmbiguousIndex: Int?
+        let outOfRangeCount: Int
 
         init(_ record: Gen5V26Record) {
             unix = record.header.unix
@@ -189,6 +197,10 @@ struct NativeDeepTelemetry: Equatable {
             deltaRMSADC = deltaCount > 0 ? sqrt(squares / Double(deltaCount)) : nil
             firstADC = record.firstSampleADC
             accelerationDeltaG = record.accelDeltaG
+            let decoded = record.reconstruction
+            reconstructedCount = decoded.codes.count
+            firstAmbiguousIndex = decoded.firstAmbiguousIndex
+            outOfRangeCount = decoded.outOfRangeCount
         }
     }
 
@@ -224,7 +236,10 @@ struct NativeDeepTelemetry: Equatable {
             v22Frames += 1
             if !record.hasKnownLayout { unknownV22Frames += 1 }
             if tagged.map({ record.header.unix >= $0.unix }) ?? true {
-                tagged = Tagged(unix: record.header.unix, tag: record.tag, known: record.hasKnownLayout)
+                let queued = record.queuedOptical
+                tagged = Tagged(unix: record.header.unix, tag: record.tag, known: record.hasKnownLayout,
+                                queuedChannel: queued?.channel, queuedSampleCount: queued?.sampleBits.count,
+                                firstAmbiguousIndex: queued?.firstAmbiguousIndex)
             }
         } else {
             return false

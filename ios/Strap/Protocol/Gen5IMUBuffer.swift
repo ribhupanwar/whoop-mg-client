@@ -10,6 +10,34 @@ struct Gen5IMUBuffer: Equatable {
     let accelerationG: [[Double]]
     let angularVelocityDPS: [[Double]]
 
+    struct BlockFeatures: Equatable {
+        let magnitudeVariationG: Double
+        let adjacentMagnitudeChangeRMSG: Double?
+        let meanAngularSpeedDPS: Double
+    }
+
+    /// Per-block features only; independent accel/gyro sample counts are kept.
+    /// A one-second block is too short for a reliable gait cadence estimate.
+    var blockFeatures: BlockFeatures? {
+        func magnitudes(_ axes: [[Double]]) -> [Double]? {
+            guard axes.count == 3, let n = axes.first?.count, n > 0,
+                  axes.allSatisfy({ $0.count == n && $0.allSatisfy { $0.isFinite } }) else { return nil }
+            return (0..<n).map { i in
+                sqrt(axes[0][i] * axes[0][i] + axes[1][i] * axes[1][i] + axes[2][i] * axes[2][i])
+            }
+        }
+        guard let a = magnitudes(accelerationG), let g = magnitudes(angularVelocityDPS) else { return nil }
+        let mean = a.reduce(0, +) / Double(a.count)
+        let variation = sqrt(a.reduce(0.0) { $0 + ($1 - mean) * ($1 - mean) } / Double(a.count))
+        let changes = zip(a.dropFirst(), a).map { pair in
+            let d = pair.0 - pair.1
+            return d * d
+        }
+        let adjacent = changes.isEmpty ? nil : sqrt(changes.reduce(0, +) / Double(changes.count))
+        return BlockFeatures(magnitudeVariationG: variation, adjacentMagnitudeChangeRMSG: adjacent,
+                             meanAngularSpeedDPS: g.reduce(0, +) / Double(g.count))
+    }
+
     static func decode(_ bytes: [UInt8]) -> Gen5IMUBuffer? {
         // Only packet routes verified by the reference. Type 0x34 has no
         // established framing here and must remain a retained raw frame.

@@ -35,6 +35,27 @@ struct Gen5V26Record: Equatable {
         self.alignedTailByte = alignedTailByte
     }
 
+    struct Reconstruction: Equatable {
+        let codes: [Int64]
+        let firstAmbiguousIndex: Int?
+        let outOfRangeCount: Int
+    }
+
+    /// Transmitted approximation only. A rail delta can hide clipping; every
+    /// subsequent sample is then ambiguous. Do not infer physiological metrics.
+    var reconstruction: Reconstruction {
+        var value = Int64(firstSampleADC)
+        var codes = [value]
+        var ambiguous: Int?
+        for (i, delta) in opticalDeltas.enumerated() {
+            if ambiguous == nil && (delta == Int16.min || delta == Int16.max) { ambiguous = i + 1 }
+            value += Int64(delta)
+            codes.append(value)
+        }
+        return Reconstruction(codes: codes, firstAmbiguousIndex: ambiguous,
+                              outOfRangeCount: codes.filter { !(-524_288...524_287).contains($0) }.count)
+    }
+
     static func decode(_ bytes: [UInt8]) -> Gen5V26Record? {
         guard bytes.count == 76, bytes[0] == 0x2F, bytes[1] == 26,
               let header = V18Decoder.header(of: bytes) else { return nil }

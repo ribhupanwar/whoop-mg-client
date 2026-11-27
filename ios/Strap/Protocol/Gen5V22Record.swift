@@ -14,7 +14,37 @@ struct Gen5V22Record: Equatable {
     let tag: UInt8
     let rawBody: [UInt8]
 
-    var hasKnownLayout: Bool { Self.knownTags.contains(tag) }
+    var hasKnownLayout: Bool { Self.knownTags.contains(tag) || queuedOptical != nil }
+
+    /// R22 version 9/subversion 0: numeric channel identity, not wavelength.
+    /// Reconstruction wraps modulo 2^32; rail deltas make the suffix ambiguous.
+    struct QueuedOptical: Equatable {
+        let channel: UInt8
+        let sampleBits: [UInt32]
+        let firstAmbiguousIndex: Int?
+        let packedMetadata: UInt16
+        var isRetainedChannel: Bool { channel != 0 }
+    }
+
+    var queuedOptical: QueuedOptical? {
+        // rawBody begins at inner 13 (frame absolute 21).
+        guard rawBody.count == 163, rawBody[0] == 9, rawBody[1] == 0,
+              rawBody[120] <= 5 else { return nil }
+        func u16(_ i: Int) -> UInt16 {
+            UInt16(rawBody[i]) | UInt16(rawBody[i + 1]) << 8
+        }
+        var value = UInt32(u16(10)) | UInt32(u16(12)) << 16
+        var samples = [value]
+        var ambiguous: Int?
+        for i in 0..<49 {
+            let d = Int16(bitPattern: u16(14 + i * 2))
+            if ambiguous == nil && (d == Int16.min || d == Int16.max) { ambiguous = i + 1 }
+            value = value &+ UInt32(bitPattern: Int32(d))
+            samples.append(value)
+        }
+        return QueuedOptical(channel: rawBody[120], sampleBits: samples,
+                             firstAmbiguousIndex: ambiguous, packedMetadata: u16(116))
+    }
 
     static func decode(_ bytes: [UInt8]) -> Gen5V22Record? {
         guard bytes.count == innerLength, bytes[0] == 0x2F, bytes[1] == version,

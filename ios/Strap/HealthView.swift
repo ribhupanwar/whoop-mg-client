@@ -369,6 +369,12 @@ struct HealthView: View {
                 Text(String(format: "Centered acceleration RMS %.3f g · gyro RMS %.1f °/s", motion.centeredAccelerationRMSG, motion.angularVelocityRMSDPS))
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let features = motion.features {
+                    let change = features.adjacentMagnitudeChangeRMSG.map { String(format: "%.3f g/sample", $0) } ?? "—"
+                    Text(String(format: "Magnitude variation %.3f g · mean rotation %.1f °/s", features.magnitudeVariationG, features.meanAngularSpeedDPS) + " · adjacent change " + change)
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
             }
             if let optical = deep.optical {
                 Text("V20 raw optical payload: \(optical.bytes) bytes · \(Date(timeIntervalSince1970: Double(optical.unix)).formatted())")
@@ -379,10 +385,20 @@ struct HealthView: View {
                 Text("V22 latest tag: \(tagged.tag) (\(tagged.known ? "known tag" : "unknown tag")) · unknown frames: \(deep.unknownV22Frames)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let channel = tagged.queuedChannel, let count = tagged.queuedSampleCount {
+                    let suffix = tagged.firstAmbiguousIndex.map { " · ambiguous from sample \($0)" } ?? ""
+                    Text("V22 v9: channel \(channel) · \(count) reconstructed bit patterns" + (channel == 0 ? "" : " · retained channel") + suffix)
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
             }
             if let pip = deep.pip {
                 let rms = pip.deltaRMSADC.map { String(format: "%.1f", $0) } ?? "—"
                 Text("V26 PIP: \(pip.deltaCount) optical deltas · delta RMS \(rms) ADC units · \(Date(timeIntervalSince1970: Double(pip.unix)).formatted())")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                let suffix = pip.firstAmbiguousIndex.map { " · ambiguous from sample \($0)" } ?? ""
+                Text("Approximate waveform: \(pip.reconstructedCount) codes · \(pip.outOfRangeCount) out of range" + suffix)
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
             }
