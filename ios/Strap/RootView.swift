@@ -196,7 +196,7 @@ struct RootView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .foregroundStyle(selected ? Color.white : Color(hex: 0x7E8B94))
+                        .foregroundStyle(selected ? Color.appFG : Color.adaptive(dark: 0x7E8B94, light: 0x52636D))
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 50)
                         .contentShape(Rectangle())
@@ -217,11 +217,11 @@ struct RootView: View {
                     RoundedRectangle(cornerRadius: 26).fill(Color.clear)
                         .strapLiquidGlass(cornerRadius: 26)
                 } else {
-                    RoundedRectangle(cornerRadius: 26).fill(Color(hex: 0x1A2228).opacity(0.94))
+                    RoundedRectangle(cornerRadius: 26).fill(Color.adaptive(dark: 0x1A2228, light: 0xE6EDF2).opacity(0.94))
                 }
             }
             .overlay(RoundedRectangle(cornerRadius: 26)
-                .strokeBorder(Color(hex: 0x36424A).opacity(0.55), lineWidth: 0.5))
+                .strokeBorder(Color.adaptive(dark: 0x36424A, light: 0xB6C2CA).opacity(0.55), lineWidth: 0.5))
 
             Button { showCoach = true } label: {
                 ZStack {
@@ -237,8 +237,8 @@ struct RootView: View {
                         .frame(width: 22, height: 22)
                 }
                 .frame(width: 50, height: 50)
-                .background(Color(hex: 0x181F27).opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
-                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(hex: 0x3E4854).opacity(0.65), lineWidth: 0.6))
+                .background(Color.adaptive(dark: 0x181F27, light: 0xE1E8EF).opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.adaptive(dark: 0x3E4854, light: 0x9CAAB7).opacity(0.65), lineWidth: 0.6))
                 .shadow(color: Color(hex: 0x5C6BC0).opacity(0.20), radius: 6, x: 0, y: 2)
             }
             .buttonStyle(.plain)

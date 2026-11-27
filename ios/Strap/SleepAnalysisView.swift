@@ -806,7 +806,7 @@ struct SleepAnalysisView: View {
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color(hex: 0x22262E))
+                        Capsule().fill(Color.adaptive(dark: 0x22262E, light: 0xD7E0E8))
                         Capsule()
                             .fill(LinearGradient(
                                 colors: [Color(hex: 0x4B7395), Color(hex: 0x8EBEE0)],
@@ -832,7 +832,7 @@ struct SleepAnalysisView: View {
                 }
                 GeometryReader { geo in
                     ZStack(alignment: .leading) {
-                        Capsule().fill(Color(hex: 0x2A2E35))
+                        Capsule().fill(Color.adaptive(dark: 0x2A2E35, light: 0xDCE4EB))
                         let targetFraction = CGFloat(hoursVsNeededFraction)
                         let markerWidth: CGFloat = 8
                         let markerX = max(0, min(geo.size.width - markerWidth, geo.size.width * targetFraction - markerWidth / 2))
@@ -860,14 +860,14 @@ struct SleepAnalysisView: View {
                     }
                 }
                 .padding(12)
-                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 8))
+                .background(Color.appFG.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
                 .padding(.top, 6)
             }
             .font(StrapTypography.body(11, weight: .medium))
             .tint(Color.appMuted)
         }
         .padding(16)
-        .background(Color(hex: 0x16181D), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.adaptive(dark: 0x16181D, light: 0xF0F3F6), in: RoundedRectangle(cornerRadius: 12))
         .foregroundStyle(Color.appFG)
     }
 
@@ -875,11 +875,11 @@ struct SleepAnalysisView: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 10) {
                 ZStack {
-                    Circle().fill(Color(hex: 0x31384D))
+                    Circle().fill(Color.adaptive(dark: 0x31384D, light: 0xDCE4F3))
                         .frame(width: 28, height: 28)
                     Text("W")
                         .font(StrapTypography.body(13, weight: .bold))
-                        .foregroundStyle(Color(hex: 0x8FA4DC))
+                        .foregroundStyle(Color.adaptive(dark: 0x8FA4DC, light: 0x455D96))
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(coachSummaryText)
@@ -897,7 +897,7 @@ struct SleepAnalysisView: View {
                 }
             }
             if let debt = debt, debt > 0.05 {
-                Divider().overlay(Color.white.opacity(0.08))
+                Divider().overlay(Color.appFG.opacity(0.08))
                 HStack(spacing: 8) {
                     RoundedRectangle(cornerRadius: 2)
                         .fill(Color.appRaised)
@@ -913,10 +913,10 @@ struct SleepAnalysisView: View {
             }
         }
         .padding(14)
-        .background(Color(hex: 0x161A24), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.adaptive(dark: 0x161A24, light: 0xE8EDF5), in: RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Color.appFG.opacity(0.08), lineWidth: 1)
         )
         .padding(.top, 8)
     }
@@ -1345,7 +1345,7 @@ private struct TypicalRangeLegendIcon: View {
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: 2)
-                .fill(Color(hex: 0x1E2128))
+                .fill(Color.adaptive(dark: 0x1E2128, light: 0xDDE4EB))
             Path { path in
                 var x: CGFloat = -10
                 while x < 20 {
@@ -1354,9 +1354,9 @@ private struct TypicalRangeLegendIcon: View {
                     x += 4
                 }
             }
-            .stroke(Color.white.opacity(0.2), lineWidth: 1)
+            .stroke(Color.appFG.opacity(0.2), lineWidth: 1)
             RoundedRectangle(cornerRadius: 2)
-                .strokeBorder(Color.white.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                .strokeBorder(Color.appFG.opacity(0.7), style: StrokeStyle(lineWidth: 1, dash: [2, 2]))
         }
         .frame(width: 16, height: 10)
         .clipShape(RoundedRectangle(cornerRadius: 2))
@@ -1418,7 +1418,7 @@ private struct SleepStageDistributionBar: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 4).fill(Color(hex: 0x1E2128))
+                RoundedRectangle(cornerRadius: 4).fill(Color.adaptive(dark: 0x1E2128, light: 0xDDE4EB))
                 Path { path in
                     var x: CGFloat = -geometry.size.height
                     while x < geometry.size.width {
@@ -1427,7 +1427,7 @@ private struct SleepStageDistributionBar: View {
                         x += 8
                     }
                 }
-                .stroke(Color.white.opacity(0.12), lineWidth: 1.5)
+                .stroke(Color.appFG.opacity(0.12), lineWidth: 1.5)
 
                 RoundedRectangle(cornerRadius: 4)
                     .fill(color)
@@ -1438,10 +1438,10 @@ private struct SleepStageDistributionBar: View {
                     let endX = geometry.size.width * CGFloat(min(1, max(0, range.upperBound)))
                     let boxWidth = max(6, endX - startX)
                     RoundedRectangle(cornerRadius: 3)
-                        .fill(Color.white.opacity(0.08))
+                        .fill(Color.appFG.opacity(0.08))
                         .overlay(
                             RoundedRectangle(cornerRadius: 3)
-                                .strokeBorder(Color.white.opacity(0.65), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                                .strokeBorder(Color.appFG.opacity(0.65), style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                         )
                         .frame(width: boxWidth, height: geometry.size.height)
                         .offset(x: startX)

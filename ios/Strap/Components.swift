@@ -63,9 +63,9 @@ enum StrapTypography {
               let bold = UIFont(name: boldName, size: 17) else { return }
         let navigation = UINavigationBarAppearance()
         navigation.configureWithDefaultBackground()
-        navigation.titleTextAttributes = [.font: bold, .foregroundColor: UIColor(Color.appFG), .kern: 1.3]
+        navigation.titleTextAttributes = [.font: bold, .foregroundColor: .label, .kern: 1.3]
         navigation.largeTitleTextAttributes = [.font: UIFont(name: boldName, size: 34) ?? bold,
-                                               .foregroundColor: UIColor(Color.appFG)]
+                                               .foregroundColor: .label]
         UINavigationBar.appearance().standardAppearance = navigation
         UINavigationBar.appearance().compactAppearance = navigation
         UINavigationBar.appearance().scrollEdgeAppearance = navigation

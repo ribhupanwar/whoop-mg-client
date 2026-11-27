@@ -90,8 +90,13 @@ class WhoopUIParityTests(unittest.TestCase):
             "appButtonFill": "0x2A3339",
         }
         for token, hex_val in expected_tokens.items():
-            pattern = rf"static\s+let\s+{token}\s*=\s*Color\(hex:\s*{hex_val}\)"
-            self.assertRegex(theme_src, pattern, f"Token {token} must be defined with hex {hex_val}")
+            # Require the exact measured dark value and a distinct explicit light
+            # value. Do not weaken the original WHOOP dark palette guard.
+            pattern = rf"static\s+let\s+{token}\s*=\s*Color\.adaptive\(dark:\s*{hex_val},\s*light:\s*(0x[0-9A-Fa-f]{{6}})\)"
+            import re
+            match = re.search(pattern, theme_src)
+            self.assertIsNotNone(match, f"Token {token} must retain dark hex {hex_val} and define a light value")
+            self.assertNotEqual(int(match.group(1), 16), int(hex_val, 16))
 
     def test_ring_geometry_constants(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")

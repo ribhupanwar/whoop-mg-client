@@ -74,14 +74,14 @@ struct HealthHubView: View {
             if !demo, fitnessSnapshot == nil {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "hourglass")
-                        .foregroundStyle(Color(hex: 0x70BDE4))
+                        .foregroundStyle(Color.adaptive(dark: 0x70BDE4, light: 0x276D97))
                     Text("Fitness Age needs your confirmed profile, four resting nights, four days with recorded steps and a qualifying workout.")
                         .font(StrapTypography.body(12))
-                        .foregroundStyle(Color(hex: 0x8FC6E7))
+                        .foregroundStyle(Color.adaptive(dark: 0x8FC6E7, light: 0x315E7C))
                     Spacer(minLength: 0)
                 }
                 .padding(16)
-                .background(RoundedRectangle(cornerRadius: 13).fill(Color(hex: 0x20303F)))
+                .background(RoundedRectangle(cornerRadius: 13).fill(Color.adaptive(dark: 0x20303F, light: 0xE2EDF5)))
             }
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
@@ -124,7 +124,7 @@ struct HealthHubView: View {
                         .tracking(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 15)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(0.10)))
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.appFG.opacity(0.10)))
                 }
                 .accessibilityIdentifier("healthspan.open")
                 .buttonStyle(.plain)
@@ -148,18 +148,18 @@ struct HealthHubView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text("NOT CONNECTED")
                     .font(StrapTypography.body(11, weight: .bold))
-                    .foregroundStyle(Color(hex: 0x72C4E8))
+                    .foregroundStyle(Color.adaptive(dark: 0x72C4E8, light: 0x176D97))
             }
             Spacer(minLength: 0)
             Image(systemName: "testtube.2")
                 .font(.system(size: 48, weight: .ultraLight))
-                .foregroundStyle(Color(hex: 0x4DE0B3))
+                .foregroundStyle(Color.adaptive(dark: 0x4DE0B3, light: 0x197C5D))
                 .frame(width: 88)
         }
         .padding(19)
         .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 12).fill(
-            LinearGradient(colors: [Color(hex: 0x292D30), Color(hex: 0x155B50)],
+            LinearGradient(colors: [Color.adaptive(dark: 0x292D30, light: 0xE9F2F0), Color.adaptive(dark: 0x155B50, light: 0xC9E7DE)],
                            startPoint: .leading, endPoint: .trailing)))
         .padding(.bottom, 20)
     }
@@ -232,7 +232,7 @@ struct HealthHubView: View {
                     VStack(alignment: .leading, spacing: 7) {
                         Text("Your fitness age").font(StrapTypography.body(20, weight: .semibold))
                         Text(demo ? "25 years · sample" : fitnessSnapshot.map { String(format: "%.0f years", $0.years) } ?? "Building your baseline")
-                            .font(StrapTypography.body(14)).foregroundStyle(Color(hex: 0x55DDA6))
+                            .font(StrapTypography.body(14)).foregroundStyle(Color.adaptive(dark: 0x55DDA6, light: 0x14754C))
                         Text("See your age trend and what's moving it")
                             .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
                     }
@@ -326,15 +326,15 @@ struct HealthHubView: View {
         return VStack(spacing: 9) {
             ZStack {
                 Circle()
-                    .fill(present ? Color(hex: 0x163C4B) : Color.appRaised)
+                    .fill(present ? Color.adaptive(dark: 0x163C4B, light: 0xDDF0F4) : Color.appRaised)
                     .frame(width: 43, height: 43)
                 Circle()
-                    .strokeBorder(present ? Color(hex: 0x59D5E8) : Color.appLine,
+                    .strokeBorder(present ? Color.adaptive(dark: 0x59D5E8, light: 0x258DA5) : Color.appLine,
                                   lineWidth: 1)
                     .frame(width: 43, height: 43)
                 Image(systemName: icon)
                     .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(present ? Color(hex: 0x7CE3F1) : Color.appMuted)
+                    .foregroundStyle(present ? Color.adaptive(dark: 0x7CE3F1, light: 0x17677A) : Color.appMuted)
             }
             Text(label)
                 .font(StrapTypography.body(10, weight: .bold))
