@@ -137,3 +137,36 @@ struct IMURhythmWindow: Equatable {
                               correlation: correlations[bestIndex])
     }
 }
+
+
+/// Dedicated Type 51/52 candidate layout (NOOP and whoop-rs). Input is
+/// CRC-validated padded Gen5 inner, not a complete frame. The physical
+/// scale, signedness, cadence and timestamp are not independently verified.
+struct DedicatedIMURawRecord: Equatable {
+    let packetType: UInt8
+    let accelerometer: [[UInt16]]
+    let gyroscope: [[UInt16]]
+    let alignmentBytes: [UInt8]
+
+    static func decodeVerifiedInner(_ bytes: [UInt8]) -> Self? {
+        guard bytes.count >= 20, bytes.count <= 65_520,
+              bytes[0] == 51 || bytes[0] == 52 else { return nil }
+        func word(_ index: Int) -> UInt16 {
+            UInt16(bytes[index]) | (UInt16(bytes[index + 1]) << 8)
+        }
+        // Complete-frame offsets 24/26/28 -> inner 16/18/20.
+        let a = Int(word(16)), g = Int(word(18))
+        guard a > 0 || g > 0 else { return nil }
+        let gyroStart = 20 + 6 * a
+        let end = gyroStart + 6 * g
+        let aligned = (end + 3) / 4 * 4
+        guard aligned == bytes.count else { return nil }
+        func axes(_ start: Int, _ count: Int) -> [[UInt16]] {
+            (0..<3).map { axis in
+                (0..<count).map { j in word(start + 2 * (axis * count + j)) }
+            }
+        }
+        return Self(packetType: bytes[0], accelerometer: axes(20, a),
+                    gyroscope: axes(gyroStart, g), alignmentBytes: Array(bytes[end..<aligned]))
+    }
+}

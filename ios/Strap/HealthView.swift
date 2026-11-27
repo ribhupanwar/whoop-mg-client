@@ -417,6 +417,11 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let raw = store.band.dedicatedIMURaw {
+                Text("Type-\(raw.packetType) raw IMU candidate: \(raw.accelerometer.first?.count ?? 0) accel / \(raw.gyroscope.first?.count ?? 0) gyro words per axis · scale unverified")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let motion = store.band.liveIMUTelemetry {
                 let measuredAt = Date(timeIntervalSince1970: Double(motion.unix))
                 let age = clock.timeIntervalSince(measuredAt)

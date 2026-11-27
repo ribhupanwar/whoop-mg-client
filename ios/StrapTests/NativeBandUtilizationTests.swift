@@ -388,6 +388,24 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertNil(evidence.candidate)
     }
 
+    func testDedicatedIMUCountsDoNotReadPaddingOrTrailer() throws {
+        var inner = [UInt8](repeating: 0, count: 40)
+        inner[0] = 52; inner[16] = 2; inner[18] = 1
+        for j in 0..<9 { inner[20 + j * 2] = UInt8(j + 1) }
+        inner[38] = 0xAB
+        let verified = try XCTUnwrap(Gen5Frame.parse(Gen5Frame.build(inner)))
+        let record = try XCTUnwrap(DedicatedIMURawRecord.decodeVerifiedInner(verified))
+        XCTAssertEqual(record.accelerometer, [[1, 2], [3, 4], [5, 6]])
+        XCTAssertEqual(record.gyroscope, [[7], [8], [9]])
+        XCTAssertEqual(record.alignmentBytes, [0xAB, 0])
+        inner[0] = 51
+        XCTAssertNotNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+        inner[16] = 3
+        XCTAssertNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+        inner[16] = 2; inner[0] = 43
+        XCTAssertNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)
