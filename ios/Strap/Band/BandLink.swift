@@ -1205,6 +1205,7 @@ final class BandLink: NSObject, ObservableObject {
         let legacy = DatedRecovery.replayLegacyHome(day: oldDay, priorDays: days,
             dateKey: assessment.dateKey, sleepNeedHours: needHours)
         let sleepAnalysis = lastSleepAnalysis
+        let priorSleepSessions = summary?.sleepSessions ?? []
         let sync = lastHistorySyncAt
         let revision = Bundle.main.object(forInfoDictionaryKey: "StrapBuildRevision") as? String
         let archived = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
@@ -1251,7 +1252,9 @@ final class BandLink: NSObject, ObservableObject {
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
                 temperatureFunnel: NightTemperature.funnel(archived, session: session),
                 oxygenCandidateSummary: Recovery.spo2Summary(samples),
-                stageDecisionEvidence: stageEvidence)
+                stageDecisionEvidence: stageEvidence,
+                personalNightContext: SleepEndResumptionExperiment.personalNightContext(
+                    prior: priorSleepSessions, before: session, calendar: calendar))
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }

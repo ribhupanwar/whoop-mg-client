@@ -151,6 +151,83 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         XCTAssertEqual(detected.first?.endUnix, end - 1)
     }
 
+    // An elevated-HR interval in positively corroborated resumed sleep
+    // must not leave a tail shorter than the normal 60-minute duration gate.
+    func testInternalHRSpikeDoesNotDiscardConfirmedResumedSleep() throws {
+        let date = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 2)))
+        let start = Int(date.timeIntervalSince1970)
+        let wake = start + 3 * 3600
+        let resume = wake + 32 * 60
+        let end = resume + 70 * 60
+        let baseline = ((start - 1800)..<start).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.2, state: 0)
+        }
+        let first = (start..<wake).map { makeV18Sample(unix: $0, hr: 82, accel: 0.01) }
+        let gap = (wake..<resume).map {
+            makeV18Sample(unix: $0, hr: $0 < wake + 180 ? 100 : 85,
+                          accel: $0 < wake + 60 ? 0.2 : 0.02, state: 3)
+        }
+        let resumed = (resume..<end).map {
+            makeV18Sample(unix: $0, hr: (resume + 600..<resume + 1560).contains($0) ? 97 : 87,
+                          accel: 0.01, state: 2)
+        }
+        let terminal = (end..<(end + 1560)).map {
+            makeV18Sample(unix: $0, hr: 88, accel: 0.02, state: 3)
+        }
+        let detected = SleepDetect.detect(baseline + first + gap + resumed + terminal)
+        XCTAssertEqual(detected.count, 1)
+        XCTAssertEqual(detected.first?.startUnix, start)
+        XCTAssertEqual(detected.first?.endUnix, end - 1)
+
+        // The same high HR with no sleep corroboration remains a split.
+        let noHint = (resume..<end).map {
+            makeV18Sample(unix: $0, hr: (resume + 600..<resume + 1560).contains($0) ? 97 : 87,
+                          accel: 0.01, state: 3)
+        }
+        let split = SleepDetect.splitRunAtHRTransitions(first + gap + noHint + terminal,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertFalse(split.contains { run in
+            run.first.map { $0.unix <= resume + 600 } == true &&
+                run.last.map { $0.unix >= resume + 1560 } == true
+        })
+    }
+
+    func testPersonalNightContextRequiresDistinctWellCoveredPriorNights() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2025, month: 3, day: 20, hour: 2)))
+        let today = Int(date.timeIntervalSince1970)
+        func night(_ start: Int, hr: Double = 60, covered: Bool = true) -> SleepSession {
+            let end = start + 7200
+            let staging = SleepStaging(
+                segments: [SleepStageSegment(startUnix: start, endUnix: end, stage: .light)],
+                deepMinutes: 0, lightMinutes: 120, remMinutes: 0, wakeMinutes: 0,
+                epochs: 240, hrCoverage: 1, reason: nil)
+            let points = covered ? (0..<120).map {
+                SleepHRPoint(unix: start + $0 * 60, bpm: hr)
+            } : []
+            return SleepSession(version: SleepSession.algorithmVersion,
+                sourceStartUnix: start, startUnix: start, endUnix: end,
+                staging: staging, heartRate: points, movementBouts: 0, isEdited: false,
+                bandSleepConfirmed: true, timezoneIdentifier: "GMT")
+        }
+        let current = night(today, hr: 100)
+        let prior = (1...14).map { night(today - $0 * 86400) }
+        let thirteen = SleepEndResumptionExperiment.personalNightContext(
+            prior: Array(prior.prefix(13)) + [prior[0], current], before: current, calendar: calendar)
+        XCTAssertEqual(thirteen.eligibleNights, 13)
+        XCTAssertNil(thirteen.medianNightHeartRate)
+        XCTAssertNil(thirteen.habitualMidpointLocalSeconds)
+        let valid = SleepEndResumptionExperiment.personalNightContext(
+            prior: prior + [current, night(today - 15 * 86400, covered: false)],
+            before: current, calendar: calendar)
+        XCTAssertEqual(valid.eligibleNights, 14)
+        XCTAssertEqual(valid.medianNightHeartRate, 60)
+        XCTAssertEqual(valid.habitualMidpointLocalSeconds, 3 * 3600)
+    }
+
     func testLongAwakeningDoesNotMergeIntoSingleSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200
