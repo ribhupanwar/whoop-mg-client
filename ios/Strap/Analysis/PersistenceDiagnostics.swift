@@ -94,7 +94,8 @@ enum PersistenceDiagnostics {
             "strap.wake.alarm.minutes.v1", "strap.wake.alarm.schedule.v1",
             "strap.preferences.useMetric", "strap.preferences.use24HourTime",
             "strap.notifications.bedtimeReminders", "strap.notifications.targetAlerts",
-            "strap.spo2ResearchEnabled", "strap.spo2ResearchReport"
+            "strap.spo2ResearchEnabled", "strap.spo2ResearchReport",
+            "strap.workout.keepScreenOn", "strap.journal.hiddenQuestions"
         ]
         return exact.contains(key) || ["physiological_cycles", "sleeps", "workouts", "journal_entries"].contains { key == "strap.whoop.import." + $0 + ".v1" }
     }

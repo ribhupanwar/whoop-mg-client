@@ -937,6 +937,7 @@ struct AppPreferencesView: View {
     @EnvironmentObject private var store: AppStore
     @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
     @AppStorage("strap.navigationGlass") private var navigationGlass = false
+    @AppStorage("strap.workout.keepScreenOn") private var keepScreenOn = false
     @AppStorage("strap.healthWidgetEnabled") private var healthWidgetEnabled = false
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet."
@@ -952,6 +953,9 @@ struct AppPreferencesView: View {
                         Text("Dark").tag("dark")
                     }
                     .pickerStyle(.segmented)
+                    Toggle("Keep workout screen awake", isOn: $keepScreenOn)
+                        .tint(Color.appAccent)
+                    Hint("Optional. Keeps the display awake only while actively recording on the workout screen. Normal sleep is restored when paused, backgrounded or leaving the screen.")
                     Toggle("Liquid Glass navigation", isOn: $navigationGlass)
                         .tint(Color.appAccent)
                     Toggle("Share health metrics with widgets", isOn: $healthWidgetEnabled)

@@ -29,6 +29,7 @@ final class MoreTabNavigationTests: XCTestCase {
         XCTAssertNotNil(JournalView().environmentObject(store))
         XCTAssertNotNil(PlanView().environmentObject(store))
         XCTAssertNotNil(StrapWidgetGuideView())
+        XCTAssertNotNil(StrapGuidedBreathingView())
 
         // 4. Health Integrations
         let healthIntegrations = AppleHealthImportView()
@@ -61,14 +62,14 @@ final class MoreTabNavigationTests: XCTestCase {
 
     func testMoreTabSectionsAndRowTitlesAreUnique() {
         let entries = MoreMenuItem.allCases
-        XCTAssertEqual(entries.count, 15)
+        XCTAssertEqual(entries.count, 16)
         XCTAssertEqual(Set(entries.map { $0.metadata.title }).count, entries.count)
         XCTAssertEqual(Set(entries.map { $0.metadata.icon }).count, entries.count)
         XCTAssertEqual(Set(entries.map { $0.accessibilityID }).count, entries.count)
         let counts = Dictionary(grouping: entries, by: { $0.metadata.section }).mapValues { $0.count }
         XCTAssertEqual(counts, [
             "DEVICE": 3,
-            "HEALTH & ACTIVITY": 3,
+            "HEALTH & ACTIVITY": 4,
             "DATA & INTEGRATIONS": 4,
             "PREFERENCES": 2,
             "WIDGETS & LIVE ACTIVITIES": 1,
