@@ -250,6 +250,7 @@ struct ProfileView: View {
             HStack {
                 Text(displayName.isEmpty ? "Your profile" : displayName)
                     .font(StrapTypography.body(27, weight: .bold))
+                    .accessibilityIdentifier("profile.displayName")
                 Spacer()
                 NavigationLink(destination: ProfileEditor()) {
                     Label("Edit", systemImage: "pencil")

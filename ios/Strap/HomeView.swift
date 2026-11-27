@@ -164,6 +164,9 @@ struct HomeView: View {
             }
             .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
+            // Keep the control row inside the safe-area hit region. The
+            // canvas remains continuous; do not paint a separate opaque bar.
+            .padding(.top, 8)
             .overlay(alignment: .bottom) {
                 if isRefreshingVisible && compactScores {
                     refreshIndicator
@@ -181,6 +184,7 @@ struct HomeView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                     .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
                     .transition(.opacity)
                 }
             }
@@ -433,9 +437,12 @@ struct HomeView: View {
                         isCharging: store.band.isCharging
                     )
                 }
+                .frame(minWidth: 44, minHeight: 34)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("home.deviceSettings")
             .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), device settings")
             .accessibilityHint("Opens band status and advanced information")
 

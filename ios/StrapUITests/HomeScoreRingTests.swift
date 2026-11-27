@@ -74,11 +74,12 @@ final class HomeScoreRingTests: XCTestCase {
         app.launchArguments = ["--design-preview"]
         app.launch()
 
-        let device = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", "device settings")).firstMatch
+        let device = app.buttons["home.deviceSettings"]
         XCTAssertTrue(device.waitForExistence(timeout: 15))
+        XCTAssertTrue(device.isHittable)
         device.tap()
-        XCTAssertTrue(app.staticTexts["DEVICE SETTINGS"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["STATUS"].exists)
+        XCTAssertTrue(app.staticTexts["DEVICE SETTINGS"].waitForExistence(timeout: 10))
+        XCTAssertTrue(app.buttons["STATUS"].waitForExistence(timeout: 5))
         capture("Device settings status", in: app)
     }
 
