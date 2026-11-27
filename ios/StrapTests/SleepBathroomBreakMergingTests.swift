@@ -60,6 +60,36 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         XCTAssertEqual(replayed.count, 2)
     }
 
+    func testLongCorroboratedHRRiseDoesNotEraseQualifyingSleep() throws {
+        let base = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 0)))
+        let start = Int(base.timeIntervalSince1970)
+        let rise = start + 3600
+        let resumed = rise + 3 * 3600
+        let end = resumed + 70 * 60
+        let first = (start..<rise).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let high = (rise..<resumed).map { makeV18Sample(unix: $0, hr: 97, accel: 0.01) }
+        let last = (resumed..<end).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let run = first + high + last
+        let expected = SleepDetect.splitRunAtHRTransitions(run,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600,
+            protectCorroboratedSleep: false)
+        let actual = SleepDetect.splitRunAtHRTransitions(run,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(expected.compactMap { $0.first?.unix }, [start, resumed])
+        XCTAssertEqual(actual.compactMap { $0.first?.unix }, [start, resumed])
+        XCTAssertEqual(actual.compactMap { $0.last?.unix }, [rise - 1, end - 1])
+        let before = ((start - 900)..<start).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.3, state: 0)
+        }
+        let after = (end..<(end + 900)).map {
+            makeV18Sample(unix: $0, hr: 100, accel: 0.3, state: 0)
+        }
+        let detected = SleepDetect.detect(before + run + after)
+        XCTAssertEqual(detected.map(\.startUnix), [start, resumed])
+        XCTAssertEqual(detected.map(\.endUnix), [rise - 1, end - 1])
+    }
+
     func testNocturnalBathroomBreakMergesIntoSingleSleepSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200 // Overnight timestamp

@@ -534,7 +534,8 @@ enum SleepDetect {
         _ run: [V18Sample],
         activeMedian: Double,
         hrDropBPM: Double,
-        minSegmentS: Int = 1800
+        minSegmentS: Int = 1800,
+        protectCorroboratedSleep: Bool = true
     ) -> [[V18Sample]] {
         guard let firstUnix = run.first?.unix, let lastUnix = run.last?.unix,
               lastUnix - firstUnix + 1 >= minSegmentS else { return [run] }
@@ -555,11 +556,15 @@ enum SleepDetect {
         }
         // This veto prevents an HR-only split inside an already detected run.
         // It does not establish sleep onset, override final wake, or assign stages.
+        var usedProtection = false
         func corroboratesSleep(_ start: Int, seconds: Int) -> Bool {
+            guard protectCorroboratedSleep else { return false }
             let count = (start..<(start + seconds)).reduce(0) {
                 $0 + (quietDeclaredSleepSeconds.contains($1) ? 1 : 0)
             }
-            return count * 5 >= seconds * 4
+            guard count * 5 >= seconds * 4 else { return false }
+            usedProtection = true
+            return true
         }
         guard hrBySec.count >= minSegmentS / 2 else { return [run] }
 
@@ -629,7 +634,24 @@ enum SleepDetect {
             let tail = run.filter { segStart <= $0.unix && $0.unix <= lastUnix }
             if !tail.isEmpty { segments.append(tail) }
         }
-        return segments.isEmpty ? [run] : segments
+        let candidates = segments.isEmpty ? [run] : segments
+        // A veto must not turn previously qualifying low-HR sleep into one
+        // long candidate that the unchanged HR-confirmation gate rejects.
+        // In that case restore the original splitter's candidates. Do not
+        // relax the HR gate, and do not recurse with protection enabled.
+        if usedProtection && candidates.contains(where: { candidate in
+            let hrs = candidate.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+            }.map { Double($0.heartRate) }
+            let adaptive = activeMedian * (runIsDeeplyQuiescent(candidate)
+                ? quiescentHrSleepMult : hrSleepBaselineMult)
+            return !hrs.isEmpty && Stats.median(hrs) > min(elevatedThreshold, adaptive)
+        }) {
+            return splitRunAtHRTransitions(run, activeMedian: activeMedian,
+                hrDropBPM: hrDropBPM, minSegmentS: minSegmentS,
+                protectCorroboratedSleep: false)
+        }
+        return candidates
     }
 
     private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {

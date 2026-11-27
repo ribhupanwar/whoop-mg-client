@@ -315,7 +315,8 @@ def _is_gravity_sparse(samples: list[V18Sample]) -> bool:
 
 
 def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float, 
-                                  hr_drop_bpm: float, min_segment_s: int = 1800) -> list[list[V18Sample]]:
+                                  hr_drop_bpm: float, min_segment_s: int = 1800,
+                                  *, protect_corroborated_sleep: bool = True) -> list[list[V18Sample]]:
     """Split a quiet run at sustained HR elevations.
     
     A long quiet run may contain both sleep (low HR) and awake-but-quiet periods (elevated HR).
@@ -338,9 +339,17 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
                         and math.isfinite(motion) and 0 <= motion <= 0.015):
                     quiet_declared_sleep_seconds.add(s.unix)
 
+    used_protection = False
+
     def corroborates_sleep(start: int, seconds: int) -> bool:
+        nonlocal used_protection
+        if not protect_corroborated_sleep:
+            return False
         count = sum(sec in quiet_declared_sleep_seconds for sec in range(start, start + seconds))
-        return count * 5 >= seconds * 4
+        if count * 5 < seconds * 4:
+            return False
+        used_protection = True
+        return True
     
     if len(hr_by_sec) < min_segment_s // 2:
         return [run]
@@ -405,11 +414,22 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
         if seg_samples:
             segments.append(seg_samples)
     
-    # If no segments created (no valid sleep portions), return original run
-    if not segments:
-        return [run]
-    
-    return segments
+    candidates = segments or [run]
+    # Preserve the pre-veto candidates if protection would make the
+    # unchanged downstream HR confirmation reject the combined run.
+    if used_protection:
+        for candidate in candidates:
+            hrs = [float(s.heart_rate) for s in candidate if s.wearing]
+            adaptive = active_median * (
+                QUIESCENT_HR_SLEEP_MULT if _run_is_deeply_quiescent(candidate)
+                else HR_SLEEP_BASELINE_MULT
+            )
+            if hrs and statistics.median(hrs) > min(elevated_threshold, adaptive):
+                return _split_run_at_hr_transitions(
+                    run, active_median, hr_drop_bpm, min_segment_s,
+                    protect_corroborated_sleep=False,
+                )
+    return candidates
 
 
 def _run_is_deeply_quiescent(run: list[V18Sample]) -> bool:
