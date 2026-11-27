@@ -121,8 +121,8 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
-                if dayOffset == 0 { tonightCard }
                 activitiesCard
+                if dayOffset == 0 { tonightCard }
                 journalCard
                 planCard
                 dashboardSection
@@ -176,8 +176,13 @@ struct HomeView: View {
             .background {
                 // Keep the sticky header opaque and continuous with the app canvas.
                 // iOS 26 ultraThinMaterial produces a gray partition across the top.
-                Color.appCanvasTop
-                    .ignoresSafeArea(edges: .top)
+                // Use the same canvas gradient as the scroll surface, avoiding
+                // a solid-color stripe when the compact header becomes sticky.
+                LinearGradient(
+                    colors: [Color.appCanvasTop, Color.appCanvasMid],
+                    startPoint: .top, endPoint: .bottom
+                )
+                .ignoresSafeArea(edges: .top)
             }
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -1055,9 +1060,10 @@ struct HomeView: View {
         .frame(minHeight: 52)
         .background {
             RoundedRectangle(cornerRadius: 11)
-                .fill(Color.appRaised)
+                .fill(Color(hex: 0x383D40))
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appCardBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 11)
+                        .strokeBorder(Color(hex: 0x42494D).opacity(0.45), lineWidth: 0.5)
                 }
         }
     }
