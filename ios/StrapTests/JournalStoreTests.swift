@@ -158,6 +158,24 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(persistence.load(), restored)
     }
 
+    func testSleepLifecycleRejectsCompletedSessionReplayAndOverlappingHistory() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = persistence.load()
+        state.confirm(sessionID: "night-1", startUnix: 1000)
+        state.end(sessionID: "night-1", at: 2000)
+        state.finishProcessing(sessionID: "night-1", hasJournalQuestions: false)
+        persistence.save(state)
+        state = persistence.load()
+        let completed = state
+        state.confirm(sessionID: "night-1", startUnix: 1000)
+        XCTAssertEqual(state, completed)
+        state.confirm(sessionID: "reindexed-night", startUnix: 1500)
+        XCTAssertEqual(state, completed)
+        state.confirm(sessionID: "night-2", startUnix: 3000)
+        XCTAssertEqual(state.phase, .detected)
+        XCTAssertEqual(state.sessionID, "night-2")
+    }
+
     func testSleepLifecycleRejectsUnconfirmedAndInvalidTransitions() {
         var state = SleepLifecycleSnapshot()
         state.end(sessionID: "unknown", at: 2000)
