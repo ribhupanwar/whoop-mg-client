@@ -192,7 +192,8 @@ struct NativeDeepTelemetry: Equatable {
         }
     }
 
-    private(set) var v20Frames = 0
+    private(set) var opticalQuality = Gen5V20DrainQuality()
+    var v20Frames: Int { opticalQuality.frames }
     private(set) var imuFrames = 0
     private(set) var v22Frames = 0
     private(set) var unknownV22Frames = 0
@@ -216,7 +217,7 @@ struct NativeDeepTelemetry: Equatable {
                 motion = Motion(record)
             }
         } else if let record = Gen5V20Record.decode(inner) {
-            v20Frames += 1
+            opticalQuality.record(record)
             if optical.map({ record.header.unix >= $0.unix }) ?? true {
                 optical = Optical(unix: record.header.unix, bytes: record.rawBody.count)
             }
