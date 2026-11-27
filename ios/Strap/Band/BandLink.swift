@@ -155,6 +155,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var lastCommandResponse: BandCommandResult?
     @Published private(set) var commandFailureCount: Int = 0
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
+    @Published private(set) var nativeDeepTelemetry = NativeDeepTelemetry()
+    private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
     private var backgroundSyncCompletion: ((Bool) -> Void)?
@@ -1925,10 +1927,10 @@ final class BandLink: NSObject, ObservableObject {
         lastStatusObservedAt = nil
         backgroundSyncCompletion?(false)
         backgroundSyncCompletion = nil
+        lastWristStateChangeAt = nil
         refreshNativeSensorSnapshot()
         isBonded = false
         lastDoubleTapAt = nil
-        lastWristStateChangeAt = nil
         recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
@@ -2352,6 +2354,8 @@ final class BandLink: NSObject, ObservableObject {
         pendingHistoryRRRejected = 0
         pendingHistoryUndecodableFrames = 0
         pendingHistoryVersionCounts = [:]
+        pendingNativeDeepTelemetry = NativeDeepTelemetry()
+        nativeDeepTelemetry = pendingNativeDeepTelemetry
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -2387,6 +2391,9 @@ final class BandLink: NSObject, ObservableObject {
             historyRRRejected = pendingHistoryRRRejected
             historyUndecodableFrames = pendingHistoryUndecodableFrames
             historyVersionCounts = pendingHistoryVersionCounts
+        }
+        if nativeDeepTelemetry != pendingNativeDeepTelemetry {
+            nativeDeepTelemetry = pendingNativeDeepTelemetry
         }
         // A band can keep sending metadata without completing its offload.
         // Analyze durable checkpoints while it is still connected; reopening
@@ -2442,6 +2449,7 @@ final class BandLink: NSObject, ObservableObject {
         historyRRRejected = pendingHistoryRRRejected
         historyUndecodableFrames = pendingHistoryUndecodableFrames
         historyVersionCounts = pendingHistoryVersionCounts
+        nativeDeepTelemetry = pendingNativeDeepTelemetry
         // Diagnostic only: never infer missing R-R from a zero count and
         // never silently treat a partial history offload as a full night.
         if UserDefaults.standard.bool(forKey: "strap.spo2ResearchEnabled") {
@@ -2805,9 +2813,7 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
             // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
             // Recognize them without inventing heartbeats or marking frames undecodable.
-            if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil
-                || Gen5V20Record.decode(inner) != nil || Gen5V22Record.decode(inner) != nil
-                || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
+            if pendingNativeDeepTelemetry.ingest(inner) || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
                 return
@@ -2903,6 +2909,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func applyWearingStateTransition(_ newState: WristContactState, source: String) {
+        let previousState = wristState
         wristOffDebounceTask?.cancel()
         wristOffDebounceTask = nil
 
@@ -2936,6 +2943,7 @@ final class BandLink: NSObject, ObservableObject {
                 BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
             }
         }
+        if wristState != previousState { refreshNativeSensorSnapshot() }
     }
 
     private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {
