@@ -146,8 +146,10 @@ struct DemoBanner: View {
 /// Surface card with hairline border, matching the mockup's rm-card/rm-panel.
 struct Panel<Content: View>: View {
     private let content: Content
+    private let gradient: LinearGradient
 
-    init(@ViewBuilder content: () -> Content) {
+    init(gradient: LinearGradient = .appCard, @ViewBuilder content: () -> Content) {
+        self.gradient = gradient
         self.content = content()
     }
 
@@ -157,7 +159,7 @@ struct Panel<Content: View>: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppLayout.cardInset)
-        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(LinearGradient.appCard))
+        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(gradient))
         .padding(.bottom, AppLayout.cardSpacing)
     }
 }

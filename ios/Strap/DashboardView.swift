@@ -298,8 +298,8 @@ struct DashboardView: View {
                             let x = slot * (CGFloat(index) + 0.5)
                             let value = min(max(item.score ?? 0, 0), 100)
                             let barHeight = CGFloat(value / 100) * 154
-                            let color: Color = value >= 67 ? Color(hex: 0x16E000) :
-                                value >= 34 ? Color(hex: 0xFFDA00) : Color(hex: 0xFF1744)
+                            let color: Color = value >= 67 ? Color.appRecoveryGreen :
+                                value >= 34 ? Color.appRecoveryYellow : Color.appRecoveryRed
                             if index == history.count - 1 {
                                 RoundedRectangle(cornerRadius: 6)
                                     .fill(Color.white.opacity(0.09))

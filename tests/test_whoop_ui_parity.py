@@ -72,17 +72,20 @@ class WhoopUIParityTests(unittest.TestCase):
     def test_theme_color_tokens(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")
         expected_tokens = {
-            "appCanvasTop": "0x252E34",
-            "appCanvasMid": "0x161C20",
-            "appBG": "0x0E1316",
+            "appCanvasTop": "0x283138",
+            "appCanvasMid": "0x191E22",
+            "appBG": "0x0D1112",
             "appSurface": "0x1D2429",
             "appRaised": "0x252D33",
             "appCardBorder": "0x303940",
-            "appSleep": "0x7EA3B9",
+            "appSleep": "0x7CA1BB",
             "appGood": "0x00E676",
+            "appRecoveryGreen": "0x1AEC07",
+            "appRecoveryYellow": "0xFEDE00",
+            "appRecoveryRed": "0xFC0025",
             "appWarn": "0xFFDE00",
             "appHigh": "0xFF3B30",
-            "appAccent": "0x0091FF",
+            "appAccent": "0x0193E8",
             "appRingTrack": "0x2A333A",
             "appButtonFill": "0x2A3339",
         }

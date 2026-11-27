@@ -35,13 +35,13 @@ class VisualRegressionTests(unittest.TestCase):
     def test_palette_color_fidelity_against_whoop_reference(self):
         # Ground truth sampled from official WHOOP screenshot
         reference_colors = {
-            "sleep_ring": "0x7EA3B9",
-            "recovery_green": "0x00E676",
-            "recovery_yellow": "0xFFDE00",
-            "recovery_red": "0xFF3B30",
-            "strain_blue": "0x0091FF",
-            "canvas_top": "0x252E34",
-            "canvas_bg": "0x0E1316",
+            "sleep_ring": "0x7CA1BB",
+            "recovery_green": "0x1AEC07",
+            "recovery_yellow": "0xFEDE00",
+            "recovery_red": "0xFC0025",
+            "strain_blue": "0x0193E8",
+            "canvas_top": "0x283138",
+            "canvas_bg": "0x0D1112",
         }
 
         theme_text = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")

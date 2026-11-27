@@ -1,7 +1,8 @@
 import SwiftUI
 
 /// WHOOP reference color tokens and typography bindings.
-/// Extracted and verified pixel-by-pixel against official WHOOP 5.80.2 application captures.
+/// Palette sampled from 19 user-provided 2026-11-10 JPEG reference captures.
+/// JPEG values are approximate rendered colors, not original source constants.
 /// Health calculation logic is preserved independently.
 extension Color {
     init(hex: UInt32) {
@@ -15,9 +16,9 @@ extension Color {
     }
 
     // Canvas & Surface Gradients
-    static let appCanvasTop = Color(hex: 0x252E34)          // Header gradient top #252E34
-    static let appCanvasMid = Color(hex: 0x161C20)          // Mid canvas #161C20
-    static let appBG = Color(hex: 0x0E1316)                 // Base background #0E1316 / #101518
+    static let appCanvasTop = Color(hex: 0x283138)          // Reference top-edge sample
+    static let appCanvasMid = Color(hex: 0x191E22)          // Reference mid-canvas sample
+    static let appBG = Color(hex: 0x0D1112)                 // Reference lower-edge sample
     static let appSurface = Color(hex: 0x1D2429)            // Dark card interior #1D2429
     static let appRaised = Color(hex: 0x252D33)             // Elevated card top #252D33
     static let appCardBorder = Color(hex: 0x303940)         // Subtle card stroke #303940
@@ -26,11 +27,14 @@ extension Color {
     static let appMuted = Color(hex: 0xA3ADB5)              // Secondary typography #A3ADB5
 
     // Hero Metric & Ring Stroke Tokens
-    static let appSleep = Color(hex: 0x7EA3B9)              // Sleep ring light blue #7EA3B9
-    static let appGood = Color(hex: 0x00E676)               // Green recovery (>=67%) #00E676 / #00F076
-    static let appWarn = Color(hex: 0xFFDE00)               // Yellow recovery (34-66%) #FFDE00
-    static let appHigh = Color(hex: 0xFF3B30)               // Red recovery (<34%) #FF3B30
-    static let appAccent = Color(hex: 0x0091FF)             // Strain electric blue #0091FF
+    static let appSleep = Color(hex: 0x7CA1BB)              // Reference sleep blue
+    static let appRecoveryGreen = Color(hex: 0x1AEC07)
+    static let appRecoveryYellow = Color(hex: 0xFEDE00)
+    static let appRecoveryRed = Color(hex: 0xFC0025)
+    static let appGood = Color(hex: 0x00E676)               // Semantic good status (not recovery ring)
+    static let appWarn = Color(hex: 0xFFDE00)               // Semantic caution status
+    static let appHigh = Color(hex: 0xFF3B30)               // Semantic error status
+    static let appAccent = Color(hex: 0x0193E8)             // Reference strain blue
     static let appRingTrack = Color(hex: 0x2A333A).opacity(0.85) // Unfilled ring track #2A333A @ 85%
 
     // Interactive & Badge Fill Tokens
@@ -66,17 +70,24 @@ enum AppLayout {
 /// Low-contrast charcoal card shading shared by every tab and detail page.
 extension LinearGradient {
     static var appCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x252D33), Color(hex: 0x1D2429)],
+        LinearGradient(colors: [Color(hex: 0x2D3238), Color(hex: 0x1C2023)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     static var dashboardCard: LinearGradient {
-        LinearGradient(colors: [Color(hex: 0x30363A), Color(hex: 0x282D30)],
+        LinearGradient(colors: [Color(hex: 0x363E41), Color(hex: 0x282C2F)],
                        startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
     static var appCanvas: LinearGradient {
-        LinearGradient(colors: [Color.appCanvasTop, Color.appCanvasMid, Color.appBG],
-                       startPoint: .top, endPoint: .bottom)
+        LinearGradient(stops: [
+            .init(color: .appCanvasTop, location: 0),
+            .init(color: Color(hex: 0x242D32), location: 0.12),
+            .init(color: Color(hex: 0x1E252B), location: 0.25),
+            .init(color: Color(hex: 0x161B1F), location: 0.45),
+            .init(color: Color(hex: 0x13181C), location: 0.55),
+            .init(color: Color(hex: 0x101417), location: 0.85),
+            .init(color: .appBG, location: 1)
+        ], startPoint: .top, endPoint: .bottom)
     }
 }

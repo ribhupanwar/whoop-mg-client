@@ -1,7 +1,7 @@
 import SwiftUI
 
-let strainBlue = Color(hex: 0x0091FF)
-let recoveryLineBlue = Color(hex: 0x00E676)
+let strainBlue = Color.appAccent
+let recoveryLineBlue = Color.appSleep
 let zonePalette: [Color] = [Color(hex: 0x337099), Color(hex: 0x2D9CDB), Color(hex: 0x00B2FE), Color(hex: 0xF2994A), Color(hex: 0xEB5757)]
 
 extension DetailMetric {
@@ -47,7 +47,7 @@ extension DetailMetric {
     }
     func color(_ value: Double?) -> Color {
         if self == .recovery, let value {
-            return value >= 67 ? Color.appGood : value >= 34 ? Color.appWarn : Color.appHigh
+            return value >= 67 ? Color.appRecoveryGreen : value >= 34 ? Color.appRecoveryYellow : Color.appRecoveryRed
         }
         return self == .sleepPerformance ? .appSleep : isLine ? recoveryLineBlue : strainBlue
     }
@@ -102,7 +102,7 @@ struct MetricDetailView: View {
                 if recoveryMode { behaviorCard } else { activities }
                 Text("Weekly Trends").font(StrapTypography.body(19, weight: .semibold)).padding(.vertical, 18)
                 ForEach(metrics) { metric in
-                    Panel {
+                    Panel(gradient: .dashboardCard) {
                         Button { detail = metric } label: {
                             HStack {
                                 Text(metric.title.uppercased()).font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
@@ -164,7 +164,7 @@ struct MetricDetailView: View {
         let scale = recoveryMode ? 100.0 : 21.0
         let mean = MetricTimeline.comparison(mainMetric, before: selectedKey, in: history)
         return ZStack {
-            Circle().stroke(mainMetric.color(value).opacity(0.20), lineWidth: 12)
+            Circle().stroke(Color.appRingTrack, lineWidth: 12)
             if let value {
                 Circle().trim(from: 0, to: min(1, max(0, value / scale)))
                     .stroke(mainMetric.color(value), style: StrokeStyle(lineWidth: 12, lineCap: .round))
@@ -183,7 +183,7 @@ struct MetricDetailView: View {
                     Text(value >= 67 ? "RECOVERED" : value >= 34 ? "ADEQUATE" : "REST & RECOVER")
                         .font(StrapTypography.body(10.5, weight: .bold))
                         .tracking(0.8)
-                        .foregroundStyle(value >= 67 ? Color(hex: 0x00E676) : value >= 34 ? Color(hex: 0xFFDE00) : Color(hex: 0xFF3B30))
+                        .foregroundStyle(value >= 67 ? Color.appRecoveryGreen : value >= 34 ? Color.appRecoveryYellow : Color.appRecoveryRed)
                 }
             }.padding(16)
         }

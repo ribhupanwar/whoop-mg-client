@@ -15,9 +15,9 @@ struct HomeView: View {
     let openPlan: () -> Void
     let openInsights: () -> Void
 
-    private let sleepRingColor = Color(hex: 0x7CA0BA)
-    private let strainRingColor = Color(hex: 0x0193E8)
-    private let highRecoveryRingColor = Color(hex: 0x24E21A)
+    private let sleepRingColor = Color.appSleep
+    private let strainRingColor = Color.appAccent
+    private let highRecoveryRingColor = Color.appRecoveryGreen
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
@@ -1016,11 +1016,15 @@ struct HomeView: View {
             .monospacedDigit()
         let tile = HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 14, weight: .medium))
-            Text(value).font(StrapTypography.metric(activityValueSize, weight: .bold)).monospacedDigit()
+            Text(value)
+                .font(StrapTypography.metric(activityValueSize, weight: .bold))
+                .monospacedDigit()
+                .minimumScaleFactor(0.8)
+                .lineLimit(1)
         }
         .foregroundStyle(Color.appFG)
         .padding(.horizontal, 8)
-        .frame(minWidth: activityTileWidth, minHeight: 36)
+        .frame(width: activityTileWidth, height: 36)
         .background {
             RoundedRectangle(cornerRadius: 8)
                 .fill(LinearGradient(
@@ -1387,7 +1391,7 @@ struct HomeView: View {
                         .foregroundStyle(Color.appFG)
                         .padding(.horizontal, 24)
                         .padding(.vertical, 12)
-                        .background(Color(hex: 0x252D33), in: Capsule())
+                        .background(Color.appRaised, in: Capsule())
                         .overlay(Capsule().strokeBorder(Color(hex: 0x3A4650), lineWidth: 1))
                 }
                 .buttonStyle(.plain)
@@ -1566,7 +1570,7 @@ private struct HomeBandDeviceSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var advanced = false
     private let muted = Color.appMuted
-    private let panel = Color(hex: 0x252D33)
+    private let panel = Color.appRaised
     @State private var showPairingSheet = false
     @State private var showUnpairConfirmation = false
     @State private var showRebootConfirmation = false
