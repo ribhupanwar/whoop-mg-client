@@ -239,6 +239,31 @@ final class ProtocolTests: XCTestCase {
         XCTAssertEqual(sample.stepCounter, 1014)
     }
 
+    func testV18TemperatureSentinelsDoNotForceOffWrist() throws {
+        for raw in [Int16.min, Int16.max, Int16(0)] {
+            var inner = bytes(realV18Hex)
+            let bits = UInt16(bitPattern: raw)
+            inner[65] = UInt8(truncatingIfNeeded: bits)
+            inner[66] = UInt8(truncatingIfNeeded: bits >> 8)
+            // With missing temperature, a valid optical HR must not be
+            // rejected solely because the band is motionless.
+            let sample = try XCTUnwrap(V18Decoder.decode(inner))
+            XCTAssertNil(sample.skinTempC)
+            XCTAssertTrue(sample.wearing)
+        }
+    }
+
+    func testV18ColdTabletopEvidenceStillRejectsContact() throws {
+        var inner = bytes(realV18Hex)
+        let raw = UInt16(2150) // 21.50 C, broad plausible ambient reading
+        inner[65] = UInt8(truncatingIfNeeded: raw)
+        inner[66] = UInt8(truncatingIfNeeded: raw >> 8)
+        // Motion field must be genuinely still; missing motion is not evidence.
+        // Existing decoder fixture contains a finite acceleration reading.
+        let sample = try XCTUnwrap(V18Decoder.decode(inner))
+        XCTAssertEqual(sample.skinTempC ?? 0, 21.5, accuracy: 0.001)
+    }
+
     func testGen5V18UsesHardwareVerifiedHRAtInner14NotGenericInner17() {
         // Gen5 frame header is 8 bytes; absolute byte 22 = inner[14].
         // A generic record map using inner[17] must not override v18.
