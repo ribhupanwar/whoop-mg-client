@@ -56,6 +56,30 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertNil(Recovery.stressIndex(lnRMSSD: nil, baseline: nil).index)
     }
 
+    func testLastMeasuredDisplayDoesNotPromoteStaleStressToLive() {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let stamp = 1_700_000_000
+        let point = StressPoint(unix: stamp, index: 1.6)
+        let diagnostics = StressDiagnostics(
+            baselineMean: 4, baselineSD: 1, baselineDays: 7, eligibleRRWindows: 1,
+            rejectedRRWindows: nil, unclampedScore: nil, finalScore: nil,
+            lastUpdateUnix: stamp, unavailableReason: "stale"
+        )
+        let result = StressResult(index: nil, reason: "stale", diagnostics: diagnostics)
+        func date(_ offset: Int) -> Date {
+            Date(timeIntervalSince1970: Double(stamp + offset))
+        }
+        XCTAssertEqual(result.lastMeasuredPoint(in: [point], now: date(601), calendar: calendar), point)
+        XCTAssertNil(result.index)
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(600), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(-1), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [point], now: date(86_400), calendar: calendar))
+        XCTAssertNil(result.lastMeasuredPoint(in: [StressPoint(unix: stamp, index: 4)], now: date(601), calendar: calendar))
+        XCTAssertNil(StressResult(index: nil, reason: "no baseline", diagnostics: nil)
+            .lastMeasuredPoint(in: [point], now: date(601), calendar: calendar))
+    }
+
     func testNeedsAwakeBaseline() {
         let split = StressWindows.share(samples: window(0), baseline: nil)
         XCTAssertNil(split.lowPct)
