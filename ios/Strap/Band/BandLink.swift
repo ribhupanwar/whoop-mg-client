@@ -1925,10 +1925,10 @@ final class BandLink: NSObject, ObservableObject {
         lastStatusObservedAt = nil
         backgroundSyncCompletion?(false)
         backgroundSyncCompletion = nil
+        lastWristStateChangeAt = nil
         refreshNativeSensorSnapshot()
         isBonded = false
         lastDoubleTapAt = nil
-        lastWristStateChangeAt = nil
         recentLiveHR.removeAll(keepingCapacity: true)
         liveRRIntervalsMS = []
         liveHRNotificationCount = 0
@@ -2903,6 +2903,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func applyWearingStateTransition(_ newState: WristContactState, source: String) {
+        let previousState = wristState
         wristOffDebounceTask?.cancel()
         wristOffDebounceTask = nil
 
@@ -2936,6 +2937,7 @@ final class BandLink: NSObject, ObservableObject {
                 BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
             }
         }
+        if wristState != previousState { refreshNativeSensorSnapshot() }
     }
 
     private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {

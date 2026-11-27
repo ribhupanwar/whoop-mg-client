@@ -6,7 +6,11 @@ struct NativeSensorSnapshot: Equatable, Codable {
     static let unavailablePSNR = -128
     static let validCadenceRange = 0...250
 
+    /// Latest observation across sources, for diagnostics only.
     let observedAt: Date
+    let sampleObservedAt: Date?
+    let contactObservedAt: Date?
+    let sampleWearing: Bool?
     let source: String
     let wristContact: WristContactState
     let wristStateRaw: UInt16?
@@ -36,6 +40,28 @@ struct NativeSensorSnapshot: Equatable, Codable {
     func isFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
         let age = now.timeIntervalSince(observedAt)
         return age >= 0 && age <= maxAge
+    }
+
+    private static func fresh(_ date: Date?, at now: Date, maxAge: TimeInterval) -> Bool {
+        guard let date else { return false }
+        let age = now.timeIntervalSince(date)
+        return age >= 0 && age <= maxAge
+    }
+
+    func isSampleFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
+        Self.fresh(sampleObservedAt, at: now, maxAge: maxAge)
+    }
+
+    func isContactFresh(at now: Date = Date(), maxAge: TimeInterval = 600) -> Bool {
+        Self.fresh(contactObservedAt, at: now, maxAge: maxAge)
+    }
+
+    /// V18 history can be delivered late. Never use receipt/contact time to
+    /// make a stale measured cadence appear live, and never invent cadence.
+    func recentStepCadence(at now: Date, connected: Bool, maxAge: TimeInterval = 15) -> Int? {
+        guard connected, sampleWearing == true, wristContact != .offWrist,
+              wristContact != .uncertain, isSampleFresh(at: now, maxAge: maxAge) else { return nil }
+        return stepCadenceSPM
     }
 
     static func sanitizedPSNR(_ raw: Int?) -> Int? {
@@ -79,8 +105,13 @@ struct NativeSensorSnapshot: Equatable, Codable {
         }()
         let wristContact = preferFallbackContact ? fallbackWristState : (statusPacket?.contactState ?? fallbackWristState)
         let wristStateRaw = preferFallbackContact ? nil : statusPacket?.wristStateRaw
+        let selectedContactDate = preferFallbackContact ? fallbackWristObservedAt
+            : (statusPacket == nil ? fallbackWristObservedAt : statusObservedAt)
         return NativeSensorSnapshot(
             observedAt: observedAt,
+            sampleObservedAt: sampleDate,
+            contactObservedAt: selectedContactDate,
+            sampleWearing: latestSample?.wearing,
             source: source,
             wristContact: wristContact,
             wristStateRaw: wristStateRaw,

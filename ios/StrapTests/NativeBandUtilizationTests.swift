@@ -94,6 +94,31 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(snapshot?.observedAt, t2)
     }
 
+    func testFreshContactCannotRefreshHistoricalCadenceOrOpticalSample() throws {
+        let measured = Date(timeIntervalSince1970: 1_700_000_000)
+        let now = measured.addingTimeInterval(1200)
+        let sample = V18Sample(
+            header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: 1,
+                                     unix: UInt32(measured.timeIntervalSince1970), subsecQ15: 0),
+            heartRate: 140, stepCadence: 176, psnrA: 12)
+        let snapshot = try XCTUnwrap(NativeSensorSnapshot.build(
+            latestSample: sample, statusPacket: nil, statusObservedAt: nil,
+            fallbackWristState: .onWrist, fallbackWristObservedAt: now))
+        XCTAssertEqual(snapshot.sampleObservedAt, measured)
+        XCTAssertEqual(snapshot.contactObservedAt, now)
+        XCTAssertTrue(snapshot.isContactFresh(at: now))
+        XCTAssertFalse(snapshot.isSampleFresh(at: now))
+        XCTAssertNil(snapshot.recentStepCadence(at: now, connected: true))
+        XCTAssertEqual(snapshot.recentStepCadence(at: measured.addingTimeInterval(15), connected: true), 176)
+        XCTAssertNil(snapshot.recentStepCadence(at: measured.addingTimeInterval(16), connected: true))
+        XCTAssertNil(snapshot.recentStepCadence(at: measured.addingTimeInterval(-1), connected: true))
+        XCTAssertNil(snapshot.recentStepCadence(at: measured, connected: false))
+        let offWrist = try XCTUnwrap(NativeSensorSnapshot.build(
+            latestSample: sample, statusPacket: nil, statusObservedAt: nil,
+            fallbackWristState: .offWrist, fallbackWristObservedAt: measured))
+        XCTAssertNil(offWrist.recentStepCadence(at: measured, connected: true))
+    }
+
     func testNativeCadenceRejectsOutOfRangeValues() {
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(0), 0)
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(180), 180)

@@ -334,7 +334,7 @@ struct HealthView: View {
             if let sensor = store.band.nativeSensorSnapshot {
                 Divider().overlay(Color.appLine).padding(.vertical, 6)
                 SectionTitle("Native sensor quality & contact")
-                let freshText = sensor.isFresh(at: clock) ? "FRESH" : "STALE"
+                let freshText = store.band.isConnected && sensor.isContactFresh(at: clock) ? "FRESH" : "STALE"
                 Text("Wrist contact: \(sensor.wristContact.rawValue) (\(freshText)) · source: \(sensor.source)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
@@ -346,10 +346,11 @@ struct HealthView: View {
                 let psnrA = sensor.psnrA.map { "\($0) dB" } ?? "unavailable"
                 let psnrB = sensor.psnrB.map { "\($0) dB" } ?? "unavailable"
                 let logVar = sensor.signalQualityLogVariance.map { String(format: "%.2f", $0) } ?? "—"
-                Text("Optical pSNR A/B: \(psnrA) / \(psnrB) · logVar: \(logVar)")
+                let qualityFresh = store.band.isConnected && sensor.isSampleFresh(at: clock) ? "FRESH" : "STALE"
+                Text("Optical pSNR A/B: \(psnrA) / \(psnrB) · logVar: \(logVar) · \(qualityFresh)")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
-                if let cadence = sensor.stepCadenceSPM, sensor.isFresh(at: clock) {
+                if let cadence = sensor.recentStepCadence(at: clock, connected: store.band.isConnected) {
                     Text("Native cadence: \(cadence) spm · activityClass: \(sensor.activityClass.map(String.init) ?? "—")")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)

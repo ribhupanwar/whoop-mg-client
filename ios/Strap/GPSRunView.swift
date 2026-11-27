@@ -8,6 +8,7 @@ struct GPSRunView: View {
     @AppStorage("strap.workout.keepScreenOn") private var keepScreenOn = false
     @State private var previousIdleTimer: Bool?
     @State private var workoutScreenVisible = false
+    @State private var workoutClock = Date()
     @EnvironmentObject private var store: AppStore
     @State private var selectedWorkout: WorkoutSession?
     @State private var exportURL: URL?
@@ -103,7 +104,8 @@ struct GPSRunView: View {
         .onChange(of: scenePhase) { _, _ in updateIdleTimer() }
         .onChange(of: keepScreenOn) { _, _ in updateIdleTimer() }
         .onChange(of: recorder.phase) { _, _ in updateIdleTimer() }
-        .onReceive(ticker) { _ in
+        .onReceive(ticker) { date in
+            workoutClock = date
             recorder.tick()
             updateHRHistory()
         }
@@ -441,7 +443,9 @@ struct GPSRunView: View {
     }
 
     private var liveWorkoutView: some View {
-        let currentHR = liveBPM(at: Date())
+        let currentHR = liveBPM(at: workoutClock)
+        let bandCadence = store.band.nativeSensorSnapshot?.recentStepCadence(
+            at: workoutClock, connected: store.band.isConnected)
 
         return ZStack(alignment: .top) {
             // Three-page TabView
@@ -458,7 +462,8 @@ struct GPSRunView: View {
                     activityKind: selectedActivity,
                     isConnected: store.band.isConnected,
                     isPaused: recorder.phase == .paused,
-                    bandBattery: store.band.batteryPercent
+                    bandBattery: store.band.batteryPercent,
+                    bandCadence: bandCadence
                 )
                 .tag(WorkoutPage.strain)
 
@@ -643,6 +648,7 @@ struct ActivityStrainPage: View {
     let isConnected: Bool
     let isPaused: Bool
     let bandBattery: Int?
+    var bandCadence: Int? = nil
 
     var body: some View {
         ScrollView {
@@ -710,6 +716,13 @@ struct ActivityStrainPage: View {
                         icon: "location.fill",
                         color: .blue
                     )
+                    WorkoutMetric(
+                        label: "BAND STEP CADENCE",
+                        value: bandCadence.map { "\($0) spm" } ?? "—",
+                        icon: "figure.walk",
+                        color: .blue
+                    )
+                    .accessibilityIdentifier("running.nativeCadence")
                 }
                 .padding(.horizontal, 20)
 
