@@ -331,7 +331,6 @@ struct GPSRunView: View {
                 // Start Activity button
                 Button {
                     hrHistory.removeAll()
-                    lastRecordedHRAt = store.band.lastLiveHRAt
                     // Pass profile data for accurate calorie/HR/strain calculations
                     recorder.updateProfile(
                         weightKg: store.settings.weightKG,
