@@ -25,6 +25,41 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         )
     }
 
+    func testHRSurgeCannotSplitCorroboratedQuietSleep() {
+        let start = 1_795_000_000
+        let surgeStart = start + 3600
+        let surgeEnd = surgeStart + 300
+        let end = surgeEnd + 4200
+        let first = (start..<surgeStart).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let last = (surgeEnd..<end).map { makeV18Sample(unix: $0, hr: 80, accel: 0.01) }
+        let asleepSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.01, state: 2)
+        }
+        let awakeSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.01, state: 3)
+        }
+        let movingSurge = (surgeStart..<surgeEnd).map {
+            makeV18Sample(unix: $0, hr: 97, accel: 0.05, state: 2)
+        }
+        let protected = SleepDetect.splitRunAtHRTransitions(first + asleepSurge + last,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(protected.count, 1)
+        XCTAssertEqual(protected.first?.count, end - start)
+        for surge in [awakeSurge, movingSurge] {
+            let split = SleepDetect.splitRunAtHRTransitions(first + surge + last,
+                activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+            XCTAssertEqual(split.compactMap { $0.first?.unix }, [start, surgeEnd])
+            XCTAssertEqual(split.compactMap { $0.last?.unix }, [surgeStart - 1, end - 1])
+        }
+        // Replays cannot turn 100 distinct seconds into 180 seconds of evidence.
+        let partial = Array(asleepSurge.prefix(100)) +
+            Array(repeating: asleepSurge[99], count: 200) +
+            Array(awakeSurge.dropFirst(100))
+        let replayed = SleepDetect.splitRunAtHRTransitions(first + partial + last,
+            activeMedian: 100, hrDropBPM: 5, minSegmentS: 3600)
+        XCTAssertEqual(replayed.count, 2)
+    }
+
     func testNocturnalBathroomBreakMergesIntoSingleSleepSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200 // Overnight timestamp

@@ -326,12 +326,21 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
     if len(run) < min_segment_s:
         return [run]
     
-    # Build per-second HR for the run
+    # Keep corroboration on the same canonical second as the HR observation.
     hr_by_sec = {}
+    quiet_declared_sleep_seconds = set()
     for s in run:
         if s.wearing and 35 <= s.heart_rate <= 220:
             if s.unix not in hr_by_sec:
                 hr_by_sec[s.unix] = s.heart_rate
+                motion = s.dynamic_accel_g
+                if (s.sleep_state == 2 and motion is not None
+                        and math.isfinite(motion) and 0 <= motion <= 0.015):
+                    quiet_declared_sleep_seconds.add(s.unix)
+
+    def corroborates_sleep(start: int, seconds: int) -> bool:
+        count = sum(sec in quiet_declared_sleep_seconds for sec in range(start, start + seconds))
+        return count * 5 >= seconds * 4
     
     if len(hr_by_sec) < min_segment_s // 2:
         return [run]
@@ -371,6 +380,7 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
             m0 is not None and m0 >= elevated_threshold
             and m1 is not None and m1 >= elevated_threshold
             and m2 is not None and m2 >= elevated_threshold
+            and not corroborates_sleep(t, 180)
         ):
             seg_duration = t - seg_start
             if seg_duration >= min_segment_s:
@@ -380,7 +390,8 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
             t += 180
             while t + 60 <= run_end:
                 m_next = _minute_median(t)
-                if m_next is not None and m_next >= elevated_threshold:
+                if (m_next is not None and m_next >= elevated_threshold
+                        and not corroborates_sleep(t, 60)):
                     t += 60
                 else:
                     break

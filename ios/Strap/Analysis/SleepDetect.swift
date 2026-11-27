@@ -540,10 +540,26 @@ enum SleepDetect {
               lastUnix - firstUnix + 1 >= minSegmentS else { return [run] }
 
         var hrBySec: [Int: Double] = [:]
+        var quietDeclaredSleepSeconds = Set<Int>()
         for sample in run where sample.wearing && (35...220).contains(sample.heartRate) {
             if hrBySec[sample.unix] == nil {
                 hrBySec[sample.unix] = Double(sample.heartRate)
+                // Same canonical observation as the HR sample. Missing motion
+                // and replayed seconds cannot establish sleep corroboration.
+                if sample.sleepState == 2,
+                   let motion = sample.dynamicAccelG, motion.isFinite,
+                   (0...0.015).contains(motion) {
+                    quietDeclaredSleepSeconds.insert(sample.unix)
+                }
             }
+        }
+        // This veto prevents an HR-only split inside an already detected run.
+        // It does not establish sleep onset, override final wake, or assign stages.
+        func corroboratesSleep(_ start: Int, seconds: Int) -> Bool {
+            let count = (start..<(start + seconds)).reduce(0) {
+                $0 + (quietDeclaredSleepSeconds.contains($1) ? 1 : 0)
+            }
+            return count * 5 >= seconds * 4
         }
         guard hrBySec.count >= minSegmentS / 2 else { return [run] }
 
@@ -584,10 +600,12 @@ enum SleepDetect {
         while t + 180 <= lastUnix {
             if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
                let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
-               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold {
+               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold,
+               !corroboratesSleep(t, seconds: 180) {
                 var endT = t + 180
                 while endT + 60 <= lastUnix {
-                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold {
+                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold,
+                       !corroboratesSleep(endT, seconds: 60) {
                         endT += 60
                     } else {
                         break
