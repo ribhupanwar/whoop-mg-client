@@ -15,9 +15,9 @@ struct HomeView: View {
     let openPlan: () -> Void
     let openInsights: () -> Void
 
-    private let sleepRingColor = Color(hex: 0x7CA0BA)
-    private let strainRingColor = Color(hex: 0x0193E8)
-    private let highRecoveryRingColor = Color(hex: 0x24E21A)
+    private let sleepRingColor = Color.appSleep
+    private let strainRingColor = Color.appAccent
+    private let highRecoveryRingColor = Color.appRecoveryGreen
 
     @State private var appStreak = AppOpenStreak.stored().current
     @State private var compactScores = false
