@@ -1666,6 +1666,18 @@ final class RecoveryTests: XCTestCase {
         }
     }
 
+    func testSpo2InvalidStoredCandidateCannotDisplaceValidReplay() {
+        let bad = V18Sample(header: BandRecordHeader(version: 18, flags: 0,
+            recordIndex: 100, unix: 100, subsecQ15: 0), heartRate: 60,
+            spo2CandidatePct: 101, spo2CandidateKind: .pct)
+        let good = makeSample(100, hr: 60, spo2: 96)
+        for rows in [[bad, good], [good, bad]] {
+            let result = Recovery.spo2Summary(rows)
+            XCTAssertEqual(result.pct, 96)
+            XCTAssertEqual(result.readings, 1)
+        }
+    }
+
     func testSpo2WithoutInBandCandidateProducesNoValue() {
         let rows = [
             makeSample(0, hr: 60, spo2: 0),

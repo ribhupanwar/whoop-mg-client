@@ -436,18 +436,22 @@ final class BandLink: NSObject, ObservableObject {
         return "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
     }
 
-    /// Export the exact retained channels and staged labels for this displayed
-    /// night. The file stays local until the user explicitly shares it.
+    /// Export the exact retained channels for this displayed night and bounded
+    /// surrounding context. Only the saved sleep window has staged labels.
+    /// The file stays local until the user explicitly shares it.
     func exportSleepDiagnostics() async throws -> URL {
         guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
         // The in-memory analysis window may start exactly at detected sleep
         // onset. Fetch the preceding 30 minutes from the durable raw archive
         // instead of exporting only the currently retained analysis samples.
         let lookback = 30 * 60
+        let lookahead = SleepDiagnostics.maximumPostSleepSeconds
+        guard session.startUnix < session.endUnix else { throw SleepDiagnostics.ExportError.noNight }
+        let archiveEnd = SleepDiagnostics.contextEnd(session.endUnix, postSleepSeconds: lookahead)
         let (candidateStart, overflow) = session.startUnix.subtractingReportingOverflow(lookback)
         let archiveStart = overflow ? Int.min : candidateStart
         let archiveRows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
-            archiveWriter.samples(from: archiveStart, through: session.endUnix - 1) { result in
+            archiveWriter.samples(from: archiveStart, through: archiveEnd - 1) { result in
                 continuation.resume(with: result)
             }
         }
@@ -457,7 +461,7 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("sleep-exports", isDirectory: true)
         return try await Task.detached(priority: .utility) {
             try SleepDiagnostics.write(samples: samples, session: session, directory: directory,
-                                       preSleepSeconds: lookback)
+                                       preSleepSeconds: lookback, postSleepSeconds: lookahead)
         }.value
     }
 
@@ -1215,6 +1219,11 @@ final class BandLink: NSObject, ObservableObject {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
             let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
+            var stageEvidence: [SleepStager.StageDecisionEvidence] = []
+            _ = SleepStager.stage(samples: samples, period: SleepPeriod(
+                startUnix: session.startUnix, endUnix: session.endUnix - 1,
+                quietFraction: 0, meanHR: 0, wakeEvents: 0),
+                decisionSink: { stageEvidence = $0 })
             let assessmentBreakdown = RecoveryDiagnostics.Breakdown(assessment: assessment)
             let legacyBreakdown = RecoveryDiagnostics.Breakdown(assessment: legacy)
             let report = RecoveryDiagnostics.Report(
@@ -1232,13 +1241,17 @@ final class BandLink: NSObject, ObservableObject {
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
                 recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
                 shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
+                hrvWindowEvidence: RecoveryDiagnostics.hrvWindowEvidence(samples: samples, session: session),
                 sleepAnalysis: sleepAnalysis,
                 upcomingSleepPlan: upcomingSleepPlan,
                 respiratoryRate: assessment.day?.respiratoryRate,
                 respiratoryBaseline: assessmentBreakdown?.respiratoryBaseline,
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
-                oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
+                oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
+                temperatureFunnel: NightTemperature.funnel(archived, session: session),
+                oxygenCandidateSummary: Recovery.spo2Summary(samples),
+                stageDecisionEvidence: stageEvidence)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }

@@ -61,7 +61,28 @@ enum SleepStager {
 
     // MARK: - Public entry
 
+    /// Observation-only trace of this classifier's actual decisions, not
+    /// reference-product or PSG ground truth. Scores are log-emissions.
+    struct StageDecisionEvidence: Encodable {
+        let startUnix: Int
+        let endUnixExclusive: Int
+        let localWinnerBeforeGuard: SleepStage
+        let localWinnerAfterGuard: SleepStage
+        let sequenceWinner: SleepStage
+        var finalStage: SleepStage
+        let deepEmission: Double
+        let remEmission: Double
+        let deepLatencyPenalty: Double
+        let remLatencyPenalty: Double
+        let respiratoryFeaturePresent: Bool
+    }
+
     static func stage(samples: [V18Sample], period: SleepPeriod) -> SleepStaging {
+        stage(samples: samples, period: period, decisionSink: nil)
+    }
+
+    static func stage(samples: [V18Sample], period: SleepPeriod,
+                      decisionSink: (([StageDecisionEvidence]) -> Void)?) -> SleepStaging {
         let start = period.startUnix
         let end = period.endUnix + 1  // SleepPeriod's end is inclusive
         guard end > start else {
@@ -114,7 +135,8 @@ enum SleepStager {
             )
         }
 
-        var labels = labelsForValidRuns(epochs)
+        var evidence: [Int: StageDecisionEvidence]? = decisionSink == nil ? nil : [:]
+        var labels = labelsForValidRuns(epochs, evidence: &evidence)
         guard labels.count == epochs.count else {
             return SleepStaging(
                 segments: [], deepMinutes: 0, lightMinutes: 0, remMinutes: 0,
@@ -156,14 +178,21 @@ enum SleepStager {
                     // A genuinely active up epoch remains wake evidence.
                     for stageIndex in first..<index {
                         let epoch = epochs[stageIndex]
-                        let active = epoch.dynamicMotionFraction >= 0.25
-                            || epoch.moveFrac >= 0.20
+                        let active = (epoch.dynamicMotionFraction ?? 0) >= 0.25
+                            || (epoch.moveFrac ?? 0) >= 0.20
                             || epoch.jerkMax > epoch.jerkScale * jerkFloorGateMult
                         if active { labels[stageIndex] = .wake }
                     }
                 }
                 runStart = nil
             }
+        }
+
+        if let decisionSink, var trace = evidence {
+            for (index, epoch) in epochs.enumerated() {
+                if let final = labels[index] { trace[epoch.start]?.finalStage = final }
+            }
+            decisionSink(trace.values.sorted { $0.startUnix < $1.startUnix })
         }
 
         var segments: [SleepStageSegment] = []
@@ -251,9 +280,9 @@ enum SleepStager {
         let hrVar: Double?
         let hrFlat11: Double?
         let jerks: [Double]
-        let gapCount: Int
+        let gravityPairCount: Int
         let jerkMax: Double
-        let dynamicMotionFraction: Double
+        let dynamicMotionFraction: Double?
         let respReg: Double?
         let clock: Double
         let minutes: Double
@@ -265,12 +294,12 @@ enum SleepStager {
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
-        let moveFrac: Double
+        let moveFrac: Double?
         let jerkMax: Double
         let respReg: Double?
         let clock: Double
         let jerkScale: Double
-        let dynamicMotionFraction: Double
+        let dynamicMotionFraction: Double?
         let minutes: Double
     }
 
@@ -315,9 +344,10 @@ enum SleepStager {
             // Absolute dynamic acceleration complements orientation changes:
             // wrist motion can occur without a large gravity-vector delta.
             // Require dense coverage; never treat missing motion as wake.
-            let dynamicMotionFraction = dynamicValues.count >= (epochEnd - epochStart) * 4 / 5
-                ? Double(dynamicValues.filter { $0 >= 0.12 }.count) / Double(dynamicValues.count)
-                : 0
+            let dynamicMotionFraction = observedMotionFraction(
+                moving: dynamicValues.filter { $0 >= 0.12 }.count,
+                observed: dynamicValues.count, expected: epochEnd - epochStart
+            )
             if valid {
                 for second in epochStart..<epochEnd {
                     // Missing seconds are not consecutive motion observations.
@@ -353,7 +383,7 @@ enum SleepStager {
                     hrVar: valid ? windowStd(epochStart - 150, epochEnd + 150) : nil,
                     hrFlat11: valid ? windowStd(epochStart - 330, epochEnd + 360) : nil,
                     jerks: jerks,
-                    gapCount: max(1, jerks.count),
+                    gravityPairCount: jerks.count,
                     jerkMax: jerks.max() ?? 0,
                     dynamicMotionFraction: dynamicMotionFraction,
                     respReg: valid ? respRegularity(beats) : nil,
@@ -381,7 +411,8 @@ enum SleepStager {
                 hr: raw.hr,
                 hrVar: raw.hrVar,
                 hrFlat11: raw.hrFlat11,
-                moveFrac: Double(moves) / Double(raw.gapCount),
+                moveFrac: observedMotionFraction(moving: moves, observed: raw.gravityPairCount,
+                                                  expected: raw.end - raw.start - 1),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
                 clock: raw.clock,
@@ -508,8 +539,29 @@ enum SleepStager {
         return Double(low) / Double(sorted.count)
     }
 
+    /// Missing motion is unknown, not measured stillness. Partial edge epochs
+    /// must meet the same proportional coverage gate as full epochs.
+    static func observedMotionFraction(moving: Int, observed: Int, expected: Int) -> Double? {
+        guard expected > 0, observed > 0, observed <= expected,
+              moving >= 0, moving <= observed,
+              Double(observed) / Double(expected) >= 0.8 else { return nil }
+        return Double(moving) / Double(observed)
+    }
+
+    /// A measured active channel must not be overridden by another quiet or
+    /// absent channel. The cardiac wake term is suppressed only with positive
+    /// evidence of quiescence.
+    static func motionQuiescent(moveFrac: Double?, jerkMax: Double, jerkScale: Double,
+                                dynamicMotionFraction: Double?) -> Bool {
+        guard moveFrac != nil || dynamicMotionFraction != nil else { return false }
+        if let moveFrac, moveFrac > 0 { return false }
+        if let dynamicMotionFraction, dynamicMotionFraction > 0 { return false }
+        return jerkMax <= jerkScale * jerkFloorGateMult
+    }
+
     private static func motionQuiescent(_ epoch: Epoch) -> Bool {
-        epoch.moveFrac <= 0 && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
+        motionQuiescent(moveFrac: epoch.moveFrac, jerkMax: epoch.jerkMax,
+                        jerkScale: epoch.jerkScale, dynamicMotionFraction: epoch.dynamicMotionFraction)
     }
 
     static func remGuard(_ minutesSinceOnset: Double) -> Double {
@@ -613,7 +665,8 @@ enum SleepStager {
         return minutes[onset]
     }
 
-    private static func labelsForValidRuns(_ epochs: [Epoch]) -> [SleepStage?] {
+    private static func labelsForValidRuns(_ epochs: [Epoch],
+                                          evidence: inout [Int: StageDecisionEvidence]?) -> [SleepStage?] {
         let population = epochs.filter { $0.hr != nil }
         var labels = [SleepStage?](repeating: nil, count: epochs.count)
         // HMM state restarts at each unclassified gap. A gapped session shares one
@@ -653,7 +706,8 @@ enum SleepStager {
             )
         }
         for (runIndex, range) in runs.enumerated() {
-            let runLabels = stageEpochs(runEpochs[runIndex], population: population, onsetMinutes: sessionOnset)
+            let runLabels = stageEpochs(runEpochs[runIndex], population: population,
+                                        onsetMinutes: sessionOnset, evidence: &evidence)
             for (offset, label) in runLabels.enumerated() { labels[range.lowerBound + offset] = label }
         }
         return labels
@@ -664,10 +718,12 @@ enum SleepStager {
     }
 
     private static func stageEpochs(
-        _ epochs: [Epoch], population: [Epoch], onsetMinutes: Double?
+        _ epochs: [Epoch], population: [Epoch], onsetMinutes: Double?,
+        evidence: inout [Int: StageDecisionEvidence]?
     ) -> [SleepStage] {
         guard !epochs.isEmpty else { return [] }
         var emissions = baseEmissions(epochs, population: population)
+        let originalEmissions = evidence == nil ? nil : emissions
         if let onsetMinutes {
             for index in epochs.indices {
                 let sinceOnset = epochs[index].minutes - onsetMinutes
@@ -676,6 +732,25 @@ enum SleepStager {
             }
         }
         var labels = viterbi(emissions)
+        if let originalEmissions {
+            func winner(_ scores: [SleepStage: Double]) -> SleepStage {
+                stageOrder.max { (scores[$0] ?? -.infinity) < (scores[$1] ?? -.infinity) } ?? .light
+            }
+            for index in epochs.indices {
+                let epoch = epochs[index]
+                let sinceOnset = onsetMinutes.map { epoch.minutes - $0 }
+                evidence?[epoch.start] = StageDecisionEvidence(
+                    startUnix: epoch.start, endUnixExclusive: epoch.end,
+                    localWinnerBeforeGuard: winner(originalEmissions[index]),
+                    localWinnerAfterGuard: winner(emissions[index]),
+                    sequenceWinner: labels[index], finalStage: labels[index],
+                    deepEmission: emissions[index][.deep] ?? 0,
+                    remEmission: emissions[index][.rem] ?? 0,
+                    deepLatencyPenalty: sinceOnset.map { deepGuard($0) } ?? 0,
+                    remLatencyPenalty: sinceOnset.map { remGuard($0) } ?? 0,
+                    respiratoryFeaturePresent: epoch.respReg != nil)
+            }
+        }
         if let onsetMinutes, onsetMinutes > epochs[0].minutes {
             for index in epochs.indices where epochs[index].minutes < onsetMinutes {
                 labels[index] = .wake
@@ -714,7 +789,7 @@ enum SleepStager {
         guard !epochs.isEmpty else { return [] }
         let localHRZ = localHRZScores(epochs)
         let zVar = zScorer(population.map { $0.hrVar })
-        let zMove = zScorer(population.map { Optional($0.moveFrac) })
+        let zMove = zScorer(population.map(\.moveFrac))
         let zResp = zScorer(population.map { $0.respReg })
         let flatSorted = population.compactMap { $0.hrFlat11 }.sorted()
 
@@ -746,7 +821,7 @@ enum SleepStager {
             }
             // Only substantial, sustained measured acceleration adds wake
             // evidence; ordinary wrist micro-motion must not erase REM/Deep.
-            if epoch.dynamicMotionFraction >= 0.25 {
+            if (epoch.dynamicMotionFraction ?? 0) >= 0.25 {
                 emission[.wake]! += motionGateBoost * 3
             }
             if let resp = epoch.respReg {

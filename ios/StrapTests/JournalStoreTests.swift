@@ -24,6 +24,17 @@ final class JournalStoreTests: XCTestCase {
         super.tearDown()
     }
 
+    func testQuestionVisibilityPreservesAnswers() {
+        var entry = JournalEntry(dateKey: "2026-11-09")
+        entry.setAnswer(.alcohol, true)
+        store.save(entry)
+        let hidden = JournalQuestionPreferences.setting(.alcohol, visible: false, in: "")
+        XCTAssertFalse(JournalQuestionPreferences.visible(excluding: hidden).contains(.alcohol))
+        XCTAssertEqual(store.entry(forDayKey: entry.dateKey)?.answer(.alcohol), true)
+        XCTAssertEqual(JournalQuestionPreferences.setting(.alcohol, visible: true, in: hidden), "")
+        XCTAssertEqual(JournalQuestionPreferences.visible(excluding: "").count, JournalQuestion.allCases.count)
+    }
+
     func testSaveAndReadBack() {
         var entry = JournalEntry(dateKey: "2026-11-09")
         entry.setAnswer(.alcohol, true)

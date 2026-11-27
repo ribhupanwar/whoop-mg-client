@@ -35,6 +35,7 @@ final class AppStore: ObservableObject {
     private var healthCancellable: AnyCancellable?
     private var monitorCancellable: AnyCancellable?
     private var healthWidgetCancellable: AnyCancellable?
+    private var batteryNoticeCancellable: AnyCancellable?
     @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
     private var fitnessCancellable: AnyCancellable?
     @Published private(set) var fitnessSnapshot: FitnessAgeSnapshot?
@@ -103,7 +104,27 @@ final class AppStore: ObservableObject {
             }
             .sink { [weak self] snapshot in
                 self?.healthMonitor = snapshot
-                DispatchQueue.main.async { self?.checkRestingHRTrend() }
+                DispatchQueue.main.async {
+                    self?.checkRestingHRTrend()
+                    self?.checkRecoveryRecap()
+                }
+            }
+        // Ignore the publisher's initial cached value. Only newly received
+        // battery updates can trigger a low-battery reminder.
+        batteryNoticeCancellable = band.$batteryPercent.dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] fresh in
+                guard let self, let fresh, self.band.isConnected,
+                      !self.band.isCharging, LocalWellnessNotice.lowBattery(fresh), !self.isPreview else { return }
+                let observed = Date()
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    await LocalWellnessNotice.post(.battery, id: JournalStore.dayKey(for: observed),
+                        defaults: self.defaults) {
+                        self.band.isConnected && !self.band.isCharging && self.band.batteryPercent.map(LocalWellnessNotice.lowBattery) == true
+                            && !self.isPreview && Date().timeIntervalSince(observed) < 60
+                    }
+                }
             }
         healthWidgetCancellable = band.objectWillChange
             .throttle(for: .seconds(60), scheduler: RunLoop.main, latest: true)
@@ -169,6 +190,20 @@ final class AppStore: ObservableObject {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    func checkRecoveryRecap() {
+        let today = JournalStore.dayKey(for: Date())
+        guard !isPreview, !band.isAnalyzingHistory, band.recoveryNight?.dateKey == today,
+              let score = band.recovery.score, score.isFinite, (0...100).contains(score) else { return }
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            await LocalWellnessNotice.post(.recovery, id: today, defaults: self.defaults) {
+                !self.isPreview && !self.band.isAnalyzingHistory &&
+                    self.band.recoveryNight?.dateKey == today && JournalStore.dayKey(for: Date()) == today &&
+                    self.band.recovery.score.map { $0.isFinite && (0...100).contains($0) } == true
             }
         }
     }

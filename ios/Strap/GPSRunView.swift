@@ -1,8 +1,13 @@
 import SwiftUI
 import MapKit
+import UIKit
 
 struct GPSRunView: View {
     @ObservedObject private var recorder = WorkoutRecorder.shared
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("strap.workout.keepScreenOn") private var keepScreenOn = false
+    @State private var previousIdleTimer: Bool?
+    @State private var workoutScreenVisible = false
     @EnvironmentObject private var store: AppStore
     @State private var selectedWorkout: WorkoutSession?
     @State private var exportURL: URL?
@@ -94,6 +99,11 @@ struct GPSRunView: View {
         }
         .navigationTitle((recorder.phase == .idle || recorder.phase == .saved || recorder.phase == .discarded) ? "Start Activity" : (recorder.currentSession?.activityLabel ?? selectedActivity.label))
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear { workoutScreenVisible = true; updateIdleTimer() }
+        .onDisappear { workoutScreenVisible = false; restoreIdleTimer() }
+        .onChange(of: scenePhase) { _, _ in updateIdleTimer() }
+        .onChange(of: keepScreenOn) { _, _ in updateIdleTimer() }
+        .onChange(of: recorder.phase) { _, _ in updateIdleTimer() }
         .onReceive(ticker) { _ in
             recorder.tick()
             updateHRHistory()
@@ -114,6 +124,11 @@ struct GPSRunView: View {
                 WorkoutLiveActivityController.shared.start(session: session)
             } else if newPhase == .saved || newPhase == .discarded {
                 WorkoutLiveActivityController.shared.end()
+                if newPhase == .saved, let session = recorder.currentSession, !store.isPreview {
+                    Task { @MainActor in
+                        await LocalWellnessNotice.post(.workout, id: session.id.uuidString) { !store.isPreview }
+                    }
+                }
             } else if newPhase == .paused {
                 WorkoutLiveActivityController.shared.update(
                     session: recorder.currentSession, phase: newPhase,
@@ -123,6 +138,21 @@ struct GPSRunView: View {
                 )
             }
         }
+    }
+
+    private func updateIdleTimer() {
+        if workoutScreenVisible && keepScreenOn && scenePhase == .active && recorder.phase == .recording {
+            if previousIdleTimer == nil { previousIdleTimer = UIApplication.shared.isIdleTimerDisabled }
+            UIApplication.shared.isIdleTimerDisabled = true
+        } else {
+            restoreIdleTimer()
+        }
+    }
+
+    private func restoreIdleTimer() {
+        guard let previousIdleTimer else { return }
+        UIApplication.shared.isIdleTimerDisabled = previousIdleTimer
+        self.previousIdleTimer = nil
     }
 
     private var prestartView: some View {
@@ -494,21 +524,18 @@ struct GPSRunView: View {
             .tabViewStyle(.page(indexDisplayMode: .always))
             .indexViewStyle(.page(backgroundDisplayMode: .always))
 
-            // Timer header overlay
-            VStack {
-                TimerHeader(
-                    elapsedSeconds: recorder.elapsedSeconds,
-                    currentHR: currentHR,
-                    activityLabel: selectedActivity.label,
-                    activityIcon: selectedActivity.icon,
-                    isPaused: recorder.phase == .paused,
-                    onTap: { showControls = true }
-                )
-                .padding(.top, 8)
-                .padding(.horizontal, 16)
-                Spacer()
-            }
-            .allowsHitTesting(false) // Let taps pass through to TabView, only header intercepts
+            // Only the actual header overlays the pages. Keep its button
+            // tappable; the rest of the TabView remains available for swipes.
+            TimerHeader(
+                elapsedSeconds: recorder.elapsedSeconds,
+                currentHR: currentHR,
+                activityLabel: selectedActivity.label,
+                activityIcon: selectedActivity.icon,
+                isPaused: recorder.phase == .paused,
+                onTap: { showControls = true }
+            )
+            .padding(.top, 8)
+            .padding(.horizontal, 16)
         }
         .confirmationDialog("Workout Controls", isPresented: $showControls, titleVisibility: .visible) {
             if recorder.phase == .recording {

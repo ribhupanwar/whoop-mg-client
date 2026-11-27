@@ -156,9 +156,11 @@ struct HealthspanView: View {
                 Text("YOUR AGE TREND").font(StrapTypography.body(11, weight: .bold)).tracking(0.8)
                 Spacer()
                 Picker("Trend period", selection: $window) {
-                    Text("M").tag(30)
+                    Text("1M").tag(30)
                     Text("3M").tag(90)
-                }.pickerStyle(.segmented).frame(width: 108)
+                    Text("6M").tag(180)
+                }.pickerStyle(.segmented).frame(width: 156)
+                    .accessibilityIdentifier("healthspan.trendPeriod")
             }.padding(.bottom, 16)
             HStack(spacing: 14) {
                 legend("Fitness age", color: healthspanMint)
@@ -166,6 +168,11 @@ struct HealthspanView: View {
             }.padding(.bottom, 16)
             HealthspanTrendChart(points: points, actualAge: snapshot?.comparisonAge
                 ?? (store.settings.ageConfirmed ? Double(store.settings.age) : nil))
+            if !points.isEmpty {
+                Text("\(points.filter { $0.years != nil }.count) of \(points.count) days with enough recorded inputs")
+                    .font(StrapTypography.body(11)).foregroundStyle(Color.appMuted)
+                    .padding(.top, 8)
+            }
             if points.allSatisfy({ $0.years == nil }) {
                 Text("Your trend appears as enough recorded nights and exercise accumulate.")
                     .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted).padding(.top, 12)
@@ -486,6 +493,7 @@ private struct HealthspanTrendChart: View {
                 selectedDate = points[index].date
             }
             .onChange(of: points.last?.date) { _, _ in selectedDate = nil }
+            .onChange(of: points.count) { _, _ in selectedDate = nil }
         }.frame(height: 185)
         .accessibilityLabel("Fitness-age trend with gaps for dates without enough measured data")
     }

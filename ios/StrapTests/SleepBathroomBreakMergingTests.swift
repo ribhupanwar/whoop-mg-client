@@ -89,6 +89,68 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
         }
     }
 
+    func testExtendedQuietNocturnalResumptionRequiresPositiveEvidence() throws {
+        let base = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 2)))
+        let start = Int(base.timeIntervalSince1970)
+        let wake = start + 2 * 3600
+        let resume = wake + 32 * 60
+        let end = resume + 70 * 60 - 1
+        let first = SleepPeriod(startUnix: start, endUnix: wake - 1,
+                                quietFraction: 1, meanHR: 60, wakeEvents: 0)
+        let second = SleepPeriod(startUnix: resume, endUnix: end,
+                                 quietFraction: 1, meanHR: 60, wakeEvents: 0)
+        let before = (start..<wake).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01) }
+        let after = (resume...end).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01) }
+        let gap = (wake..<resume).map {
+            makeV18Sample(unix: $0, hr: 80, accel: $0 < wake + 60 ? 0.2 : 0.02, state: 3)
+        }
+        let merged = SleepDetect.mergeNocturnalPeriods([first, second], samples: before + gap + after)
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged.first?.startUnix, start)
+        XCTAssertEqual(merged.first?.endUnix, end)
+        XCTAssertEqual(merged.first?.wakeEvents, 1)
+
+        let noHint = (resume...end).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01, state: 0) }
+        let active = (wake..<resume).map { makeV18Sample(unix: $0, hr: 100, accel: 0.2, state: 3) }
+        let insufficientStrictQuiet = (resume...end).map {
+            makeV18Sample(unix: $0, hr: 60, accel: 0.03)
+        }
+        for rows in [before + gap + noHint, before + active + after, before + after,
+                     before + gap + insufficientStrictQuiet] {
+            XCTAssertEqual(SleepDetect.mergeNocturnalPeriods([first, second], samples: rows).count, 2)
+        }
+        XCTAssertEqual(SleepDetect.mergeNocturnalPeriods([first, second], samples: before + gap + after,
+                                                         maxAwakeningGapS: 20 * 60).count, 2)
+    }
+
+    // Exercise the production detector rather than just constructing periods.
+    // An HR-confirmed interruption must be followed by independently detected
+    // sleep, with both periods satisfying the normal minimum-duration gate.
+    func testDetectorRejoinsConfirmedQuietThirtyTwoMinuteInterruption() throws {
+        let base = try XCTUnwrap(Calendar.current.date(from: DateComponents(
+            year: 2025, month: 2, day: 10, hour: 2)))
+        let start = Int(base.timeIntervalSince1970)
+        let wake = start + 2 * 3600
+        let resume = wake + 32 * 60
+        let end = resume + 70 * 60
+        let baseline = ((start - 1800)..<start).map {
+            makeV18Sample(unix: $0, hr: 90, accel: 0.2, state: 0)
+        }
+        let before = (start..<wake).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01) }
+        let gap = (wake..<resume).map {
+            makeV18Sample(unix: $0, hr: 88, accel: $0 < wake + 60 ? 0.2 : 0.02, state: 3)
+        }
+        let after = (resume..<end).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01) }
+        let terminal = (end..<(end + 1800)).map {
+            makeV18Sample(unix: $0, hr: 90, accel: 0.2, state: 3)
+        }
+        let detected = SleepDetect.detect(baseline + before + gap + after + terminal)
+        XCTAssertEqual(detected.count, 1)
+        XCTAssertEqual(detected.first?.startUnix, start)
+        XCTAssertEqual(detected.first?.endUnix, end - 1)
+    }
+
     func testLongAwakeningDoesNotMergeIntoSingleSession() {
         var samples: [V18Sample] = []
         let baseUnix = 1795039200

@@ -169,6 +169,18 @@ enum DailyAnalysis {
     /// Canonical rolling baseline window discovered from WHOOP `GetRestingHeartRateBaselineRequest` (`0x1099623a0`).
     /// WHOOP evaluates baseline statistics over a rolling buffer of 28 eligible days.
     static let rollingBaselineDays = 28
+
+    /// Use a single canonical session for all nightly biometrics. Prefer the
+    /// existing overnight classification when present; keep the established
+    /// longest-session fallback for days without an overnight classification.
+    static func primaryNight(_ sessions: [SleepSession]) -> SleepSession? {
+        let valid = sessions.filter { $0.endUnix > $0.startUnix }
+        let overnight = valid.filter { $0.classification == .overnight }
+        return (overnight.isEmpty ? valid : overnight).max {
+            if $0.timeInBedHours != $1.timeInBedHours { return $0.timeInBedHours < $1.timeInBedHours }
+            return $0.startUnix > $1.startUnix
+        }
+    }
     /// Inclusive range in the chronologically sorted archive. Preserve all
     /// records at either boundary, including replayed seconds.
     static func rows(in ordered: [V18Sample], from start: Int, through end: Int) -> ArraySlice<V18Sample> {
@@ -257,12 +269,15 @@ enum DailyAnalysis {
                 return JournalStore.dayKey(for: end, calendar: calendar) == key
             }
             struct DayContext: Codable {
+                // Invalidate daily biometric checkpoints without changing saved sleep bounds.
+                let respirationRecipe = 2
                 let key: String
                 let sex: Sex
                 let maxHR: Double?
                 let calendar: String
                 let zone: String
                 let sessions: [SleepSession]
+                let primarySelectionRecipe: Int
             }
             // A night ending today can begin yesterday. Include its earlier
             // packets and every canonical bound that excludes today's awake load.
@@ -281,7 +296,7 @@ enum DailyAnalysis {
                 }
                 let context = DayContext(key: key, sex: sex, maxHR: maxHR,
                                          calendar: String(describing: calendar.identifier),
-                                         zone: calendar.timeZone.identifier, sessions: related)
+                                         zone: calendar.timeZone.identifier, sessions: related, primarySelectionRecipe: 1)
                 return cache.ticket(key: HistoryAnalysisCache.dailyKey(key), samples: inputs, context: context)
             }
             if let saved = analysisCache?.load(DayMetrics.self, ticket: ticket) {
@@ -291,59 +306,36 @@ enum DailyAnalysis {
                 continue
             }
             mark("cache miss; starting nightly biometrics")
-            // NOOP-style per-sleep-session aggregation: derive each validated
-            // session independently, then weight HRV by session duration.
-            // Never join R-R beats across gaps or unrelated sleep sessions.
-            let sessions: [(period: SleepPeriod, hrv: HrvResult, window: Int, rhr: Double?)] =
-                dayPeriods.compactMap { period in
-                    let segment = Array(rows(in: ordered, from: period.startUnix, through: period.endUnix))
-                    let validSeconds = Set(segment.filter {
-                        $0.wearing && (35...220).contains($0.heartRate)
-                    }.map(\.unix)).count
-                    guard validSeconds >= 300 else { return nil }
-                    // Accuracy Engine V2: evaluate 5-minute windowed RMSSD across the
-                    // sleep session (with SWS fallback for short captures) to avoid
-                    // single-longest-run sampling variance.
-                    let relatedSession = sleepSessions.first {
-                        $0.startUnix == period.startUnix || ($0.startUnix <= period.endUnix && period.startUnix < $0.endUnix)
-                    }
-                    let deepEpochs = relatedSession?.staging.segments
-                        .filter { $0.stage == .deep }
-                        .compactMap { $0.endUnix > $0.startUnix ? ($0.startUnix...($0.endUnix - 1)) : nil } ?? []
-                    let result = Hrv.windowedSleepHRV(segment, deepEpochs: deepEpochs, windowSeconds: 300)
-                    let rhr = Hrv.restingHeartRate(segment, windowS: 300)
-                    return (period: period, hrv: result.result,
-                            window: result.windowSeconds, rhr: rhr)
-                }
-            // Use the primary (longest) sleep session, so a low-HR nap cannot
-            // change the overnight reference. RHR does not require R-R beats.
-            let resting = sessions.max { $0.period.durationS < $1.period.durationS }?.rhr
-            // Nightly recovery must use the same primary sleep session as RHR.
-            // Combining a daytime nap's RMSSD with overnight RMSSD changes the
-            // recovery reference even when the primary night is unchanged.
-            // Missing/invalid primary-session RR must remain missing: do not
-            // silently substitute a nap's otherwise valid HRV.
-            let primary = sessions.max { $0.period.durationS < $1.period.durationS }
-            let primaryRMSSD: Double? = {
-                guard let primary, let rmssd = primary.hrv.rmssdMS,
-                      rmssd.isFinite, rmssd > 0,
-                      primary.window >= 300, primary.hrv.nnBeats >= 20 else { return nil }
-                return rmssd
-            }()
-            let nightlyLnRMSSD = primaryRMSSD.map { log($0) }
-            let nightlyWindowSeconds = primary?.window ?? 0
             let daySleep = sleepSessions.filter {
                 JournalStore.dayKey(
                     for: Date(timeIntervalSince1970: TimeInterval($0.endUnix - 1)),
                     calendar: calendar
                 ) == key
             }
-            let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
-            let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
-            let longest = daySleep.max { $0.timeInBedHours < $1.timeInBedHours }
+            // Select the canonical session BEFORE examining available RR/HR.
+            // Missing overnight measurements cannot be replaced by a nap.
+            let longest = primaryNight(daySleep)
             let primaryRows = longest.map {
                 Array(rows(in: ordered, from: $0.startUnix, through: $0.endUnix - 1))
             } ?? []
+            let validSeconds = Set(primaryRows.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+            }.map(\.unix)).count
+            let deepEpochs = longest?.staging.segments.filter { $0.stage == .deep }
+                .compactMap { $0.endUnix > $0.startUnix ? ($0.startUnix...($0.endUnix - 1)) : nil } ?? []
+            let primary = validSeconds >= 300
+                ? Hrv.windowedSleepHRV(primaryRows, deepEpochs: deepEpochs, windowSeconds: 300) : nil
+            let resting = validSeconds >= 300 ? Hrv.restingHeartRate(primaryRows, windowS: 300) : nil
+            let primaryRMSSD: Double? = {
+                guard let primary, let rmssd = primary.result.rmssdMS,
+                      rmssd.isFinite, rmssd > 0,
+                      primary.windowSeconds >= 300, primary.result.nnBeats >= 20 else { return nil }
+                return rmssd
+            }()
+            let nightlyLnRMSSD = primaryRMSSD.map { log($0) }
+            let nightlyWindowSeconds = primary?.windowSeconds ?? 0
+            let sleepHours = daySleep.reduce(0.0) { $0 + ($1.asleepHours ?? 0) }
+            let sleepReliable = !daySleep.isEmpty && daySleep.allSatisfy(\.isComplete)
             let temperature = NightTemperature.measure(primaryRows, session: longest)
             // Training load needs a measured resting reference, not sleep stages
             // or R-R intervals. A verified five-minute daytime rest can supply it.

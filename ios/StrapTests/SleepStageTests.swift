@@ -79,6 +79,22 @@ private func makeNight(
 
 final class SleepStageTests: XCTestCase {
 
+    func testMotionEvidenceNeverTreatsMissingOrSparseChannelsAsStillness() throws {
+        XCTAssertNil(SleepStager.observedMotionFraction(moving: 0, observed: 0, expected: 30))
+        XCTAssertNil(SleepStager.observedMotionFraction(moving: 0, observed: 23, expected: 30))
+        XCTAssertEqual(try XCTUnwrap(SleepStager.observedMotionFraction(moving: 0, observed: 24, expected: 30)), 0)
+        XCTAssertEqual(try XCTUnwrap(SleepStager.observedMotionFraction(moving: 6, observed: 24, expected: 30)), 0.25)
+        XCTAssertNil(SleepStager.observedMotionFraction(moving: 0, observed: 0, expected: 1))
+        XCTAssertFalse(SleepStager.motionQuiescent(moveFrac: nil, jerkMax: 0, jerkScale: 1,
+                                                  dynamicMotionFraction: nil))
+        XCTAssertTrue(SleepStager.motionQuiescent(moveFrac: nil, jerkMax: 0, jerkScale: 1,
+                                                 dynamicMotionFraction: 0))
+        XCTAssertFalse(SleepStager.motionQuiescent(moveFrac: 0, jerkMax: 0, jerkScale: 1,
+                                                  dynamicMotionFraction: 0.25))
+        XCTAssertFalse(SleepStager.motionQuiescent(moveFrac: 0.2, jerkMax: 0, jerkScale: 1,
+                                                  dynamicMotionFraction: 0))
+    }
+
     func testBandWakeEvidenceUsesAbsoluteEpochBoundaries() {
         let start = alignedBase + 17
         XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: start, sessionStart: start), 0)

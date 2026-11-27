@@ -34,6 +34,20 @@ final class PersistenceDiagnosticsTests: XCTestCase {
         XCTAssertTrue(PersistenceDiagnostics.permittedKey("strap.capture.summary.v1"))
     }
 
+    func testNewOptInReminderPreferencesSurviveVerifiedBackupAllowlist() {
+        let keys = [
+            "strap.workout.keepScreenOn", "strap.journal.hiddenQuestions",
+            "strap.journalReminderEnabled", "strap.journalReminderMinutes",
+            "strap.lowBatteryNoticeEnabled", "strap.recoveryRecapNoticeEnabled",
+            "strap.workoutSavedNoticeEnabled"
+        ]
+        for key in keys {
+            XCTAssertTrue(PersistenceDiagnostics.permittedKey(key), "Backup must preserve \(key)")
+        }
+        XCTAssertFalse(PersistenceDiagnostics.permittedKey("strap.localNotice.last.battery"),
+                       "Notification delivery dedup state must not be imported from a different device")
+    }
+
     func testVaultPreservesUndecodableCacheIdempotently() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: directory) }

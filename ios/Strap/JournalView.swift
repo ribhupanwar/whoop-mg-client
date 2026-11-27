@@ -10,6 +10,12 @@ struct JournalView: View {
     @State private var saved = false
     @State private var loaded = false
     @State private var comparisonMetric: JournalComparisonMetric = .sleep
+    @AppStorage("strap.journal.hiddenQuestions") private var hiddenQuestions = ""
+    @State private var customizingQuestions = false
+
+    private var visibleQuestions: [JournalQuestion] {
+        JournalQuestionPreferences.visible(excluding: hiddenQuestions)
+    }
 
     var body: some View {
         Screen {
@@ -29,6 +35,56 @@ struct JournalView: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { loadIfNeeded() }
         .onChange(of: entry) { saved = false }
+        .sheet(isPresented: $customizingQuestions) {
+            NavigationStack {
+                Form {
+                    Section("Show in daily check-in") {
+                        ForEach(JournalQuestion.allCases, id: \.id) { question in
+                            Toggle(question.label, isOn: Binding(
+                                get: { visibleQuestions.contains(question) },
+                                set: { show in
+                                    hiddenQuestions = JournalQuestionPreferences.setting(question, visible: show, in: hiddenQuestions)
+                                }
+                            ))
+                        }
+                        Button("Show all") { hiddenQuestions = "" }
+                    }
+                    Text("Hidden questions retain their saved answers and historical insights.")
+                        .font(.footnote)
+                }
+                .navigationTitle("Customize journal")
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { customizingQuestions = false } } }
+            }
+        }
+    }
+
+    private var behaviorPanel: some View {
+        Panel {
+            SectionTitle("Behavior insights")
+            Picker("Compare with", selection: $comparisonMetric) {
+                ForEach(JournalComparisonMetric.allCases, id: \.self) { metric in
+                    Text(metric.rawValue).tag(metric)
+                }
+            }
+            .pickerStyle(.segmented)
+            let rows = JournalQuestion.allCases.compactMap { question in
+                JournalBehaviorComparison.make(question: question,
+                    entries: Array(store.journalEntries.values), days: store.band.days, metric: comparisonMetric)
+            }
+            if rows.isEmpty {
+                Hint("Needs 14 matched recorded days, including at least 5 explicitly answered Yes and 5 No days for a behavior. Unanswered questions are excluded.")
+            } else {
+                ForEach(rows, id: \.question) { row in
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(row.question.label).font(StrapTypography.body(13, weight: .bold))
+                        Text("Yes: \(comparisonMetric.format(row.yesMean)) (n=\(row.yesCount)) · No: \(comparisonMetric.format(row.noMean)) (n=\(row.noCount))")
+                            .font(StrapTypography.body(12)).foregroundStyle(Color.appMuted)
+                    }
+                    .padding(.vertical, 5)
+                }
+                Hint("Compares the next calendar day’s recorded metrics with explicitly logged answers. Observational association only; not a causal effect or score adjustment.")
+            }
+        }
     }
 
     private var behaviorPanel: some View {
@@ -64,8 +120,17 @@ struct JournalView: View {
 
     private var questionsPanel: some View {
         Panel {
-            SectionTitle("Daily check-in")
-            ForEach(Array(JournalQuestion.allCases.enumerated()), id: \.element.id) { index, question in
+            HStack {
+                SectionTitle("Daily check-in")
+                Spacer()
+                Button("Customize") { customizingQuestions = true }
+                    .font(StrapTypography.body(12, weight: .semibold))
+                    .foregroundStyle(Color.appAccent)
+            }
+            if visibleQuestions.isEmpty {
+                Hint("No questions selected. Customize to show them again; existing answers are preserved.")
+            }
+            ForEach(visibleQuestions, id: \.id) { question in
                 HStack {
                     Text(question.label).font(StrapTypography.body(12.5))
                     Spacer()
@@ -213,5 +278,19 @@ struct JournalBehaviorComparison {
         guard yes.count >= 5, no.count >= 5, yes.count + no.count >= 14 else { return nil }
         return Self(question: question, yesMean: Stats.mean(yes), noMean: Stats.mean(no),
                     yesCount: yes.count, noCount: no.count)
+    }
+}
+
+/// Hiding a built-in question changes presentation only, never journal data.
+enum JournalQuestionPreferences {
+    static func visible(excluding raw: String) -> [JournalQuestion] {
+        let hidden = Set(raw.split(separator: ",").map(String.init))
+        return JournalQuestion.allCases.filter { !hidden.contains($0.rawValue) }
+    }
+
+    static func setting(_ question: JournalQuestion, visible: Bool, in raw: String) -> String {
+        var hidden = Set(raw.split(separator: ",").map(String.init))
+        if visible { hidden.remove(question.rawValue) } else { hidden.insert(question.rawValue) }
+        return hidden.sorted().joined(separator: ",")
     }
 }

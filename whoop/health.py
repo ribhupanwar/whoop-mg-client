@@ -1280,14 +1280,31 @@ def _rr_segments(samples: list[V18Sample]) -> list[list[tuple[int, int]]]:
     Short gaps are tolerated because a single missed beat does not move the
     estimate, but a multi-second gap starts a new segment.
     """
-    ordered = sorted(samples, key=lambda s: s.unix)
+    # Match the native path: retain one payload per second, ranking valid
+    # beats ahead of padding or malformed words. A tie retains the first.
+    def quality(sample: V18Sample) -> tuple[int, int]:
+        valid = sum(MIN_RR_MS <= v <= MAX_RR_MS for v in sample.rr_intervals_ms)
+        return valid, -(len(sample.rr_intervals_ms) - valid)
+
+    unique: dict[int, V18Sample] = {}
+    for sample in samples:
+        previous = unique.get(sample.unix)
+        if previous is None or quality(sample) > quality(previous):
+            unique[sample.unix] = sample
+    ordered = sorted(unique.values(), key=lambda s: s.unix)
     segments: list[list[tuple[int, int]]] = []
     current: list[tuple[int, int]] = []
     last_unix: int | None = None
     last_span_s = 0.0
     for sample in ordered:
+        motion = sample.dynamic_accel_g
         rr = [v for v in sample.rr_intervals_ms if MIN_RR_MS <= v <= MAX_RR_MS]
-        if not rr:
+        if not sample.wearing or motion is None or not math.isfinite(motion) or not 0 <= motion <= 0.10 or not rr:
+            if current:
+                segments.append(current)
+                current = []
+            last_unix = None
+            last_span_s = 0.0
             continue
         # On a real capture the wall-clock step exceeds the previous record's
         # R-R span by ~0.16 s. A multi-second excess is a dropout, not timing
@@ -1393,7 +1410,9 @@ def _window_rates(detrended: list[float]) -> list[float]:
 def _spectral_window_rates(
     detrended: list[float], median_rr_seconds: float
 ) -> list[float]:
-    ceiling_hz = min(0.40, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.40
+    # Search beyond the publishable band so a dominant out-of-band peak
+    # cannot be hidden by truncating the spectrum at 24 breaths/min.
+    ceiling_hz = min(0.50, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.50
     if ceiling_hz <= 0.16:
         return []
     window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
@@ -1433,7 +1452,8 @@ def _spectral_window_rates(
         if (
             mean_power > 0
             and (best_power / mean_power) >= 2.0
-            and 0.133 <= best_freq <= 0.417
+            and RESP_PLAUSIBLE_MIN_BPM <= best_freq * 60 <= RESP_PLAUSIBLE_MAX_BPM
+            and best_freq + 0.005 <= ceiling_hz + 1e-6
         ):
             rates.append(best_freq * 60.0)
     return rates
@@ -1459,8 +1479,19 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
 
     rates: list[float] = []
     spectral_rates: list[float] = []
+    overcounted_segments = 0
+    undercovered_segments = 0
+    attempted_windows = 0
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
+            continue
+        span = segment[-1][0] - segment[0][0] + 1
+        beat_seconds = sum(rr for _, rr in segment) / 1000
+        if beat_seconds > span * 1.05:
+            overcounted_segments += 1
+            continue
+        if beat_seconds < span * 0.80:
+            undercovered_segments += 1
             continue
         times: list[float] = []
         acc = 0.0
@@ -1473,17 +1504,36 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         if len(grid) < 8:
             continue
         detrended = _detrend(grid)
+        # Include rejected and flat windows in the consensus denominator.
+        window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
+        min_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
+        full, tail = divmod(len(detrended), window_samples)
+        attempted_windows += full + int(tail >= min_samples)
         if statistics.pstdev(detrended) <= 1e-9:
             continue
         median_rr_s = statistics.median(rr / 1000.0 for _, rr in segment)
         spectral_rates.extend(_spectral_window_rates(detrended, median_rr_s))
         rates.extend(_window_rates(detrended))
 
-    active_rates = spectral_rates if len(spectral_rates) >= 3 else rates
+    # A plausible peak train alone can be a harmonic or noise. Require
+    # agreement between spectral windows and corroboration for thin evidence.
+    active_rates = spectral_rates
+    if active_rates:
+        center = statistics.median(active_rates)
+        agreeing = sum(abs(rate - center) <= 2.0 for rate in active_rates)
+        corroborated = bool(rates) and abs(statistics.median(rates) - center) <= 2.0
+        if agreeing * 2 < attempted_windows or (len(active_rates) < 3 and not corroborated):
+            return RespRate(None, f"Insufficient RSA consensus: {agreeing}/{attempted_windows} eligible windows agree; "
+                            "or thin evidence lacks peak-train corroboration",
+                            total_beats, len(active_rates))
     if not active_rates:
         return RespRate(
             None,
-            "no usable RSA peak train - needs a continuous still or sleep R-R window",
+            ("no usable RSA peak train - RR beat duration exceeded elapsed recording time"
+             if overcounted_segments else
+             ("no usable RSA peak train - insufficient RR beat-time coverage"
+              if undercovered_segments else
+              "no usable RSA peak train - needs a continuous still or sleep R-R window")),
             total_beats,
             0,
         )

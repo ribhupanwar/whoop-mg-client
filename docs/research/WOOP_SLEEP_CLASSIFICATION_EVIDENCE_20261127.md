@@ -1,0 +1,7 @@
+# Woop sleep classification comparison
+
+Static binary symbols in reference build 4a3ef0e establish a SleepStagerV2 with epoch feature extraction, stageEpochs, percentile and z-score helpers, cycle priors, respiratory regularity, and Viterbi transitions. The analytics interface exposes motion-aware wake and optional V2 staging. They do not establish that the reference reproduces WHOOP or reveal validated weights, default selections, or clinical ground truth.
+
+STRAP already implements these broad classifier components. Retain original thresholds, phase priors, transition matrix, latency guards and gap behavior. A separate observed defect is that missing gravity/acceleration could enter the motion distribution as zero movement, and the quiescence gate could suppress cardiac wake evidence even during measured dynamic activity. Correct coverage-aware feature availability and preserve unknown movement as nil; use positive motion evidence for the quiescence gate. Do not fill missing HR epochs or change the manual sleep window.
+
+This is a staged improvement independent of the nocturnal-continuation policy in #288. It does not claim to explain any specific night's Deep/REM discrepancy. The supplied personal capture has complete gravity and HR coverage, so missing gravity is not an explanation for that night. Evaluate the full-night boundary and epoch-level paired reference data before considering REM/deep latency or model weight changes. No private captures or proprietary code included. Native CI and real-night evaluation remain required.
