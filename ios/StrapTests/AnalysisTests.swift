@@ -88,6 +88,22 @@ private func steadyBaseline(days: Int = 14) -> Baseline {
     Baseline(lnRMSSDMean: 4.0, lnRMSSDSD: 0.3, rhrMean: 55.0, rhrSD: 3.0, days: days)
 }
 
+
+// MARK: - NN seed continuity
+
+final class NNSeedBoundaryTests: XCTestCase {
+    func testInvalidPaddingCannotJoinSeparatedRRSeedBeats() {
+        XCTAssertTrue(Hrv.nnIntervals([800, 0, 800]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, 0, 800, 800]), [800, 800])
+    }
+
+    func testOutOfRangeIntervalResetsPendingSeed() {
+        let invalid = Double(V18Decoder.maxRRMS + 1)
+        XCTAssertTrue(Hrv.nnIntervals([800, invalid, 800]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, invalid, 800, 810]), [800, 810])
+    }
+}
+
 // MARK: - HRV
 
 final class LiveRRReplayDedupTests: XCTestCase {
@@ -115,6 +131,52 @@ final class LiveRRReplayDedupTests: XCTestCase {
         let replayed = Hrv.fromLiveSamples(weaker + original)
         XCTAssertEqual(replayed.beats, baseline.beats)
         XCTAssertEqual(replayed.rmssdMS, baseline.rmssdMS)
+    }
+}
+
+final class OvernightHRVSelectionRegressionTests: XCTestCase {
+    // Synthetic analogue of the 26 Nov diagnostic: a longer deep/quiet run
+    // has lower RMSSD than a shorter quiet run. Do not silently cherry-pick
+    // the higher HRV to match another wearable's displayed value.
+    func testSWSSelectionPrefersLongestEligibleDeepRunNotHighestRMSSD() throws {
+        let longDeep = (0..<1380).map { second in
+            makeSample(10000 + second, hr: 69, accel: 0.01,
+                       rr: [800, second.isMultiple(of: 2) ? 835 : 825])
+        }
+        let shortDeep = (0..<570).map { second in
+            makeSample(12000 + second, hr: 67, accel: 0.01,
+                       rr: [800, second.isMultiple(of: 2) ? 850 : 840])
+        }
+        let longResult = Hrv.fromSamples(longDeep)
+        let shortResult = Hrv.fromSamples(shortDeep)
+        XCTAssertGreaterThan(try XCTUnwrap(shortResult.rmssdMS),
+                             try XCTUnwrap(longResult.rmssdMS))
+        let selected = Hrv.swsRestingHRV(
+            longDeep + shortDeep,
+            deepEpochs: [10000...11379, 12000...12569],
+            minWindowS: 300
+        )
+        XCTAssertTrue(selected.isSWS)
+        XCTAssertEqual(selected.windowSeconds, 1380)
+        XCTAssertEqual(try XCTUnwrap(selected.result.rmssdMS),
+                       try XCTUnwrap(longResult.rmssdMS), accuracy: 0.000001)
+    }
+
+    func testSWSSelectionFallsBackWhenDeepRRUnavailable() throws {
+        let deepWithoutRR = (0..<600).map {
+            makeSample(10000 + $0, hr: 65, accel: 0.01)
+        }
+        let quietWithRR = (0..<600).map {
+            makeSample(12000 + $0, hr: 65, accel: 0.01, rr: [800, 840])
+        }
+        let selected = Hrv.swsRestingHRV(
+            deepWithoutRR + quietWithRR,
+            deepEpochs: [10000...10599],
+            minWindowS: 300
+        )
+        XCTAssertFalse(selected.isSWS)
+        XCTAssertEqual(selected.windowSeconds, 600)
+        XCTAssertNotNil(selected.result.rmssdMS)
     }
 }
 
@@ -221,7 +283,8 @@ final class HrvTests: XCTestCase {
     }
 
     func testOutOfRangeRejected() {
-        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810]), [800, 810])
+        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810]), [])
+        XCTAssertEqual(Hrv.nnIntervals([50, 800, 5000, 810, 815]), [810, 815])
     }
 
     func testEmpty() {
@@ -248,8 +311,9 @@ final class HrvTests: XCTestCase {
         XCTAssertEqual(Hrv.nnIntervals([800]), [])
     }
 
-    func testSeedCandidateSurvivesADropout() {
-        XCTAssertEqual(Hrv.nnIntervals([800, 5000, 810]), [800, 810])
+    func testSeedCandidateResetsAtDropout() {
+        XCTAssertTrue(Hrv.nnIntervals([800, 5000, 810]).isEmpty)
+        XCTAssertEqual(Hrv.nnIntervals([800, 5000, 810, 815]), [810, 815])
     }
 
     func testRmssdKnownVector() {
@@ -1337,6 +1401,46 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(green.band, "green")
     }
 
+    // Regression scenario from the 2026-11-26 WHOOP/STRAP comparison.
+    // Respiratory rate must be compared to STRAP's own baseline, not WHOOP's
+    // displayed 18.9 rpm. A small difference between devices is not an
+    // illness penalty and must not explain a six-point recovery gap.
+    func testRecoveryRespirationBelowElevationGateDoesNotChangeScore() {
+        let baseline = steadyBaseline()
+        let withoutRespiration = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        let withRespiration = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline,
+            respiratoryRate: 19.8, respiratoryRateBaseline: 19.0
+        )
+        XCTAssertEqual(withRespiration.score, withoutRespiration.score)
+        XCTAssertEqual(withRespiration.hrvComponent, withoutRespiration.hrvComponent)
+        XCTAssertEqual(withRespiration.rhrComponent, withoutRespiration.rhrComponent)
+        XCTAssertEqual(withRespiration.sleepComponent, withoutRespiration.sleepComponent)
+    }
+
+    func testRecoveryRespondsToMeasuredHRVWithoutChangingOtherInputs() throws {
+        let baseline = Baseline(
+            lnRMSSDMean: log(40), lnRMSSDSD: 0.3,
+            rhrMean: 68, rhrSD: 3, days: 14
+        )
+        let lowerHRV = Recovery.score(
+            lnRMSSD: log(36), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        let higherHRV = Recovery.score(
+            lnRMSSD: log(44), rhr: 69, sleepHours: 6.92,
+            sleepNeedHours: 10, baseline: baseline
+        )
+        XCTAssertGreaterThan(try XCTUnwrap(higherHRV.score),
+                             try XCTUnwrap(lowerHRV.score))
+        XCTAssertEqual(lowerHRV.rhrComponent, higherHRV.rhrComponent)
+        XCTAssertEqual(lowerHRV.sleepComponent, higherHRV.sleepComponent)
+    }
+
     func testRespiratoryRateIllnessPenalty() {
         let baseline = steadyBaseline()
         // Normal respiration (+0.3 rpm above baseline) applies no deduction
@@ -1359,6 +1463,67 @@ final class RecoveryTests: XCTestCase {
         XCTAssertEqual(sick.score!, 58.5, accuracy: 1e-6)
     }
 
+    func testRecoveryUsesSleepPerformanceIncorporatingSleepDebt() {
+        let baseline = steadyBaseline()
+        let result = Recovery.score(
+            lnRMSSD: 4.0, rhr: 55.0, sleepHours: 8, sleepNeedHours: 8,
+            baseline: baseline, sleepPerformance: 75.0
+        )
+        XCTAssertEqual(result.sleepComponent, 75.0)
+    }
+
+    func testDatedRecoveryEvaluatesRespiratoryBaselineAndPassesToScore() throws {
+        // Keep fixture day keys and timestamps in the same explicit calendar.
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        let firstDay = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 1)))
+        let midnight = Int(firstDay.timeIntervalSince1970)
+        let priorDays: [DayMetrics] = (1...14).map { dayIndex in
+            DayMetrics(
+                dateKey: String(format: "2026-11-%02d", dayIndex),
+                state: "sleep",
+                restingHR: 55.0,
+                lnRMSSD: 4.0,
+                hrvWindowSeconds: 300,
+                sleepHours: 8.0,
+                sleepStartUnix: midnight + (dayIndex - 1) * 86400,
+                sleepEndUnix: midnight + (dayIndex - 1) * 86400 + 28800,
+                strain: 10.0,
+                steps: 5000,
+                sleepDurationReliable: true,
+                respiratoryRate: 14.0
+            )
+        }
+        let sickDay = DayMetrics(
+            dateKey: "2026-11-15",
+            state: "sleep",
+            restingHR: 55.0,
+            lnRMSSD: 4.0,
+            hrvWindowSeconds: 300,
+            sleepHours: 8.0,
+            sleepStartUnix: midnight + 14 * 86400,
+            sleepEndUnix: midnight + 14 * 86400 + 28800,
+            strain: 10.0,
+            steps: 5000,
+            sleepDurationReliable: true,
+            respiratoryRate: 16.0
+        )
+        let assessment = DatedRecovery.evaluate(
+            day: sickDay,
+            priorDays: priorDays,
+            date: Date(timeIntervalSince1970: TimeInterval(midnight + 14 * 86400 + 28800)),
+            sleepNeedHours: 8.0,
+            calendar: calendar
+        )
+        XCTAssertEqual(assessment.dateKey, sickDay.dateKey)
+        XCTAssertEqual(assessment.baselineDays.count, 14)
+        XCTAssertEqual(assessment.result.score, 58.5)
+        let breakdown = try XCTUnwrap(RecoveryDiagnostics.Breakdown(assessment: assessment))
+        XCTAssertEqual(breakdown.respiratoryRate, 16.0)
+        XCTAssertEqual(breakdown.respiratoryBaseline, 14.0)
+        XCTAssertEqual(breakdown.respiratoryPenaltyApplied, true)
+    }
+
     func testVO2MaxSourceEnumeration() {
         // 4 source strings matching 0x109748af0-0x109748b50
         XCTAssertEqual(VO2MaxSource.internalEstimate.rawValue, "INTERNAL_ESTIMATE")
@@ -1369,8 +1534,11 @@ final class RecoveryTests: XCTestCase {
     }
 
     func testDeletedWorkoutReturnsItsSamplesToOutsideWorkoutStress() {
+        // One physiological ~800 ms beat per second; four beats per second
+        // over-counted elapsed time and are correctly rejected by the RR gate.
+        let rrPattern = [790, 810, 795, 806]
         let samples = (0..<600).map { second in
-            makeSample(second, hr: 75, rr: [790, 810, 795, 806])
+            makeSample(second, hr: 75, rr: [rrPattern[second % rrPattern.count]])
         }
         let workout = ActivitySession(startUnix: 300, endUnix: 599, kind: "workout", steps: 0,
                                       meanHR: 75, walkTicks: 0, runTicks: 0)
@@ -1427,6 +1595,42 @@ final class RecoveryTests: XCTestCase {
         XCTAssertNil(summary.reason)
     }
 
+    func testSpo2ExcludesOffWristCandidate() {
+        let rows = [
+            makeSample(0, hr: 60, spo2: 96),
+            makeSample(1, hr: 0, spo2: 80),
+            makeSample(2, hr: 60, spo2: 98)
+        ]
+        let summary = Recovery.spo2Summary(rows)
+        XCTAssertEqual(summary.pct!, 97, accuracy: 1e-6)
+        XCTAssertEqual(summary.readings, 2)
+    }
+
+    func testSpo2ReplayDoesNotBiasMeanOrCandidateCounts() {
+        let original = [
+            makeSample(100, hr: 60, spo2: 96),
+            makeSample(101, hr: 60, spo2: 98),
+            makeSample(102, hr: 60, spo2: 0x80),
+            makeSample(103, hr: 60, spo2: 5)
+        ]
+        let baseline = Recovery.spo2Summary(original)
+        let replayed = Recovery.spo2Summary(original + [original[0], original[0], original[2], original[3]])
+        XCTAssertEqual(replayed.pct, baseline.pct)
+        XCTAssertEqual(replayed.readings, baseline.readings)
+        XCTAssertEqual(replayed.saturated, baseline.saturated)
+        XCTAssertEqual(replayed.diagnostic, baseline.diagnostic)
+    }
+
+    func testSpo2OnWristReplayOutranksOffWristCandidate() {
+        let offWrist = makeSample(100, hr: 0, spo2: 80)
+        let onWrist = makeSample(100, hr: 60, spo2: 96)
+        for rows in [[offWrist, onWrist], [onWrist, offWrist]] {
+            let result = Recovery.spo2Summary(rows)
+            XCTAssertEqual(result.pct, 96)
+            XCTAssertEqual(result.readings, 1)
+        }
+    }
+
     func testSpo2WithoutInBandCandidateProducesNoValue() {
         let rows = [
             makeSample(0, hr: 60, spo2: 0),
@@ -1480,6 +1684,21 @@ final class RespirationTests: XCTestCase {
             elapsed += Double(rr) / 1000.0
         }
         return samples
+    }
+
+    func testRespirationRejectsShortTrailingWindow() {
+        let hz = Respiration.resampleHz
+        let full = Int(Respiration.windowS * hz)
+        let half = full / 2
+        func waveform(_ count: Int) -> [Double] {
+            (0..<count).map { index in
+                sin(2.0 * Double.pi * Double(index) / (4.0 * hz))
+            }
+        }
+        XCTAssertTrue(Respiration.windowRates(waveform(half - 1)).isEmpty)
+        XCTAssertEqual(Respiration.windowRates(waveform(half)).count, 1)
+        XCTAssertEqual(Respiration.windowRates(waveform(full + half - 1)).count, 1)
+        XCTAssertEqual(Respiration.windowRates(waveform(full + half)).count, 2)
     }
 
     func testFifteenBreathsPerMinuteIsRecovered() {
@@ -1729,5 +1948,290 @@ extension HistoricalArchiveWriterTests {
         wait(for: [retried], timeout: 20)
         let saved = try HistoryDatabase(url: writer.databaseURL).samples(from: 1_790_000_000, through: 1_790_000_000)
         XCTAssertEqual(saved.map(\.unix), [1_790_000_000])
+    }
+}
+
+
+final class HealthspanCoverageBoundaryRegressionTests: XCTestCase {
+    private var utc: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func day(_ offset: Int, from anchor: Date) -> Date {
+        utc.date(byAdding: .day, value: offset, to: anchor)!
+    }
+
+    func testLongHistoryOverlappingWindowRetainsGuaranteedDays() {
+        let asOf = Date(timeIntervalSince1970: 1_795_478_400) // stable UTC anchor
+        let observation = HealthspanObservation(
+            value: 55, observedDays: 35,
+            firstObserved: day(-39, from: asOf),
+            lastObserved: asOf
+        )
+        let coverage = HealthspanInputCoverage(observations: [.steps: observation], asOf: asOf)
+        XCTAssertFalse(coverage.missing(.steps, minimumDays: 20, windowDays: 30, calendar: utc))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 26, windowDays: 30, calendar: utc))
+    }
+
+    func testImpossibleObservedDayCountIsNotAvailable() {
+        let asOf = Date(timeIntervalSince1970: 1_795_478_400)
+        let impossible = HealthspanObservation(
+            value: 55, observedDays: 30,
+            firstObserved: day(-1, from: asOf),
+            lastObserved: asOf
+        )
+        let coverage = HealthspanInputCoverage(observations: [.steps: impossible], asOf: asOf)
+        XCTAssertFalse(impossible.isValid)
+        XCTAssertFalse(coverage.availableContributors.contains(.steps))
+        XCTAssertTrue(coverage.missingContributors.contains(.steps))
+        XCTAssertTrue(coverage.missing(.steps, minimumDays: 1, windowDays: 30, calendar: utc))
+    }
+
+
+    func testDetailedDiagnosticsMatchesProductionRRReplaySelection() {
+        let clean = (0..<30).map { index in
+            makeSample(90_000 + index, hr: 65, accel: 0.01, rr: [800, 810])
+        }
+        let paddedReplay = makeSample(90_012, hr: 65, accel: 0.01, rr: [800, 810, 0])
+        let baseline = Hrv.detailedDiagnostics(samples: clean)
+        let replayed = Hrv.detailedDiagnostics(samples: clean + [paddedReplay])
+        XCTAssertEqual(replayed.rawRRCount, baseline.rawRRCount)
+        XCTAssertEqual(replayed.acceptedNNCount, baseline.acceptedNNCount)
+        XCTAssertEqual(replayed.finalRMSSD, baseline.finalRMSSD)
+        XCTAssertEqual(Hrv.fromSamples(clean + [paddedReplay]).rmssdMS,
+                       Hrv.fromSamples(clean).rmssdMS)
+    }
+
+    func testRecentRetransmissionPrefersValidRRNotPadding() {
+        XCTAssertTrue(Hrv.preferRetransmittedRR([800, 810], over: [800, 810, 0]))
+        XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810, 0], over: [800, 810]))
+        XCTAssertFalse(Hrv.preferRetransmittedRR([800, 810], over: [800, 810]))
+    }
+}
+
+// MARK: - Observation-Only Diagnostics (Non-Production)
+
+final class HrvObservationOnlyDiagnosticsTests: XCTestCase {
+    /// Constant NN series returns nil ACF1 (zero variance)
+    func testNnDiffAcf1ConstantSeriesReturnsNil() {
+        XCTAssertNil(Hrv.nnDiffAcf1([800, 800, 800, 800]))
+    }
+
+    /// Fewer than 30 pairs returns nil
+    func testNnDiffAcf1InsufficientPairsReturnsNil() {
+        XCTAssertNil(Hrv.nnDiffAcf1((0..<15).flatMap { _ in [800.0, 810.0] })) // 30 NN intervals = 29 differences
+    }
+
+    /// Smooth tachogram with RSA-like pattern -> positive ACF1
+    func testNnDiffAcf1SmoothTachogramPositiveAcf1() {
+        var nn: [Double] = []
+        for i in 0..<100 {
+            nn.append(800 + 20 * sin(Double(i) * 0.1)) // Slow modulation
+        }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertGreaterThan(acf1!, 0.5) // Strong positive correlation
+    }
+
+    /// White noise NN intervals -> ACF1 ≈ -0.5 (below -0.35 floor)
+    func testNnDiffAcf1WhiteNoiseBelowFloor() {
+        var rng = SeededRandom(seed: 42)
+        var nn: [Double] = []
+        for _ in 0..<200 {
+            nn.append(800 + Double.random(in: -50...50, using: &rng))
+        }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertLessThan(acf1!, -0.35) // Should be below OpenStrap floor
+    }
+
+    /// Alternating pattern (800, 810, 800, 810...) -> ACF1 ≈ -1
+    func testNnDiffAcf1AlternatingPatternStrongNegative() {
+        let nn = (0..<100).flatMap { _ in [800.0, 810.0] }
+        let acf1 = Hrv.nnDiffAcf1(nn)
+        XCTAssertNotNil(acf1)
+        XCTAssertLessThan(acf1!, -0.9)
+    }
+
+    /// Normal RR stream: sum of RR ≈ wall-clock span
+    func testRrCoverageNormalStream() {
+        let rr = Array(repeating: 800.0, count: 1000)
+        let timestamps = (0..<1000).map { 800 * ($0 + 1) }
+        let cov = Hrv.rrCoverage(rr, timestamps: timestamps)
+        XCTAssertNotNil(cov)
+        XCTAssertEqual(cov!, 1.0, accuracy: 0.01)
+    }
+
+    /// Duplicate beats: more beat-time than elapsed time -> coverage > 1.10
+    func testRrCoverageDuplicateBeatsOverCounted() {
+        let rr = Array(repeating: 800.0, count: 2000)
+        let timestamps = (0..<1000).map { 800 * ($0 + 1) } + (0..<1000).map { 800 * ($0 + 1) }
+        let cov = Hrv.rrCoverage(rr, timestamps: timestamps)
+        XCTAssertNotNil(cov)
+        XCTAssertGreaterThan(cov!, 1.10)
+    }
+
+    /// Span < 600s returns nil
+    func testRrCoverageInsufficientSpanReturnsNil() {
+        let rr = Array(repeating: 800.0, count: 500)
+        let timestamps = (0..<500).map { 800 * ($0 + 1) } // 400s < 600s
+        XCTAssertNil(Hrv.rrCoverage(rr, timestamps: timestamps))
+    }
+
+    /// Mismatched lengths returns nil
+    func testRrCoverageMismatchedLengthsReturnsNil() {
+        XCTAssertNil(Hrv.rrCoverage([800, 810], timestamps: [0]))
+    }
+
+    /// Extended diagnostics includes ACF1 and RR coverage flags
+    func testExtendedDiagnosticsIncludesAcf1AndCoverage() {
+        var rows: [V18Sample] = []
+        var rng = SeededRandom(seed: 42)
+        for i in 0..<1000 {
+            // RSA: 4 beats per breath cycle, plus small physiological noise
+            let rrVal = 1000 + 20 * sin(Double(i) * 2 * .pi / 4) + Double.random(in: -2...2, using: &rng)
+            // One ~1000ms beat per second matches measured wall-clock coverage.
+            rows.append(makeSample(i, hr: 60, accel: 0.01, rr: [Int(rrVal)]))
+        }
+        let diag = Hrv.extendedDiagnostics(samples: rows)
+        XCTAssertNotNil(diag.nnDiffAcf1)
+        XCTAssertNotNil(diag.rrCoverageRatio)
+        XCTAssertNotNil(diag.acf1BelowFloor)
+        XCTAssertNotNil(diag.rrOverCoverage)
+        guard let belowFloor = diag.acf1BelowFloor, let overCoverage = diag.rrOverCoverage else {
+            XCTFail("Expected ACF1 and coverage for 1000 seconds of valid NN beats")
+            return
+        }
+        XCTAssertFalse(belowFloor) // RSA pattern should be above floor
+        XCTAssertFalse(overCoverage) // Normal coverage
+    }
+
+    /// Extended diagnostics with SWS epochs selects correct window type
+    func testExtendedDiagnosticsWithSwSEpochs() {
+        let rows = (0..<500).map { makeSample($0, hr: 60, accel: 0.01, rr: [800, 810]) }
+        let diag = Hrv.extendedDiagnostics(samples: rows, swsEpochs: [100...400])
+        XCTAssertEqual(diag.selectedCalculationWindow, "SWS_DEEP_SLEEP")
+    }
+
+    /// Median-of-5-minute-window RMSSD basic test
+    func testMedianOfWindowedRmssdBasic() {
+        // Alternating 800/810 -> RMSSD = 10
+        let nn = (0..<50).flatMap { _ in [800.0, 810.0] }
+        let timestamps = Array(0..<100)
+        let rmssd = Hrv.medianOfWindowedRMSSD(nn, timestamps: timestamps, windowSeconds: 300)
+        XCTAssertNotNil(rmssd)
+        // Each 5-min window has 300 beats -> 299 diffs, all ±10 -> RMSSD = 10
+        XCTAssertEqual(rmssd!, 10.0, accuracy: 0.1)
+    }
+
+    /// Median-of-windowed RMSSD with insufficient data returns nil
+    func testMedianOfWindowedRmssdInsufficientData() {
+        let nn = (0..<5).flatMap { _ in [800.0, 810.0] } // Only 10 beats
+        let timestamps = Array(0..<10)
+        XCTAssertNil(Hrv.medianOfWindowedRMSSD(nn, timestamps: timestamps))
+    }
+
+    /// Median-of-windowed RMSSD with mismatched lengths returns nil
+    func testMedianOfWindowedRmssdMismatchedLengths() {
+        XCTAssertNil(Hrv.medianOfWindowedRMSSD([800, 810], timestamps: [0]))
+    }
+
+    /// Production HRV is unchanged by observation-only diagnostics
+    func testProductionHrvUnchangedByObservationOnlyDiagnostics() {
+        let rows = (0..<600).map { makeSample($0, hr: 60, accel: 0.01, rr: [800, 810]) }
+        let production = Hrv.fromSamples(rows)
+        let extended = Hrv.extendedDiagnostics(samples: rows)
+        XCTAssertEqual(extended.finalRMSSD, production.rmssdMS)
+        XCTAssertEqual(extended.finalLnRMSSD, production.lnRMSSD)
+        XCTAssertEqual(extended.acceptedNNCount, production.nnBeats)
+        XCTAssertEqual(extended.rawRRCount, production.beats)
+    }
+
+    func testWindowedSleepHrvAveragesMultipleWindowsAndRejectsOvercounted() {
+        let w1 = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 820]) }
+        let w2 = (300..<600).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
+        let w3 = (600..<900).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 860]) }
+        let overCounted = (900..<1200).map { makeSample($0, hr: 60, accel: 0.02, rr: [800, 900, 800]) }
+
+        let result = Hrv.windowedSleepHRV(w1 + w2 + w3 + overCounted, windowSeconds: 300)
+        XCTAssertEqual(result.qualifyingWindows, 3)
+        XCTAssertFalse(result.usedSWSFallback)
+        XCTAssertNotNil(result.result.rmssdMS)
+        XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
+        XCTAssertEqual(result.windowSeconds, 900)
+    }
+
+    func testWindowedSleepHrvRejectsSparseBucketAndBumpsCacheKey() {
+        let dense = (0..<300).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 840]) }
+        let sparseHead = (300..<320).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 950]) }
+        let sparseTail = (580..<600).map { makeSample($0, hr: 60, accel: 0.02, rr: [$0 % 2 == 0 ? 800 : 950]) }
+        let result = Hrv.windowedSleepHRV(dense + sparseHead + sparseTail, windowSeconds: 300)
+        XCTAssertEqual(result.qualifyingWindows, 1)
+        XCTAssertEqual(result.windowSeconds, 300)
+        XCTAssertEqual(result.result.rmssdMS!, 40.0, accuracy: 0.5)
+        XCTAssertTrue(HistoryAnalysisCache.dailyKey("2026-11-24").hasPrefix("day-accuracy-v2:"))
+    }
+
+    // MARK: - Phase 1 HRV Window-Selection Sensitivity Tests
+
+    func testSingleSecondDurationTiebreakCausesProductionDiscontinuityWhileWindowedIsStable() throws {
+        let winA = (0..<1380).map { makeSample(10_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 850 : 885]) }
+        let winB1380 = (0..<1380).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+        let winB1381 = (0..<1381).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+
+        let prodTie = Hrv.swsRestingHRV(winA + winB1380, deepEpochs: [10_000...11_379, 20_000...21_379], minWindowS: 300)
+        let prodPlus1 = Hrv.swsRestingHRV(winA + winB1381, deepEpochs: [10_000...11_379, 20_000...21_380], minWindowS: 300)
+        let prodA = try XCTUnwrap(prodPlus1.result.rmssdMS)
+        let prodB = try XCTUnwrap(prodTie.result.rmssdMS)
+        XCTAssertGreaterThan(abs(prodA - prodB), 10.0)
+
+        let winTie = Hrv.windowedSleepHRV(winA + winB1380)
+        let winPlus1 = Hrv.windowedSleepHRV(winA + winB1381)
+        let winAVal = try XCTUnwrap(winPlus1.result.rmssdMS)
+        let winBVal = try XCTUnwrap(winTie.result.rmssdMS)
+        XCTAssertLessThan(abs(winAVal - winBVal), 1.0)
+    }
+
+    func testOneSecondMotionSpikeSplitsLongestRunWhileWindowedRemainsStable() throws {
+        let winHigh = (0..<1500).map { makeSample(10_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 840 : 886]) }
+        let winLow = (0..<800).map { makeSample(20_000 + $0, hr: 66, accel: 0.01, rr: [$0 % 2 == 0 ? 850 : 880]) }
+        var winSplit = winHigh
+        winSplit[749] = makeSample(10_749, hr: 66, accel: 0.15, rr: [886])
+
+        let epochs = [10_000...11_499, 20_000...20_799]
+        let prodIntact = Hrv.swsRestingHRV(winHigh + winLow, deepEpochs: epochs, minWindowS: 300)
+        let prodSplit = Hrv.swsRestingHRV(winSplit + winLow, deepEpochs: epochs, minWindowS: 300)
+        let prodA = try XCTUnwrap(prodIntact.result.rmssdMS)
+        let prodB = try XCTUnwrap(prodSplit.result.rmssdMS)
+        XCTAssertGreaterThan(abs(prodA - prodB), 15.0)
+
+        let winIntact = Hrv.windowedSleepHRV(winHigh + winLow)
+        let winPerturbed = Hrv.windowedSleepHRV(winSplit + winLow)
+        let winAVal = try XCTUnwrap(winIntact.result.rmssdMS)
+        let winBVal = try XCTUnwrap(winPerturbed.result.rmssdMS)
+        XCTAssertLessThan(abs(winAVal - winBVal), 1.0)
+    }
+
+    func testShadowCandidateSummariesPreserveRunBoundariesAndIncludeAllThreeCandidates() throws {
+        let r1 = (0..<350).map { makeSample(10_000 + $0, hr: 65, accel: 0.01, rr: [800]) }
+        let r2 = (0..<350).map { makeSample(10_400 + $0, hr: 65, accel: 0.01, rr: [1200]) }
+        let summaries = Hrv.shadowCandidateSummaries(samples: r1 + r2, deepEpochs: [10_000...10_349])
+        XCTAssertEqual(summaries.count, 3)
+        XCTAssertEqual(summaries.map(\.name), ["windowed_sleep_5m_mean", "stage_independent_quiet_pooled", "pooled_sws"])
+        // Constant intervals in each disconnected run -> pooled RMSSD must be 0.0 (never bridges gap)
+        let quietPooled = try XCTUnwrap(summaries.first { $0.name == "stage_independent_quiet_pooled" })
+        XCTAssertNil(quietPooled.rmssdMS) // rmssd=0 -> filtered out by rmssd > 0 invariant
+    }
+}
+
+// Seeded random number generator for deterministic tests
+struct SeededRandom: RandomNumberGenerator {
+    var state: UInt64
+    init(seed: UInt64) { self.state = seed }
+    mutating func next() -> UInt64 {
+        state = state &* 6364136223846793005 &+ 1442695040888963407
+        return state
     }
 }

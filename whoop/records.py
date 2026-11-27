@@ -23,6 +23,17 @@ V18 = 18
 V18_INNER_LEN = 112
 V18_MIN_READABLE = 109
 
+V20 = 20
+V20_INNER_LEN = 2128
+V20_NUM_BLOCKS = 5
+V20_BLOCK_LEN = 423
+V20_BODY_START = 13
+
+V22 = 22
+V22_INNER_LEN = 176
+V22_KNOWN_TAGS = {1, 2, 3, 4, 5, 6}
+V22_TAG_OFFSET = 13
+
 V26 = 26
 V26_INNER_LEN = 76
 V26_SAMPLE_COUNT = 25
@@ -160,6 +171,9 @@ class V18Sample:
     # The band's own log-variance quality weight; lower is cleaner. Unlike the
     # accelerometer fields it has no physical bound, so only NaN/inf are dropped.
     signal_quality_log_variance: float | None = None
+    # Signed optical pSNR (dB); -128 means unavailable, not low quality or sample rejection.
+    psnr_b: int | None = None
+    psnr_a: int | None = None
 
     @property
     def unix(self) -> int:
@@ -246,6 +260,12 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         raw = _i16(inner, offset)
         return round(raw / scale, 2) if raw is not None else None
 
+    def signed_byte(offset: int) -> int | None:
+        if offset >= len(inner):
+            return None
+        val = inner[offset]
+        return val - 256 if val >= 128 else val
+
     return V18Sample(
         header=header,
         heart_rate=hr,
@@ -267,6 +287,8 @@ def decode_v18(inner: bytes) -> V18Sample | None:
         spo2_candidate_pct=spo2_pct,
         spo2_candidate_status=spo2_status,
         signal_quality_log_variance=round(quality, 4) if quality is not None else None,
+        psnr_b=signed_byte(100),
+        psnr_a=signed_byte(101),
     )
 
 
@@ -434,3 +456,57 @@ def decode_v21(inner: bytes) -> IMUBuffer | None:
         accel_g=block(V21_ACCEL_OFFSET, accel_count, V21_ACCEL_G_PER_LSB, 4),
         gyro_dps=block(V21_GYRO_OFFSET, gyro_count, V21_GYRO_DPS_PER_LSB, 2),
     )
+
+
+@dataclass
+class V20OpticalBuffer:
+    header: RecordHeader
+    raw_body: bytes
+
+    @property
+    def unix(self) -> int:
+        return self.header.unix
+
+
+def decode_v20(inner: bytes) -> V20OpticalBuffer | None:
+    """Decode a v20 raw optical deep buffer (2128 bytes inner).
+
+    Contains five 422/423-byte optical blocks. Diagnostic optical telemetry,
+    NOT a 1 Hz biometric summary.
+    """
+    if len(inner) != V20_INNER_LEN or inner[0] != 0x2F or inner[1] != V20:
+        return None
+    header = parse_header(inner)
+    if header is None:
+        return None
+    return V20OpticalBuffer(header=header, raw_body=inner[V20_BODY_START:])
+
+
+@dataclass
+class V22ResearchRecord:
+    header: RecordHeader
+    tag: int
+    raw_body: bytes
+
+    @property
+    def unix(self) -> int:
+        return self.header.unix
+
+    @property
+    def has_known_layout(self) -> bool:
+        return self.tag in V22_KNOWN_TAGS
+
+
+def decode_v22(inner: bytes) -> V22ResearchRecord | None:
+    """Decode a v22 research / diagnostic telemetry record (176 bytes inner).
+
+    inner[13] selects one of six tagged layouts. Diagnostic telemetry,
+    NOT a 1 Hz biometric summary.
+    """
+    if len(inner) != V22_INNER_LEN or inner[0] != 0x2F or inner[1] != V22:
+        return None
+    header = parse_header(inner)
+    if header is None:
+        return None
+    tag = inner[V22_TAG_OFFSET]
+    return V22ResearchRecord(header=header, tag=tag, raw_body=inner[V22_TAG_OFFSET:])

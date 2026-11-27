@@ -11,18 +11,20 @@ private func stageSample(
     rr: [Int] = [],
     gravity: (Double, Double, Double)? = (0, 0, 1),
     recordIndex: UInt32 = 0,
-    subsecQ15: Int = 0
+    subsecQ15: Int = 0,
+    dynamicAccelG: Double = 0.02,
+    sleepState: Int? = nil
 ) -> V18Sample {
     V18Sample(
         header: BandRecordHeader(
             version: 18, flags: 0x80, recordIndex: recordIndex,
             unix: UInt32(unix), subsecQ15: subsecQ15
         ),
-        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: 0.02,
+        heartRate: hr, rrIntervalsMS: rr, dynamicAccelG: dynamicAccelG,
         gravityXG: gravity?.0, gravityYG: gravity?.1, gravityZG: gravity?.2,
         stepCounter: nil, stepCadence: nil, activityClass: nil,
         skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
-        sleepStateByte: nil, sleepState: nil, cardiacFlags: nil, hrQualityFlags: nil,
+        sleepStateByte: nil, sleepState: sleepState, cardiacFlags: nil, hrQualityFlags: nil,
         spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
         signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
     )
@@ -76,6 +78,57 @@ private func makeNight(
 }
 
 final class SleepStageTests: XCTestCase {
+
+    func testBandWakeEvidenceUsesAbsoluteEpochBoundaries() {
+        let start = alignedBase + 17
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: start, sessionStart: start), 0)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 29, sessionStart: start), 0)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 30, sessionStart: start), 1)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 59, sessionStart: start), 1)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 60, sessionStart: start), 2)
+        XCTAssertEqual(SleepStager.absoluteEpochIndex(unix: alignedBase + 30, sessionStart: alignedBase), 1)
+    }
+
+
+    // Regression derived from an anonymized 2026-11-26 overnight capture:
+    // RR packets can be absent while HR and motion remain continuously measured.
+    // Missing RR is missing respiratory evidence, not missing sleep time.
+    func testRRDropoutDoesNotEraseMeasuredSleepEpochs() {
+        let (baseline, period) = makeNight(minutes: 90)
+        let withRRDropout = baseline.map { sample -> V18Sample in
+            let second = sample.unix - period.startUnix
+            // 8-minute RR blackout, followed by intermittent 1-in-5 gaps.
+            let absent = (30 * 60..<38 * 60).contains(second)
+                || (second >= 38 * 60 && second % 5 == 0)
+            return V18Sample(
+                header: sample.header, heartRate: sample.heartRate,
+                rrIntervalsMS: absent ? [] : sample.rrIntervalsMS,
+                dynamicAccelG: sample.dynamicAccelG,
+                gravityXG: sample.gravityXG, gravityYG: sample.gravityYG,
+                gravityZG: sample.gravityZG, stepCounter: sample.stepCounter,
+                stepCadence: sample.stepCadence, activityClass: sample.activityClass,
+                skinTempC: sample.skinTempC, tempAux1C: sample.tempAux1C,
+                tempAux2C: sample.tempAux2C, sleepStateByte: sample.sleepStateByte,
+                sleepState: sample.sleepState, cardiacFlags: sample.cardiacFlags,
+                hrQualityFlags: sample.hrQualityFlags,
+                spo2CandidateRaw: sample.spo2CandidateRaw,
+                spo2CandidatePct: sample.spo2CandidatePct,
+                spo2CandidateKind: sample.spo2CandidateKind,
+                signalQualityLogVariance: sample.signalQualityLogVariance,
+                psnrB: sample.psnrB, psnrA: sample.psnrA
+            )
+        }
+        let expected = SleepStager.stage(samples: baseline, period: period)
+        let actual = SleepStager.stage(samples: withRRDropout, period: period)
+        XCTAssertNil(actual.reason)
+        XCTAssertEqual(actual.hrCoverage, expected.hrCoverage, accuracy: 1e-12)
+        XCTAssertEqual(actual.totalMinutes, expected.totalMinutes, accuracy: 1e-9)
+        XCTAssertEqual(actual.segments.first?.startUnix, period.startUnix)
+        XCTAssertEqual(actual.segments.last?.endUnix, period.endUnix + 1)
+        XCTAssertEqual(actual.asleepMinutes + actual.wakeMinutes,
+                       actual.totalMinutes, accuracy: 1e-9)
+    }
+
     func testRespirationDoesNotInterpolateAcrossMissingRRSeconds() throws {
         let first = (0..<45).map { index in
             (t: Double(index), rr: 800.0 + 30 * sin(Double(index) * 1.2))
@@ -159,6 +212,41 @@ final class SleepStageTests: XCTestCase {
         XCTAssertGreaterThan(staging.lightMinutes, staging.deepMinutes)
         XCTAssertGreaterThan(staging.restorativeMinutes, 0)
         XCTAssertEqual(staging.asleepMinutes + staging.wakeMinutes, staging.totalMinutes, accuracy: 0.001)
+    }
+
+    func testLocalHRBaselinePreservesLateNightRemDespiteCircadianHRDrop() {
+        let baseUnix = 1_700_000_000
+        let totalSeconds = 420 * 60
+        let samples: [V18Sample] = (0..<totalSeconds).map { s in
+            let minute = s / 60
+            let hr: Int
+            if minute < 210 {
+                hr = 74
+            } else if (300..<340).contains(minute) {
+                hr = 66 + ((s / 15) % 2 == 0 ? 4 : -4)
+            } else {
+                hr = 58
+            }
+            return stageSample(
+                unix: baseUnix + s,
+                hr: hr,
+                rr: [60_000 / hr],
+                gravity: (0.0, 0.0, 1.0),
+                dynamicAccelG: 0.01,
+                sleepState: 2
+            )
+        }
+        let period = SleepPeriod(startUnix: baseUnix, endUnix: baseUnix + totalSeconds - 1, quietFraction: 0.98, meanHR: 66, wakeEvents: 0)
+        let staging = SleepStager.stage(samples: samples, period: period)
+        let episodeStart = baseUnix + 300 * 60
+        let episodeEnd = baseUnix + 340 * 60
+        let episodeRemMinutes = staging.segments
+            .filter { $0.stage == .rem }
+            .reduce(0.0) { total, seg in
+                let overlap = max(0, min(seg.endUnix, episodeEnd) - max(seg.startUnix, episodeStart))
+                return total + Double(overlap) / 60.0
+            }
+        XCTAssertGreaterThan(episodeRemMinutes, 20.0)
     }
 
     func testOneHourNapRespectsRemLatencyGuard() {

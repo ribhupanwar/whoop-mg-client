@@ -251,5 +251,29 @@ class TestReportGenerator(unittest.TestCase):
         self.assertIn("StrainCalculations.reserve", html)
 
 
+class TestLongitudinalAB(unittest.TestCase):
+    def test_evaluate_metric_ab_reports_mae_rmse_bias_and_improvement(self):
+        from whoop.accuracy import PairedObservation, evaluate_metric_ab
+
+        obs = [
+            PairedObservation("2026-11-23", whoop_ref=29.0, baseline_strap=26.5, candidate_strap=28.0),
+            PairedObservation("2026-11-24", whoop_ref=44.0, baseline_strap=51.0, candidate_strap=44.9),
+            PairedObservation("2026-11-19", whoop_ref=34.0, baseline_strap=None, candidate_strap=33.7),
+        ]
+        res = evaluate_metric_ab("hrv_ms", obs)
+        self.assertEqual(res.regression_status, "IMPROVED")
+        self.assertEqual(res.total_days, 3)
+        self.assertEqual(res.common_paired_days, 2)
+        self.assertAlmostEqual(res.baseline_coverage_pct, 66.7, places=1)
+        self.assertAlmostEqual(res.candidate_coverage_pct, 100.0, places=1)
+        self.assertIsNotNone(res.baseline_stats)
+        self.assertIsNotNone(res.candidate_stats)
+        self.assertEqual(res.baseline_stats.n, 2)
+        self.assertEqual(res.candidate_stats.n, 2)
+        self.assertAlmostEqual(res.baseline_stats.mae, 4.75, places=2)
+        self.assertAlmostEqual(res.candidate_stats.mae, 0.95, places=2)
+        self.assertLess(res.mae_delta, -3.5)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -128,14 +128,20 @@ enum SleepStager {
         // and should not be smoothed into deep/light by the physiological model.
         // Short bathroom/movement intervals remain part of the same night and
         // are left to the normal stage classifier.
-        let upEpochs = epochs.map { epoch -> Bool in
+        // One pass through the worn seconds instead of a full-night scan
+        // for each epoch; preserve the existing 80% up-state wake gate.
+        var upSecondsByEpoch: [Int: Int] = [:]
+        for sample in records.values where sample.sleepState == 3 {
+            let index = absoluteEpochIndex(unix: sample.unix, sessionStart: start)
+            guard index >= 0, index < epochs.count,
+                  epochs[index].start <= sample.unix,
+                  sample.unix < epochs[index].end else { continue }
+            upSecondsByEpoch[index, default: 0] += 1
+        }
+        let upEpochs = epochs.enumerated().map { index, epoch -> Bool in
             let duration = epoch.end - epoch.start
             guard duration > 0 else { return false }
-            let upSeconds = records.values.reduce(into: 0) { count, sample in
-                if epoch.start <= sample.unix, sample.unix < epoch.end,
-                   sample.sleepState == 3 { count += 1 }
-            }
-            return Double(upSeconds) / Double(duration) >= 0.8
+            return Double(upSecondsByEpoch[index, default: 0]) / Double(duration) >= 0.8
         }
         var runStart: Int?
         for index in 0...upEpochs.count {
@@ -192,6 +198,13 @@ enum SleepStager {
             remMinutes: rem, wakeMinutes: wake, epochs: validEpochCount,
             hrCoverage: coverage, reason: coverageReason
         )
+    }
+
+    /// Feature epochs are anchored to absolute 30-second boundaries, with
+    /// a clipped first epoch for non-aligned session starts.
+    static func absoluteEpochIndex(unix: Int, sessionStart: Int) -> Int {
+        let gridStart = sessionStart - ((sessionStart % epochS + epochS) % epochS)
+        return (unix - gridStart) / epochS
     }
 
     // MARK: - Features
@@ -671,19 +684,46 @@ enum SleepStager {
         return labels
     }
 
+    private static func localHRZScores(_ epochs: [Epoch], radiusEpochs: Int = 90) -> [Double] {
+        let n = epochs.count
+        let radiusSeconds = radiusEpochs * epochS
+        var out = [Double](repeating: 0, count: n)
+        var lo = 0
+        var hi = 0
+        for index in 0..<n {
+            guard let hr = epochs[index].hr else { continue }
+            let tMin = epochs[index].start - radiusSeconds
+            let tMax = epochs[index].start + radiusSeconds
+            while lo < n && epochs[lo].start < tMin {
+                lo += 1
+            }
+            while hi < n && epochs[hi].start < tMax {
+                hi += 1
+            }
+            let window = epochs[lo..<hi].compactMap(\.hr)
+            guard !window.isEmpty else { continue }
+            let median = Stats.median(window)
+            let variance = window.reduce(0.0) { $0 + ($1 - median) * ($1 - median) } / Double(window.count)
+            let sd = max(1.0, sqrt(variance))
+            out[index] = (hr - median) / sd
+        }
+        return out
+    }
+
     private static func baseEmissions(_ epochs: [Epoch], population: [Epoch]) -> [[SleepStage: Double]] {
         guard !epochs.isEmpty else { return [] }
-        let zHR = zScorer(population.map { $0.hr })
+        let localHRZ = localHRZScores(epochs)
         let zVar = zScorer(population.map { $0.hrVar })
         let zMove = zScorer(population.map { Optional($0.moveFrac) })
         let zResp = zScorer(population.map { $0.respReg })
         let flatSorted = population.compactMap { $0.hrFlat11 }.sorted()
 
         var emissions: [[SleepStage: Double]] = []
-        for epoch in epochs {
+        for (index, epoch) in epochs.enumerated() {
+            let lhr = localHRZ[index]
             let gate = deepGateSlope
                 * max(0, percentileRank(flatSorted, epoch.hrFlat11) - deepGateThreshold)
-            var awakeCardiac = 0.8 * zVar(epoch.hrVar) + 0.4 * zHR(epoch.hr)
+            var awakeCardiac = 0.8 * zVar(epoch.hrVar) + 0.4 * lhr
             if motionQuiescent(epoch) {
                 awakeCardiac = min(0, awakeCardiac)
             }
@@ -691,7 +731,7 @@ enum SleepStager {
                 .deep: -1.1 * zVar(epoch.hrVar) - 0.5 * zMove(epoch.moveFrac)
                     - gate + baseLogPrior[.deep]!,
                 .rem: 0.6 * zVar(epoch.hrVar) - 0.6 * zMove(epoch.moveFrac)
-                    + 0.4 * zHR(epoch.hr) + baseLogPrior[.rem]!,
+                    + 0.4 * lhr + baseLogPrior[.rem]!,
                 .light: baseLogPrior[.light]!,
                 .wake: zMove(epoch.moveFrac) + awakeCardiac + baseLogPrior[.wake]!
             ]

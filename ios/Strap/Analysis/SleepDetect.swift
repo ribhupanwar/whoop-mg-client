@@ -93,9 +93,16 @@ enum SleepDetect {
                 index += 1
             }
             let end = index
-            let run = Array(ordered[start..<end])
-            let duration = run[run.count - 1].unix - run[0].unix + 1
-            guard duration >= minSleepS else { continue }
+            let fullRun = Array(ordered[start..<end])
+            let fullDuration = fullRun[fullRun.count - 1].unix - fullRun[0].unix + 1
+            guard fullDuration >= minSleepS else { continue }
+
+            let runSegments = splitRunAtHRTransitions(
+                fullRun, activeMedian: activeMedian, hrDropBPM: hrDropBPM, minSegmentS: minSleepS
+            )
+            for run in runSegments {
+                let duration = run[run.count - 1].unix - run[0].unix + 1
+                guard duration >= minSleepS else { continue }
             // A short evening rest or lying still is easily mistaken for
             // sleep by actigraphy plus HR drop. Require substantially longer
             // evidence for daytime/evening sleep candidates. Overnight
@@ -251,10 +258,9 @@ enum SleepDetect {
                 }
             }
 
-            // Autonomic onset gate (WHOOP parity): HR must settle ≤ activeMedian + 5 for ≥10 min sustained stillness.
+            // Autonomic onset gate (WHOOP parity): HR must settle ≤ activeMedian + 5 for sustained stillness.
             // This finds the true physiological sleep onset independent of band state lag.
             let autonomicThreshold = activeMedian + SleepDetect.autonomicOnsetThresholdBPM
-            let autonomicWindow = SleepDetect.autonomicOnsetWindowS
             var autonomicCursor = verifiedStart
             let runStart = run[0].unix
             let searchFloor = max(runStart, verifiedStart - 60 * 60) // Search up to 1 hour before verifiedStart
@@ -432,15 +438,24 @@ enum SleepDetect {
             }
             // Harmonize wakeEvents with WHOOP 5.80.2 disturbanceCount and SleepSession.movementBouts:
             // Count sustained movement bouts (movement persisting >= 15 seconds), not 1-second edge noise.
+            // Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
             var movingSeconds = 0
             var wakeEvents = 0
             var lastMovingUnix: Int? = nil
             for index in verifiedIndices {
+                let u = ordered[index].unix
                 if !quiet[index] {
-                    if ordered[index].unix != lastMovingUnix {
-                        movingSeconds += 1
-                        lastMovingUnix = ordered[index].unix
+                    if let last = lastMovingUnix {
+                        if u == last + 1 {
+                            movingSeconds += 1
+                        } else if u > last + 1 {
+                            // Sparse gap: reset to single moving second rather than bridging across gap
+                            movingSeconds = 1
+                        }
+                    } else {
+                        movingSeconds = 1
                     }
+                    lastMovingUnix = u
                     if movingSeconds == 15 { wakeEvents += 1 }
                 } else {
                     movingSeconds = 0
@@ -456,6 +471,7 @@ enum SleepDetect {
                     wakeEvents: wakeEvents
                 )
             )
+            }
         }
         return mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
     }
@@ -507,6 +523,93 @@ enum SleepDetect {
             onset -= 60
         }
         return start
+    }
+
+    /// Split a quiet run at three-consecutive-minute sustained HR elevations
+    /// (e.g. quiet awake-in-bed laptop use before sleep or sustained mid-night wake),
+    /// without splitting on brief 1–2 minute REM surges.
+    static func splitRunAtHRTransitions(
+        _ run: [V18Sample],
+        activeMedian: Double,
+        hrDropBPM: Double,
+        minSegmentS: Int = 1800
+    ) -> [[V18Sample]] {
+        guard let firstUnix = run.first?.unix, let lastUnix = run.last?.unix,
+              lastUnix - firstUnix + 1 >= minSegmentS else { return [run] }
+
+        var hrBySec: [Int: Double] = [:]
+        for sample in run where sample.wearing && (35...220).contains(sample.heartRate) {
+            if hrBySec[sample.unix] == nil {
+                hrBySec[sample.unix] = Double(sample.heartRate)
+            }
+        }
+        guard hrBySec.count >= minSegmentS / 2 else { return [run] }
+
+        let elevatedThreshold = activeMedian - hrDropBPM
+
+        func minuteMedian(_ startSec: Int) -> Double? {
+            let hrs = (startSec..<(startSec + 60)).compactMap { hrBySec[$0] }
+            guard hrs.count >= 30 else { return nil }
+            return Stats.median(hrs)
+        }
+
+        let hasBandSleep = run.contains { $0.sleepState == 2 }
+        var t = firstUnix
+        while t + 60 <= lastUnix {
+            if hasBandSleep && run.contains(where: { t <= $0.unix && $0.unix < t + 60 && $0.sleepState == 1 }) {
+                break
+            }
+            if let med = minuteMedian(t), med >= elevatedThreshold {
+                t += 60
+            } else {
+                break
+            }
+        }
+        var segStart = t
+        var segments: [[V18Sample]] = []
+
+        // A leading band-still prefix followed by declared sleep belongs to
+        // the existing overnight onset refinement policy. The internal HR
+        // splitter must not bypass its delay, anchor and coverage guards.
+        // Preserve segStart, and only scan for internal transitions after
+        // the first declared sleep sample when the leading scan stopped on still.
+        if hasBandSleep,
+           run.contains(where: { t <= $0.unix && $0.unix < t + 60 && $0.sleepState == 1 }),
+           let firstDeclaredSleep = run.first(where: { $0.unix >= t && $0.sleepState == 2 }) {
+            t = firstDeclaredSleep.unix
+        }
+
+        while t + 180 <= lastUnix {
+            if let m0 = minuteMedian(t), m0 >= elevatedThreshold,
+               let m1 = minuteMedian(t + 60), m1 >= elevatedThreshold,
+               let m2 = minuteMedian(t + 120), m2 >= elevatedThreshold {
+                var endT = t + 180
+                while endT + 60 <= lastUnix {
+                    if let mNext = minuteMedian(endT), mNext >= elevatedThreshold {
+                        endT += 60
+                    } else {
+                        break
+                    }
+                }
+                // Do not split near the end of the night if the remaining resumed sleep
+                // is shorter than minSegmentS (e.g. brief bathroom trip before final wake).
+                guard lastUnix - endT + 1 >= minSegmentS else { break }
+                if t - segStart >= minSegmentS {
+                    let seg = run.filter { segStart <= $0.unix && $0.unix < t }
+                    if !seg.isEmpty { segments.append(seg) }
+                }
+                t = endT
+                segStart = t
+            } else {
+                t += 60
+            }
+        }
+
+        if lastUnix - segStart + 1 >= minSegmentS {
+            let tail = run.filter { segStart <= $0.unix && $0.unix <= lastUnix }
+            if !tail.isEmpty { segments.append(tail) }
+        }
+        return segments.isEmpty ? [run] : segments
     }
 
     private static func isNocturnalPeriod(_ period: SleepPeriod) -> Bool {

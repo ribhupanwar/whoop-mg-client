@@ -118,10 +118,10 @@ final class SleepSessionTests: XCTestCase {
 
     private let start = 1_800_000_000
 
-    private func sample(_ unix: Int, hr: Int = 55) -> V18Sample {
+    private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01) -> V18Sample {
         V18Sample(
             header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
-            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            heartRate: hr, rrIntervalsMS: [], dynamicAccelG: accel,
             gravityXG: 0, gravityYG: 0, gravityZG: 1,
             stepCounter: nil, stepCadence: nil, activityClass: 0,
             skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
@@ -130,6 +130,43 @@ final class SleepSessionTests: XCTestCase {
             signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
         )
     }
+    private func confirmedSleepSample(_ unix: Int) -> V18Sample {
+        V18Sample(
+            header: BandRecordHeader(version: 18, flags: 0x80, recordIndex: UInt32(unix), unix: UInt32(unix), subsecQ15: 0),
+            heartRate: 62, rrIntervalsMS: [], dynamicAccelG: 0.01,
+            gravityXG: 0, gravityYG: 0, gravityZG: 1,
+            stepCounter: nil, stepCadence: nil, activityClass: 0,
+            skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+            sleepStateByte: nil, sleepState: 2, cardiacFlags: nil, hrQualityFlags: nil,
+            spo2CandidateRaw: nil, spo2CandidatePct: nil, spo2CandidateKind: .absent,
+            signalQualityLogVariance: nil, psnrB: nil, psnrA: nil
+        )
+    }
+
+    func testDelayedHistoryExtendsUnownedEditedBoundaryButPreservesExplicitCorrection() {
+        let oldEnd = start + 6 * 3600
+        let newEnd = oldEnd + 28 * 60
+        let old = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: oldEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: true, sourceEndUnix: oldEnd, bandSleepConfirmed: true)
+        let fresh = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: newEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: false, sourceEndUnix: newEnd, bandSleepConfirmed: true)
+        let late = (oldEnd..<newEnd).map { confirmedSleepSample($0) }
+        let repaired = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late)
+        XCTAssertEqual(repaired.map(\.endUnix), [newEnd])
+        let protected = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late,
+            overrides: [String(start): [start, oldEnd]])
+        XCTAssertEqual(protected.map(\.endUnix), [oldEnd])
+        let insufficient = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: Array(late.prefix(299)))
+        XCTAssertEqual(insufficient.map(\.endUnix), [oldEnd])
+    }
+
     private func period(_ seconds: Int, quiet: Double = 0.2) -> SleepPeriod {
         SleepPeriod(startUnix: start, endUnix: start + seconds - 1, quietFraction: quiet, meanHR: 55, wakeEvents: 1436)
     }
@@ -772,4 +809,49 @@ extension SleepSessionTests {
             }
         }
     }
+    func testLateQuietHistoryCannotExtendSavedWakeWithoutConfirmedSleepState() throws {
+        // A new build must not extend the canonical wake merely because
+        // late on-wrist quiet samples arrived with no confirmed sleep state.
+        let oldSeconds = 7 * 3600
+        let lateSeconds = 26 * 60
+        let rows = (0..<(oldSeconds + lateSeconds)).map { sample(start + $0) }
+        let saved = SleepSession.make(samples: Array(rows.prefix(oldSeconds)),
+                                      period: period(oldSeconds))
+        let replacement = SleepSession.make(samples: rows,
+                                            period: period(oldSeconds + lateSeconds))
+        XCTAssertTrue(saved.isComplete)
+        XCTAssertTrue(replacement.isComplete)
+        let merged = SleepSession.retainingUncovered(
+            previous: [saved], fresh: [replacement],
+            coverageStart: start, coverageEnd: start + rows.count - 1, samples: rows)
+        XCTAssertEqual(merged.count, 1)
+        XCTAssertEqual(merged[0].endUnix, saved.endUnix,
+                       "Unknown-state quiet tail must not move a saved wake boundary")
+    }
+
+    func testThreeMinuteSustainedHRTransitionTrimsAwakeInBedPrefixAndIgnoresOneMinuteSurge() {
+        var rows: [V18Sample] = []
+        let dayStart = Int(Calendar.current.startOfDay(
+            for: Date(timeIntervalSince1970: 1_700_000_000)
+        ).timeIntervalSince1970)
+        let base = dayStart + 23 * 3600
+        func addStretch(_ startOffset: Int, _ count: Int, hr: Int, accel: Double) {
+            for i in 0..<count {
+                rows.append(sample(base + startOffset + i, hr: hr, accel: accel))
+            }
+        }
+        addStretch(0, 600, hr: 85, accel: 0.30)
+        addStretch(600, 2700, hr: 83, accel: 0.01)   // 45m quiet awake-in-bed prefix
+        addStretch(3300, 1500, hr: 60, accel: 0.01)
+        addStretch(4800, 60, hr: 85, accel: 0.01)     // 1-minute surge: must NOT split
+        addStretch(4860, 3840, hr: 60, accel: 0.01)
+        addStretch(8700, 600, hr: 85, accel: 0.30)
+
+        let periods = SleepDetect.detect(rows)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertGreaterThanOrEqual(periods[0].startUnix, base + 3300)
+        XCTAssertLessThan(periods[0].startUnix, base + 3600)
+        XCTAssertEqual(periods[0].endUnix, base + 8699)
+    }
+
 }

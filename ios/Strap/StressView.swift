@@ -28,7 +28,7 @@ struct StressView: View {
                     Text(demo ? String(format: "%.1f", SampleData.stressGauge) : gaugeValue)
                         .font(StrapTypography.metric(36, weight: .bold))
                         .foregroundStyle(Color.appFG)
-                    Text(demo ? "HIGH · SAMPLE" : "\(store.band.stress.band.uppercased())")
+                    Text(demo ? "HIGH · SAMPLE" : (stressIndex == nil ? "UNAVAILABLE" : store.band.stress.band.uppercased()))
                         .font(StrapTypography.body(11, weight: .medium))
                         .tracking(1.0)
                         .foregroundStyle(demo ? Color.appWarn : Color.appMuted)
@@ -71,7 +71,7 @@ struct StressView: View {
 
     private var stressStateText: String {
         if let reason = store.band.stress.reason { return reason }
-        return "\(store.recordedDayCount) awake baseline days recorded"
+        return "Awake-quiet baseline available"
     }
 
     private var seriesPanel: some View {
@@ -194,8 +194,8 @@ struct StressView: View {
     }
 
     private func durationText(_ pct: Double?, in split: StressSplit) -> String {
-        guard let pct else { return "—" }
-        let hours = StressWindows.scoredSeconds(split) * pct / 100.0 / 3600.0
+        guard let pct, let seconds = StressWindows.scoredSeconds(split) else { return "—" }
+        let hours = seconds * pct / 100.0 / 3600.0
         return CoachFormat.duration(hours)
     }
 

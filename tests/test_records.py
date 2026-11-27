@@ -5,13 +5,19 @@ import unittest
 
 from whoop.records import (
     V18,
+    V20,
+    V20_INNER_LEN,
+    V22,
+    V22_INNER_LEN,
     V26,
     V26_DELTA_OFFSET,
     V26_SAMPLE_COUNT,
     decode_record,
     decode_spo2_candidate,
     decode_v18,
+    decode_v20,
     decode_v21,
+    decode_v22,
     decode_v26,
     parse_header,
 )
@@ -423,6 +429,15 @@ class TestV21(unittest.TestCase):
         sample = decode_v18(bytes(record))
         self.assertIsNotNone(sample)
         self.assertEqual(sample.heart_rate, 94)
+        self.assertEqual(sample.psnr_b, -128)
+        self.assertEqual(sample.psnr_a, -128)
+
+        # Positive dB values decode as signed int8
+        record[100] = 0x1E  # +30 dB
+        record[101] = 0x1E  # +30 dB
+        sample_valid = decode_v18(bytes(record))
+        self.assertEqual(sample_valid.psnr_b, 30)
+        self.assertEqual(sample_valid.psnr_a, 30)
 
     def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
         # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
@@ -436,6 +451,75 @@ class TestV21(unittest.TestCase):
         sample = decode_v18(bytes(record))
         self.assertIsNotNone(sample)
         self.assertFalse(sample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
+
+
+class TestV20(unittest.TestCase):
+    def test_decode_v20_valid_buffer(self):
+        buf = bytearray(V20_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V20
+        buf[2] = 0x80
+        struct.pack_into("<I", buf, 3, 5001)
+        struct.pack_into("<I", buf, 7, 1_800_000_123)
+        struct.pack_into("<H", buf, 11, 8192)
+
+        res = decode_v20(bytes(buf))
+        self.assertIsNotNone(res)
+        self.assertEqual(res.header.version, 20)
+        self.assertEqual(res.header.record_index, 5001)
+        self.assertEqual(res.unix, 1_800_000_123)
+        self.assertEqual(len(res.raw_body), V20_INNER_LEN - 13)
+
+        # Non-1Hz telemetry must not enter the per-second biometric stream
+        self.assertIsNone(decode_record(bytes(buf)))
+
+    def test_decode_v20_rejection(self):
+        buf = bytearray(V20_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V20
+        self.assertIsNone(decode_v20(bytes(buf[:-1])))
+        self.assertIsNone(decode_v20(bytes(buf) + b"\x00"))
+        buf[1] = 18
+        self.assertIsNone(decode_v20(bytes(buf)))
+        buf[1] = V20
+        buf[0] = 0x28
+        self.assertIsNone(decode_v20(bytes(buf)))
+
+
+class TestV22(unittest.TestCase):
+    def test_decode_v22_valid_telemetry(self):
+        buf = bytearray(V22_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V22
+        buf[2] = 0x80
+        struct.pack_into("<I", buf, 3, 777)
+        struct.pack_into("<I", buf, 7, 1_800_000_456)
+        struct.pack_into("<H", buf, 11, 4096)
+        buf[13] = 4  # Tag 4
+
+        res = decode_v22(bytes(buf))
+        self.assertIsNotNone(res)
+        self.assertEqual(res.header.version, 22)
+        self.assertEqual(res.header.record_index, 777)
+        self.assertEqual(res.unix, 1_800_000_456)
+        self.assertEqual(res.tag, 4)
+        self.assertTrue(res.has_known_layout)
+        self.assertEqual(len(res.raw_body), V22_INNER_LEN - 13)
+
+        # Non-1Hz telemetry must not enter the per-second biometric stream
+        self.assertIsNone(decode_record(bytes(buf)))
+
+    def test_decode_v22_rejection(self):
+        buf = bytearray(V22_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V22
+        self.assertIsNone(decode_v22(bytes(buf[:-1])))
+        self.assertIsNone(decode_v22(bytes(buf) + b"\x00"))
+        buf[1] = 18
+        self.assertIsNone(decode_v22(bytes(buf)))
+        buf[1] = V22
+        buf[0] = 0x28
+        self.assertIsNone(decode_v22(bytes(buf)))
 
 
 if __name__ == "__main__":

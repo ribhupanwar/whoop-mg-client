@@ -30,6 +30,7 @@ enum Respiration {
         }
 
         var rates: [Double] = []
+        var spectralRates: [Double] = []
         for segment in segments {
             guard segment.count >= minBeats else { continue }
             var times: [Double] = []
@@ -43,10 +44,13 @@ enum Respiration {
             guard grid.count >= 8 else { continue }
             let detrended = detrend(grid)
             guard Stats.populationStdev(detrended) > 1e-9 else { continue }
+            let medianRRSec = Stats.median(segment.map { Double($0.rr) / 1000.0 })
+            spectralRates.append(contentsOf: spectralWindowRates(detrended, medianRRSeconds: medianRRSec))
             rates.append(contentsOf: windowRates(detrended))
         }
 
-        guard !rates.isEmpty else {
+        let activeRates = spectralRates.count >= 3 ? spectralRates : rates
+        guard !activeRates.isEmpty else {
             return RespRate(
                 breathsPerMinute: nil,
                 reason: "no usable RSA peak train — needs a continuous still or sleep R-R window",
@@ -54,7 +58,7 @@ enum Respiration {
                 windows: 0
             )
         }
-        let median = Stats.median(rates)
+        let median = Stats.median(activeRates)
         guard median >= plausibleMinBPM && median <= plausibleMaxBPM else {
             return RespRate(
                 breathsPerMinute: nil,
@@ -63,14 +67,14 @@ enum Respiration {
                     median, plausibleMinBPM, plausibleMaxBPM
                 ),
                 beats: totalBeats,
-                windows: rates.count
+                windows: activeRates.count
             )
         }
         return RespRate(
             breathsPerMinute: Stats.rounded(median, 1),
             reason: nil,
             beats: totalBeats,
-            windows: rates.count
+            windows: activeRates.count
         )
     }
 
@@ -195,7 +199,10 @@ enum Respiration {
             let end = min(start + windowSamples, detrended.count)
             let window = Array(detrended[start..<end])
             start += windowSamples
-            guard window.count >= minDistance * 3 else { continue }
+            // A short trailing fragment can contain three accidental peaks and yield
+            // a plausible but unsupported nightly breathing rate. Require at
+            // least half of the intended 5-minute window before estimating.
+            guard window.count >= Int(windowS * resampleHz / 2.0) else { continue }
             let peaks = findPeaks(window, minDistance: minDistance)
             guard peaks.count >= 3 else { continue }
             var intervals = (1..<peaks.count).map {
@@ -210,6 +217,65 @@ enum Respiration {
             let anchored = intervals.filter { abs($0 - median) <= intervalBand * median }
             let meanInterval = anchored.isEmpty ? median : Stats.mean(anchored)
             if meanInterval > 0 { rates.append(60.0 / meanInterval) }
+        }
+        return rates
+    }
+
+    /// Hann-windowed spectral RSA peak estimator over the 0.15–0.40 Hz HF band
+    /// (Nyquist-bounded by `0.5 / medianRRSeconds`) with SNR >= 2.0 gating.
+    /// Avoids the high-frequency jitter bias of time-domain peak picking.
+    static func spectralWindowRates(_ detrended: [Double], medianRRSeconds: Double) -> [Double] {
+        let ceilingHz = medianRRSeconds > 0 ? min(0.40, 0.5 / medianRRSeconds) : 0.40
+        guard ceilingHz > 0.16 else { return [] }
+        let windowSamples = Int((windowS * resampleHz).rounded())
+        let minSamples = Int((windowS * resampleHz / 2.0).rounded())
+        var rates: [Double] = []
+        var start = 0
+        while start < detrended.count {
+            let end = min(start + windowSamples, detrended.count)
+            let n = end - start
+            start += windowSamples
+            guard n >= minSamples else { continue }
+            var windowed = [Double](repeating: 0, count: n)
+            let denom = Double(max(1, n - 1))
+            for i in 0..<n {
+                let hann = 0.5 * (1.0 - cos(2.0 * .pi * Double(i) / denom))
+                windowed[i] = detrended[start - windowSamples + i] * hann
+            }
+            var bestPower = -1.0
+            var bestFreq = 0.0
+            var totalPower = 0.0
+            var bins = 0
+            var freq = 0.05
+            while freq <= ceilingHz + 1e-6 {
+                // Goertzel algorithm: 1 cos + 1 sin per frequency bin instead of 2*N trig calls.
+                let omega = 2.0 * .pi * freq / resampleHz
+                let cosW = cos(omega)
+                let sinW = sin(omega)
+                let coeff = 2.0 * cosW
+                var s1 = 0.0
+                var s2 = 0.0
+                for i in 0..<n {
+                    let s0 = windowed[i] + coeff * s1 - s2
+                    s2 = s1
+                    s1 = s0
+                }
+                let re = s1 - s2 * cosW
+                let im = s2 * sinW
+                let power = re * re + im * im
+                totalPower += power
+                bins += 1
+                if power > bestPower {
+                    bestPower = power
+                    bestFreq = freq
+                }
+                freq += 0.005
+            }
+            let meanPower = bins > 0 ? totalPower / Double(bins) : 0.0
+            if meanPower > 0, (bestPower / meanPower) >= 2.0,
+               bestFreq >= 0.133, bestFreq <= 0.417 {
+                rates.append(bestFreq * 60.0)
+            }
         }
         return rates
     }

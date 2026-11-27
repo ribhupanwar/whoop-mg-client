@@ -308,4 +308,92 @@ final class SensorTruthAndDataIntegrityTests: XCTestCase {
         XCTAssertTrue(jsonString.contains("quality"))
         XCTAssertFalse(jsonString.contains("heartRateSeries"), "Must not leak raw biometric arrays in privacy export")
     }
+
+    // MARK: - Test 14: RR Padding Valid Diagnostic Flag & Declared Slot Preservation
+    func testRRPaddingValidDiagnosticFlagAndDeclaredSlotPreservation() {
+        var inner = [UInt8](repeating: 0, count: 112)
+        inner[0] = 0x2F
+        inner[1] = 18
+        inner[2] = 0
+        inner[7] = 0x80; inner[8] = 0x96; inner[9] = 0x98; inner[10] = 0x00 // unix
+        inner[14] = 65 // HR
+
+        // Case A: 1 declared beat, zero padding -> rrPaddingValid == true
+        inner[15] = 1
+        inner[16] = 0x98; inner[17] = 0x03 // 920 ms
+        for i in 18..<24 { inner[i] = 0 }
+        let sampleA = V18Decoder.decode(inner)
+        XCTAssertNotNil(sampleA)
+        XCTAssertEqual(sampleA?.rrIntervalsMS, [920])
+        XCTAssertEqual(sampleA?.rrPaddingValid, true)
+
+        // Case B: 1 declared beat, non-zero unused byte -> preserves beat, rrPaddingValid == false
+        inner[18] = 0xFF
+        let sampleB = V18Decoder.decode(inner)
+        XCTAssertNotNil(sampleB)
+        XCTAssertEqual(sampleB?.rrIntervalsMS, [920], "Non-zero unused byte must not drop declared beat")
+        XCTAssertEqual(sampleB?.rrPaddingValid, false, "Non-zero unused byte must set rrPaddingValid = false")
+
+        // Case C: Invalid declared count > 4 -> drops RR, rrPaddingValid == false
+        inner[15] = 5
+        let sampleC = V18Decoder.decode(inner)
+        XCTAssertNotNil(sampleC)
+        XCTAssertEqual(sampleC?.rrIntervalsMS, [], "Declared count > 4 must yield empty intervals")
+        XCTAssertEqual(sampleC?.rrPaddingValid, false)
+    }
+
+    // MARK: - Test 15: HRV Detailed Diagnostics Breakdown
+    func testHrvDetailedDiagnosticsBreakdown() {
+        var samples: [V18Sample] = []
+        for i in 0..<30 {
+            let rr: [Int]
+            if i == 5 {
+                rr = [150] // out of range (< 200)
+            } else if i == 15 {
+                rr = [1600] // ectopic (> 20% jump from ~900)
+            } else {
+                rr = [900, 910]
+            }
+            samples.append(makeSample(unix: 1700000000 + i, hr: 65, rr: rr))
+        }
+
+        let diag = Hrv.detailedDiagnostics(samples: samples)
+        XCTAssertEqual(diag.selectedCalculationWindow, "ALL_VALID_SLEEP")
+        XCTAssertGreaterThan(diag.rawRRCount, 0)
+        XCTAssertGreaterThan(diag.acceptedNNCount, 0)
+        XCTAssertGreaterThan(diag.rejectedBeatsByReason["outOfPlausibleRange"] ?? 0, 0)
+        XCTAssertGreaterThan(diag.coveragePercentage, 0.0)
+        XCTAssertNotNil(diag.finalRMSSD)
+        XCTAssertNotNil(diag.finalLnRMSSD)
+    }
+
+    // MARK: - Test 16: Sleep Disturbance Timestamp Gap Isolation
+    func testSleepDisturbanceTimestampGapIsolation() {
+        var samples: [V18Sample] = []
+        let baseUnix = 1700000000
+
+        // 8 moving seconds (accel = 0.20 g)
+        for i in 0..<8 {
+            samples.append(makeSample(unix: baseUnix + i, hr: 80, motion: 0.20))
+        }
+        // 600-second gap (10 minutes)
+        // 8 moving seconds (accel = 0.20 g)
+        for i in 608..<616 {
+            samples.append(makeSample(unix: baseUnix + i, hr: 80, motion: 0.20))
+        }
+        // 3600 seconds of quiet sleep to form a valid period
+        for i in 616..<4300 {
+            samples.append(makeSample(unix: baseUnix + i, hr: 55, motion: 0.01))
+        }
+
+        // Active baseline reference samples
+        for i in 5000..<5600 {
+            samples.append(makeSample(unix: baseUnix + i, hr: 95, motion: 0.25))
+        }
+
+        let periods = SleepDetect.detect(samples)
+        if let period = periods.first {
+            XCTAssertEqual(period.wakeEvents, 0, "Sparse timestamp gap must break movement bout accumulation")
+        }
+    }
 }

@@ -24,6 +24,16 @@ from .records import MAX_RR_MS, MIN_RR_MS, V18Sample
 NN_MAX_DEVIATION = 0.20
 NN_REFERENCE_BEATS = 5
 
+# Observation-only diagnostic thresholds (OpenStrap reference values)
+# ACF1 floor: below this, RMSSD/pNN50 may reflect beat-timing jitter not physiology
+ACF1_FLOOR = -0.35
+# RR coverage ceiling: above this, stream holds more beat-time than elapsed time
+RR_COVERAGE_CEILING = 1.10
+# Minimum pairs for ACF1 estimate
+ACF1_MIN_PAIRS = 30
+# Minimum span for RR coverage (seconds)
+RR_COVERAGE_MIN_SPAN_S = 600
+
 TRIMP_COEFFICIENTS = {"male": (0.64, 1.92), "female": (0.86, 1.67)}
 
 
@@ -134,8 +144,39 @@ def hrv_from_rr(rr_ms: list[float]) -> HrvResult:
     )
 
 
+def prefer_retransmitted_rr(
+    candidate: list[int | float], over: list[int | float]
+) -> bool:
+    """Return True if candidate RR list should replace existing one during deduplication.
+
+    Prefers the list with more plausible valid intervals (200..3000 ms).
+    If valid counts are equal, prefers the list with fewer out-of-range words.
+    """
+    cand_valid = sum(1 for v in candidate if MIN_RR_MS <= v <= MAX_RR_MS)
+    over_valid = sum(1 for v in over if MIN_RR_MS <= v <= MAX_RR_MS)
+    if cand_valid != over_valid:
+        return cand_valid > over_valid
+    cand_bad = sum(1 for v in candidate if not (MIN_RR_MS <= v <= MAX_RR_MS))
+    over_bad = sum(1 for v in over if not (MIN_RR_MS <= v <= MAX_RR_MS))
+    return cand_bad < over_bad
+
+
 def hrv(samples: list[V18Sample]) -> HrvResult:
-    return hrv_from_rr([float(rr) for s in samples for rr in s.rr_intervals_ms])
+    """Cardiovascular HRV (RMSSD) from a list of records.
+
+    Offload can re-stream a second after reconnect. Deduplicate by second,
+    keeping the record with the most valid intervals, before pulling the R-Rs.
+    """
+    unique_by_second: dict[int, V18Sample] = {}
+    for s in samples:
+        if s.unix in unique_by_second:
+            if not prefer_retransmitted_rr(
+                s.rr_intervals_ms, unique_by_second[s.unix].rr_intervals_ms
+            ):
+                continue
+        unique_by_second[s.unix] = s
+    ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
+    return hrv_from_rr([float(rr) for s in ordered for rr in s.rr_intervals_ms])
 
 
 def resting_hrv(
@@ -168,6 +209,368 @@ def resting_hrv(
     return hrv(longest), len(longest)
 
 
+def hrv_detailed_diagnostics(
+    samples: list[V18Sample],
+    sws_epochs: list[tuple[int, int]] | None = None,
+) -> dict:
+    """Detailed HRV diagnostics for provenance and audit trail."""
+    unique_by_second: dict[int, V18Sample] = {}
+    for s in samples:
+        if s.unix in unique_by_second:
+            if not prefer_retransmitted_rr(
+                s.rr_intervals_ms, unique_by_second[s.unix].rr_intervals_ms
+            ):
+                continue
+        unique_by_second[s.unix] = s
+    ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
+
+    sws_samples = ordered
+    window_type = "ALL_VALID_SLEEP"
+    if sws_epochs:
+        filtered = [
+            s for s in ordered
+            if any(start <= s.unix <= end for start, end in sws_epochs)
+        ]
+        if filtered:
+            sws_samples = filtered
+            window_type = "SWS_DEEP_SLEEP"
+
+    timestamp_gaps = 0
+    if len(ordered) > 1:
+        for i in range(1, len(ordered)):
+            if ordered[i].unix > ordered[i - 1].unix + 1:
+                timestamp_gaps += 1
+
+    raw_beats = 0
+    rejection_reasons = {
+        "outOfPlausibleRange": 0,
+        "ectopicDeviation": 0,
+        "seedMismatch": 0,
+    }
+
+    runs = _contiguous_runs(sws_samples)
+    all_nn: list[float] = []
+    squared_diffs = 0.0
+    pairs = 0
+
+    for run in runs:
+        previous: float | None = None
+        recent: list[float] = []
+        seed_candidate: float | None = None
+        for s in run:
+            rr = [float(val) for val in s.rr_intervals_ms]
+            raw_beats += len(rr)
+            if not rr:
+                previous = None
+                recent.clear()
+                seed_candidate = None
+                continue
+            for val in rr:
+                if not (MIN_RR_MS <= val <= MAX_RR_MS):
+                    rejection_reasons["outOfPlausibleRange"] += 1
+                    previous = None
+                    recent.clear()
+                    seed_candidate = None
+                    continue
+                if not recent:
+                    if seed_candidate is None:
+                        seed_candidate = val
+                        continue
+                    midpoint = statistics.median([seed_candidate, val])
+                    if abs(val - seed_candidate) > NN_MAX_DEVIATION * midpoint:
+                        rejection_reasons["seedMismatch"] += 1
+                        seed_candidate = val
+                        continue
+                    all_nn.append(seed_candidate)
+                    recent.append(seed_candidate)
+                    previous = seed_candidate
+                    seed_candidate = None
+                else:
+                    reference = statistics.median(recent)
+                    if abs(val - reference) > NN_MAX_DEVIATION * reference:
+                        rejection_reasons["ectopicDeviation"] += 1
+                        previous = None
+                        recent.clear()
+                        seed_candidate = None
+                        continue
+                if previous is not None:
+                    delta = val - previous
+                    squared_diffs += delta * delta
+                    pairs += 1
+                all_nn.append(val)
+                recent.append(val)
+                if len(recent) > NN_REFERENCE_BEATS:
+                    recent.pop(0)
+                previous = val
+
+    accepted_nn = len(all_nn)
+    coverage_pct = (accepted_nn / raw_beats * 100.0) if raw_beats > 0 else 0.0
+    final_rmssd = math.sqrt(squared_diffs / pairs) if (accepted_nn >= 20 and pairs > 0) else None
+    final_ln = math.log(final_rmssd) if final_rmssd is not None and final_rmssd > 0 else None
+
+    return {
+        "raw_rr_count": raw_beats,
+        "accepted_nn_count": accepted_nn,
+        "rejected_beats_by_reason": rejection_reasons,
+        "coverage_percentage": round(coverage_pct, 2),
+        "timestamp_gaps": timestamp_gaps,
+        "selected_calculation_window": window_type,
+        "final_rmssd": round(final_rmssd, 2) if final_rmssd is not None else None,
+        "final_ln_rmssd": round(final_ln, 2) if final_ln is not None else None,
+    }
+
+
+# MARK: - Observation-Only Diagnostics (Non-Production)
+
+def nn_diff_acf1(nn_ms: list[float]) -> float | None:
+    """Lag-1 autocorrelation of the NN successive-difference series.
+
+    Returns None when there are fewer than ACF1_MIN_PAIRS pairs or the
+    series is constant. This is an OBSERVATION-ONLY diagnostic. It does not
+    gate or modify production HRV. OpenStrap uses ACF1_FLOOR = -0.35 as a
+    refusal threshold; we compute and expose the value for comparison.
+    """
+    if len(nn_ms) < 2:
+        return None
+    diffs = [b - a for a, b in zip(nn_ms, nn_ms[1:])]
+    if len(diffs) < ACF1_MIN_PAIRS:
+        return None
+    mean = sum(diffs) / len(diffs)
+    cov = 0.0
+    var_sum = 0.0
+    for i, d in enumerate(diffs):
+        a = d - mean
+        var_sum += a * a
+        if i > 0:
+            b = diffs[i - 1] - mean
+            cov += a * b
+    if var_sum == 0:
+        return None
+    return cov / var_sum
+
+
+def rr_coverage(rr_ms: list[float], timestamps: list[int]) -> float | None:
+    """RR coverage diagnostic: sum of plausible RR / wall-clock span.
+
+    Returns coverage ratio. A value > RR_COVERAGE_CEILING (1.10) indicates
+    duplicate or interleaved beats (more beat-time than elapsed time).
+
+    This is an OBSERVATION-ONLY diagnostic. It does not gate or modify
+    production HRV. OpenStrap uses RR_COVERAGE_CEILING = 1.10.
+    """
+    if len(rr_ms) < 2 or len(rr_ms) != len(timestamps):
+        return None
+    lo = 0
+    hi = 0
+    for i in range(1, len(timestamps)):
+        if timestamps[i] < timestamps[lo]:
+            lo = i
+        if timestamps[i] > timestamps[hi]:
+            hi = i
+    first = rr_ms[lo]
+    span_sec = (timestamps[hi] - timestamps[lo] +
+                (first if 300 <= first <= 2400 else 0)) / 1000.0
+    if span_sec < RR_COVERAGE_MIN_SPAN_S:
+        return None
+    total = 0.0
+    for v in rr_ms:
+        if 300 <= v <= 2400:
+            total += v
+    return (total / 1000.0) / span_sec
+
+
+@dataclass
+class ExtendedHrvDiagnostics:
+    """Extended HRV diagnostics including observation-only jitter/coverage metrics."""
+    raw_rr_count: int
+    accepted_nn_count: int
+    coverage_percentage: float
+    timestamp_gaps: int
+    selected_calculation_window: str
+    final_rmssd: float | None
+    final_ln_rmssd: float | None
+    # Observation-only jitter/coverage diagnostics
+    nn_diff_acf1: float | None
+    rr_coverage_ratio: float | None
+    acf1_below_floor: bool | None
+    rr_over_coverage: bool | None
+
+
+def hrv_extended_diagnostics(
+    samples: list[V18Sample],
+    sws_epochs: list[tuple[int, int]] | None = None,
+) -> ExtendedHrvDiagnostics:
+    """Generates extended HRV calculation diagnostics including ACF1 and RR coverage.
+
+    These are OBSERVATION-ONLY diagnostics that do not affect production HRV.
+    """
+    unique_by_second: dict[int, V18Sample] = {}
+    for s in samples:
+        if s.unix in unique_by_second:
+            if not prefer_retransmitted_rr(
+                s.rr_intervals_ms, unique_by_second[s.unix].rr_intervals_ms
+            ):
+                continue
+        unique_by_second[s.unix] = s
+    ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
+
+    sws_samples = ordered
+    window_type = "ALL_VALID_SLEEP"
+    if sws_epochs:
+        filtered = [
+            s for s in ordered
+            if any(start <= s.unix <= end for start, end in sws_epochs)
+        ]
+        if filtered:
+            sws_samples = filtered
+            window_type = "SWS_DEEP_SLEEP"
+
+    timestamp_gaps = 0
+    if len(ordered) > 1:
+        for i in range(1, len(ordered)):
+            if ordered[i].unix > ordered[i - 1].unix + 1:
+                timestamp_gaps += 1
+
+    raw_beats = 0
+    rejection_reasons = {
+        "outOfPlausibleRange": 0,
+        "ectopicDeviation": 0,
+        "seedMismatch": 0,
+    }
+
+    runs = _contiguous_runs(sws_samples)
+    all_nn: list[float] = []
+    all_nn_timestamps: list[int] = []
+    squared_diffs = 0.0
+    pairs = 0
+
+    for run in runs:
+        previous: float | None = None
+        recent: list[float] = []
+        seed_candidate: float | None = None
+        # Track cumulative beat time in milliseconds for timestamp generation
+        # Start from the first sample's unix * 1000
+        beat_time_ms = run[0].unix * 1000 if run else 0
+        for s in run:
+            rr = [float(val) for val in s.rr_intervals_ms]
+            raw_beats += len(rr)
+            if not rr:
+                previous = None
+                recent.clear()
+                seed_candidate = None
+                continue
+            for val in rr:
+                if not (MIN_RR_MS <= val <= MAX_RR_MS):
+                    rejection_reasons["outOfPlausibleRange"] += 1
+                    previous = None
+                    recent.clear()
+                    seed_candidate = None
+                    continue
+                if not recent:
+                    if seed_candidate is None:
+                        seed_candidate = val
+                        # Advance beat time by the seed candidate
+                        beat_time_ms += int(seed_candidate)
+                        continue
+                    midpoint = statistics.median([seed_candidate, val])
+                    if abs(val - seed_candidate) > NN_MAX_DEVIATION * midpoint:
+                        rejection_reasons["seedMismatch"] += 1
+                        seed_candidate = val
+                        continue
+                    all_nn.append(seed_candidate)
+                    all_nn_timestamps.append(beat_time_ms)
+                    recent.append(seed_candidate)
+                    previous = seed_candidate
+                    seed_candidate = None
+                else:
+                    reference = statistics.median(recent)
+                    if abs(val - reference) > NN_MAX_DEVIATION * reference:
+                        rejection_reasons["ectopicDeviation"] += 1
+                        previous = None
+                        recent.clear()
+                        seed_candidate = None
+                        continue
+                if previous is not None:
+                    delta = val - previous
+                    squared_diffs += delta * delta
+                    pairs += 1
+                all_nn.append(val)
+                beat_time_ms += int(val)
+                all_nn_timestamps.append(beat_time_ms)
+                recent.append(val)
+                if len(recent) > NN_REFERENCE_BEATS:
+                    recent.pop(0)
+                previous = val
+
+    accepted_nn = len(all_nn)
+    coverage_pct = (accepted_nn / raw_beats * 100.0) if raw_beats > 0 else 0.0
+    final_rmssd = math.sqrt(squared_diffs / pairs) if (accepted_nn >= 20 and pairs > 0) else None
+    final_ln = math.log(final_rmssd) if final_rmssd is not None and final_rmssd > 0 else None
+
+    # Observation-only diagnostics
+    acf1 = nn_diff_acf1(all_nn)
+    rr_cov = rr_coverage(all_nn, all_nn_timestamps)
+
+    return ExtendedHrvDiagnostics(
+        raw_rr_count=raw_beats,
+        accepted_nn_count=accepted_nn,
+        coverage_percentage=round(coverage_pct, 2),
+        timestamp_gaps=timestamp_gaps,
+        selected_calculation_window=window_type,
+        final_rmssd=round(final_rmssd, 2) if final_rmssd is not None else None,
+        final_ln_rmssd=round(final_ln, 2) if final_ln is not None else None,
+        nn_diff_acf1=round(acf1, 3) if acf1 is not None else None,
+        rr_coverage_ratio=round(rr_cov, 3) if rr_cov is not None else None,
+        acf1_below_floor=acf1 < ACF1_FLOOR if acf1 is not None else None,
+        rr_over_coverage=rr_cov > RR_COVERAGE_CEILING if rr_cov is not None else None,
+    )
+
+
+def median_of_windowed_rmssd(
+    nn_ms: list[float],
+    timestamps: list[int],
+    window_seconds: int = 300,
+) -> float | None:
+    """Computes median-of-5-minute-window RMSSD for comparison.
+
+    This is an ALTERNATIVE estimator for comparison, not the production
+    estimator. It splits the NN series into 5-minute windows, computes
+    RMSSD in each window with >= 20 clean successive differences, and
+    returns the median across windows.
+    """
+    if len(nn_ms) < 2 or len(nn_ms) != len(timestamps):
+        return None
+    windows: dict[int, list[tuple[float, int]]] = {}
+    for i in range(len(nn_ms)):
+        window_idx = timestamps[i] // window_seconds
+        windows.setdefault(window_idx, []).append((nn_ms[i], timestamps[i]))
+
+    window_rmssds: list[float] = []
+    for _, beats in sorted(windows.items()):
+        if len(beats) < 21:  # need >= 20 diffs
+            continue
+        nn = [b[0] for b in beats]
+        ts = [b[1] for b in beats]
+        sq_diff = 0.0
+        pairs = 0
+        for j in range(1, len(nn)):
+            # Only count successive differences within the same contiguous run
+            if ts[j] - ts[j - 1] <= 2:
+                d = nn[j] - nn[j - 1]
+                sq_diff += d * d
+                pairs += 1
+        if pairs >= 20:
+            window_rmssds.append(math.sqrt(sq_diff / pairs))
+
+    if not window_rmssds:
+        return None
+    window_rmssds.sort()
+    mid = len(window_rmssds) // 2
+    if len(window_rmssds) % 2 == 0:
+        return (window_rmssds[mid - 1] + window_rmssds[mid]) / 2
+    return window_rmssds[mid]
+
+
 def sws_resting_hrv(
     samples: list[V18Sample],
     deep_epochs: list[tuple[int, int]] | None = None,
@@ -194,6 +597,108 @@ def sws_resting_hrv(
         samples, quiet_accel_g=quiet_accel_g, min_window_s=min_window_s
     )
     return fallback_res, fallback_len, False
+
+
+def windowed_sleep_hrv(
+    samples: list[V18Sample],
+    deep_epochs: list[tuple[int, int]] | None = None,
+    quiet_accel_g: float = 0.15,
+    window_seconds: int = 300,
+    min_beats_per_window: int = 21,
+) -> tuple[HrvResult, int, int, bool]:
+    """Multi-window 5-minute sleep RMSSD estimator (Accuracy Engine V2).
+
+    Evaluates every 5-minute bucket in the sleep period independently with
+    per-window RR coverage gating (<= 1.05 * elapsed) and gap-aware NN
+    cleaning (>= 21 clean beats), returning the mean RMSSD across qualifying
+    windows. Falls back to sws_resting_hrv when no 5-minute window qualifies.
+    """
+    unique_by_sec: dict[int, V18Sample] = {}
+    for sample in samples:
+        prev = unique_by_sec.get(sample.unix)
+        if prev is not None and not prefer_retransmitted_rr(
+            sample.rr_intervals_ms, prev.rr_intervals_ms
+        ):
+            continue
+        unique_by_sec[sample.unix] = sample
+
+    eligible = sorted(
+        (
+            s
+            for s in unique_by_sec.values()
+            if s.wearing
+            and 35 <= s.heart_rate <= 220
+            and (s.dynamic_accel_g is not None and s.dynamic_accel_g <= quiet_accel_g)
+        ),
+        key=lambda s: s.unix,
+    )
+
+    buckets: dict[int, list[V18Sample]] = {}
+    for s in eligible:
+        buckets.setdefault(s.unix // window_seconds, []).append(s)
+
+    window_rmssds: list[float] = []
+    window_sdnns: list[float] = []
+    window_pnn50s: list[float] = []
+    window_mean_rrs: list[float] = []
+    total_beats = 0
+    total_nn_beats = 0
+    total_seconds = 0
+
+    min_covered_seconds = max(60, window_seconds // 2)
+    min_rr_duration_s = window_seconds * 0.25
+
+    for _, records in sorted(buckets.items()):
+        if len(records) < min_covered_seconds:
+            continue
+        elapsed = records[-1].unix - records[0].unix + 1
+        if elapsed < min_covered_seconds:
+            continue
+        valid_rr_sum_ms = sum(
+            v
+            for r in records
+            for v in r.rr_intervals_ms
+            if 300 <= v <= 2000
+        )
+        valid_rr_sum_s = valid_rr_sum_ms / 1000.0
+        if valid_rr_sum_s < min_rr_duration_s or valid_rr_sum_s > elapsed * 1.05:
+            continue
+        res = hrv(records)
+        if res.rmssd_ms is None or not math.isfinite(res.rmssd_ms) or res.rmssd_ms <= 0:
+            continue
+        if res.nn_beats < min_beats_per_window:
+            continue
+        window_rmssds.append(res.rmssd_ms)
+        if res.sdnn_ms is not None and math.isfinite(res.sdnn_ms):
+            window_sdnns.append(res.sdnn_ms)
+        if res.pnn50_pct is not None and math.isfinite(res.pnn50_pct):
+            window_pnn50s.append(res.pnn50_pct)
+        if res.mean_rr_ms is not None and math.isfinite(res.mean_rr_ms):
+            window_mean_rrs.append(res.mean_rr_ms)
+        total_beats += res.beats
+        total_nn_beats += res.nn_beats
+        total_seconds += len(records)
+
+    if window_rmssds:
+        mean_rmssd = sum(window_rmssds) / len(window_rmssds)
+        result = HrvResult(
+            beats=total_beats,
+            nn_beats=total_nn_beats,
+            rmssd_ms=mean_rmssd,
+            sdnn_ms=sum(window_sdnns) / len(window_sdnns) if window_sdnns else None,
+            pnn50_pct=sum(window_pnn50s) / len(window_pnn50s) if window_pnn50s else None,
+            ln_rmssd=math.log(mean_rmssd) if mean_rmssd > 0 else None,
+            mean_rr_ms=sum(window_mean_rrs) / len(window_mean_rrs) if window_mean_rrs else None,
+        )
+        return result, total_seconds, len(window_rmssds), False
+
+    fb_res, fb_len, is_sws = sws_resting_hrv(
+        samples,
+        deep_epochs=deep_epochs,
+        quiet_accel_g=min(quiet_accel_g, 0.08),
+        min_window_s=window_seconds,
+    )
+    return fb_res, fb_len, (1 if fb_res.rmssd_ms is not None else 0), is_sws
 
 
 def age_predicted_max_hr(age: int) -> float:
@@ -256,6 +761,9 @@ def resting_heart_rate(
     sustained window, and motion must be measured, not assumed: a sample with
     no accelerometer reading is excluded rather than treated as quiet.
 
+    Heart rate must be in the plausible range 35-220 bpm (matches Swift).
+    This rejects artefact beats that would otherwise split contiguous runs.
+
     This matches the Swift implementation which reduced MAE vs WHOOP export
     from 8.1 bpm (minimum) to 1.5 bpm (median) over 5 paired nights.
     """
@@ -263,6 +771,7 @@ def resting_heart_rate(
         s
         for s in samples
         if s.wearing
+        and 35 <= s.heart_rate <= 220
         and s.dynamic_accel_g is not None
         and s.dynamic_accel_g <= quiet_accel_g
     ]

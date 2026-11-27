@@ -13,7 +13,7 @@ struct SleepSession: Codable, Equatable {
     // v6 invalidates v5 sleep-stage estimates that could classify prolonged
     // V18 sleepState=3 ("up") as Deep/Light. The retained sensor archive and
     // authoritative manual bed/wake corrections are not modified.
-    static let algorithmVersion = 7
+    static let algorithmVersion = 8
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
@@ -89,6 +89,9 @@ struct SleepSession: Codable, Equatable {
         let pending = SleepStaging(segments: [], deepMinutes: 0, lightMinutes: 0,
             remMinutes: 0, wakeMinutes: 0, epochs: 0, hrCoverage: 0,
             reason: "Recalculating the saved sleep window from recorded sensor data.")
+        // The saved correction is authoritative even when it happens to
+        // equal the current detector bounds; isEdited must not be inferred
+        // from quietness or from a legacy cached session alone.
         return SleepSession(version: version, sourceStartUnix: sourceStartUnix,
             startUnix: times[0], endUnix: times[1], staging: changed ? pending : staging,
             heartRate: changed ? heartRate.filter { times[0] <= $0.unix && $0.unix < times[1] } : heartRate,
@@ -196,8 +199,17 @@ struct SleepSession: Codable, Equatable {
             let unsupportedExtension = fresh.contains { candidate in
                 guard candidate.startUnix < old.endUnix, old.startUnix < candidate.endUnix,
                       candidate.endUnix > old.endUnix, !candidate.isEdited else { return false }
-                let tail = samples.filter { $0.unix >= old.endUnix && $0.unix < candidate.endUnix
-                    && $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2 }
+                // A quiet or unknown-state tail is not proof of resumed sleep.
+                // Require five continuous minutes of positive band sleep(2)
+                // evidence before changing a previously saved wake boundary.
+                // This prevents algorithm upgrades and BLE replays from
+                // silently extending the canonical session on relaunch.
+                let tail = samples.filter {
+                    $0.unix >= old.endUnix && $0.unix < candidate.endUnix
+                        && $0.wearing && $0.sleepState == 2
+                        && (35...220).contains($0.heartRate)
+                        && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= 0.015 } ?? false)
+                }
                 return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
             }
             // Archive endpoints do not prove usable data throughout a night.
@@ -206,6 +218,22 @@ struct SleepSession: Codable, Equatable {
             let missingReliableReplacement = old.isComplete && !fresh.contains {
                 $0.isComplete && max($0.startUnix, old.startUnix) < min($0.endUnix, old.endUnix)
             }
+            // Some persisted sessions carry isEdited without a corresponding
+            // authoritative correction. Do not freeze such a stale wake boundary
+            // when late BLE history provides >=5 minutes of consecutive, on-wrist
+            // firmware-confirmed sleep and a newer detector candidate.
+            // Explicit saved corrections remain authoritative.
+            let confirmedLateExtension = savedEdit == nil && old.isEdited && fresh.contains { candidate in
+                guard !candidate.isEdited, candidate.startUnix <= old.startUnix,
+                      candidate.endUnix > old.endUnix else { return false }
+                let tail = samples.filter {
+                    $0.unix >= old.endUnix && $0.unix < candidate.endUnix
+                        && $0.wearing && $0.sleepState == 2
+                        && (35...220).contains($0.heartRate)
+                }
+                return Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
+            }
+            if confirmedLateExtension { continue }
             guard old.isEdited || editedBoundsChanged || unsupportedExtension || missingReliableReplacement
                     || first > old.startUnix || last < old.endUnix - 1 else { continue }
             // Keep intersecting source windows and the latest saved night, not a growing archive.

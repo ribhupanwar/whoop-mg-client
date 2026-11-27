@@ -10,7 +10,7 @@ final class HistoryAnalysisCache {
 
     // PR #106 changed the daily RHR statistic from minimum to median.
     // Keep staged-night checkpoints reusable while refreshing daily metrics.
-    static func dailyKey(_ dateKey: String) -> String { "day-rhr-median-v1:\(dateKey)" }
+    static func dailyKey(_ dateKey: String) -> String { "day-accuracy-v2:\(dateKey)" }
     struct Ticket { let key: String; let fingerprint: String }
     private let database: HistoryDatabase
     private let encoder = JSONEncoder()

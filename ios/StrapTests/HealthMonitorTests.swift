@@ -28,6 +28,8 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertEqual(report.withinCount, 0)
         XCTAssertEqual(report[.oxygen].status, .candidate)
         XCTAssertNil(report[.temperature].value)
+        XCTAssertEqual(report[.temperature].nightlyTemperatureCandidate, 34)
+        XCTAssertFalse(report[.temperature].verifiedWithinRange)
     }
     func testOnlyEarlierDistinctQualifiedNightsCountTowardRange() throws {
         let prior = (-7 ... -1).map { day($0) }
@@ -42,6 +44,36 @@ final class HealthMonitorTests: XCTestCase {
         let duplicates = HealthMonitor.make(days: Array(repeating: day(-1), count: 7) + [day(0)], session: session, calendar: calendar)
         XCTAssertEqual(duplicates[.rhr].baselineDays, 1)
         XCTAssertEqual(duplicates.withinCount, 0)
+    }
+    func testDuplicatePriorNightUsesLatestCompletedIntervalRegardlessOfInputOrder() {
+        let prior = (-7 ... -1).map { day($0) }
+        let original = day(-1, rhr: 85)
+        // A later saved revision for the same calendar day. DayMetrics has
+        // immutable fields, so create the revision using its initializer.
+        let revised = DayMetrics(
+            dateKey: original.dateKey, state: original.state,
+            restingHR: original.restingHR, lnRMSSD: original.lnRMSSD,
+            hrvWindowSeconds: original.hrvWindowSeconds,
+            sleepHours: original.sleepHours,
+            sleepStartUnix: original.sleepStartUnix,
+            sleepEndUnix: original.sleepEndUnix.map { $0 + 60 },
+            strain: original.strain, steps: original.steps,
+            sleepDurationReliable: original.sleepDurationReliable,
+            respiratoryRate: original.respiratoryRate,
+            restingHRWindowSeconds: original.restingHRWindowSeconds,
+            respiratoryWindows: original.respiratoryWindows,
+            skinTemperatureC: original.skinTemperatureC,
+            skinTemperatureSeconds: original.skinTemperatureSeconds,
+            skinTemperatureSource: original.skinTemperatureSource,
+            oxygenCandidatePct: original.oxygenCandidatePct)
+        let current = day(0, rhr: 60)
+        let first = HealthMonitor.make(days: prior + [revised, current],
+                                       session: session, calendar: calendar)
+        let second = HealthMonitor.make(days: [revised] + prior + [current],
+                                        session: session, calendar: calendar)
+        XCTAssertEqual(first[.rhr].baselineDays, 7)
+        XCTAssertEqual(first[.rhr].reference, second[.rhr].reference)
+        XCTAssertEqual(first[.rhr].reference?.upperBound, 85)
     }
     func testOutOfRangeAndInsufficientQualityAreNotNormal() {
         let prior = (-7 ... -1).map { day($0) }
@@ -64,6 +96,7 @@ final class HealthMonitorTests: XCTestCase {
         let missing = HealthMonitor.make(days: [unknownSource] + Array(prior.dropFirst()) + [day(0, temp: 34.6)],
                                          session: session, calendar: calendar)
         XCTAssertEqual(missing[.temperature].baselineDays, 6)
+        XCTAssertEqual(missing[.temperature].nightlyTemperatureCandidate, 34.6)
         XCTAssertNil(missing[.temperature].value)
     }
     func testPreviouslyCommittedVitalsRemainAvailableUntilBoundsChange() {
@@ -71,7 +104,10 @@ final class HealthMonitorTests: XCTestCase {
         let old = day(0)
         let changed = session.applyingSavedBounds([String(session.sourceStartUnix): [session.startUnix + 30, session.endUnix]])
         XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: changed, calendar: calendar).availableCount, 0)
-        XCTAssertEqual(HealthMonitor.make(days: prior + [old], session: session, calendar: calendar).availableCount, 5)
+        let report = HealthMonitor.make(days: prior + [old], session: session, calendar: calendar)
+        XCTAssertEqual(report.availableCount, 4) // Unvalidated oxygen is not a measured vital.
+        XCTAssertNil(report[.oxygen].value)
+        XCTAssertEqual(report[.oxygen].status, .candidate)
     }
     func testLegacyDayDecodesWithoutInventingTemperatureBaseline() throws {
         let original = day(0)

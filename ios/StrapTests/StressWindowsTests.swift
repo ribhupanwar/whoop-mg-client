@@ -98,10 +98,26 @@ final class StressWindowsTests: XCTestCase {
         XCTAssertEqual(split.reason, "no R-R beats in awake windows")
     }
 
-    func testScoredSecondsUsesFiveMinuteWindows() {
+    func testSparseScoredWindowsDoNotInventElapsedDuration() {
         let split = StressWindows.share(samples: window(0) + window(300), baseline: baseline(mean: 4.605))
         XCTAssertEqual(split.windows, 2)
+        XCTAssertNil(StressWindows.scoredSeconds(split))
+    }
+
+    func testCompleteScoredWindowsExposeElapsedDuration() {
+        let rows = (0..<600).map { sample($0, rr: [$0 % 2 == 0 ? 800 : 900]) }
+        let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 2)
         XCTAssertEqual(StressWindows.scoredSeconds(split), 600)
+        let replayed = StressWindows.share(samples: rows + rows, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(StressWindows.scoredSeconds(replayed), 600)
+    }
+
+    func testPartialExcludedWindowCannotClaimFullDuration() {
+        let rows = (0..<300).map { sample($0, rr: [1000, 1100]) }
+        let split = StressWindows.share(samples: rows, baseline: baseline(mean: 4.605),
+                                        excluded: [(start: 0, end: 59)])
+        XCTAssertNil(StressWindows.scoredSeconds(split))
     }
 
     func testWindowsWithoutBeatsAreSkipped() {
@@ -141,5 +157,31 @@ final class StressWindowsTests: XCTestCase {
             excluded: [(start: 0, end: 299)]
         )
         XCTAssertEqual(points.map(\.unix), [300])
+    }
+
+    func testHighMotionSamplesExcludedFromRestingStress() {
+        let moving = (0..<10).map { i -> V18Sample in
+            let s = sample(i * 30, rr: [1000, 1100])
+            return V18Sample(
+                header: s.header, heartRate: 110, rrIntervalsMS: s.rrIntervalsMS,
+                dynamicAccelG: 0.65, gravityXG: nil, gravityYG: nil, gravityZG: nil,
+                stepCounter: nil, stepCadence: nil, activityClass: 0,
+                skinTempC: nil, tempAux1C: nil, tempAux2C: nil,
+                sleepStateByte: nil, sleepState: nil, cardiacFlags: nil,
+                hrQualityFlags: nil, spo2CandidateRaw: nil, spo2CandidatePct: nil,
+                spo2CandidateKind: .absent, signalQualityLogVariance: nil,
+                psnrB: nil, psnrA: nil
+            )
+        }
+        let split = StressWindows.share(samples: moving, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 0)
+        XCTAssertTrue(StressWindows.series(samples: moving, baseline: baseline(mean: 4.605)).isEmpty)
+    }
+
+    func testOvercountedBucketRejectedFromStressWindows() {
+        let overCounted = (0..<300).map { sample($0, rr: [800, 900, 800]) }
+        let split = StressWindows.share(samples: overCounted, baseline: baseline(mean: 4.605))
+        XCTAssertEqual(split.windows, 0)
+        XCTAssertTrue(StressWindows.series(samples: overCounted, baseline: baseline(mean: 4.605)).isEmpty)
     }
 }

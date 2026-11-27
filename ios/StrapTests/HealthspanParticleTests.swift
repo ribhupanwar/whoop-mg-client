@@ -7,7 +7,7 @@ final class HealthspanParticleTests: XCTestCase {
         XCTAssertEqual(field, HealthspanOrbParticle.makeField(seed: 0x8C42C0DE))
         XCTAssertEqual(HealthspanOrbParticle.makeField(seed: 42), HealthspanOrbParticle.makeField(seed: 42))
         XCTAssertNotEqual(field, HealthspanOrbParticle.makeField(seed: 42))
-        XCTAssertEqual(field.count, 288)
+        XCTAssertEqual(field.count, 360)
         let first = field[0]
         let initialTime = (1.15 - first.phase) * first.period
         let early = first.position(at: initialTime)

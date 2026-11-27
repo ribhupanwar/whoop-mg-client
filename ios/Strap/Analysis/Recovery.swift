@@ -26,7 +26,8 @@ enum Recovery {
         sleepNeedHours: Double?,
         baseline: Baseline?,
         respiratoryRate: Double? = nil,
-        respiratoryRateBaseline: Double? = nil
+        respiratoryRateBaseline: Double? = nil,
+        sleepPerformance: Double? = nil
     ) -> RecoveryResult {
         guard let baseline, baseline.days >= minBaselineDays else {
             return RecoveryResult(
@@ -58,8 +59,13 @@ enum Recovery {
         var weighted = hrvComponent * hrvWeight + rhrComponent * rhrWeight
         var weight = hrvWeight + rhrWeight
         var sleepComponent: Double?
-        if let sleepHours, sleepHours.isFinite, sleepHours >= 0,
-           let sleepNeedHours, sleepNeedHours.isFinite, sleepNeedHours > 0 {
+        if let sleepPerformance, sleepPerformance.isFinite, sleepPerformance >= 0 {
+            let sleep = min(100.0, sleepPerformance)
+            sleepComponent = sleep
+            weighted += sleep * sleepWeight
+            weight += sleepWeight
+        } else if let sleepHours, sleepHours.isFinite, sleepHours >= 0,
+                  let sleepNeedHours, sleepNeedHours.isFinite, sleepNeedHours > 0 {
             let sleep = 100.0 * min(sleepHours / sleepNeedHours, 1.0)
             sleepComponent = sleep
             weighted += sleep * sleepWeight
@@ -118,21 +124,35 @@ enum Recovery {
     /// saturation sentinels, other nonzero values are diagnostic codes. It
     /// never feeds a score.
     static func spo2Summary(_ samples: [V18Sample]) -> Spo2Summary {
-        let inBand = samples.compactMap { sample -> Double? in
-            guard let pct = sample.spo2CandidatePct,
+        // BLE history transfers can replay the same second after reconnect.
+        // Each recorded second contributes at most one candidate to the mean.
+        // Prefer an eligible on-wrist reading over a duplicate off-wrist or
+        // diagnostic record; equal-quality replays retain the first record.
+        var bySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            let eligible = sample.wearing && sample.spo2CandidatePct != nil
+            if let previous = bySecond[sample.unix] {
+                let previousEligible = previous.wearing && previous.spo2CandidatePct != nil
+                if !eligible || previousEligible { continue }
+            }
+            bySecond[sample.unix] = sample
+        }
+        let unique = bySecond.values
+        let inBand = unique.compactMap { sample -> Double? in
+            guard sample.wearing, let pct = sample.spo2CandidatePct,
                   pct >= V18Decoder.spo2CandidateMin && pct <= V18Decoder.spo2CandidateMax
             else { return nil }
             return Double(pct)
         }
-        let saturated = samples.filter { $0.spo2CandidateKind == .saturated }.count
-        let diagnostic = samples.filter { $0.spo2CandidateKind == .diagnostic }.count
+        let saturated = unique.filter { $0.spo2CandidateKind == .saturated }.count
+        let diagnostic = unique.filter { $0.spo2CandidateKind == .diagnostic }.count
         guard !inBand.isEmpty else {
             return Spo2Summary(
                 pct: nil,
                 readings: 0,
                 saturated: saturated,
                 diagnostic: diagnostic,
-                reason: "the strap banked no in-band (70-100) candidate — no SpO2 % is produced"
+                reason: "the strap produced no eligible in-band (70-100) candidate — no SpO2 % is produced"
             )
         }
         return Spo2Summary(

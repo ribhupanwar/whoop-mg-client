@@ -71,6 +71,13 @@ class TestRespRateFromRR(unittest.TestCase):
         self.assertIsNone(result.breaths_per_min)
         self.assertIsNotNone(result.reason)
 
+    def test_spectral_rsa_recovers_rate_over_multiple_windows(self):
+        # 1800s -> 6 windows -> triggers spectral DFT path (>= 3 windows)
+        result = resp_rate_from_rr(rsa_series(0, 1800, 18))
+        self.assertIsNotNone(result.breaths_per_min)
+        self.assertAlmostEqual(result.breaths_per_min, 18.0, delta=0.6)
+        self.assertGreaterEqual(result.windows, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

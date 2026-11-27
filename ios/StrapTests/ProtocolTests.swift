@@ -384,6 +384,32 @@ final class ProtocolTests: XCTestCase {
         }
     }
 
+    func testFirmwareVersionAndShortPayloadFailClosed() {
+        let valid = bytes(realV18Hex)
+        XCTAssertNotNil(V18Decoder.decode(valid))
+        for version: UInt8 in [20, 21, 22, 24, 26] {
+            var other = valid
+            other[1] = version
+            XCTAssertNil(V18Decoder.decode(other),
+                "Do not reinterpret unverified firmware layout as V18")
+        }
+        XCTAssertNil(V18Decoder.decode(Array(valid.prefix(V18Decoder.minReadable - 1))))
+    }
+
+    func testInvalidImuAccelerationDoesNotDiscardValidHR() {
+        var inner = bytes(realV18Hex)
+        let bits = Float(99).bitPattern
+        for (offset, value) in [(33, bits), (37, bits)] {
+            for byte in 0..<4 {
+                inner[offset + byte] = UInt8(truncatingIfNeeded: value >> (byte * 8))
+            }
+        }
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.heartRate, 94)
+        XCTAssertNil(sample?.dynamicAccelG)
+        XCTAssertNil(sample?.gravityXG)
+    }
+
     func testSpo2CandidateTriMode() {
         XCTAssertEqual(V18Decoder.spo2Candidate(raw: 96).pct, 96)
         XCTAssertEqual(V18Decoder.spo2Candidate(raw: 96).kind, .pct)
@@ -559,5 +585,50 @@ final class StandardHeartRateTests: XCTestCase {
         let reading = parse([0x19, 0x2C, 0x00, 0x20, 0x00, 0x00, 0x04])
         XCTAssertEqual(reading?.heartRate, 44)
         XCTAssertEqual(reading?.rrMS, [1000])
+    }
+}
+
+
+final class HistoricalOpticalK21DecoderTests: XCTestCase {
+    func testRejectsTruncatedOrOversizedBodies() {
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: []))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1243)))
+        XCTAssertNil(HistoricalOpticalK21Decoder.decode(body: [UInt8](repeating: 0, count: 1245)))
+    }
+
+    func testRawOpticalSignalValidityNeverImpliesCalibratedSpo2() {
+        let flat = HistoricalOpticalK21(
+            green: Array(repeating: Array(repeating: Int16(500), count: 100), count: 3),
+            infrared: Array(repeating: Array(repeating: Int16(600), count: 100), count: 3))
+        XCTAssertEqual(flat.signalValidity, .flatline)
+        var variable = flat
+        var green = variable.green
+        green[0][5] = 501
+        variable = HistoricalOpticalK21(green: green, infrared: variable.infrared)
+        XCTAssertEqual(variable.signalValidity, .variable)
+        green[0][5] = Int16.max
+        XCTAssertEqual(HistoricalOpticalK21(green: green, infrared: flat.infrared).signalValidity, .clipped)
+        XCTAssertEqual(HistoricalOpticalK21(green: [], infrared: []).signalValidity, .missing)
+    }
+
+    func testSixChannelsDecodeIndependentlyWithSignedLittleEndian() {
+        var body = [UInt8](repeating: 0, count: 1244)
+        let offsets = [20, 220, 420, 632, 832, 1032]
+        for (channel, offset) in offsets.enumerated() {
+            let value = Int16(channel % 2 == 0 ? -(channel + 1) : channel + 1)
+            let bits = UInt16(bitPattern: value)
+            body[offset] = UInt8(truncatingIfNeeded: bits)
+            body[offset + 1] = UInt8(truncatingIfNeeded: bits >> 8)
+        }
+        let decoded = HistoricalOpticalK21Decoder.decode(body: body)
+        XCTAssertEqual(decoded?.green.count, 3)
+        XCTAssertEqual(decoded?.infrared.count, 3)
+        XCTAssertEqual(decoded?.green[0][0], -1)
+        XCTAssertEqual(decoded?.green[1][0], 2)
+        XCTAssertEqual(decoded?.green[2][0], -3)
+        XCTAssertEqual(decoded?.infrared[0][0], 4)
+        XCTAssertEqual(decoded?.infrared[1][0], -5)
+        XCTAssertEqual(decoded?.infrared[2][0], 6)
+        XCTAssertEqual(decoded?.infrared[2][99], 0)
     }
 }

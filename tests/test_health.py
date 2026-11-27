@@ -229,6 +229,19 @@ class TestSleepDetection(unittest.TestCase):
         )
         self.assertLess(corrected_period.duration_s, periods[0].duration_s)
 
+    def test_sustained_three_minute_hr_elevation_trims_awake_in_bed_prefix_and_ignores_one_minute_surge(self):
+        # 600s active (85 bpm), 2700s quiet awake-in-bed laptop prefix (83 bpm),
+        # 5400s sleep (60 bpm) with a 1-minute 85 bpm REM surge at 4800s (must NOT split).
+        rows = stretch(0, 600, 85, 0.3)
+        rows += stretch(600, 2700, 83, 0.01)
+        rows += stretch(3300, 1500, 60, 0.01)
+        rows += stretch(4800, 60, 85, 0.01)  # 1-min surge only
+        rows += stretch(4860, 3840, 60, 0.01)
+        rows += stretch(8700, 600, 85, 0.3)
+        periods = detect_sleep(rows)
+        self.assertEqual(len(periods), 1)
+        self.assertGreaterEqual(periods[0].start_unix, 3300)
+        self.assertEqual(periods[0].end_unix, 8699)
 
 class TestStrain(unittest.TestCase):
     def test_zero_trimp_is_zero(self):
@@ -345,6 +358,14 @@ class TestRecovery(unittest.TestCase):
         self.assertLess(sick.score, unpenalized.score)
         # Expected: 65.0 * (1 - 0.10) = 58.5
         self.assertEqual(sick.score, 58.5)
+
+    def test_sleep_performance_incorporating_sleep_debt(self):
+        # When sleep performance (e.g. 75% after sleep debt) is provided,
+        # it drives the sleep component directly.
+        base = baseline()
+        res_with_perf = recovery_score(4.0, 55.0, sleep_hours=8.0, sleep_need_hours=8.0,
+                                       baseline=base, sleep_performance=75.0)
+        self.assertEqual(res_with_perf.sleep_component, 75.0)
 
     def test_vo2max_source_enumeration(self):
         # 4 source strings matching 0x109748af0-0x109748b50

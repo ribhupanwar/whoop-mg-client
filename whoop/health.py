@@ -347,43 +347,46 @@ def _split_run_at_hr_transitions(run: list[V18Sample], active_median: float,
     seg_start = run_start
     
     # First, skip any leading elevated HR (awake in bed before sleep)
+    def _minute_median(start_sec: int) -> float | None:
+        hrs = [hr_by_sec[sec] for sec in range(start_sec, start_sec + 60) if sec in hr_by_sec]
+        return statistics.median(hrs) if len(hrs) >= 30 else None
+
     t = run_start
     while t + 60 <= run_end:
-        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-        if len(minute_hrs) >= 30:
-            minute_median = statistics.median(minute_hrs)
-            if minute_median >= elevated_threshold:
-                t += 30
-            else:
-                break
+        m = _minute_median(t)
+        if m is not None and m >= elevated_threshold:
+            t += 60
         else:
             break
     seg_start = t
-    
-    # Scan with 1-minute sliding window for internal elevations (bathroom breaks, etc.)
+
+    # Scan with 3-consecutive-minute sustained HR elevation gate (180s)
+    # so brief 1-2 minute REM surges do not fragment a continuous night.
     t = seg_start
-    while t + 60 <= run_end:
-        # Check if this minute has elevated HR
-        minute_hrs = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-        if len(minute_hrs) >= 30:  # At least 30 samples in minute
-            minute_median = statistics.median(minute_hrs)
-            if minute_median >= elevated_threshold:
-                # Found sustained elevated HR - split here if segment is long enough
-                seg_duration = t - seg_start
-                if seg_duration >= min_segment_s:
-                    # Create segment
-                    seg_samples = [s for s in run if seg_start <= s.unix < t]
-                    if seg_samples:
-                        segments.append(seg_samples)
-                    # Skip the elevated period
-                    while t + 60 <= run_end:
-                        minute_hrs2 = [hr_by_sec.get(sec) for sec in range(t, t + 60) if sec in hr_by_sec]
-                        if len(minute_hrs2) >= 30 and statistics.median(minute_hrs2) >= elevated_threshold:
-                            t += 30
-                        else:
-                            break
-                    seg_start = t
-        t += 30  # Step by 30 seconds
+    while t + 180 <= run_end:
+        m0 = _minute_median(t)
+        m1 = _minute_median(t + 60)
+        m2 = _minute_median(t + 120)
+        if (
+            m0 is not None and m0 >= elevated_threshold
+            and m1 is not None and m1 >= elevated_threshold
+            and m2 is not None and m2 >= elevated_threshold
+        ):
+            seg_duration = t - seg_start
+            if seg_duration >= min_segment_s:
+                seg_samples = [s for s in run if seg_start <= s.unix < t]
+                if seg_samples:
+                    segments.append(seg_samples)
+            t += 180
+            while t + 60 <= run_end:
+                m_next = _minute_median(t)
+                if m_next is not None and m_next >= elevated_threshold:
+                    t += 60
+                else:
+                    break
+            seg_start = t
+        else:
+            t += 60
     
     # Add final segment
     if run_end - seg_start + 1 >= min_segment_s:
@@ -924,14 +927,21 @@ def detect_sleep(
                             if ordered[idx].wearing and 35 <= ordered[idx].heart_rate <= 220]
             
             # Harmonize wakeEvents: count sustained movement bouts (>=15 seconds)
+            # Timestamp gaps must break the contiguous movement bout rather than bridging across minutes.
             moving_seconds = 0
             wake_events = 0
             last_moving_unix = None
             for idx in verified_indices:
+                u = ordered[idx].unix
                 if not quiet[idx]:
-                    if ordered[idx].unix != last_moving_unix:
-                        moving_seconds += 1
-                        last_moving_unix = ordered[idx].unix
+                    if last_moving_unix is not None:
+                        if u == last_moving_unix + 1:
+                            moving_seconds += 1
+                        elif u > last_moving_unix + 1:
+                            moving_seconds = 1
+                    else:
+                        moving_seconds = 1
+                    last_moving_unix = u
                     if moving_seconds == 15:
                         wake_events += 1
                 else:
@@ -1146,6 +1156,7 @@ def recovery_score(
     baseline: Baseline | None,
     respiratory_rate: float | None = None,
     respiratory_rate_baseline: float | None = None,
+    sleep_performance: float | None = None,
 ) -> RecoveryResult:
     """Baseline-relative 0-100 recovery estimate. Not WHOOP's recovery.
 
@@ -1169,7 +1180,9 @@ def recovery_score(
     )
     components = {"hrv": _logistic(hrv_z), "rhr": _logistic(rhr_z)}
 
-    if sleep_hours is not None and sleep_need_hours and sleep_need_hours > 0:
+    if sleep_performance is not None and math.isfinite(sleep_performance) and sleep_performance >= 0:
+        components["sleep"] = min(100.0, sleep_performance)
+    elif sleep_hours is not None and sleep_need_hours and sleep_need_hours > 0:
         components["sleep"] = 100.0 * min(sleep_hours / sleep_need_hours, 1.0)
 
     total_weight = sum(RECOVERY_WEIGHTS[k] for k in components)
@@ -1331,11 +1344,12 @@ def _window_rates(detrended: list[float]) -> list[float]:
     window_samples = max(
         min_distance * 3, round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
     )
+    min_window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
     dt = 1.0 / RSA_RESAMPLE_HZ
     rates: list[float] = []
     for start in range(0, len(detrended), window_samples):
         window = detrended[start : start + window_samples]
-        if len(window) < min_distance * 3:
+        if len(window) < min_window_samples:
             continue
         peaks = _find_peaks(window, min_distance)
         if len(peaks) < 3:
@@ -1361,6 +1375,55 @@ def _window_rates(detrended: list[float]) -> list[float]:
     return rates
 
 
+def _spectral_window_rates(
+    detrended: list[float], median_rr_seconds: float
+) -> list[float]:
+    ceiling_hz = min(0.40, 0.5 / median_rr_seconds) if median_rr_seconds > 0 else 0.40
+    if ceiling_hz <= 0.16:
+        return []
+    window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
+    min_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
+    rates: list[float] = []
+    for start in range(0, len(detrended), window_samples):
+        window = detrended[start : start + window_samples]
+        n = len(window)
+        if n < min_samples:
+            continue
+        denom = max(1, n - 1)
+        windowed = [
+            window[i] * 0.5 * (1.0 - math.cos(2.0 * math.pi * i / denom))
+            for i in range(n)
+        ]
+        best_power = -1.0
+        best_freq = 0.0
+        total_power = 0.0
+        bins = 0
+        freq = 0.05
+        while freq <= ceiling_hz + 1e-6:
+            omega = 2.0 * math.pi * freq / RSA_RESAMPLE_HZ
+            re = 0.0
+            im = 0.0
+            for i in range(n):
+                ang = omega * i
+                re += windowed[i] * math.cos(ang)
+                im -= windowed[i] * math.sin(ang)
+            power = re * re + im * im
+            total_power += power
+            bins += 1
+            if power > best_power:
+                best_power = power
+                best_freq = freq
+            freq += 0.005
+        mean_power = total_power / bins if bins > 0 else 0.0
+        if (
+            mean_power > 0
+            and (best_power / mean_power) >= 2.0
+            and 0.133 <= best_freq <= 0.417
+        ):
+            rates.append(best_freq * 60.0)
+    return rates
+
+
 def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
     """Estimate sleeping respiratory rate from R-R via RSA.
 
@@ -1380,6 +1443,7 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         )
 
     rates: list[float] = []
+    spectral_rates: list[float] = []
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
             continue
@@ -1396,25 +1460,28 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         detrended = _detrend(grid)
         if statistics.pstdev(detrended) <= 1e-9:
             continue
+        median_rr_s = statistics.median(rr / 1000.0 for _, rr in segment)
+        spectral_rates.extend(_spectral_window_rates(detrended, median_rr_s))
         rates.extend(_window_rates(detrended))
 
-    if not rates:
+    active_rates = spectral_rates if len(spectral_rates) >= 3 else rates
+    if not active_rates:
         return RespRate(
             None,
             "no usable RSA peak train - needs a continuous still or sleep R-R window",
             total_beats,
             0,
         )
-    median = statistics.median(rates)
+    median = statistics.median(active_rates)
     if not (RESP_PLAUSIBLE_MIN_BPM <= median <= RESP_PLAUSIBLE_MAX_BPM):
         return RespRate(
             None,
             f"RSA estimate {median:.1f}/min fell outside the plausible"
             f" {RESP_PLAUSIBLE_MIN_BPM:.0f}-{RESP_PLAUSIBLE_MAX_BPM:.0f} band",
             total_beats,
-            len(rates),
+            len(active_rates),
         )
-    return RespRate(round(median, 1), None, total_beats, len(rates))
+    return RespRate(round(median, 1), None, total_beats, len(active_rates))
 
 
 @dataclass

@@ -301,15 +301,16 @@ enum DailyAnalysis {
                         $0.wearing && (35...220).contains($0.heartRate)
                     }.map(\.unix)).count
                     guard validSeconds >= 300 else { return nil }
-                    // WHOOP 5.80.2 forensic parity (0x976d620): evaluate HRV during Slow Wave Sleep (SWS / deep sleep)
-                    // when deep epochs contain >= 20 clean NN beats; otherwise safely fall back to the quiet resting window.
+                    // Accuracy Engine V2: evaluate 5-minute windowed RMSSD across the
+                    // sleep session (with SWS fallback for short captures) to avoid
+                    // single-longest-run sampling variance.
                     let relatedSession = sleepSessions.first {
                         $0.startUnix == period.startUnix || ($0.startUnix <= period.endUnix && period.startUnix < $0.endUnix)
                     }
                     let deepEpochs = relatedSession?.staging.segments
                         .filter { $0.stage == .deep }
                         .compactMap { $0.endUnix > $0.startUnix ? ($0.startUnix...($0.endUnix - 1)) : nil } ?? []
-                    let result = Hrv.swsRestingHRV(segment, deepEpochs: deepEpochs, minWindowS: 300)
+                    let result = Hrv.windowedSleepHRV(segment, deepEpochs: deepEpochs, windowSeconds: 300)
                     let rhr = Hrv.restingHeartRate(segment, windowS: 300)
                     return (period: period, hrv: result.result,
                             window: result.windowSeconds, rhr: rhr)

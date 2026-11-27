@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum ProfileAvatar: String, CaseIterable, Identifiable {
     case person = "person.fill"
@@ -49,47 +50,100 @@ private struct ProfileEditor: View {
     @AppStorage(ProfileView.nameKey) private var displayName = ""
     @AppStorage(ProfileAvatar.storageKey) private var avatar: ProfileAvatar = .person
     @State private var hasLoadedDraft = false
-    @State private var draftName = ""
+    @State private var firstName = ""
+    @State private var lastName = ""
     @State private var draftAvatar: ProfileAvatar = .person
     @Environment(\.dismiss) private var dismiss
 
+    private var combinedName: String {
+        [firstName.trimmingCharacters(in: .whitespacesAndNewlines),
+         lastName.trimmingCharacters(in: .whitespacesAndNewlines)]
+            .filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
     var body: some View {
-        Form {
-            Section {
-                TextField("Display name", text: $draftName)
-                    .textContentType(.nickname)
-                    .accessibilityIdentifier("profile.displayName")
-                Picker("Avatar", selection: $draftAvatar) {
-                    ForEach(ProfileAvatar.allCases) { option in
-                        Label(option.title, systemImage: option.rawValue).tag(option)
+        Screen {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 12) {
+                    ProfileAvatarView(size: 104)
+                    Text(combinedName.isEmpty ? "Your profile" : combinedName)
+                        .font(StrapTypography.body(27, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Menu {
+                        ForEach(ProfileAvatar.allCases) { option in
+                            Button {
+                                draftAvatar = option
+                            } label: {
+                                Label(option.title, systemImage: option.rawValue)
+                            }
+                        }
+                    } label: {
+                        Label("Change avatar", systemImage: "pencil.circle")
+                            .font(StrapTypography.body(13, weight: .semibold))
+                            .foregroundStyle(Color.appAccent)
                     }
                 }
-            } header: {
-                Text("Personal profile")
-            } footer: {
-                Text("Your name and avatar are stored on this device.")
-            }
-
-            Section {
-                NavigationLink("Health & Activity Settings") { SettingsView() }
-            }
-        }
-        .navigationTitle("Edit Profile")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button("Save") {
-                    displayName = String(draftName.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
+                profileField("FIRST NAME", text: $firstName, contentType: .givenName)
+                profileField("LAST NAME", text: $lastName, contentType: .familyName)
+                Panel {
+                    SectionTitle("HEALTH PROFILE")
+                    Text("Birthday, sex, height and weight are managed in Health & Activity Settings so your existing measurements stay consistent.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                    NavigationLink {
+                        SettingsView()
+                    } label: {
+                        HStack {
+                            Text("Edit birthday, gender, height & weight")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .font(StrapTypography.body(13, weight: .semibold))
+                        .foregroundStyle(Color.appAccent)
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    displayName = String(combinedName.prefix(60))
                     avatar = draftAvatar
                     dismiss()
+                } label: {
+                    Text("SAVE")
+                        .font(StrapTypography.body(15, weight: .bold))
+                        .frame(maxWidth: .infinity, minHeight: 52)
                 }
+                .buttonStyle(.borderedProminent)
+                .disabled(combinedName.isEmpty)
+                .accessibilityIdentifier("profile.save")
             }
+            .foregroundStyle(Color.appFG)
         }
+        .navigationTitle("EDIT PROFILE")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             guard !hasLoadedDraft else { return }
-            draftName = displayName
+            let parts = displayName.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            firstName = parts.first.map(String.init) ?? ""
+            lastName = parts.count > 1 ? String(parts[1]) : ""
             draftAvatar = avatar
             hasLoadedDraft = true
+        }
+    }
+
+    private func profileField(_ label: String, text: Binding<String>,
+                              contentType: UITextContentType) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(label)
+                .font(StrapTypography.body(11, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(Color.appMuted)
+            TextField(label, text: text)
+                .textContentType(contentType)
+                .font(StrapTypography.body(18, weight: .medium))
+                .padding(16)
+                .background(Color.appRaised, in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.appLine, lineWidth: 1))
         }
     }
 }

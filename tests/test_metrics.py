@@ -4,15 +4,23 @@ import math
 import unittest
 
 from whoop.metrics import (
+    ACF1_FLOOR,
+    ACF1_MIN_PAIRS,
+    RR_COVERAGE_CEILING,
+    RR_COVERAGE_MIN_SPAN_S,
     age_predicted_max_hr,
     hrv,
+    hrv_extended_diagnostics,
     hrv_from_rr,
     hr_reserve_ratio,
+    median_of_windowed_rmssd,
+    nn_diff_acf1,
     nn_intervals,
     pnn50,
     resting_heart_rate,
     resting_hrv,
     rmssd,
+    rr_coverage,
     sdnn,
     sws_resting_hrv,
     trimp,
@@ -71,6 +79,117 @@ class TestNnFiltering(unittest.TestCase):
         # An out-of-range value carries no interval information, so it must not
         # discard a pending seed that the next real beat can corroborate.
         self.assertEqual(nn_intervals([800.0, 5000.0, 810.0]), [800.0, 810.0])
+
+
+class TestObservationOnlyDiagnostics(unittest.TestCase):
+    """Tests for observation-only diagnostics: ACF1 jitter gate and RR coverage."""
+
+    def test_nn_diff_acf1_constant_series_returns_none(self):
+        # Constant series has zero variance -> returns None
+        self.assertIsNone(nn_diff_acf1([800.0, 800.0, 800.0, 800.0]))
+
+    def test_nn_diff_acf1_insufficient_pairs_returns_none(self):
+        # Fewer than ACF1_MIN_PAIRS (30) pairs returns None
+        self.assertIsNone(nn_diff_acf1([800.0, 810.0] * 10))  # 19 pairs < 30
+
+    def test_nn_diff_acf1_smooth_tachogram_positive_acf1(self):
+        # Smooth tachogram with RSA-like pattern: successive differences
+        # are positively correlated -> ACF1 > 0
+        nn = []
+        base = 800.0
+        for i in range(100):
+            nn.append(base + 20 * math.sin(i * 0.1))  # Slow modulation
+        acf1 = nn_diff_acf1(nn)
+        self.assertIsNotNone(acf1)
+        self.assertGreater(acf1, 0.5)  # Strong positive correlation
+
+    def test_nn_diff_acf1_white_noise_below_floor(self):
+        # White noise NN intervals: differences have ACF1 ≈ -0.5
+        # This should be below the OpenStrap floor of -0.35
+        import random
+        random.seed(42)
+        nn = [800.0 + random.uniform(-50, 50) for _ in range(200)]
+        acf1 = nn_diff_acf1(nn)
+        self.assertIsNotNone(acf1)
+        self.assertLess(acf1, ACF1_FLOOR)  # Should be below -0.35
+
+    def test_nn_diff_acf1_alternating_pattern_strong_negative(self):
+        # Alternating pattern (800, 810, 800, 810...) -> differences
+        # alternate +10, -10 -> perfect negative correlation -> ACF1 ≈ -1
+        nn = [800.0, 810.0] * 100
+        acf1 = nn_diff_acf1(nn)
+        self.assertIsNotNone(acf1)
+        self.assertLess(acf1, -0.9)
+
+    def test_rr_coverage_normal_stream(self):
+        # Normal RR stream: sum of RR ≈ wall-clock span
+        # Beat-end timestamps: each beat ends at 800ms intervals
+        rr = [800.0] * 1000
+        timestamps = [800 * (i + 1) for i in range(1000)]
+        cov = rr_coverage(rr, timestamps)
+        self.assertIsNotNone(cov)
+        self.assertAlmostEqual(cov, 1.0, places=2)
+
+    def test_rr_coverage_duplicate_beats_over_counted(self):
+        # Duplicate beats: more beat-time than elapsed time
+        rr = [800.0] * 2000
+        timestamps = [800 * (i + 1) for i in range(1000)] * 2
+        cov = rr_coverage(rr, timestamps)
+        self.assertIsNotNone(cov)
+        self.assertGreater(cov, RR_COVERAGE_CEILING)
+
+    def test_rr_coverage_insufficient_span_returns_none(self):
+        # Span < RR_COVERAGE_MIN_SPAN_S (600s) returns None
+        # 500 beats at 800ms = 400s < 600s
+        rr = [800.0] * 500
+        timestamps = [800 * (i + 1) for i in range(500)]
+        self.assertIsNone(rr_coverage(rr, timestamps))
+
+    def test_rr_coverage_mismatched_lengths_returns_none(self):
+        self.assertIsNone(rr_coverage([800.0, 810.0], [0]))
+
+    def test_extended_diagnostics_includes_acf1_and_coverage(self):
+        # Create a valid sleep period with RR data - need enough beats for coverage
+        # Use a realistic RSA pattern: breathing at ~15 breaths/min = 0.25 Hz
+        # At 60 bpm (1 beat/sec), this is 1 cycle per 4 beats
+        # This gives ACF1 ≈ 0 for the successive differences (above floor of -0.35)
+        import math
+        import random
+        random.seed(42)
+        rows = []
+        for i in range(1000):
+            # RSA: 4 beats per breath cycle, plus small physiological noise
+            rr_val = 800 + 20 * math.sin(i * 2 * math.pi / 4) + random.uniform(-2, 2)
+            rows.append(sample(i, 60, 0.01, (int(rr_val), int(rr_val + 5))))
+        diag = hrv_extended_diagnostics(rows)
+        self.assertIsNotNone(diag.nn_diff_acf1)
+        self.assertIsNotNone(diag.rr_coverage_ratio)
+        self.assertIsNotNone(diag.acf1_below_floor)
+        self.assertIsNotNone(diag.rr_over_coverage)
+        self.assertFalse(diag.acf1_below_floor)  # RSA pattern should be above floor
+        self.assertFalse(diag.rr_over_coverage)  # Normal coverage
+
+    def test_extended_diagnostics_with_sws_epochs(self):
+        rows = [sample(i, 60, 0.01, (800, 810)) for i in range(500)]
+        diag = hrv_extended_diagnostics(rows, sws_epochs=[(100, 400)])
+        self.assertEqual(diag.selected_calculation_window, "SWS_DEEP_SLEEP")
+
+    def test_median_of_windowed_rmssd_basic(self):
+        # Create a clean NN series with known RMSSD
+        nn = [800.0, 810.0] * 50  # Alternating 800/810 -> RMSSD = 10
+        timestamps = list(range(0, 100))
+        rmssd = median_of_windowed_rmssd(nn, timestamps, window_seconds=300)
+        self.assertIsNotNone(rmssd)
+        # Each 5-min window has 300 beats -> 299 diffs, all ±10 -> RMSSD = 10
+        self.assertAlmostEqual(rmssd, 10.0, places=1)
+
+    def test_median_of_windowed_rmssd_insufficient_data(self):
+        nn = [800.0, 810.0] * 5  # Only 10 beats
+        timestamps = list(range(0, 10))
+        self.assertIsNone(median_of_windowed_rmssd(nn, timestamps))
+
+    def test_median_of_windowed_rmssd_mismatched_lengths(self):
+        self.assertIsNone(median_of_windowed_rmssd([800.0, 810.0], [0]))
 
 
 class TestRestingHrv(unittest.TestCase):
@@ -233,6 +352,18 @@ class TestRestingHeartRate(unittest.TestCase):
         rows = [sample(i, 40 if i == 30 else 70) for i in range(60)]
         self.assertAlmostEqual(resting_heart_rate(rows), 69.5, places=6)
 
+    def test_out_of_range_hr_rejected(self):
+        # HR below 35 or above 220 should be filtered out, splitting runs
+        rows = [
+            sample(0, 55),
+            sample(1, 30),  # below 35 - filtered
+            sample(2, 57),
+            sample(3, 58),
+        ]
+        # Without filtering: 4-second run, window_s=3 gives windows [47.33, 48.33], median=47.83
+        # With filtering: runs are [0] and [2,3], both < 3 seconds, so no valid window
+        self.assertIsNone(resting_heart_rate(rows, window_s=3))
+
     def test_lowest_window_is_chosen(self):
         rows = [sample(i, 75 if i < 60 else 58) for i in range(180)]
         self.assertAlmostEqual(resting_heart_rate(rows), 58.0, places=6)
@@ -257,6 +388,47 @@ class TestRestingHeartRate(unittest.TestCase):
     def test_short_window_is_absent(self):
         rows = [sample(i, 55) for i in range(30)]
         self.assertIsNone(resting_heart_rate(rows))
+
+
+class TestWindowedSleepHRV(unittest.TestCase):
+    def test_averages_multiple_5min_windows_eliminating_longest_run_bias(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): RMSSD = 20 ms (alternating 800, 820)
+        # Window 2 (300..599): RMSSD = 40 ms (alternating 800, 840)
+        # Window 3 (600..899): RMSSD = 60 ms (alternating 800, 860)
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 820], accel=0.02) for t in range(0, 300)]
+        w2 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(300, 600)]
+        w3 = [sample(t, 60, rr=[800 if t % 2 == 0 else 860], accel=0.02) for t in range(600, 900)]
+        res, secs, n_win, used_fb = windowed_sleep_hrv(w1 + w2 + w3)
+        self.assertEqual(n_win, 3)
+        self.assertFalse(used_fb)
+        self.assertIsNotNone(res.rmssd_ms)
+        # Mean of (20, 40, 60) = 40 ms
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 900)
+
+    def test_rejects_overcounted_5min_window_without_losing_valid_windows(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): normal 1 beat/sec -> 40 ms RMSSD
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(0, 300)]
+        # Window 2 (300..599): over-counted 3 beats/sec -> >2.4x elapsed -> rejected
+        w2 = [sample(t, 60, rr=[800, 900, 800], accel=0.02) for t in range(300, 600)]
+        res, secs, n_win, _ = windowed_sleep_hrv(w1 + w2)
+        self.assertEqual(n_win, 1)
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 300)
+
+    def test_rejects_excessively_sparse_5min_window(self):
+        from whoop.metrics import windowed_sleep_hrv
+        # Window 1 (0..299): dense 300s -> 40 ms
+        w1 = [sample(t, 60, rr=[800 if t % 2 == 0 else 840], accel=0.02) for t in range(0, 300)]
+        # Window 2 (300..599): sparse 20s at start + 20s at end (elapsed=300, covered=40 < 150) -> rejected
+        sparse_head = [sample(t, 60, rr=[800 if t % 2 == 0 else 950], accel=0.02) for t in range(300, 320)]
+        sparse_tail = [sample(t, 60, rr=[800 if t % 2 == 0 else 950], accel=0.02) for t in range(580, 600)]
+        res, secs, n_win, _ = windowed_sleep_hrv(w1 + sparse_head + sparse_tail)
+        self.assertEqual(n_win, 1)
+        self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
+        self.assertEqual(secs, 300)
 
 
 if __name__ == "__main__":

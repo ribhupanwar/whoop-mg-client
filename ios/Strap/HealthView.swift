@@ -41,11 +41,13 @@ struct HealthView: View {
     }
 
     private var fiveMetricGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible())], spacing: 18) {
             healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
-            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen, value: demo ? "95" : ActivityFormat.whole(monitor[.oxygen].value) ?? "—",
-                         unit: "%", reading: monitor[.oxygen])
+            // The V18 offset-74 byte is not calibrated SpO₂. Keep the raw candidate
+            // in diagnostics, but never render it as a measured oxygen percentage.
+            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen, value: "—",
+                         unit: "", reading: monitor[.oxygen])
             healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
                          unit: "bpm", reading: monitor[.rhr])
             healthMetric("HRV", symbol: StrapIcon.Metric.hrv, value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
@@ -55,36 +57,39 @@ struct HealthView: View {
         .padding(.bottom, 18)
     }
 
-    // No validated relative-to-baseline temperature is available yet.
-    // Show the WHOOP-style tile without inventing a +°C delta from raw skin ADC.
+    // Show a baseline-relative *candidate* only after seven qualifying prior
+    // nights. Raw v18 skin temperature is not clinically calibrated.
     private var skinTemperatureCard: some View {
-        VStack(alignment: .leading, spacing: 15) {
+        let reading = monitor[.temperature]
+        let hasDelta = reading.baselineDays >= 7 && reading.value != nil
+        let hasNightlyCandidate = !hasDelta && reading.nightlyTemperatureCandidate != nil
+        return VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
                 Image(systemName: "thermometer")
                     .font(.system(size: 16, weight: .light))
                     .foregroundStyle(Color.appMuted)
                     .frame(width: 20)
-                Text("SKIN TEMP\n(FROM BASELINE)")
+                Text(hasNightlyCandidate ? "SKIN TEMP\n(NIGHTLY CANDIDATE)" : "SKIN TEMP\n(FROM BASELINE)")
                     .font(StrapTypography.body(10, weight: .bold))
                     .tracking(0.6)
                     .foregroundStyle(Color.appMuted)
                 Spacer(minLength: 0)
             }
             Spacer(minLength: 0)
-            Text("—")
+            Text(hasDelta ? String(format: "%+.1f", reading.value ?? 0) + " °C" : (reading.nightlyTemperatureCandidate.map { String(format: "%.1f °C", $0) } ?? "—"))
                 .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
-            Text("BUILDING BASELINE")
+            Text(hasDelta || hasNightlyCandidate ? "UNVALIDATED CANDIDATE" : reading.statusText)
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(Color.appMuted)
-            Text("No validated temperature delta")
+                .foregroundStyle(hasDelta || hasNightlyCandidate ? Color.appWarn : Color.appMuted)
+            Text(hasDelta ? reading.referenceText : "Personal baseline: \(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
@@ -133,9 +138,9 @@ struct HealthView: View {
                 .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(13)
-        .frame(maxWidth: .infinity, minHeight: 132, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
+        .padding(16)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
     }
 
     // Full-bleed WHOOP-style monitor. Sensor readings are never synthesized.
@@ -375,11 +380,10 @@ struct HealthView: View {
                 chipGood: false
             )
             MetricTile(
-                label: "SpO₂ candidate",
-                value: demo ? "\(SampleData.spo2Candidate)%"
-                             : summary?.spo2.pct.map { String(format: "%.0f%%", $0) } ?? "—",
+                label: "SpO₂ (unvalidated)",
+                value: "—",
                 unit: nil,
-                chip: demo ? "unvalidated · sample" : spo2Chip,
+                chip: demo ? "candidate telemetry only · sample" : spo2Chip,
                 chipGood: false
             )
             MetricTile(
@@ -578,7 +582,7 @@ struct HealthView: View {
 
     private var spo2Chip: String {
         guard let spo2 = summary?.spo2 else { return "sleep capture only" }
-        if spo2.pct != nil { return "unvalidated · \(spo2.readings) readings" }
+        if spo2.pct != nil { return "\(spo2.readings) raw candidates · no calibrated %" }
         return spo2.reason ?? "no in-band candidate"
     }
 

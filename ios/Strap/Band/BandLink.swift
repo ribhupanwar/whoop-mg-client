@@ -1,6 +1,7 @@
 import Combine
 import CoreBluetooth
 import Foundation
+import WidgetKit
 
 enum BandStatus: Equatable {
     case unpaired
@@ -164,6 +165,7 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var liveDayStrain: Double?
     @Published private(set) var liveDayRawStrain: Double = 0.0
     private var liveDayStrainKey: String = ""
+    var liveDayStrainDateKey: String { liveDayStrainKey }
     private var lastLiveStrainSampleUnix: Int?
     private var configuredRestingHR: Double?
     @Published private(set) var lastLiveHRAt: Date?
@@ -219,7 +221,25 @@ final class BandLink: NSObject, ObservableObject {
         summary?.latestSleepSession
     }
     @Published private(set) var days: [DayMetrics] = []
+    /// Persistent captured-step lower bound, never a claimed complete-day total.
+    @Published private(set) var capturedTodayFromLedger: Int?
+    @Published private(set) var capturedTodayStepAt: Date?
+    @Published private(set) var capturedTodayIncreaseAt: Date?
+    @Published private(set) var capturedTodayLedgerDayKey: String?
+    private let dailyStepLedger = DailyStepLedger()
+    private var stepLedgerTask: Task<Void, Never>?
+    private var lastStepWidgetReloadAt = Date.distantPast
+    private var stepLedgerUpdateGeneration = 0
+    private var stepLedgerArchiveHydrated = false
+
+    var recordedTodayFromLedger: Int? {
+        guard capturedTodayLedgerDayKey == JournalStore.dayKey(for: Date()) else { return nil }
+        return capturedTodayFromLedger
+    }
+
     @Published private(set) var drainStats = DrainStats()
+    @Published private(set) var lastDataRangeResponse: DataRangeResponse?
+    @Published private(set) var isStrapStuck = false
     @Published private(set) var lastCapturePath: String?
     @Published private(set) var isLiveSession = false
     @Published var lastMessage: String?
@@ -387,6 +407,8 @@ final class BandLink: NSObject, ObservableObject {
     private var newestInsertedThisPass: Int?
     private var seenRecordIndices: Set<UInt32> = []
     private var historyClock = HistoryClockGate()
+    private var strapReportedNewestUnix: Int?
+    private var stuckDetector = StuckStrapDetector(stuckAfterSeconds: 60.0, behindGapSeconds: 300)
     @Published private(set) var passiveECG: MGEcgPacket?
     @Published private(set) var currentBandModel: String?
     private var historySyncGeneration = 0
@@ -496,6 +518,86 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("strap-history-v18.json")
     }
 
+    /// Called only after the ledger actor has completed its read/write. Keep
+    /// the Home display, existing workout card and WidgetKit App Group snapshot
+    /// consistent with the same measured band-counter observation.
+    @MainActor
+    private func applyCapturedStepSnapshot(_ captured: DailyStepLedger.TodaySnapshot, now: Date) {
+        capturedTodayFromLedger = captured.steps
+        capturedTodayStepAt = captured.lastObservedAt
+        capturedTodayIncreaseAt = captured.lastIncreaseAt
+        capturedTodayLedgerDayKey = JournalStore.dayKey(for: now)
+
+        let today = JournalStore.dayKey(for: now)
+        let archived = days.first(where: { $0.dateKey == today })?.steps
+        let count = DailyStepLedger.bestRecordedMinimum(archive: archived, ledger: captured.steps)
+        let snapshot = StepWidgetSnapshot(
+            recordedDayKey: today, recordedMinimum: count, lastObservedAt: captured.lastObservedAt,
+            lastIncreaseAt: captured.lastIncreaseAt,
+            connectedAtWrite: isConnected, writtenAt: now
+        )
+        if snapshot.save(), now.timeIntervalSince(lastStepWidgetReloadAt) >= 60 {
+            lastStepWidgetReloadAt = now
+            WidgetCenter.shared.reloadTimelines(ofKind: StepWidgetSnapshot.widgetKind)
+        }
+
+        let phase = WorkoutRecorder.shared.phase
+        let workoutActive = phase == .recording || phase == .paused
+        if workoutActive {
+            WorkoutLiveActivityController.shared.updateStepCount(
+                count, observedAt: captured.lastObservedAt
+            )
+        }
+        let measuredHR = LiveHeartRateState.fresh(
+            liveHeartRate, receivedAt: lastLiveHRAt, connected: isConnected, now: now
+        )
+        let estimatedStrain = liveDayStrainDateKey == today ? liveDayStrain : nil
+        CapturedStepsLiveActivityController.shared.reconcile(
+            snapshot, workoutActive: workoutActive,
+            heartRate: measuredHR, estimatedStrain: estimatedStrain
+        )
+    }
+
+    /// Read the persisted capture across app relaunch, calendar midnight and
+    /// timezone change. A stale previous-day value is not shown as today's.
+    func refreshRecordedTodaySteps() {
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.applyCapturedStepSnapshot(snapshot, now: now)
+            }
+        }
+    }
+
+    /// The ledger consumes ONLY records durably committed by the history
+    /// writer. Never show unacknowledged raw BLE frames as daily steps.
+    private func ingestDurableStepSamples(_ samples: [V18Sample]) {
+        guard samples.contains(where: { $0.stepCounter != nil }) else { return }
+        stepLedgerUpdateGeneration += 1
+        let generation = stepLedgerUpdateGeneration
+        let now = Date()
+        let calendar = Calendar.current
+        let previous = stepLedgerTask
+        stepLedgerTask = Task { [weak self] in
+            await previous?.value
+            guard let self else { return }
+            await self.dailyStepLedger.ingest(samples, calendar: calendar, now: now)
+            let snapshot = await self.dailyStepLedger.todaySnapshot(now: now, calendar: calendar)
+            await MainActor.run {
+                guard self.stepLedgerUpdateGeneration == generation else { return }
+                self.applyCapturedStepSnapshot(snapshot, now: now)
+            }
+        }
+    }
+
     /// Serial disk work never blocks BLE callbacks or SwiftUI. The writer owns
     /// the latest archive so recovery and a live drain cannot overwrite each other.
     private func mergeHistoricalArchive(
@@ -512,6 +614,15 @@ final class BandLink: NSObject, ObservableObject {
                 self.hasUnsavedArchiveRecords = false
                 self.retainedHistoricalSamples = merged.samples
                 self.lastHistoryRecordCount = merged.samples.count
+                // On startup, hydrate from durable history even if no new
+                // packets arrived. Subsequent checkpoints ingest only new
+                // packets; replays are idempotent inside DailyStepLedger.
+                if !self.stepLedgerArchiveHydrated {
+                    self.stepLedgerArchiveHydrated = true
+                    self.ingestDurableStepSamples(merged.samples)
+                } else {
+                    self.ingestDurableStepSamples(incoming)
+                }
                 if historyGeneration == self.historySyncGeneration {
                     self.noteInsertedHistory(merged.progress)
                 }
@@ -622,6 +733,7 @@ final class BandLink: NSObject, ObservableObject {
             central = CBCentralManager(delegate: self, queue: nil)
         }
         recoverSavedCaptures()
+        refreshRecordedTodaySteps()
     }
 
     deinit {
@@ -804,13 +916,20 @@ final class BandLink: NSObject, ObservableObject {
                 self.historyProgress = HistoryProgress(stage: .finishing, completed: 0, total: 0, reused: 0,
                                                       startedAt: began, lastStepAt: Date())
             }
+            // isEdited is a legacy presentation flag, not proof of an explicit
+            // user correction. Only a persisted SleepCorrectionStore entry
+            // may prevent a later complete-history recalculation replacing a
+            // stale early wake boundary.
+            func hasSavedCorrection(_ session: SleepSession) -> Bool {
+                SleepCorrectionStore.times(for: session.sourcePeriod, overrides: corrections) != nil
+            }
             let editedDays = Set(freshDays.filter { day in
                 fresh.sleepSessions?.contains {
-                    $0.isEdited && $0.startUnix == day.sleepStartUnix
+                    hasSavedCorrection($0) && $0.startUnix == day.sleepStartUnix
                         && $0.endUnix - 1 == day.sleepEndUnix
                 } ?? false
             }.map(\.dateKey))
-            let previousEditedDays = Set(sessionsSnapshot.filter(\.isEdited).compactMap { session in
+            let previousEditedDays = Set(sessionsSnapshot.filter { hasSavedCorrection($0) }.compactMap { session in
                 JournalStore.dayKey(for: Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1)), calendar: .current)
             })
             var byDay: [String: DayMetrics] = [:]
@@ -944,6 +1063,11 @@ final class BandLink: NSObject, ObservableObject {
         guard let point = summary?.stressSeries?.last else {
             return StressResult(index: nil, reason: "Needs recorded awake R-R windows")
         }
+        // Historical stress windows are chartable but must not masquerade as live stress.
+        let age = Date().timeIntervalSince1970 - Double(point.unix)
+        guard age >= 0, age <= 10 * 60 else {
+            return StressResult(index: nil, reason: "No recent awake R-R stress window; historical values remain in the chart")
+        }
         return StressResult(index: point.index, reason: nil)
     }
 
@@ -994,7 +1118,12 @@ final class BandLink: NSObject, ObservableObject {
                 self?.recalculateRetainedMetrics()
             }
         } else if status.isReady, isConnected,
-                  HistorySyncPolicy.shouldSync(now: Date(), lastAttempt: lastSyncAttempt, foreground: true) {
+                  HistorySyncPolicy.shouldResumeIncompleteForeground(
+                    hasIncompleteHistory: hasIncompleteHistory,
+                    now: Date(), lastAttempt: lastSyncAttempt, foreground: true) {
+            // A timed-out drain can leave a persisted, incomplete night. Do not
+            // let the normal foreground cooldown suppress its recovery attempt.
+            // readHistory() still enforces pairing and active-drain guards.
             readHistory()
         }
     }
@@ -1012,10 +1141,13 @@ final class BandLink: NSObject, ObservableObject {
     private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
         let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
         let key = JournalStore.dayKey(for: date, calendar: calendar)
-        return days.last {
+        if let exact = days.last(where: {
             $0.dateKey == key && $0.state == "sleep"
                 && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
+        }) {
+            return exact
         }
+        return days.last { $0.dateKey == key && $0.state == "sleep" }
     }
 
     private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
@@ -1048,22 +1180,31 @@ final class BandLink: NSObject, ObservableObject {
         return try await Task.detached(priority: .utility) {
             let deep = session.staging.segments.filter { $0.stage == .deep && $0.endUnix > $0.startUnix }
                 .map { $0.startUnix...($0.endUnix - 1) }
-            let hrv = Hrv.swsRestingHRV(samples, deepEpochs: deep, minWindowS: 300)
+            let hrv = Hrv.windowedSleepHRV(samples, deepEpochs: deep, windowSeconds: 300)
+            let assessmentBreakdown = RecoveryDiagnostics.Breakdown(assessment: assessment)
+            let legacyBreakdown = RecoveryDiagnostics.Breakdown(assessment: legacy)
             let report = RecoveryDiagnostics.Report(
                 buildRevision: revision, timezone: calendar.timeZone.identifier,
                 lastCompletedHistorySync: sync, assessment: assessment,
-                breakdown: RecoveryDiagnostics.Breakdown(assessment: assessment), legacyHomeReplay: legacy,
-                legacyHomeBreakdown: RecoveryDiagnostics.Breakdown(assessment: legacy), session: session,
+                breakdown: assessmentBreakdown, legacyHomeReplay: legacy,
+                legacyHomeBreakdown: legacyBreakdown, session: session,
                 archiveFirstUnix: samples.first?.unix, archiveLastUnix: samples.last?.unix,
                 archiveFirstRecordIndex: samples.first?.header.recordIndex,
                 archiveLastRecordIndex: samples.last?.header.recordIndex,
                 archiveSampleCount: samples.count, recomputedHRV: hrv.result,
-                recomputedHRVWindowSeconds: hrv.windowSeconds, recomputedHRVUsedDeepSleep: hrv.isSWS,
+                recomputedHRVWindowSeconds: hrv.windowSeconds, recomputedHRVUsedDeepSleep: hrv.usedSWSFallback,
                 quietWindows: Hrv.restingWindowDiagnostics(samples, minWindowS: 300),
                 deepQuietWindows: Hrv.restingWindowDiagnostics(
                     samples.filter { sample in deep.contains { $0.contains(sample.unix) } }, minWindowS: 300),
-                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300), sleepAnalysis: sleepAnalysis,
-                upcomingSleepPlan: upcomingSleepPlan)
+                recomputedRHR: Hrv.restingHeartRate(samples, windowS: 300),
+                shadowHrvCandidates: Hrv.shadowCandidateSummaries(samples: samples, deepEpochs: deep),
+                sleepAnalysis: sleepAnalysis,
+                upcomingSleepPlan: upcomingSleepPlan,
+                respiratoryRate: assessment.day?.respiratoryRate,
+                respiratoryBaseline: assessmentBreakdown?.respiratoryBaseline,
+                sleepPerformancePct: assessment.day?.sleepPerformancePct,
+                skinTemperatureC: assessment.day?.skinTemperatureC,
+                oxygenCandidatePct: assessment.day?.oxygenCandidatePct)
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }
@@ -1863,6 +2004,8 @@ final class BandLink: NSObject, ObservableObject {
         if !continuing {
             continuationAttempts = 0
             continuationFrontier = retainedHistoricalSamples.last?.unix
+            stuckDetector.reset()
+            isStrapStuck = false
         }
         resubscribeNotifyCharacteristics()
         startCaptureFile()
@@ -2132,6 +2275,16 @@ final class BandLink: NSObject, ObservableObject {
         drainStats = DrainStats(
             frames: drainFrames, samples: capturedSamples.count, acks: drainAcks
         )
+        if let strapNewest = strapReportedNewestUnix {
+            let frontier = newestInsertedThisPass ?? continuationFrontier ?? retainedHistoricalSamples.last?.unix
+            let stuck = stuckDetector.observe(strapNewestTs: strapNewest, ourFrontierTs: frontier, now: now.timeIntervalSince1970)
+            if stuck && !isStrapStuck {
+                isStrapStuck = true
+                BLEDiagnosticLog.shared.log("stuckStrapDetector triggered: strapNewest=\(strapNewest) frontier=\(frontier ?? 0)")
+            } else if !stuck && isStrapStuck {
+                isStrapStuck = false
+            }
+        }
         // Throttle high-frequency drain diagnostic counters to 1 Hz to prevent
         // flooding SwiftUI with hundreds of objectWillChange notifications per second.
         if historyRRRecords != pendingHistoryRRRecords || historyUndecodableFrames != pendingHistoryUndecodableFrames {
@@ -2236,6 +2389,8 @@ final class BandLink: NSObject, ObservableObject {
             }
             if completed && historicalRecordFrames == 0 {
                 lastMessage = "History sync completed. No new stored sensor records."
+            } else if isStrapStuck {
+                lastMessage = "Strap transfer stopped: band reported records (\(lastDataRangeResponse?.pagesBehind ?? 0) pages behind) but offload was stuck. Re-initiating historical drain."
             } else if historicalRecordFrames == 0 && liveHRNotificationCount == 0 && firmwareRevision?.hasPrefix("50.43.") == true {
                 lastMessage = "Connected, but no history records or live HR arrived. Firmware 50.43.x has reported data-access restrictions; this is not proof of a token issue. Check firmware and retry after verifying band access."
             } else if historicalRecordFrames > 0 {
@@ -2310,6 +2465,8 @@ final class BandLink: NSObject, ObservableObject {
                 switch result {
                 case .success(let progress):
                     self.noteInsertedHistory(progress)
+                    // Saved and committed to SQLite; now safe for Home steps.
+                    self.ingestDurableStepSamples(incoming)
                     guard !self.historyPersistenceStalled else {
                         self.pendingHistoryFlushes -= 1
                         self.finishCompletedDrainIfReady()
@@ -2423,6 +2580,9 @@ final class BandLink: NSObject, ObservableObject {
             map[day.dateKey] = DailyAnalysis.mergeDay(previous: previous, fresh: day, replacesSleep: replacesSleep)
         }
         days = map.values.sorted { $0.dateKey < $1.dateKey }
+        // Publish the final analyzed daily minimum after the persisted sensor
+        // ledger, even when the analysis finishes after the history checkpoint.
+        refreshRecordedTodaySteps()
         let today = JournalStore.dayKey(for: Date())
         if let batch = days.first(where: { $0.dateKey == today })?.strain {
             if let currentLive = liveDayStrain {
@@ -2512,6 +2672,15 @@ final class BandLink: NSObject, ObservableObject {
             }
             recordLiveHR(bpm)
             lastLiveHRAt = Date()
+            // When a verified walking card already exists, update measured HR
+            // at a system-friendly cadence. HR never increments the step count.
+            let todaysStrain = liveDayStrainDateKey == JournalStore.dayKey(for: Date())
+                ? liveDayStrain : nil
+            Task { @MainActor in
+                CapturedStepsLiveActivityController.shared.updateVitals(
+                    heartRate: bpm, estimatedStrain: todaysStrain
+                )
+            }
             liveHRNotificationCount += 1
             hrRecoveryAttempts = 0
             if !rrMS.isEmpty {
@@ -2535,9 +2704,11 @@ final class BandLink: NSObject, ObservableObject {
             if inner.count > 1 {
                 pendingHistoryVersionCounts[Int(inner[1]), default: 0] += 1
             }
-            // OpenStrap: v26 is a 76-byte optical waveform, NOT an RR/HR
-            // biometric record. Recognize it without inventing heartbeats.
+            // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
+            // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
+            // Recognize them without inventing heartbeats or marking frames undecodable.
             if Gen5V26Record.decode(inner) != nil || Gen5IMUBuffer.decode(inner) != nil
+                || Gen5V20Record.decode(inner) != nil || Gen5V22Record.decode(inner) != nil
                 || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1
@@ -2585,7 +2756,16 @@ final class BandLink: NSObject, ObservableObject {
             // Note: in raw Gen5 BLE frame, inner[4] resides at byte 12 (+4 shift from 4.0 byte 8).
             let cmdOpcode = inner[2]
             let resultCode = inner[4]
-            if cmdOpcode == BandCommand.rebootStrap.rawValue {
+            if cmdOpcode == BandCommand.getDataRange.rawValue {
+                let body = Array(inner.dropFirst(5))
+                if let response = DataRangeResponse.decode(body) {
+                    lastDataRangeResponse = response
+                    BLEDiagnosticLog.shared.log("getDataRange decoded: write=\(response.writePage) trim=\(response.trimPage) behind=\(response.pagesBehind) newest=\(response.newestUnix ?? 0)")
+                    if let newest = response.newestUnix {
+                        strapReportedNewestUnix = newest
+                    }
+                }
+            } else if cmdOpcode == BandCommand.rebootStrap.rawValue {
                 if resultCode == 1 {
                     rebootExpectedDisconnect = true
                     isRebooting = true
@@ -2684,6 +2864,13 @@ final class BandLink: NSObject, ObservableObject {
               let reading = StandardHeartRate.parse(value),
               (25...230).contains(reading.heartRate) else { return }
         standardHRPackets += 1
+        // Retain valid standard 0x2A37 R-R intervals even while Type-40 HR
+        // remains fresh for display. Only HR display is suppressed below.
+        if !reading.rrMS.isEmpty {
+            standardRRPackets += 1
+            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
+            liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
+        }
         // Prefer the Gen5 stream while it is fresh; SIG remains a live fallback.
         guard LiveHeartRateState.fresh(liveHeartRate, receivedAt: lastType40HRAt,
                                        connected: isConnected, now: Date()) == nil else { return }
@@ -2702,11 +2889,6 @@ final class BandLink: NSObject, ObservableObject {
         liveHRNotificationCount += 1
         hrRecoveryAttempts = 0
         lastMessage = nil
-        if !reading.rrMS.isEmpty {
-            standardRRPackets += 1
-            archiveLiveRR(unix: Int(Date().timeIntervalSince1970), heartRate: reading.heartRate, intervals: reading.rrMS, source: "Bluetooth 2A37")
-            liveRRIntervalsMS = Array((liveRRIntervalsMS + reading.rrMS).suffix(120))
-        }
         guard isLiveSession else { return }
         let unix = Int(Date().timeIntervalSince1970)
         let sample = LiveSample(unix: unix, heartRate: reading.heartRate, rrIntervalsMS: reading.rrMS)
@@ -2769,6 +2951,7 @@ extension BandLink: CBCentralManagerDelegate {
                 pickerMode = false
             }
             status = .poweredOff
+            refreshRecordedTodaySteps()
         case .unauthorized:
             status = .unauthorized
         case .unsupported:
@@ -2856,6 +3039,7 @@ extension BandLink: CBCentralManagerDelegate {
         armHandshakeDeadline(seconds: 40)
         bandName = peripheral.name ?? preferredBandName ?? bandName
         status = .authenticating
+        refreshRecordedTodaySteps()
         lastMessage = "Bluetooth connected; discovering WHOOP services…"
         peripheral.delegate = self
         hrConnectedAt = Date()
@@ -2912,6 +3096,7 @@ extension BandLink: CBCentralManagerDelegate {
         status = .disconnected(
             error.map { $0.localizedDescription } ?? "Strap disconnected"
         )
+        refreshRecordedTodaySteps()
         if wantsConnection || preferredBandID != nil {
             scheduleReconnect()
         }

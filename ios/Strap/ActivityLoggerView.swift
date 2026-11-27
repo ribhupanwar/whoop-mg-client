@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// Manual activity entry. Lifting is logged as sets Ã— reps Ã— load; everything
-/// else by minutes. Nothing here feeds a score â€” it is the user's own log.
+/// Manual activity entry. Lifting is logged as sets × reps × load; everything
+/// else by minutes. Nothing here feeds a score — it is the user's own log.
 struct ActivityLoggerView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
@@ -12,6 +12,10 @@ struct ActivityLoggerView: View {
     @State private var sets: [WorkSet] = [WorkSet(reps: 8, loadKG: 60.0)]
     @State private var notes = ""
     @State private var activitySearch = ""
+    @State private var showsActivityPicker = false
+    @State private var activityCategory: ActivityPickerCategory = .all
+    @State private var newActivityID = UUID()
+    @State private var saving = false
     
     private let editing: ManualActivity?
     private let today = JournalStore.dayKey(for: Date())
@@ -50,7 +54,11 @@ struct ActivityLoggerView: View {
                     Button("Save") { save() }
                         .font(StrapTypography.body(17, weight: .bold))
                         .foregroundStyle(Color.appAccent)
+                        .disabled(saving || !(1...600).contains(minutes))
                 }
+            }
+            .fullScreenCover(isPresented: $showsActivityPicker) {
+                activityPicker
             }
         }
     }
@@ -59,53 +67,88 @@ struct ActivityLoggerView: View {
 
     private var kindPanel: some View {
         Panel {
-            SectionTitle("Type")
-            HStack(spacing: 10) {
-                Image(systemName: kind.icon)
-                    .foregroundStyle(Color.appAccent)
-                Text(kind.label)
-                    .font(StrapTypography.body(14, weight: .bold))
-                    .foregroundStyle(Color.appFG)
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .foregroundStyle(Color.appMuted)
-            }
-            .padding(12)
-            .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-            TextField("Search 60+ activities", text: $activitySearch)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .font(StrapTypography.body(13))
-                .padding(10)
+            SectionTitle("Select Activity")
+            Button {
+                activitySearch = ""
+                activityCategory = .all
+                showsActivityPicker = true
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: kind.icon).foregroundStyle(Color.appAccent)
+                    Text(kind.label)
+                        .font(StrapTypography.body(14, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Color.appMuted)
+                }
+                .padding(12)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
-            ScrollView {
-                LazyVStack(spacing: 2) {
-                    ForEach(ActivityKind.allCases.filter {
-                        activitySearch.isEmpty || $0.label.localizedCaseInsensitiveContains(activitySearch)
-                    }) { option in
-                        Button {
-                            kind = option
-                            activitySearch = ""
-                        } label: {
-                            HStack(spacing: 12) {
-                                Image(systemName: option.icon)
-                                    .frame(width: 22)
-                                Text(option.label)
-                                Spacer()
-                                if kind == option {
-                                    Image(systemName: "checkmark")
-                                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("manual.activityPicker")
+        }
+    }
+
+    private var activityPicker: some View {
+        NavigationStack {
+            Screen {
+                VStack(alignment: .leading, spacing: 12) {
+                    TextField("Search activities", text: $activitySearch)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                        .font(StrapTypography.body(13))
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.appRaised))
+                        .accessibilityIdentifier("manual.activitySearch")
+                    HStack {
+                        ForEach(ActivityPickerCategory.allCases) { category in
+                            Button { activityCategory = category } label: {
+                                Text(category.rawValue)
+                                    .font(StrapTypography.body(11, weight: .bold))
+                                    .foregroundStyle(activityCategory == category ? Color.appAccent : Color.appMuted)
+                                    .frame(maxWidth: .infinity)
+                                    .padding(.vertical, 10)
                             }
-                            .font(StrapTypography.body(13))
-                            .foregroundStyle(kind == option ? Color.appAccent : Color.appFG)
-                            .padding(.vertical, 9)
-                            .contentShape(Rectangle())
+                            .buttonStyle(.plain)
+                            .accessibilityAddTraits(activityCategory == category ? .isSelected : [])
                         }
-                        .buttonStyle(.plain)
+                    }
+                    let options = ActivityKind.allCases.filter {
+                        activityCategory.includes($0) &&
+                        (activitySearch.isEmpty || $0.label.localizedCaseInsensitiveContains(activitySearch))
+                    }.sorted { $0.label.localizedCaseInsensitiveCompare($1.label) == .orderedAscending }
+                    if options.isEmpty {
+                        Text("No matching activities").foregroundStyle(Color.appMuted)
+                    }
+                    LazyVStack(spacing: 4) {
+                        ForEach(options) { option in
+                            Button {
+                                kind = option
+                                showsActivityPicker = false
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: option.icon).frame(width: 24)
+                                    Text(option.label)
+                                    Spacer()
+                                    if kind == option { Image(systemName: "checkmark") }
+                                }
+                                .font(StrapTypography.body(14))
+                                .foregroundStyle(kind == option ? Color.appAccent : Color.appFG)
+                                .padding(14)
+                                .background(RoundedRectangle(cornerRadius: 10).fill(Color.appRaised))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
                 }
             }
-            .frame(maxHeight: 225)
+            .navigationTitle("SELECT ACTIVITY")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Back") { showsActivityPicker = false }
+                }
+            }
         }
     }
 
@@ -207,7 +250,7 @@ struct ActivityLoggerView: View {
     private var volumeText: String {
         let reps = sets.reduce(0) { $0 + $1.reps }
         let volume = Int(sets.reduce(0.0) { $0 + $1.volumeKG }.rounded())
-        return "\(sets.count) sets Â· \(reps) reps Â· \(volume) kg total volume"
+        return "\(sets.count) sets · \(reps) reps · \(volume) kg total volume"
     }
 
     private func row<Control: View>(label: String, @ViewBuilder control: () -> Control) -> some View {
@@ -226,15 +269,19 @@ struct ActivityLoggerView: View {
     }
 
     private func save() {
+        guard !saving, (1...600).contains(minutes) else { return }
+        saving = true
+        defer { saving = false }
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let activity = ManualActivity(
-            id: editing?.id ?? UUID(),
+            id: editing?.id ?? newActivityID,
             dateKey: editing?.dateKey ?? today,
             kind: kind,
             name: trimmed.isEmpty ? kind.label : trimmed,
             minutes: minutes,
             sets: kind.usesSets ? sets.filter { $0.reps > 0 } : [],
-            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines)
+            notes: notes.trimmingCharacters(in: .whitespacesAndNewlines),
+            mergedFrom: editing?.mergedFrom
         )
         if store.addActivity(activity) { dismiss() }
     }

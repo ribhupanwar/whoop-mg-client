@@ -35,7 +35,10 @@ enum Hrv {
 
         for value in rrMS {
             guard value >= minimum && value <= maximum else {
+                // Invalid/padding RR is a hard beat-continuity boundary.
+                // Do not pair a pre-gap seed with a post-gap interval.
                 recent.removeAll()
+                candidate = nil
                 rejectedRun = 0
                 continue
             }
@@ -69,6 +72,19 @@ enum Hrv {
             if recent.count > nnReferenceBeats { recent.removeFirst() }
         }
         return accepted
+    }
+
+    /// Research-only RR duration coverage. Never rescale production HRV.
+    /// Requires a verified contiguous observation interval.
+    static func rrDurationCoverage(_ rrMS: [Int], observedSeconds: Int) -> Double? {
+        guard observedSeconds > 0 else { return nil }
+        var totalMilliseconds = 0.0
+        for rr in rrMS {
+            guard (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains(rr) else { continue }
+            totalMilliseconds += Double(rr)
+        }
+        guard totalMilliseconds > 0 else { return nil }
+        return totalMilliseconds / (Double(observedSeconds) * 1_000)
     }
 
     // MARK: - Standard HRV
@@ -112,6 +128,21 @@ enum Hrv {
         )
     }
 
+    /// Choose one RR payload per timestamp after history/live retransmission.
+    /// An extra invalid/padding word must not outrank a shorter, valid payload.
+    /// Ties retain the first observation for deterministic replay behavior.
+    static func preferRetransmittedRR(_ candidate: [Int], over existing: [Int]) -> Bool {
+        func validCount(_ rr: [Int]) -> Int {
+            rr.filter { (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0) }.count
+        }
+        let candidateValid = validCount(candidate)
+        let existingValid = validCount(existing)
+        if candidateValid != existingValid { return candidateValid > existingValid }
+        let candidateInvalid = candidate.count - candidateValid
+        let existingInvalid = existing.count - existingValid
+        return candidateInvalid < existingInvalid
+    }
+
     /// Compute RMSSD only across consecutive beats inside contiguous records.
     /// Never bridge a missing second or an artefact-rejected beat: doing so
     /// creates an artificial successive-NN difference and biases recovery.
@@ -124,12 +155,7 @@ enum Hrv {
         var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
-                duplicateCount += 1
-                if !sample.rrIntervalsMS.isEmpty {
-                    // Diagnostic: two records for same second both have RR data
-                    print("[HRV] Duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
-                }
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
@@ -153,12 +179,7 @@ enum Hrv {
         var duplicateCount = 0
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
-                duplicateCount += 1
-                if !sample.rrIntervalsMS.isEmpty {
-                    // Diagnostic: two records for same second both have RR data
-                    print("[HRV] Live duplicate second \(sample.unix): kept \(previous.rrIntervalsMS.count) RR, discarded \(sample.rrIntervalsMS.count) RR")
-                }
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
@@ -250,6 +271,134 @@ enum Hrv {
             pnn50Pct: 100 * Double(over50) / Double(successivePairs),
             lnRMSSD: rmssd > 0 ? log(rmssd) : nil,
             meanRRMS: Stats.mean(allNN)
+        )
+    }
+
+    /// Generates detailed HRV calculation diagnostics for provenance auditing.
+    static func detailedDiagnostics(
+        samples: [V18Sample],
+        swsEpochs: [ClosedRange<Int>] = []
+    ) -> HrvDetailedDiagnostics {
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
+        let targetSamples: [V18Sample]
+        let windowType: String
+        if !swsEpochs.isEmpty {
+            let filtered = ordered.filter { sample in
+                swsEpochs.contains { $0.contains(sample.unix) }
+            }
+            if !filtered.isEmpty {
+                targetSamples = filtered
+                windowType = "SWS_DEEP_SLEEP"
+            } else {
+                targetSamples = ordered
+                windowType = "ALL_VALID_SLEEP"
+            }
+        } else {
+            targetSamples = ordered
+            windowType = "ALL_VALID_SLEEP"
+        }
+
+        var timestampGaps = 0
+        if ordered.count > 1 {
+            for i in 1..<ordered.count {
+                if ordered[i].unix > ordered[i - 1].unix + 1 {
+                    timestampGaps += 1
+                }
+            }
+        }
+
+        var rawBeats = 0
+        var rejectionReasons: [String: Int] = [
+            "outOfPlausibleRange": 0,
+            "ectopicDeviation": 0,
+            "seedMismatch": 0
+        ]
+
+        let runs = contiguousRuns(targetSamples)
+        var allNN: [Double] = []
+        var squaredDifferences = 0.0
+        var successivePairs = 0
+
+        for run in runs {
+            var previous: Double?
+            var recent: [Double] = []
+            var seedCandidate: Double?
+            for sample in run {
+                let rr = sample.rrIntervalsMS.map(Double.init)
+                rawBeats += rr.count
+                if rr.isEmpty {
+                    previous = nil; recent.removeAll(); seedCandidate = nil
+                    continue
+                }
+                for value in rr {
+                    guard value >= Double(V18Decoder.minRRMS),
+                          value <= Double(V18Decoder.maxRRMS) else {
+                        rejectionReasons["outOfPlausibleRange", default: 0] += 1
+                        previous = nil; recent.removeAll(); seedCandidate = nil
+                        continue
+                    }
+                    if recent.isEmpty {
+                        guard let pending = seedCandidate else {
+                            seedCandidate = value
+                            continue
+                        }
+                        let midpoint = Stats.median([pending, value])
+                        guard abs(value - pending) <= nnMaxDeviation * midpoint else {
+                            rejectionReasons["seedMismatch", default: 0] += 1
+                            seedCandidate = value
+                            continue
+                        }
+                        allNN.append(pending)
+                        recent.append(pending)
+                        previous = pending
+                        seedCandidate = nil
+                    } else {
+                        let reference = Stats.median(recent)
+                        if abs(value - reference) > nnMaxDeviation * reference {
+                            rejectionReasons["ectopicDeviation", default: 0] += 1
+                            previous = nil
+                            recent.removeAll()
+                            seedCandidate = nil
+                            continue
+                        }
+                    }
+                    if let previous {
+                        let delta = value - previous
+                        squaredDifferences += delta * delta
+                        successivePairs += 1
+                    }
+                    allNN.append(value)
+                    recent.append(value)
+                    if recent.count > nnReferenceBeats { recent.removeFirst() }
+                    previous = value
+                }
+            }
+        }
+
+        let acceptedNN = allNN.count
+        let coveragePct = rawBeats > 0 ? (Double(acceptedNN) / Double(rawBeats)) * 100.0 : 0.0
+        let finalRMSSD: Double? = (acceptedNN >= minCleanBeats && successivePairs > 0)
+            ? sqrt(squaredDifferences / Double(successivePairs))
+            : nil
+        let finalLn: Double? = finalRMSSD.flatMap { $0 > 0 ? log($0) : nil }
+
+        return HrvDetailedDiagnostics(
+            rawRRCount: rawBeats,
+            acceptedNNCount: acceptedNN,
+            rejectedBeatsByReason: rejectionReasons,
+            coveragePercentage: coveragePct,
+            timestampGaps: timestampGaps,
+            selectedCalculationWindow: windowType,
+            finalRMSSD: finalRMSSD,
+            finalLnRMSSD: finalLn
         )
     }
 
@@ -356,6 +505,104 @@ enum Hrv {
         }
         let fallback = restingHRV(samples, quietAccelG: quietAccelG, minWindowS: minWindowS)
         return (result: fallback.result, windowSeconds: fallback.windowSeconds, isSWS: false)
+    }
+
+    /// Multi-window 5-minute sleep RMSSD estimator (Accuracy Engine V2).
+    ///
+    /// Instead of selecting a single longest contiguous run (which introduces ±7–15 ms
+    /// sampling variance whenever a single micro-movement or 1s gap splits a run),
+    /// this partitions the sleep period into 5-minute windows, enforces per-window
+    /// RR coverage (<= 1.05 * elapsed) and gap-aware NN cleaning (>= 21 clean beats),
+    /// and averages the qualifying window RMSSDs across the sleep session.
+    /// Falls back to `swsRestingHRV` when no 5-minute window qualifies.
+    static func windowedSleepHRV(
+        _ samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = restingQuietAccelG,
+        windowSeconds: Int = 300,
+        minBeatsPerWindow: Int = 21
+    ) -> (result: HrvResult, windowSeconds: Int, qualifyingWindows: Int, usedSWSFallback: Bool) {
+        guard windowSeconds > 0 else { return (.empty, 0, 0, false) }
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let eligible = uniqueBySecond.values
+            .filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+            }
+            .sorted { $0.unix < $1.unix }
+
+        var buckets: [Int: [V18Sample]] = [:]
+        for sample in eligible {
+            buckets[sample.unix / windowSeconds, default: []].append(sample)
+        }
+
+        var windowRMSSDs: [Double] = []
+        var windowSDNNs: [Double] = []
+        var windowPNN50s: [Double] = []
+        var windowMeanRRs: [Double] = []
+        var totalBeats = 0
+        var totalNNBeats = 0
+        var totalSeconds = 0
+
+        let minCoveredSeconds = max(60, windowSeconds / 2)
+        let minRRDurationS = Double(windowSeconds) * 0.25
+
+        for bucket in buckets.keys.sorted() {
+            guard let records = buckets[bucket],
+                  records.count >= minCoveredSeconds,
+                  let firstUnix = records.first?.unix,
+                  let lastUnix = records.last?.unix else { continue }
+            let elapsed = lastUnix - firstUnix + 1
+            guard elapsed >= minCoveredSeconds else { continue }
+            let validRRSumMS = records.reduce(0) { acc, s in
+                acc + s.rrIntervalsMS.filter {
+                    (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0)
+                }.reduce(0, +)
+            }
+            let validRRSumS = Double(validRRSumMS) / 1000.0
+            if validRRSumS < minRRDurationS || validRRSumS > Double(elapsed) * 1.05 {
+                continue
+            }
+            let res = fromSamples(records)
+            guard let rmssd = res.rmssdMS, rmssd.isFinite, rmssd > 0,
+                  res.nnBeats >= minBeatsPerWindow else { continue }
+            windowRMSSDs.append(rmssd)
+            if let sd = res.sdnnMS, sd.isFinite { windowSDNNs.append(sd) }
+            if let p50 = res.pnn50Pct, p50.isFinite { windowPNN50s.append(p50) }
+            if let mrr = res.meanRRMS, mrr.isFinite { windowMeanRRs.append(mrr) }
+            totalBeats += res.beats
+            totalNNBeats += res.nnBeats
+            totalSeconds += records.count
+        }
+
+        if !windowRMSSDs.isEmpty {
+            let meanRMSSD = Stats.mean(windowRMSSDs)
+            let result = HrvResult(
+                beats: totalBeats,
+                nnBeats: totalNNBeats,
+                rmssdMS: meanRMSSD,
+                sdnnMS: windowSDNNs.isEmpty ? nil : Stats.mean(windowSDNNs),
+                pnn50Pct: windowPNN50s.isEmpty ? nil : Stats.mean(windowPNN50s),
+                lnRMSSD: meanRMSSD > 0 ? log(meanRMSSD) : nil,
+                meanRRMS: windowMeanRRs.isEmpty ? nil : Stats.mean(windowMeanRRs)
+            )
+            return (result: result, windowSeconds: totalSeconds,
+                    qualifyingWindows: windowRMSSDs.count, usedSWSFallback: false)
+        }
+
+        let fallback = swsRestingHRV(samples, deepEpochs: deepEpochs,
+                                     quietAccelG: min(quietAccelG, restingQuietAccelG),
+                                     minWindowS: windowSeconds)
+        return (result: fallback.result, windowSeconds: fallback.windowSeconds,
+                qualifyingWindows: fallback.result.rmssdMS != nil ? 1 : 0,
+                usedSWSFallback: fallback.isSWS)
     }
 
     /// Diagnostic provenance for overnight HRV/RHR comparisons. Does not
@@ -633,5 +880,342 @@ enum GapClosing {
             }
         }
         return filled
+    }
+}
+
+// MARK: - Observation-Only Diagnostics (Non-Production)
+
+extension Hrv {
+    /// Lag-1 autocorrelation of the NN successive-difference series, pooled
+    /// over CONTIGUOUS runs. Returns nil when there are fewer than 30 pairs
+    /// or the series is constant.
+    ///
+    /// This is an OBSERVATION-ONLY diagnostic. It does not gate or modify
+    /// production HRV. OpenStrap uses kNnDiffAcf1Floor = -0.35 as a refusal
+    /// threshold; we compute and expose the value for comparison.
+    static func nnDiffAcf1(_ nnMS: [Double]) -> Double? {
+        guard nnMS.count >= 2 else { return nil }
+        let diffs = (1..<nnMS.count).map { nnMS[$0] - nnMS[$0 - 1] }
+        guard diffs.count >= 30 else { return nil }
+        let mean = diffs.reduce(0, +) / Double(diffs.count)
+        var cov = 0.0
+        var varSum = 0.0
+        for i in 0..<diffs.count {
+            let a = diffs[i] - mean
+            varSum += a * a
+            if i > 0 {
+                let b = diffs[i - 1] - mean
+                cov += a * b
+            }
+        }
+        guard varSum > 0 else { return nil }
+        return cov / varSum
+    }
+
+    /// RR coverage diagnostic: Σ plausible RR ÷ wall-clock span.
+    ///
+    /// Returns coverage ratio. A value > 1.10 indicates duplicate or
+    /// interleaved beats (more beat-time than elapsed time).
+    ///
+    /// This is an OBSERVATION-ONLY diagnostic. It does not gate or modify
+    /// production HRV. OpenStrap uses kRrCoverageCeiling = 1.10.
+    static func rrCoverage(_ rrMS: [Double], timestamps: [Int]) -> Double? {
+        guard rrMS.count >= 2, rrMS.count == timestamps.count else { return nil }
+        var lo = 0, hi = 0
+        for i in 1..<timestamps.count {
+            if timestamps[i] < timestamps[lo] { lo = i }
+            if timestamps[i] > timestamps[hi] { hi = i }
+        }
+        let first = rrMS[lo]
+        let spanSec = (Double(timestamps[hi] - timestamps[lo]) +
+                       ((300...2400).contains(first) ? first : 0)) / 1000.0
+        guard spanSec >= 600 else { return nil }
+        var sum = 0.0
+        var seen = Set<Int>()
+        for i in 0..<rrMS.count {
+            let v = rrMS[i]
+            if (300...2400).contains(v) {
+                sum += v
+            }
+            if !seen.insert(timestamps[i]).inserted {
+                // duplicate timestamp - counted but not summed
+            }
+        }
+        return (sum / 1000.0) / spanSec
+    }
+
+    /// Extended diagnostics including ACF1 and RR coverage.
+    struct ExtendedDiagnostics: Encodable {
+        let rawRRCount: Int
+        let acceptedNNCount: Int
+        let coveragePercentage: Double
+        let timestampGaps: Int
+        let selectedCalculationWindow: String
+        let finalRMSSD: Double?
+        let finalLnRMSSD: Double?
+        // Observation-only jitter/coverage diagnostics
+        let nnDiffAcf1: Double?
+        let rrCoverageRatio: Double?
+        let acf1BelowFloor: Bool?  // true if below -0.35 (OpenStrap floor)
+        let rrOverCoverage: Bool?  // true if above 1.10 (OpenStrap ceiling)
+    }
+
+    /// Generates extended HRV calculation diagnostics including ACF1 and RR coverage.
+    /// These are OBSERVATION-ONLY diagnostics that do not affect production HRV.
+    static func extendedDiagnostics(
+        samples: [V18Sample],
+        swsEpochs: [ClosedRange<Int>] = []
+    ) -> ExtendedDiagnostics {
+        var uniqueBySecond: [Int: V18Sample] = [:]
+        for sample in samples {
+            if let previous = uniqueBySecond[sample.unix],
+               !preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
+                continue
+            }
+            uniqueBySecond[sample.unix] = sample
+        }
+        let ordered = uniqueBySecond.values.sorted { $0.unix < $1.unix }
+        let targetSamples: [V18Sample]
+        let windowType: String
+        if !swsEpochs.isEmpty {
+            let filtered = ordered.filter { sample in
+                swsEpochs.contains { $0.contains(sample.unix) }
+            }
+            if !filtered.isEmpty {
+                targetSamples = filtered
+                windowType = "SWS_DEEP_SLEEP"
+            } else {
+                targetSamples = ordered
+                windowType = "ALL_VALID_SLEEP"
+            }
+        } else {
+            targetSamples = ordered
+            windowType = "ALL_VALID_SLEEP"
+        }
+
+        var timestampGaps = 0
+        if ordered.count > 1 {
+            for i in 1..<ordered.count {
+                if ordered[i].unix > ordered[i - 1].unix + 1 {
+                    timestampGaps += 1
+                }
+            }
+        }
+
+        var rawBeats = 0
+        var rejectionReasons: [String: Int] = [
+            "outOfPlausibleRange": 0,
+            "ectopicDeviation": 0,
+            "seedMismatch": 0
+        ]
+
+        let runs = contiguousRuns(targetSamples)
+        var allNN: [Double] = []
+        var allNNTimestamps: [Int] = []
+        var squaredDifferences = 0.0
+        var successivePairs = 0
+
+        for run in runs {
+            var previous: Double?
+            var recent: [Double] = []
+            var seedCandidate: Double?
+            for sample in run {
+                let rr = sample.rrIntervalsMS.map(Double.init)
+                rawBeats += rr.count
+                if rr.isEmpty {
+                    previous = nil; recent.removeAll(); seedCandidate = nil
+                    continue
+                }
+                for (_, value) in rr.enumerated() {
+                    guard value >= Double(V18Decoder.minRRMS),
+                          value <= Double(V18Decoder.maxRRMS) else {
+                        rejectionReasons["outOfPlausibleRange", default: 0] += 1
+                        previous = nil; recent.removeAll(); seedCandidate = nil
+                        continue
+                    }
+                    if recent.isEmpty {
+                        guard let pending = seedCandidate else {
+                            seedCandidate = value
+                            continue
+                        }
+                        let midpoint = Stats.median([pending, value])
+                        guard abs(value - pending) <= nnMaxDeviation * midpoint else {
+                            rejectionReasons["seedMismatch", default: 0] += 1
+                            seedCandidate = value
+                            continue
+                        }
+                        allNN.append(pending)
+                        allNNTimestamps.append(sample.unix * 1_000)
+                        recent.append(pending)
+                        previous = pending
+                        seedCandidate = nil
+                    } else {
+                        let reference = Stats.median(recent)
+                        if abs(value - reference) > nnMaxDeviation * reference {
+                            rejectionReasons["ectopicDeviation", default: 0] += 1
+                            previous = nil
+                            recent.removeAll()
+                            seedCandidate = nil
+                            continue
+                        }
+                    }
+                    if let previous {
+                        let delta = value - previous
+                        squaredDifferences += delta * delta
+                        successivePairs += 1
+                    }
+                    allNN.append(value)
+                    allNNTimestamps.append(sample.unix * 1_000)
+                    recent.append(value)
+                    if recent.count > nnReferenceBeats { recent.removeFirst() }
+                    previous = value
+                }
+            }
+        }
+
+        let acceptedNN = allNN.count
+        let coveragePct = rawBeats > 0 ? (Double(acceptedNN) / Double(rawBeats)) * 100.0 : 0.0
+        let finalRMSSD: Double? = (acceptedNN >= minCleanBeats && successivePairs > 0)
+            ? sqrt(squaredDifferences / Double(successivePairs))
+            : nil
+        let finalLn: Double? = finalRMSSD.flatMap { $0 > 0 ? log($0) : nil }
+
+        // Observation-only diagnostics
+        let acf1 = nnDiffAcf1(allNN)
+        let rrCov = rrCoverage(allNN, timestamps: allNNTimestamps)
+        let acf1Floor: Double = -0.35  // OpenStrap kNnDiffAcf1Floor
+        let rrCeiling: Double = 1.10   // OpenStrap kRrCoverageCeiling
+
+        return ExtendedDiagnostics(
+            rawRRCount: rawBeats,
+            acceptedNNCount: acceptedNN,
+            coveragePercentage: coveragePct,
+            timestampGaps: timestampGaps,
+            selectedCalculationWindow: windowType,
+            finalRMSSD: finalRMSSD,
+            finalLnRMSSD: finalLn,
+            nnDiffAcf1: acf1,
+            rrCoverageRatio: rrCov,
+            acf1BelowFloor: acf1.map { $0 < acf1Floor },
+            rrOverCoverage: rrCov.map { $0 > rrCeiling }
+        )
+    }
+
+    /// Computes median-of-5-minute-window RMSSD for SWS/quiet epochs.
+    ///
+    /// This is an ALTERNATIVE estimator for comparison, not the production
+    /// estimator. It splits the NN series into 5-minute windows, computes
+    /// RMSSD in each window with >= 20 clean successive differences, and
+    /// returns the median across windows.
+    static func medianOfWindowedRMSSD(
+        _ nnMS: [Double],
+        timestamps: [Int],
+        windowSeconds: Int = 300
+    ) -> Double? {
+        guard nnMS.count >= 2, nnMS.count == timestamps.count else { return nil }
+        var windows: [Int: [(Double, Int)]] = [:]
+        for i in 0..<nnMS.count {
+            let windowIdx = timestamps[i] / windowSeconds
+            windows[windowIdx, default: []].append((nnMS[i], timestamps[i]))
+        }
+        var windowRMSSDs: [Double] = []
+        for (_, beats) in windows.sorted(by: { $0.key < $1.key }) {
+            guard beats.count >= 21 else { continue } // need >= 20 diffs
+            let nn = beats.map { $0.0 }
+            let ts = beats.map { $0.1 }
+            var sqDiff = 0.0
+            var pairs = 0
+            for j in 1..<nn.count {
+                // Only count successive differences within the same contiguous run
+                if ts[j] - ts[j - 1] <= 2 { // allow 1-2s gap tolerance
+                    let d = nn[j] - nn[j - 1]
+                    sqDiff += d * d
+                    pairs += 1
+                }
+            }
+            if pairs >= 20 {
+                windowRMSSDs.append(sqrt(sqDiff / Double(pairs)))
+            }
+        }
+        guard !windowRMSSDs.isEmpty else { return nil }
+        let sorted = windowRMSSDs.sorted()
+        let mid = sorted.count / 2
+        return sorted.count % 2 == 0
+            ? (sorted[mid - 1] + sorted[mid]) / 2
+            : sorted[mid]
+    }
+
+    struct ShadowCandidateSummary: Encodable {
+        let name: String
+        let rmssdMS: Double?
+        let lnRMSSD: Double?
+        let windowsUsed: Int
+        let windowSeconds: Int
+        let rawBeats: Int
+        let nnBeats: Int
+        let rejectedBeats: Int
+    }
+
+    /// Observation-only shadow-mode comparison for the leading candidate HRV
+    /// estimators (OpenStrap quality-gated 5m mean, stage-independent quiet
+    /// pooled, and pooled SWS). Does not affect production HRV or Recovery.
+    static func shadowCandidateSummaries(
+        samples: [V18Sample],
+        deepEpochs: [ClosedRange<Int>] = [],
+        quietAccelG: Double = restingQuietAccelG,
+        minWindowS: Int = 300
+    ) -> [ShadowCandidateSummary] {
+        let windowed = windowedSleepHRV(samples, deepEpochs: deepEpochs, quietAccelG: quietAccelG, windowSeconds: minWindowS)
+        let candWindowed = ShadowCandidateSummary(
+            name: "windowed_sleep_5m_mean",
+            rmssdMS: windowed.result.rmssdMS,
+            lnRMSSD: windowed.result.lnRMSSD,
+            windowsUsed: windowed.qualifyingWindows,
+            windowSeconds: windowed.windowSeconds,
+            rawBeats: windowed.result.beats,
+            nnBeats: windowed.result.nnBeats,
+            rejectedBeats: max(0, windowed.result.beats - windowed.result.nnBeats)
+        )
+
+        func pooledSummary(name: String, subset: [V18Sample]) -> ShadowCandidateSummary {
+            let eligible = subset
+                .filter {
+                    $0.wearing && (35...220).contains($0.heartRate)
+                        && ($0.dynamicAccelG ?? Double.infinity) <= quietAccelG
+                }
+                .sorted { $0.unix < $1.unix }
+            let runs = contiguousRuns(eligible).filter { $0.count >= minWindowS }
+            var qualifying: [[V18Sample]] = []
+            var totalSec = 0
+            for run in runs {
+                let eval = fromSamples(run)
+                if let rmssd = eval.rmssdMS, rmssd.isFinite, rmssd > 0, eval.nnBeats >= minCleanBeats {
+                    qualifying.append(run)
+                    totalSec += run.count
+                }
+            }
+            guard !qualifying.isEmpty else {
+                return ShadowCandidateSummary(
+                    name: name, rmssdMS: nil, lnRMSSD: nil,
+                    windowsUsed: 0, windowSeconds: 0, rawBeats: 0, nnBeats: 0, rejectedBeats: 0
+                )
+            }
+            let pooled = evaluateRuns(qualifying) { $0.rrIntervalsMS }
+            return ShadowCandidateSummary(
+                name: name,
+                rmssdMS: pooled.rmssdMS,
+                lnRMSSD: pooled.lnRMSSD,
+                windowsUsed: qualifying.count,
+                windowSeconds: totalSec,
+                rawBeats: pooled.beats,
+                nnBeats: pooled.nnBeats,
+                rejectedBeats: max(0, pooled.beats - pooled.nnBeats)
+            )
+        }
+
+        let candQuietPooled = pooledSummary(name: "stage_independent_quiet_pooled", subset: samples)
+        let deepSamples = deepEpochs.isEmpty ? [] : samples.filter { s in deepEpochs.contains { $0.contains(s.unix) } }
+        let candPooledSWS = pooledSummary(name: "pooled_sws", subset: deepSamples)
+        return [candWindowed, candQuietPooled, candPooledSWS]
     }
 }

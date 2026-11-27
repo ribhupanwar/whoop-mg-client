@@ -9,6 +9,7 @@ struct SettingsView: View {
     /// Text state so a half-typed decimal ("70.") is not rewritten mid-entry.
     @AppStorage("strap.spo2ResearchEnabled") private var spo2ResearchEnabled = false
     @AppStorage("strap.spo2ResearchReport") private var spo2ResearchReport = "No research capture yet. Sync band history to collect candidates."
+    @AppStorage("strap.appearanceMode") private var appearanceMode = "system"
     @FocusState private var profileEditing: Bool
     @State private var weightText = ""
     @State private var heightText = ""
@@ -27,6 +28,7 @@ struct SettingsView: View {
     var body: some View {
         Screen {
             VStack(alignment: .leading, spacing: 0) {
+                appearancePanel
                 profilePanel
                 strapPanel
                 overridesPanel
@@ -73,6 +75,20 @@ struct SettingsView: View {
                 } catch { whoopImportStatus = "Import failed; existing source records preserved: " + error.localizedDescription }
             }
         } catch { whoopImportStatus = "Import failed: " + error.localizedDescription }
+    }
+
+    private var appearancePanel: some View {
+        Panel {
+            SectionTitle("Appearance")
+            Picker("Theme", selection: $appearanceMode) {
+                Text("System").tag("system")
+                Text("Dark").tag("dark")
+                Text("Light").tag("light")
+            }
+            .pickerStyle(.segmented)
+            .accessibilityIdentifier("settings.appearanceMode")
+            Hint("System follows your iPhone appearance. Dark and Light override it in STRAP.")
+        }
     }
 
     // MARK: Profile

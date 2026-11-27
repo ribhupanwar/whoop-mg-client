@@ -10,6 +10,7 @@ struct DatedRecovery: Encodable {
         let restingHRWindowSeconds: Int?
         let lnRMSSD: Double
         let restingHR: Double
+        let respiratoryRate: Double?
     }
 
     let day: DayMetrics?
@@ -40,15 +41,25 @@ struct DatedRecovery: Encodable {
                                    sleepNeedHours: Double) -> DatedRecovery {
         let baseline = DailyAnalysis.baseline(from: baselineCandidates)
         let matchedDay = day.flatMap { $0.dateKey == dateKey ? $0 : nil }
-        let result = Recovery.score(lnRMSSD: matchedDay?.lnRMSSD, rhr: matchedDay?.restingHR,
-                                    sleepHours: matchedDay?.reliableSleepHours,
-                                    sleepNeedHours: sleepNeedHours, baseline: baseline)
+        let validRespRates = baselineCandidates.compactMap(\.respiratoryRate).filter { $0.isFinite && $0 > 0 }
+        let respBaseline: Double? = validRespRates.count >= Recovery.minBaselineDays ? Stats.mean(validRespRates) : nil
+        let result = Recovery.score(
+            lnRMSSD: matchedDay?.lnRMSSD,
+            rhr: matchedDay?.restingHR,
+            sleepHours: matchedDay?.reliableSleepHours,
+            sleepNeedHours: sleepNeedHours,
+            baseline: baseline,
+            respiratoryRate: matchedDay?.respiratoryRate,
+            respiratoryRateBaseline: respBaseline,
+            sleepPerformance: matchedDay?.sleepPerformancePct
+        )
         let inputs = baselineCandidates.compactMap { day -> BaselineDay? in
             guard let lnRMSSD = day.lnRMSSD, let rhr = day.restingHR else { return nil }
             return BaselineDay(dateKey: day.dateKey, recordedState: day.state,
                                hrvWindowSeconds: day.hrvWindowSeconds,
                                restingHRWindowSeconds: day.restingHRWindowSeconds,
-                               lnRMSSD: lnRMSSD, restingHR: rhr)
+                               lnRMSSD: lnRMSSD, restingHR: rhr,
+                               respiratoryRate: day.respiratoryRate)
         }
         return DatedRecovery(dateKey: dateKey, day: matchedDay,
                              baselineDays: inputs, baseline: baseline, sleepNeedHours: sleepNeedHours, result: result)
@@ -65,6 +76,9 @@ enum RecoveryDiagnostics {
         let sleepPoints: Double?
         let activeWeight: Double
         let unroundedScore: Double
+        let respiratoryRate: Double?
+        let respiratoryBaseline: Double?
+        let respiratoryPenaltyApplied: Bool
 
         init?(assessment: DatedRecovery) {
             guard assessment.result.score != nil, let baseline = assessment.baseline,
@@ -75,10 +89,28 @@ enum RecoveryDiagnostics {
             hrvPoints = Recovery.logistic(hrvZ) * Recovery.hrvWeight
             rhrPoints = Recovery.logistic(rhrZ) * Recovery.rhrWeight
             sleepPoints = assessment.result.sleepComponent.flatMap { _ in
-                assessment.day?.reliableSleepHours.map { 100 * min(1, $0 / assessment.sleepNeedHours) * Recovery.sleepWeight }
+                let perf = assessment.day?.sleepPerformancePct.flatMap { $0.isFinite && $0 >= 0 ? min(100.0, $0) : nil }
+                let ratio = perf ?? assessment.day?.reliableSleepHours.map { 100 * min(1, $0 / assessment.sleepNeedHours) }
+                return ratio.map { $0 * Recovery.sleepWeight }
             }
             activeWeight = Recovery.hrvWeight + Recovery.rhrWeight + (sleepPoints == nil ? 0 : Recovery.sleepWeight)
-            unroundedScore = (hrvPoints + rhrPoints + (sleepPoints ?? 0)) / activeWeight
+            var baseScore = (hrvPoints + rhrPoints + (sleepPoints ?? 0)) / activeWeight
+            let resp = assessment.day?.respiratoryRate
+            let respDays = assessment.baselineDays.compactMap(\.respiratoryRate).filter { $0.isFinite && $0 > 0 }
+            let rBaseline = respDays.count >= Recovery.minBaselineDays ? Stats.mean(respDays) : nil
+            let penaltyApplied: Bool
+            if let resp, let rBaseline, resp.isFinite, rBaseline.isFinite, rBaseline > 0, (resp - rBaseline) >= 1.2 {
+                penaltyApplied = true
+                let excess = (resp - rBaseline) - 1.0
+                let damping = max(0.0, min(0.25, 0.10 * excess))
+                baseScore *= (1.0 - damping)
+            } else {
+                penaltyApplied = false
+            }
+            unroundedScore = baseScore
+            respiratoryRate = resp
+            respiratoryBaseline = rBaseline
+            respiratoryPenaltyApplied = penaltyApplied
         }
     }
 
@@ -104,13 +136,19 @@ enum RecoveryDiagnostics {
         let quietWindows: [Hrv.RestingWindowDiagnostic]
         let deepQuietWindows: [Hrv.RestingWindowDiagnostic]
         let recomputedRHR: Double?
+        var shadowHrvCandidates: [Hrv.ShadowCandidateSummary]? = nil
         var sleepAnalysis: SleepAnalysis? = nil
         var upcomingSleepPlan: SleepRecommendation? = nil
+        var respiratoryRate: Double? = nil
+        var respiratoryBaseline: Double? = nil
+        var sleepPerformancePct: Double? = nil
+        var skinTemperatureC: Double? = nil
+        var oxygenCandidatePct: Double? = nil
         let notes = [
             "Assessment uses persisted daily measurements. Window diagnostics are independently recomputed from the current archive.",
             "Legacy Home replay uses the earlier day-row selection with today's retained history. It cannot recover deleted or subsequently changed inputs.",
-            "Recovery uses paired prior-night log RMSSD and RHR, plus reliable sleep duration relative to the configured need when available.",
-            "Respiratory rate, sleep performance, stage totals, SpO₂, temperature and strain are not direct inputs to this score.",
+            "Recovery uses paired prior-night log RMSSD and RHR, plus sleep performance/duration relative to configured need, and validates respiratory rate against personal baseline to penalize acute illness.",
+            "SpO₂, temperature and strain are secondary health indicators audited in the report.",
             "A zero baseline standard deviation contributes a neutral z-score. Missing reliable sleep removes its weight."
         ]
     }

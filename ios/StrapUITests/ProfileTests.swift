@@ -10,15 +10,25 @@ final class ProfileTests: XCTestCase {
         let openProfile = app.buttons["Profile"]
         XCTAssertTrue(openProfile.waitForExistence(timeout: 15))
         openProfile.tap()
-        app.buttons["profile.edit"].tap()
-        let name = app.textFields["profile.displayName"]
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        name.tap()
-        if let savedName = name.value as? String, savedName != "Display name" {
-            name.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: savedName.count))
+        let edit = app.buttons["profile.edit"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        edit.tap()
+
+        // ProfileEditor uses separate FIRST NAME and LAST NAME fields.
+        // The old profile.displayName identifier no longer exists.
+        let firstName = app.textFields["FIRST NAME"]
+        XCTAssertTrue(firstName.waitForExistence(timeout: 10))
+        firstName.tap()
+        if let current = firstName.value as? String,
+           current != "FIRST NAME", !current.isEmpty {
+            firstName.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: current.count))
         }
-        name.typeText("Morgan")
-        app.buttons["Save"].tap()
+        firstName.typeText("Morgan")
+
+        let save = app.buttons["profile.save"]
+        XCTAssertTrue(save.waitForExistence(timeout: 5))
+        XCTAssertTrue(save.isEnabled)
+        save.tap()
 
         let moreTab = app.buttons["tab.more"]
         XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
@@ -26,8 +36,12 @@ final class ProfileTests: XCTestCase {
         let profile = app.buttons["more.profile"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
         profile.tap()
-        app.buttons["profile.edit"].tap()
-        XCTAssertTrue(name.waitForExistence(timeout: 5))
-        XCTAssertEqual(name.value as? String, "Morgan")
+
+        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Morgan")).firstMatch.waitForExistence(timeout: 10))
+        let editAgain = app.buttons["profile.edit"]
+        XCTAssertTrue(editAgain.waitForExistence(timeout: 5))
+        editAgain.tap()
+        XCTAssertTrue(firstName.waitForExistence(timeout: 10))
+        XCTAssertEqual(firstName.value as? String, "Morgan")
     }
 }

@@ -54,3 +54,24 @@ final class WhoopImportedHistoryTests: XCTestCase {
         XCTAssertNil(day?.onsetUnix)
     }
 }
+
+extension WhoopImportedHistoryTests {
+    func testNormalizedAliasesAndMalformedWakeUseValidCycleDate() throws {
+        let row = WhoopCSVImport.SupplementalRecord(source: "physiological_cycles", fields: [
+            "wake_onset": "invalid", "cycle_start_time": "2026-10-02 23:00:00",
+            "heart_rate_variability_rmssd_ms": "48", "resting_heart_rate_bpm": "61",
+            "recovery_score_pct": "73", "day_strain": "8.1"])
+        let day = try XCTUnwrap(WhoopImportedHistory.make(["physiological_cycles": [row]])["2026-10-02"])
+        XCTAssertEqual(day.hrvMS, 48)
+        XCTAssertEqual(day.restingHR, 61)
+        XCTAssertEqual(day.recovery, 73)
+        XCTAssertEqual(day.strain, 8.1)
+    }
+
+    func testNormalizedCollisionPrefersNonemptySourceValue() throws {
+        let row = WhoopCSVImport.SupplementalRecord(source: "physiological_cycles", fields: [
+            "Cycle start time": "2026-10-03", "Day Strain": "", "day_strain": "7"])
+        let day = try XCTUnwrap(WhoopImportedHistory.make(["physiological_cycles": [row]])["2026-10-03"])
+        XCTAssertEqual(day.strain, 7)
+    }
+}

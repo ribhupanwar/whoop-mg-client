@@ -9,6 +9,7 @@ struct HealthReading {
     let status: Status
     let baselineDays: Int
     let reference: ClosedRange<Double>?
+    var nightlyTemperatureCandidate: Double? = nil
     var verifiedWithinRange: Bool { status == .withinRange }
     var statusText: String {
         switch status {
@@ -49,7 +50,16 @@ enum HealthMonitor {
         let readings = HealthVital.allCases.map { vital -> HealthReading in
             let value = current.flatMap { measurement($0, vital: vital) }
             let qualified = prior.filter { measurement($0, vital: vital) != nil }
-            let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { _, last in last })
+            let distinct = Dictionary(qualified.map { ($0.dateKey, $0) }, uniquingKeysWith: { earlier, later in
+                // A duplicate saved night must not depend on enumeration order.
+                // Prefer the latest completed interval, then its earliest start.
+                let earlierEnd = earlier.sleepEndUnix ?? Int.min
+                let laterEnd = later.sleepEndUnix ?? Int.min
+                if earlierEnd != laterEnd {
+                    return earlierEnd > laterEnd ? earlier : later
+                }
+                return (earlier.sleepStartUnix ?? Int.max) <= (later.sleepStartUnix ?? Int.max) ? earlier : later
+            })
             let values = distinct.values.sorted { $0.dateKey < $1.dateKey }.suffix(30)
                 .compactMap { measurement($0, vital: vital) }
             let enough = values.count >= 7
@@ -57,7 +67,10 @@ enum HealthMonitor {
             var range: ClosedRange<Double>?
             if enough, let low = values.min(), let high = values.max() { range = low...high }
             if vital == .oxygen {
-                return HealthReading(vital: vital, value: value, status: value == nil ? .unavailable : .candidate,
+                // Raw v18 oxygen bytes have no validated red/IR calibration. Keep
+                // candidate provenance in DayMetrics, but never surface a
+                // clinical-looking percentage as a measured Health Monitor value.
+                return HealthReading(vital: vital, value: nil, status: value == nil ? .unavailable : .candidate,
                                      baselineDays: values.count, reference: nil)
             }
             if vital == .temperature {
@@ -65,7 +78,7 @@ enum HealthMonitor {
                 let deviationRange = range.flatMap { raw in center.map { (raw.lowerBound - $0)...(raw.upperBound - $0) } }
                 return HealthReading(vital: vital, value: delta,
                     status: value == nil ? .unavailable : (enough ? .candidate : .calibrating),
-                    baselineDays: values.count, reference: deviationRange)
+                    baselineDays: values.count, reference: deviationRange, nightlyTemperatureCandidate: value)
             }
             let status: HealthReading.Status
             if let value { status = range.map { $0.contains(value) ? .withinRange : .outsideRange } ?? .calibrating }
