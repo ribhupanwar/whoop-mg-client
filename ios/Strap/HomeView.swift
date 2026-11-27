@@ -659,6 +659,7 @@ struct HomeView: View {
         }
 
         let stress = store.band.stress
+        let lastMeasured = stress.lastMeasuredPoint(in: store.band.summary?.stressSeries)
         let stressColor: Color
         switch demo ? "low" : stress.band {
         case "low": stressColor = .appSleep
@@ -683,11 +684,13 @@ struct HomeView: View {
             NavigationLink(value: Route.stress) {
                 tapCard(
                     title: "Stress monitor",
-                    pill: (demo ? SampleData.stressHome : stress.index).map { String(format: "%.1f", $0) } ?? "—",
+                    pill: (demo ? SampleData.stressHome : (stress.index ?? lastMeasured?.index)).map { String(format: "%.1f", $0) } ?? "—",
                     pillColor: stressColor,
-                    state: demo ? "LOW" : stress.band.uppercased(),
+                    state: demo ? "LOW" : (lastMeasured == nil ? stress.band.uppercased() : "LAST MEASURED"),
                     stateColor: stressColor,
-                    detail: demo ? "11:49 · sample" : stress.reason ?? (stress.diagnostics?.unclampedScore.map { $0 <= 0 } == true ? "HRV at/above baseline" : "Awake-quiet estimate")
+                    detail: demo ? "11:49 · sample" : (lastMeasured.map {
+                        "Stale · " + Date(timeIntervalSince1970: Double($0.unix)).formatted(date: .omitted, time: .shortened)
+                    } ?? stress.reason ?? (stress.diagnostics?.unclampedScore.map { $0 <= 0 } == true ? "HRV at/above baseline" : "Awake-quiet estimate"))
                 )
             }
             .buttonStyle(.plain)
