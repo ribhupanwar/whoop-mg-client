@@ -406,6 +406,23 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertNil(DedicatedIMURawRecord.decodeVerifiedInner(inner))
     }
 
+    func testOxygenWindowMediansHaveEqualWeightAndIgnoreSentinels() {
+        func row(_ unix: UInt32, _ raw: Int) -> V18Sample {
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: unix, unix: unix, subsecQ15: 0),
+                      heartRate: 60, spo2CandidateRaw: raw,
+                      spo2CandidatePct: (70...100).contains(raw) ? raw : nil,
+                      spo2CandidateKind: (70...100).contains(raw) ? .pct : .saturated)
+        }
+        let first = (0..<5).map { row(UInt32(100 + $0), 94) }
+        let second = (0..<20).map { row(UInt32(200 + $0), 98) }
+        let rows = first + second + [row(300, 93), row(301, 128)]
+        let result = OxygenWindowEvidence.calculate(rows + rows)
+        XCTAssertEqual(result.candidateMean, 96)
+        XCTAssertEqual(result.observedWindows, 3)
+        XCTAssertEqual(result.acceptedWindows, 2)
+        XCTAssertEqual(result.acceptedSeconds, 25)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

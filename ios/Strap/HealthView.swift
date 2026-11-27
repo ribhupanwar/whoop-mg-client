@@ -417,6 +417,12 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let oxygen = store.band.oxygenWindowEvidence {
+                let value = oxygen.candidateMean.map { String(format: "%.1f", $0) } ?? "—"
+                Text("Oxygen burst candidate: \(value) · \(oxygen.acceptedWindows)/\(oxygen.observedWindows) windows · last capture only, uncalibrated")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let raw = store.band.dedicatedIMURaw {
                 Text("Type-\(raw.packetType) raw IMU candidate: \(raw.accelerometer.first?.count ?? 0) accel / \(raw.gyroscope.first?.count ?? 0) gyro words per axis · scale unverified")
                     .font(StrapTypography.body(12))
