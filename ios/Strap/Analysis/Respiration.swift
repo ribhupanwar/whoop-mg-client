@@ -31,8 +31,18 @@ enum Respiration {
 
         var rates: [Double] = []
         var spectralRates: [Double] = []
+        var overcountedSegments = 0
         for segment in segments {
-            guard segment.count >= minBeats else { continue }
+            guard segment.count >= minBeats,
+                  let first = segment.first, let last = segment.last else { continue }
+            let span = Double(last.unix - first.unix + 1)
+            let beatSeconds = segment.reduce(0.0) { $0 + Double($1.rr) } / 1000
+            // Duplicated/interleaved beats stretch the synthetic RSA time axis.
+            // Use the same upper bound as nightly HRV, not a new physiological threshold.
+            guard beatSeconds <= span * 1.05 else {
+                overcountedSegments += 1
+                continue
+            }
             var times: [Double] = []
             var elapsed = 0.0
             for beat in segment {
@@ -53,7 +63,9 @@ enum Respiration {
         guard !activeRates.isEmpty else {
             return RespRate(
                 breathsPerMinute: nil,
-                reason: "no usable RSA peak train — needs a continuous still or sleep R-R window",
+                reason: overcountedSegments > 0
+                    ? "no usable RSA peak train — RR beat duration exceeded elapsed recording time"
+                    : "no usable RSA peak train — needs a continuous still or sleep R-R window",
                 beats: totalBeats,
                 windows: 0
             )
@@ -93,7 +105,7 @@ enum Respiration {
         var uniqueBySecond: [Int: V18Sample] = [:]
         for sample in samples {
             if let previous = uniqueBySecond[sample.unix],
-               previous.rrIntervalsMS.count >= sample.rrIntervalsMS.count {
+               !Hrv.preferRetransmittedRR(sample.rrIntervalsMS, over: previous.rrIntervalsMS) {
                 continue
             }
             uniqueBySecond[sample.unix] = sample
@@ -106,7 +118,7 @@ enum Respiration {
         for sample in ordered {
             guard sample.wearing,
                   let motion = sample.dynamicAccelG,
-                  motion <= 0.10 else {
+                  motion.isFinite, (0...0.10).contains(motion) else {
                 if !current.isEmpty { segments.append(current); current = [] }
                 lastUnix = nil
                 lastSpanS = 0

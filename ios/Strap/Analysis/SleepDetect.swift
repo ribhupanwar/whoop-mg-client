@@ -775,6 +775,23 @@ enum SleepDetect {
             }.map(\.unix))
             return seconds.count >= 15 * 60
         }
+        // Match the canonical saved-night extension guard. A candidate must
+        // contain at least five continuous minutes of distinct measured seconds
+        // of strict quiet state-2 evidence in its resumed period.
+        let strictSeconds = Set(samples.lazy.filter {
+            next.startUnix <= $0.unix && $0.unix <= next.endUnix
+                && valid($0) && $0.sleepState == 2
+                && ($0.dynamicAccelG ?? .infinity) <= 0.015
+        }.map(\.unix)).sorted()
+        var longest = 0
+        var consecutive = 0
+        var last: Int?
+        for second in strictSeconds {
+            consecutive = last.map { second - $0 == 1 } == true ? consecutive + 1 : 1
+            longest = max(longest, consecutive)
+            last = second
+        }
+        guard longest >= 300 else { return false }
         return confirmed(from: max(previous.startUnix, previous.endUnix - 30 * 60 + 1),
                          through: previous.endUnix)
             && confirmed(from: next.startUnix,

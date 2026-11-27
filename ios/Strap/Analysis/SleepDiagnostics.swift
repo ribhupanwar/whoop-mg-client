@@ -14,7 +14,17 @@ enum SleepDiagnostics {
         }
     }
 
-    static func csv(samples: [V18Sample], session: SleepSession, preSleepSeconds: Int = 0) throws -> String {
+    static let maximumPostSleepSeconds = 3 * 3600
+
+    /// Exclusive upper bound for raw diagnostic context, not a new sleep end.
+    static func contextEnd(_ sleepEnd: Int, postSleepSeconds: Int) -> Int {
+        let lookahead = min(max(0, postSleepSeconds), maximumPostSleepSeconds)
+        let (end, overflow) = sleepEnd.addingReportingOverflow(lookahead)
+        return overflow ? Int.max : end
+    }
+
+    static func csv(samples: [V18Sample], session: SleepSession,
+                    preSleepSeconds: Int = 0, postSleepSeconds: Int = 0) throws -> String {
         // Clamp before subtraction so an imported/corrupt extreme timestamp
         // cannot trap the diagnostic exporter on integer underflow.
         let lookback = min(max(0, preSleepSeconds), 3600)
@@ -22,7 +32,8 @@ enum SleepDiagnostics {
         let lowerBound = overflow ? Int.min : candidateLowerBound
         // Do not label an invalid/empty edited night as a valid export window.
         guard session.startUnix < session.endUnix else { throw ExportError.noNight }
-        let rows = samples.filter { lowerBound <= $0.unix && $0.unix < session.endUnix }
+        let upperBound = contextEnd(session.endUnix, postSleepSeconds: postSleepSeconds)
+        let rows = samples.filter { lowerBound <= $0.unix && $0.unix < upperBound }
             .sorted {
                 if $0.unix != $1.unix { return $0.unix < $1.unix }
                 if $0.header.subsecQ15 != $1.header.subsecQ15 {
@@ -41,7 +52,8 @@ enum SleepDiagnostics {
         for sample in rows {
             while segmentIndex < segments.count && segments[segmentIndex].endUnix <= sample.unix { segmentIndex += 1 }
             let stage: String
-            if segmentIndex < segments.count,
+            if session.startUnix <= sample.unix, sample.unix < session.endUnix,
+               segmentIndex < segments.count,
                segments[segmentIndex].startUnix <= sample.unix,
                sample.unix < segments[segmentIndex].endUnix {
                 stage = segments[segmentIndex].stage.rawValue
@@ -80,8 +92,9 @@ enum SleepDiagnostics {
     }
 
     static func write(samples: [V18Sample], session: SleepSession, directory: URL,
-                      preSleepSeconds: Int = 0) throws -> URL {
-        let contents = try csv(samples: samples, session: session, preSleepSeconds: preSleepSeconds)
+                      preSleepSeconds: Int = 0, postSleepSeconds: Int = 0) throws -> URL {
+        let contents = try csv(samples: samples, session: session,
+                               preSleepSeconds: preSleepSeconds, postSleepSeconds: postSleepSeconds)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let url = directory.appendingPathComponent("sleep-\(session.startUnix)-\(session.endUnix)-\(UUID().uuidString).csv")
         try Data(contents.utf8).write(to: url, options: .atomic)

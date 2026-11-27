@@ -113,7 +113,11 @@ final class SleepBathroomBreakMergingTests: XCTestCase {
 
         let noHint = (resume...end).map { makeV18Sample(unix: $0, hr: 60, accel: 0.01, state: 0) }
         let active = (wake..<resume).map { makeV18Sample(unix: $0, hr: 100, accel: 0.2, state: 3) }
-        for rows in [before + gap + noHint, before + active + after, before + after] {
+        let insufficientStrictQuiet = (resume...end).map {
+            makeV18Sample(unix: $0, hr: 60, accel: 0.03)
+        }
+        for rows in [before + gap + noHint, before + active + after, before + after,
+                     before + gap + insufficientStrictQuiet] {
             XCTAssertEqual(SleepDetect.mergeNocturnalPeriods([first, second], samples: rows).count, 2)
         }
         XCTAssertEqual(SleepDetect.mergeNocturnalPeriods([first, second], samples: before + gap + after,
