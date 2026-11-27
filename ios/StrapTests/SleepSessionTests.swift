@@ -252,6 +252,23 @@ final class SleepSessionTests: XCTestCase {
                        try SleepDiagnostics.csv(samples: rows, session: session, preSleepSeconds: 0))
     }
 
+    func testDiagnosticPostSleepContextPreservesSavedBoundsAndMissingSeconds() throws {
+        let rows = [-1, 0, 59, 60, 61, 119, 120].map { sample(start + $0) }
+        let session = SleepSession.make(samples: rows, period: period(60))
+        let csv = try SleepDiagnostics.csv(samples: rows, session: session,
+                                           preSleepSeconds: 1, postSleepSeconds: 60)
+        let lines = csv.split(separator: "\n").dropFirst().map {
+            $0.split(separator: ",", omittingEmptySubsequences: false)
+        }
+        XCTAssertEqual(lines.compactMap { Int($0[3]) },
+                       [-1, 0, 59, 60, 61, 119].map { start + $0 })
+        XCTAssertTrue(lines.allSatisfy { Int($0[0]) == session.startUnix && Int($0[1]) == session.endUnix })
+        XCTAssertTrue(lines.filter { (Int($0[3]) ?? 0) >= session.endUnix }.allSatisfy { $0[14].isEmpty })
+        XCTAssertEqual(SleepDiagnostics.contextEnd(start, postSleepSeconds: -1), start)
+        XCTAssertEqual(SleepDiagnostics.contextEnd(start, postSleepSeconds: Int.max), start + 10800)
+        XCTAssertEqual(SleepDiagnostics.contextEnd(Int.max - 1, postSleepSeconds: 60), Int.max)
+    }
+
     func testDiagnosticExportWritesAReadableLocalCSV() throws {
         let rows = (0..<60).map { sample(start + $0) }
         let session = SleepSession.make(samples: rows, period: period(60))
