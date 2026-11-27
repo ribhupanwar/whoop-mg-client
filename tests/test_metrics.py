@@ -407,6 +407,31 @@ class TestWindowedSleepHRV(unittest.TestCase):
         self.assertAlmostEqual(res.rmssd_ms, 40.0, delta=0.5)
         self.assertEqual(secs, 900)
 
+    def test_fallback_does_not_dilute_aligned_overcount(self):
+        from whoop.metrics import windowed_sleep_hrv
+        rows = [sample(t, 60, accel=0.01, rr=[(1080 if t % 2 == 0 else 1120) if t < 300
+                 else (780 if t % 2 == 0 else 820)]) for t in range(100, 400)]
+        result, seconds, windows, _ = windowed_sleep_hrv(rows)
+        self.assertIsNone(result.rmssd_ms)
+        self.assertEqual((seconds, windows), (0, 0))
+
+    def test_empty_rr_record_breaks_successive_differences(self):
+        rows = [sample(0, 70, rr=[800, 810]), sample(1, 70, rr=[]),
+                sample(2, 70, rr=[1000, 1010])]
+        result = hrv(rows)
+        self.assertAlmostEqual(result.rmssd_ms, 10.0)
+        self.assertEqual(result.beats, 4)
+
+    def test_fallback_short_tail_does_not_erase_prefix(self):
+        rows = [sample(t, 60, accel=0.01, rr=[800 if t % 2 == 0 else 810] if t % 6 < 3 else [])
+                for t in range(150, 450)]
+        prefix, count = resting_hrv(rows, min_window_s=300, require_rr_duration=True)
+        extended, extended_count = resting_hrv(rows + [sample(450, 60, accel=0.01, rr=[])],
+                                                min_window_s=300, require_rr_duration=True)
+        self.assertIsNotNone(prefix.rmssd_ms)
+        self.assertEqual(count, extended_count)
+        self.assertEqual(prefix.rmssd_ms, extended.rmssd_ms)
+
     def test_windowed_fallback_rejects_impossible_beat_time(self):
         from whoop.metrics import windowed_sleep_hrv
         rows = [sample(t, 60, rr=[800, 840], accel=0.01) for t in range(600)]

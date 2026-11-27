@@ -58,12 +58,15 @@ enum PortableBackupInspection {
         let out = try FileHandle(forWritingTo: target)
         var actual: UInt64 = 0
         do {
-            _ = try archive.extract(entry) { bytes in
+            let checksum = try archive.extract(entry) { bytes in
                 actual += UInt64(bytes.count)
                 guard actual <= limit, actual <= UInt64(entry.uncompressedSize) else {
                     throw Failure(message: "Archive exceeds declared database size.")
                 }
                 try out.write(contentsOf: bytes)
+            }
+            guard checksum == entry.checksum else {
+                throw Failure(message: "Database archive checksum mismatch.")
             }
             try out.close()
         } catch { try? out.close(); throw error }

@@ -203,7 +203,7 @@ final class HrvTests: XCTestCase {
         // Sleep detection requires a measured awake-HR reference. Without
         // awake samples this fixture detects no night, testing the wrong gate.
         let awake = stretch(26_000, 3_600, hr: 80, accel: 0.15)
-        let nap = stretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [760, 840])
+        let nap = pacedRRStretch(50_000, 2_700, hr: 50, accel: 0.01, rr: [1160, 1240])
         let days = DailyAnalysis.metrics(
             from: overnight + awake + nap, sex: .male, maxHR: 180, calendar: calendar
         )
@@ -226,6 +226,28 @@ final class HrvTests: XCTestCase {
         let night = try XCTUnwrap(days.first(where: { $0.lnRMSSD != nil }))
         XCTAssertEqual(try XCTUnwrap(night.restingHR), 60, accuracy: 1e-9)
         XCTAssertEqual(exp(try XCTUnwrap(night.lnRMSSD)), 20, accuracy: 1e-9)
+    }
+
+    func testFallbackCannotDiluteOvercountedAlignedWindow() {
+        let rows = (100..<400).map { t in
+            makeSample(t, hr: 60, accel: 0.01,
+                       rr: [t < 300 ? (t.isMultiple(of: 2) ? 1080 : 1120) : (t.isMultiple(of: 2) ? 780 : 820)])
+        }
+        let result = Hrv.windowedSleepHRV(rows)
+        XCTAssertNil(result.result.rmssdMS)
+        XCTAssertEqual(result.windowSeconds, 0)
+    }
+
+    func testFallbackKeepsCompletePrefixWithoutScoringShortTail() throws {
+        let rows = (150..<450).map { t in
+            makeSample(t, hr: 60, accel: 0.01, rr: t % 6 < 3 ? [t.isMultiple(of: 2) ? 800 : 810] : [])
+        }
+        let prefix = Hrv.restingHRV(rows, minWindowS: 300, requireRRDuration: true)
+        let extended = Hrv.restingHRV(rows + [makeSample(450, hr: 60, accel: 0.01, rr: [])],
+                                      minWindowS: 300, requireRRDuration: true)
+        XCTAssertNotNil(prefix.result.rmssdMS)
+        XCTAssertEqual(extended.windowSeconds, prefix.windowSeconds)
+        XCTAssertEqual(extended.result.rmssdMS, prefix.result.rmssdMS)
     }
 
     func testOvernightRMSSD28MillisecondsKeepsRRUnits() throws {
