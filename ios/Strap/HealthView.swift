@@ -429,6 +429,12 @@ struct HealthView: View {
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
             }
+            if let fusion = store.band.opticalRRFusion {
+                let rate = fusion.candidateRPM.map { String(format: "%.1f rpm", $0) } ?? "unavailable"
+                Text("Same-night optical/RR fusion candidate: \(rate) · \(fusion.agreedWindows)/\(fusion.attemptedWindows) agreeing windows · unvalidated")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let comparison = store.band.opticalRRComparison {
                 let rr = comparison.rrRPM.map { String(format: "%.1f", $0) } ?? "unavailable"
                 let agreement = comparison.agrees.map { $0 ? "agreement" : "disagreement" } ?? "insufficient overlap"

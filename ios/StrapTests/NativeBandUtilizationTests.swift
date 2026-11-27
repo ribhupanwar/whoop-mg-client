@@ -460,6 +460,18 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(evidence.compare(samples: [], sleep: sleep, activities: [])?.pairedSeconds, 0)
     }
 
+    func testOpticalRRFusionNeedsDistinctAndConsistentWindows() {
+        func row(_ end: UInt32, _ optical: Double, _ rr: Double?) -> OpticalRRRespirationComparison {
+            OpticalRRRespirationComparison(endUnix: end, opticalRPM: optical, rrRPM: rr,
+                                            overlappingRRSeconds: rr == nil ? 0 : 40)
+        }
+        let good = [row(1000, 15, 15), row(1300, 15, 16), row(1600, 15, 14)]
+        XCTAssertEqual(OpticalRRFusionEvidence.aggregate(good).candidateRPM, 15)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate([good[0], good[0], row(1010, 15, 15)]).candidateRPM)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate(good + [row(1900, 15, nil), row(2200, 15, 23)]).candidateRPM)
+        XCTAssertNil(OpticalRRFusionEvidence.aggregate([row(1000, 10, 10), row(1300, 16, 16), row(1600, 23, 23)]).candidateRPM)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

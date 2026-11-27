@@ -184,6 +184,7 @@ struct V26RespiratoryEvidence: Equatable {
     private var amplitude: [Double] = []
     private(set) var candidate: Candidate?
     private(set) var lastAccepted: Candidate?
+    private(set) var acceptedBursts: [Candidate] = []
 
     private mutating func reset() {
         last = nil
@@ -231,6 +232,10 @@ struct V26RespiratoryEvidence: Equatable {
                               intensityConcentration: a.concentration,
                               amplitudeConcentration: b.concentration)
         lastAccepted = candidate
+        if let candidate, acceptedBursts.last.map({ candidate.endUnix > $0.endUnix }) ?? true {
+            acceptedBursts.append(candidate)
+            if acceptedBursts.count > 128 { acceptedBursts.removeFirst() }
+        }
     }
 
     /// 40 one-second values yield 1.5 rpm bins; require a prominent interior

@@ -162,6 +162,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var oxygenWindowEvidence: OxygenWindowEvidence?
     @Published private(set) var opticalRRComparison: OpticalRRRespirationComparison?
     @Published private(set) var nativeIMUClassifierReport: NativeIMUClassifierEvidence.Report?
+    @Published private(set) var opticalRRFusion: OpticalRRFusionEvidence?
+    private var completedOpticalBursts: [V26RespiratoryEvidence.Candidate] = []
     private var pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
     private var completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
     private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
@@ -880,6 +882,7 @@ final class BandLink: NSObject, ObservableObject {
         let databaseURL = archiveWriter.databaseURL
         let samples = retainedHistoricalSamples
         let imuEvidence = completedIMUClassifierEvidence
+        let opticalBursts = completedOpticalBursts
         let sexSnapshot = sex
         let maxSnapshot = maxHR
         let needSnapshot = needHours
@@ -1049,6 +1052,10 @@ final class BandLink: NSObject, ObservableObject {
             }
             let imuReport = imuEvidence.compare(samples: samples, sleep: imuSleep,
                                                 activities: finalFresh.activities)
+            let fusion = finalFresh.latestSleepSession.flatMap {
+                OpticalRRFusionEvidence.evaluate(opticalBursts, samples: samples,
+                                                  startUnix: $0.startUnix, endUnix: $0.endUnix)
+            }
             let checkpointError = cacheSetupError ?? cache?.lastError
             submittedResult = true
             DispatchQueue.main.async { [weak self] in
@@ -1067,6 +1074,7 @@ final class BandLink: NSObject, ObservableObject {
                            editedDays: editedDays)
                 self.summary = finalFresh
                 self.nativeIMUClassifierReport = imuReport
+                self.opticalRRFusion = fusion
                 self.lastSleepAnalysis = report
                 self.persistMetricsSnapshot()
                 self.isAnalyzingHistory = false
@@ -2380,6 +2388,8 @@ final class BandLink: NSObject, ObservableObject {
         pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
         completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
         nativeIMUClassifierReport = nil
+        completedOpticalBursts = []
+        opticalRRFusion = nil
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -2475,6 +2485,7 @@ final class BandLink: NSObject, ObservableObject {
         historyVersionCounts = pendingHistoryVersionCounts
         nativeDeepTelemetry = pendingNativeDeepTelemetry
         completedIMUClassifierEvidence = pendingIMUClassifierEvidence
+        completedOpticalBursts = pendingNativeDeepTelemetry.respiratoryEvidence.acceptedBursts
         oxygenWindowEvidence = OxygenWindowEvidence.calculate(samples)
         opticalRRComparison = pendingNativeDeepTelemetry.respiratoryEvidence.lastAccepted.map {
             OpticalRRRespirationComparison.compare($0, samples: samples)
