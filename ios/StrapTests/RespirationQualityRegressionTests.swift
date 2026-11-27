@@ -45,6 +45,18 @@ final class RespirationQualityRegressionTests: XCTestCase {
         XCTAssertEqual(try XCTUnwrap(result.breathsPerMinute), 11, accuracy: 1)
     }
 
+    func testSparseAcceptedPeaksDoNotRepresentWholeNight() {
+        let convincing = (0..<900).map { second in
+            row(second, rr: [1000 + Int(80 * sin(2 * .pi * 15 * Double(second) / 60))])
+        }
+        // Six additional well-covered windows carry no respiratory modulation.
+        // They are evidence attempts, not silently removed from the denominator.
+        let flat = (960..<2760).map { row($0, rr: [1000]) }
+        let result = Respiration.estimate(convincing + flat)
+        XCTAssertNil(result.breathsPerMinute)
+        XCTAssertTrue(result.reason?.contains("Insufficient RSA consensus") == true)
+    }
+
     func testMissingRRAndInvalidMotionSplitSegments() {
         let left = row(0, rr: [900])
         let right = row(2, rr: [920])

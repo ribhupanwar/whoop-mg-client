@@ -1479,6 +1479,7 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
     spectral_rates: list[float] = []
     overcounted_segments = 0
     undercovered_segments = 0
+    attempted_windows = 0
     for segment in segments:
         if len(segment) < MIN_RSA_BEATS:
             continue
@@ -1501,6 +1502,11 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         if len(grid) < 8:
             continue
         detrended = _detrend(grid)
+        # Include rejected and flat windows in the consensus denominator.
+        window_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ)
+        min_samples = round(RSA_WINDOW_S * RSA_RESAMPLE_HZ / 2.0)
+        full, tail = divmod(len(detrended), window_samples)
+        attempted_windows += full + int(tail >= min_samples)
         if statistics.pstdev(detrended) <= 1e-9:
             continue
         median_rr_s = statistics.median(rr / 1000.0 for _, rr in segment)
@@ -1514,8 +1520,9 @@ def resp_rate_from_rr(samples: list[V18Sample]) -> RespRate:
         center = statistics.median(active_rates)
         agreeing = sum(abs(rate - center) <= 2.0 for rate in active_rates)
         corroborated = bool(rates) and abs(statistics.median(rates) - center) <= 2.0
-        if agreeing * 2 < len(active_rates) or (len(active_rates) < 3 and not corroborated):
-            return RespRate(None, "RSA windows disagree or lack independent peak-train corroboration",
+        if agreeing * 2 < attempted_windows or (len(active_rates) < 3 and not corroborated):
+            return RespRate(None, f"Insufficient RSA consensus: {agreeing}/{attempted_windows} eligible windows agree; "
+                            "or thin evidence lacks peak-train corroboration",
                             total_beats, len(active_rates))
     if not active_rates:
         return RespRate(

@@ -35,6 +35,7 @@ enum Respiration {
         var spectralRates: [Double] = []
         var overcountedSegments = 0
         var undercoveredSegments = 0
+        var attemptedWindows = 0
         for segment in segments {
             guard segment.count >= minBeats,
                   let first = segment.first, let last = segment.last else { continue }
@@ -62,6 +63,12 @@ enum Respiration {
             let grid = resampleBeatTimes(times, values: segment.map { $0.rr })
             guard grid.count >= 8 else { continue }
             let detrended = detrend(grid)
+            // Count all eligible windows, including those with no accepted peak.
+            // Otherwise a tiny selected subset can masquerade as nightly consensus.
+            let windowSamples = Int((windowS * resampleHz).rounded())
+            let minSamples = Int((windowS * resampleHz / 2.0).rounded())
+            attemptedWindows += detrended.count / windowSamples
+            if detrended.count % windowSamples >= minSamples { attemptedWindows += 1 }
             guard Stats.populationStdev(detrended) > 1e-9 else { continue }
             let medianRRSec = Stats.median(segment.map { Double($0.rr) / 1000.0 })
             spectralRates.append(contentsOf: spectralWindowRates(detrended, medianRRSeconds: medianRRSec))
@@ -75,9 +82,9 @@ enum Respiration {
             let center = Stats.median(activeRates)
             let agreeing = activeRates.filter { abs($0 - center) <= rateAgreementRPM }.count
             let corroborated = !rates.isEmpty && abs(Stats.median(rates) - center) <= rateAgreementRPM
-            guard agreeing * 2 >= activeRates.count,
+            guard agreeing * 2 >= attemptedWindows,
                   activeRates.count >= 3 || corroborated else {
-                return RespRate(breathsPerMinute: nil, reason: "RSA windows disagree or lack independent peak-train corroboration",
+                return RespRate(breathsPerMinute: nil, reason: "Insufficient RSA consensus: \(agreeing)/\(attemptedWindows) eligible windows agree; or thin evidence lacks peak-train corroboration",
                                 beats: totalBeats, windows: activeRates.count)
             }
         }

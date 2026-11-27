@@ -88,6 +88,13 @@ class TestRespRateFromRR(unittest.TestCase):
         self.assertIsNotNone(result.breaths_per_min)
         self.assertAlmostEqual(result.breaths_per_min, 11, delta=1)
 
+    def test_sparse_accepted_peaks_do_not_represent_whole_night(self):
+        convincing = rsa_series(0, 900, 15)
+        flat = [sample(t, [1000]) for t in range(960, 2760)]
+        result = resp_rate_from_rr(convincing + flat)
+        self.assertIsNone(result.breaths_per_min)
+        self.assertIn("Insufficient RSA consensus", result.reason)
+
     def test_motion_and_missing_rr_are_boundaries(self):
         left = sample(0, [900])
         right = sample(2, [920])
