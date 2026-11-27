@@ -417,6 +417,22 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let motion = store.band.liveIMUTelemetry {
+                let measuredAt = Date(timeIntervalSince1970: Double(motion.unix))
+                let age = clock.timeIntervalSince(measuredAt)
+                let recent = store.band.isConnected && age >= 0 && age <= 15
+                Text("Type-43 IMU: \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(recent ? "recent" : "stale")")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
+            if let candidate = deep.respiratoryEvidence.candidate {
+                Text(String(format: "V26 optical respiration candidate %.1f rpm · RIIV/RIAV agreement (unvalidated)", candidate.breathsPerMinute))
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text(Date(timeIntervalSince1970: Double(candidate.endUnix)).formatted())
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let candidate = deep.pulseEvidence.candidate {
                 Text(String(format: "V26 shadow pulse %.0f bpm · correlation %.2f (unvalidated)", candidate.bpm, candidate.correlation))
                     .font(StrapTypography.body(12))

@@ -359,6 +359,35 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertNil(evidence.candidate)
     }
 
+    func testV26RespiratoryEvidenceRequiresCleanFullBurst() throws {
+        func block(_ second: UInt32, moving: Bool = false) -> Gen5V26Record {
+            let modulation = sin(2 * Double.pi * Double(second) / 4)
+            let baseline = 5000 + 200 * modulation
+            let amplitude = 1000 + 300 * modulation
+            let codes = (0..<25).map { i -> Int32 in
+                let phase = 2 * Double.pi * Double(i) / 25
+                return Int32((baseline + amplitude * sin(phase)).rounded())
+            }
+            var deltas: [Int16] = []
+            for j in 1..<codes.count { deltas.append(Int16(codes[j] - codes[j - 1])) }
+            return Gen5V26Record(header: BandRecordHeader(version: 26, flags: 0x80,
+                recordIndex: second, unix: second, subsecQ15: 0), pipStateCounter: 0,
+                firstSampleADC: codes[0], opticalDeltas: deltas, accelDeltaG: moving ? 1 : 0.01,
+                channelStateWord: 0, primaryFlagsByte: 0, morphologyByte: 1, alignedTailByte: 0)
+        }
+        var evidence = V26RespiratoryEvidence()
+        for i in 0..<39 { evidence.ingest(block(UInt32(i))) }
+        evidence.ingest(block(38))
+        XCTAssertNil(evidence.candidate)
+        evidence.ingest(block(39))
+        XCTAssertEqual(try XCTUnwrap(evidence.candidate).breathsPerMinute, 15, accuracy: 0.01)
+        evidence.ingest(block(40, moving: true))
+        XCTAssertNil(evidence.candidate)
+        for i in 41..<79 { evidence.ingest(block(UInt32(i))) }
+        evidence.ingest(block(80))
+        XCTAssertNil(evidence.candidate)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)

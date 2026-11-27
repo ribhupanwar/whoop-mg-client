@@ -166,3 +166,106 @@ struct V26PulseEvidence: Equatable {
                               correlation: values[chosen])
     }
 }
+
+
+/// Research-only respiratory modulation evidence. One full clean 40-second
+/// burst; both intensity (RIIV) and amplitude (RIAV) must support the same
+/// frequency. One-second modulation features, not beat intervals. No clinical
+/// interpretation, nightly aggregation, or replacement of the RR estimator.
+struct V26RespiratoryEvidence: Equatable {
+    struct Candidate: Equatable {
+        let endUnix: UInt32
+        let breathsPerMinute: Double
+        let intensityConcentration: Double
+        let amplitudeConcentration: Double
+    }
+    private var last: Gen5V26Record?
+    private var intensity: [Double] = []
+    private var amplitude: [Double] = []
+    private(set) var candidate: Candidate?
+
+    private mutating func reset() {
+        last = nil
+        intensity.removeAll()
+        amplitude.removeAll()
+        candidate = nil
+    }
+
+    mutating func ingest(_ record: Gen5V26Record) {
+        if let last, record.header.unix <= last.header.unix { return }
+        let reconstruction = record.reconstruction
+        guard record.header.ppgSampleRateHz == 25, reconstruction.codes.count == 25,
+              reconstruction.firstAmbiguousIndex == nil, reconstruction.outOfRangeCount == 0,
+              record.morphologyByte == 1,
+              let motion = record.accelDeltaG, motion.isFinite,
+              motion >= 0, motion <= Hrv.restingQuietAccelG,
+              !reconstruction.codes.contains(where: { $0 == -524288 || $0 == 524287 }) else {
+            reset(); return
+        }
+        if let previous = last {
+            if UInt64(record.header.unix) != UInt64(previous.header.unix) + 1 ||
+                record.header.recordIndex != (previous.header.recordIndex &+ 1) ||
+                record.header.subsecQ15 != previous.header.subsecQ15 ||
+                record.channelStateWord != previous.channelStateWord {
+                reset()
+            }
+        }
+        last = record
+        let codes = reconstruction.codes.map(Double.init)
+        let mean = codes.reduce(0, +) / Double(codes.count)
+        var variance = 0.0
+        for code in codes {
+            let delta = code - mean
+            variance += delta * delta
+        }
+        guard variance > 0 else { reset(); return }
+        intensity.append(mean)
+        amplitude.append(sqrt(variance / Double(codes.count)))
+        guard intensity.count == 40 else { return }
+        defer { intensity.removeAll(); amplitude.removeAll() }
+        guard let a = Self.peak(intensity), let b = Self.peak(amplitude),
+              a.bin == b.bin else { candidate = nil; return }
+        candidate = Candidate(endUnix: record.header.unix,
+                              breathsPerMinute: Double(a.bin) * 60.0 / 40.0,
+                              intensityConcentration: a.concentration,
+                              amplitudeConcentration: b.concentration)
+    }
+
+    /// 40 one-second values yield 1.5 rpm bins; require a prominent interior
+    /// peak, not the largest bin of a flat spectrum. Thresholds are exploratory.
+    private static func peak(_ values: [Double]) -> (bin: Int, concentration: Double)? {
+        guard values.count == 40 else { return nil }
+        let mean = values.reduce(0, +) / 40.0
+        var covariance = 0.0
+        var timeEnergy = 0.0
+        for j in values.indices {
+            let t = Double(j) - 19.5
+            covariance += t * (values[j] - mean)
+            timeEnergy += t * t
+        }
+        let slope = covariance / timeEnergy
+        var signal: [Double] = []
+        for j in values.indices {
+            let detrended = values[j] - mean - slope * (Double(j) - 19.5)
+            let taper = 0.5 - 0.5 * cos(2 * Double.pi * Double(j) / 39.0)
+            signal.append(detrended * taper)
+        }
+        var power = [Double](repeating: 0, count: 21)
+        for k in 1...20 {
+            var re = 0.0, im = 0.0
+            for j in signal.indices {
+                let phase = 2 * Double.pi * Double(k * j) / 40.0
+                re += signal[j] * cos(phase)
+                im += signal[j] * sin(phase)
+            }
+            power[k] = re * re + im * im
+        }
+        let total = power.dropFirst().reduce(0, +)
+        guard total.isFinite, total > 1e-9,
+              let bin = (6...16).max(by: { power[$0] < power[$1] }),
+              power[bin] > power[bin - 1], power[bin] >= power[bin + 1] else { return nil }
+        let concentration = (power[bin - 1] + power[bin] + power[bin + 1]) / total
+        guard concentration >= 0.65 else { return nil }
+        return (bin, concentration)
+    }
+}

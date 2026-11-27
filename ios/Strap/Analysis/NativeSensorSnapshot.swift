@@ -208,6 +208,7 @@ struct NativeDeepTelemetry: Equatable {
         }
     }
 
+    private(set) var respiratoryEvidence = V26RespiratoryEvidence()
     private(set) var pulseEvidence = V26PulseEvidence()
     private(set) var rhythm = IMURhythmWindow()
     private(set) var rawECGFrames = 0
@@ -233,6 +234,7 @@ struct NativeDeepTelemetry: Equatable {
         } else if let record = Gen5V26Record.decode(inner) {
             v26Frames += 1
             pulseEvidence.ingest(record)
+            respiratoryEvidence.ingest(record)
             if pip.map({ record.header.unix >= $0.unix }) ?? true {
                 pip = PIP(record)
             }

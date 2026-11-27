@@ -156,6 +156,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var commandFailureCount: Int = 0
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
     @Published private(set) var nativeDeepTelemetry = NativeDeepTelemetry()
+    @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
+    @Published private(set) var liveIMURhythm = IMURhythmWindow()
     private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
@@ -1880,6 +1882,8 @@ final class BandLink: NSObject, ObservableObject {
 
     private func resetLink() {
         linkGeneration = UUID()
+        liveIMUTelemetry = nil
+        liveIMURhythm = IMURhythmWindow()
         passiveECG = nil
         currentBandModel = nil
         commandDeadline?.cancel()
@@ -2731,6 +2735,14 @@ final class BandLink: NSObject, ObservableObject {
     private func handleFrame(_ inner: [UInt8], uuid: CBUUID) {
         captureWriter?.frame(inner, uuid: uuid.uuidString.lowercased())
         guard let type = inner.first else { return }
+        // OpenStrap protocol: live type-43 uses the same Gen5 IMU shape.
+        // Keep this distinct from historical data, ECG, and measured HR.
+        if uuid == BandUUID.data, type == 0x2B, let motion = Gen5IMUBuffer.decode(inner) {
+            if liveIMUTelemetry.map({ motion.unix > $0.unix }) ?? true {
+                liveIMUTelemetry = NativeDeepTelemetry.Motion(motion)
+                liveIMURhythm.ingest(motion)
+            }
+        }
         if uuid == BandUUID.commandFrom, helloExchange != nil {
             helloExchange?.receive(inner)
             confirmHelloIfReady()
