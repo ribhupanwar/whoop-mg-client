@@ -480,25 +480,36 @@ enum Hrv {
         for run in runs.sorted(by: { $0.count > $1.count }) {
             // Production fallback must not resurrect windows rejected by the
             // primary estimator for missing or duplicated beat time.
+            var candidate = run
             if requireRRDuration {
                 guard minWindowS > 0 else { continue }
-                var valid = true
-                for start in stride(from: 0, to: run.count, by: minWindowS) {
-                    let chunk = run[start..<min(start + minWindowS, run.count)]
-                    let duration = chunk.flatMap(\.rrIntervalsMS)
+                // Do not let an incomplete final chunk invalidate a measured prefix.
+                candidate = Array(run.prefix(run.count / minWindowS * minWindowS))
+                guard candidate.count >= minWindowS else { continue }
+                func durationMS(_ rows: [V18Sample]) -> Int {
+                    rows.flatMap(\.rrIntervalsMS)
                         .filter { (V18Decoder.minRRMS...V18Decoder.maxRRMS).contains($0) }
-                        .reduce(0.0) { $0 + Double($1) } / 1000
-                    if duration < Double(chunk.count) * 0.25 || duration > Double(chunk.count) * 1.05 {
+                        .reduce(0, +)
+                }
+                // Also enforce the primary estimator's upper bound at its actual
+                // clock-aligned boundaries. Adjacent sparse data cannot hide overcount.
+                let aligned = Dictionary(grouping: candidate) { $0.unix / minWindowS }
+                guard aligned.values.allSatisfy({ durationMS($0) <= $0.count * 1050 }) else { continue }
+                var valid = true
+                for start in stride(from: 0, to: candidate.count, by: minWindowS) {
+                    let chunk = Array(candidate[start..<(start + minWindowS)])
+                    let duration = durationMS(chunk)
+                    if duration < chunk.count * 250 || duration > chunk.count * 1050 {
                         valid = false
                         break
                     }
                 }
                 guard valid else { continue }
             }
-            let result = fromSamples(run)
+            let result = fromSamples(candidate)
             if let value = result.rmssdMS, value.isFinite,
                !requireRRDuration || (value > 0 && result.nnBeats >= 21) {
-                return (result, run.count)
+                return (result, candidate.count)
             }
         }
         return (.empty, 0)

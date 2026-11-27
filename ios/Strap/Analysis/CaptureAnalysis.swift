@@ -457,11 +457,11 @@ enum DailyAnalysis {
             guard let rows = groups[key], rows.count == 1 else { return nil }
             return rows.first
         }
-        let pairs = distinct.suffix(rollingBaselineDays).compactMap { day -> (Double, Double)? in
+        let pairs = distinct.compactMap { day -> (Double, Double)? in
             guard let ln = day.awakeLnRMSSD, ln.isFinite,
                   let rhr = day.awakeRestingHR, rhr.isFinite, rhr > 0 else { return nil }
             return (ln, rhr)
-        }
+        }.suffix(rollingBaselineDays)
         return Baseline.fromDaily(lnRMSSD: pairs.map { $0.0 }, rhr: pairs.map { $0.1 })
     }
 

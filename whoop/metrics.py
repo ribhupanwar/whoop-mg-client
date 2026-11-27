@@ -176,7 +176,31 @@ def hrv(samples: list[V18Sample]) -> HrvResult:
                 continue
         unique_by_second[s.unix] = s
     ordered = sorted(unique_by_second.values(), key=lambda s: s.unix)
-    return hrv_from_rr([float(rr) for s in ordered for rr in s.rr_intervals_ms])
+    # Missing records and empty RR fields break successive-beat continuity.
+    # Pool only within-segment NN differences, not differences between segments.
+    segments = []
+    current = []
+    previous_unix = None
+    for row in ordered:
+        if previous_unix is not None and row.unix != previous_unix + 1 or not row.rr_intervals_ms:
+            if current:
+                segments.append(current)
+                current = []
+        current.extend(float(rr) for rr in row.rr_intervals_ms)
+        previous_unix = row.unix
+    if current:
+        segments.append(current)
+    cleaned = [nn_intervals(segment) for segment in segments]
+    nn = [value for segment in cleaned for value in segment]
+    differences = [b - a for segment in cleaned for a, b in zip(segment, segment[1:])]
+    value = math.sqrt(sum(d * d for d in differences) / len(differences)) if differences else None
+    return HrvResult(
+        beats=sum(len(segment) for segment in segments), nn_beats=len(nn),
+        rmssd_ms=value, sdnn_ms=sdnn(nn),
+        pnn50_pct=100.0 * sum(abs(d) > 50 for d in differences) / len(differences) if differences else None,
+        ln_rmssd=math.log(value) if value is not None and value > 0 else None,
+        mean_rr_ms=statistics.mean(nn) if nn else None,
+    )
 
 
 def resting_hrv(
@@ -208,19 +232,30 @@ def resting_hrv(
     if min_window_s <= 0:
         return hrv_from_rr([]), 0
     for run in sorted(runs, key=len, reverse=True):
+        candidate = run
         if require_rr_duration:
-            chunks = (run[start:start + min_window_s] for start in range(0, len(run), min_window_s))
-            def valid_duration(chunk):
-                duration = sum(v for row in chunk for v in row.rr_intervals_ms
-                               if MIN_RR_MS <= v <= MAX_RR_MS) / 1000
-                return len(chunk) * 0.25 <= duration <= len(chunk) * 1.05
-            if not all(valid_duration(chunk) for chunk in chunks):
+            # Keep the complete qualifying prefix; never score the short tail.
+            candidate = run[:len(run) // min_window_s * min_window_s]
+            if len(candidate) < min_window_s:
                 continue
-        result = hrv(run)
+            def duration_ms(chunk):
+                return sum(v for row in chunk for v in row.rr_intervals_ms
+                           if MIN_RR_MS <= v <= MAX_RR_MS)
+            aligned = {}
+            for row in candidate:
+                aligned.setdefault(row.unix // min_window_s, []).append(row)
+            if any(duration_ms(chunk) > len(chunk) * 1050 for chunk in aligned.values()):
+                continue
+            chunks = (candidate[start:start + min_window_s]
+                      for start in range(0, len(candidate), min_window_s))
+            if not all(len(chunk) * 250 <= duration_ms(chunk) <= len(chunk) * 1050
+                       for chunk in chunks):
+                continue
+        result = hrv(candidate)
         if result.rmssd_ms is not None and math.isfinite(result.rmssd_ms) and (
             not require_rr_duration or (result.rmssd_ms > 0 and result.nn_beats >= 21)
         ):
-            return result, len(run)
+            return result, len(candidate)
     return hrv_from_rr([]), 0
 
 
