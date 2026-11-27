@@ -48,11 +48,13 @@ enum SleepDetect {
         hrDropBPM: Double = SleepDetect.hrDropBPM,
         traceSink: TraceSink? = nil
     ) -> [SleepPeriod] {
-        let ordered = samples.sorted { $0.unix < $1.unix }
+        // Replayed records must not increase the duration of evidence or bias HR.
+        let ordered = HistoricalCaptureRecovery.merged(samples).values.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return [] }
         
         // Sparse gravity detection (NOOP P0): when gravity coverage < 50% of HR coverage
-        let gravSeconds = Set(ordered.compactMap { $0.dynamicAccelG != nil ? $0.unix : nil }).count
+        let gravSeconds = ordered.filter { $0.wearing && (35...220).contains($0.heartRate)
+            && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 } ?? false) }.count
         let hrSeconds = Set(ordered.filter { $0.wearing }.map(\.unix)).count
         let sparse = hrSeconds > 0 && Double(gravSeconds) / Double(hrSeconds) < sparseGravityCoverageThreshold
         if sparse {
@@ -66,9 +68,13 @@ enum SleepDetect {
             guard let accel = sample.dynamicAccelG, accel.isFinite, accel >= 0 else { return false }
             return sample.wearing && (35...220).contains(sample.heartRate) && accel <= effectiveQuietAccelG
         }
-        let activeHRs = zip(ordered, quiet)
-            .filter { !$0.1 && $0.0.wearing && (35...220).contains($0.0.heartRate) }
-            .map { Double($0.0.heartRate) }
+        // An unknown acceleration is not an active waking observation.
+        func measuredMovement(_ sample: V18Sample) -> Bool {
+            guard sample.wearing, (35...220).contains(sample.heartRate),
+                  let motion = sample.dynamicAccelG, motion.isFinite else { return false }
+            return motion >= 0 && motion > effectiveQuietAccelG
+        }
+        let activeHRs = ordered.filter(measuredMovement).map { Double($0.heartRate) }
         guard !activeHRs.isEmpty else { return [] }
         let activeMedian = Stats.median(activeHRs)
         
@@ -446,7 +452,7 @@ enum SleepDetect {
             var lastMovingUnix: Int? = nil
             for index in verifiedIndices {
                 let u = ordered[index].unix
-                if !quiet[index] {
+                if measuredMovement(ordered[index]) {
                     if let last = lastMovingUnix {
                         if u == last + 1 {
                             movingSeconds += 1

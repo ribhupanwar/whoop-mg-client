@@ -50,6 +50,19 @@ class TestWakeEvents(unittest.TestCase):
         self.assertEqual(periods[0].wake_events, 2)
         self.assertLess(periods[0].quiet_fraction, 1.0)
 
+    def test_missing_motion_and_replays_are_not_disturbances(self):
+        rows = (stretch(0, 300, 100, 0.5) + stretch(300, 1800, 60, 0.02)
+                + stretch(2100, 30, 60, None) + stretch(2130, 1800, 60, 0.02)
+                + stretch(3930, 300, 100, 0.5))
+        original = detect_sleep(rows)
+        self.assertEqual(len(original), 1)
+        self.assertEqual(original[0].wake_events, 0)
+        self.assertEqual(detect_sleep(rows + rows), original)
+
+    def test_missing_motion_does_not_supply_active_hr_reference(self):
+        rows = stretch(0, 300, 100, None) + stretch(300, 7200, 60, 0.02)
+        self.assertEqual(detect_sleep(rows), [])
+
     def test_still_night_has_no_wake_events(self):
         rows = stretch(0, 300, 100, 0.5) + stretch(300, 3600, 60, 0.02)
         rows += stretch(3900, 300, 100, 0.5)
