@@ -677,6 +677,13 @@ struct SleepLifecycleSnapshot: Codable, Equatable {
     mutating func confirm(sessionID: String, startUnix: Int) {
         guard !sessionID.isEmpty, startUnix > 0 else { return }
         guard phase == .idle || phase == .completed else { return }
+        // A replayed or re-analyzed finalized session must not bring back the
+        // Sleep Detected card or overwrite the last acknowledged journal.
+        if phase == .completed {
+            guard self.sessionID != sessionID,
+                  let previousEnd = endedAtUnix,
+                  startUnix >= previousEnd else { return }
+        }
         self.sessionID = sessionID
         confirmedStartUnix = startUnix
         endedAtUnix = nil
