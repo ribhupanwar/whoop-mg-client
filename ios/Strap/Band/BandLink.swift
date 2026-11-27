@@ -157,6 +157,8 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
+    private var backgroundSyncCompletion: ((Bool) -> Void)?
+    private var backgroundSyncEnabled = false
     private var wristOffDebounceTask: Task<Void, Never>?
     static let wristOffDebounceInterval: TimeInterval = 45.0
     @Published private(set) var isRebooting = false
@@ -745,12 +747,18 @@ final class BandLink: NSObject, ObservableObject {
         recoverSavedCaptures()
         refreshRecordedTodaySteps()
         if restoreIdentifier != nil {
+            backgroundSyncEnabled = true
             BackgroundSyncScheduler.shared.setSyncHandler { [weak self] completion in
                 DispatchQueue.main.async {
                     guard let self else { completion(false); return }
-                    guard self.isConnected else { completion(true); return }
+                    guard self.isReady else { completion(false); return }
+                    self.backgroundSyncCompletion?(false)
+                    self.backgroundSyncCompletion = completion
                     self.readHistory()
-                    completion(true)
+                    if self.drainStartedAt == nil {
+                        self.backgroundSyncCompletion = nil
+                        completion(false)
+                    }
                 }
             }
             BackgroundSyncScheduler.shared.scheduleIfPermitted(isPaired: preferredBandID != nil)
@@ -1913,6 +1921,11 @@ final class BandLink: NSObject, ObservableObject {
         wristState = .unknown
         isWearing = false
         isCharging = false
+        lastStatusPacket = nil
+        lastStatusObservedAt = nil
+        backgroundSyncCompletion?(false)
+        backgroundSyncCompletion = nil
+        refreshNativeSensorSnapshot()
         isBonded = false
         lastDoubleTapAt = nil
         lastWristStateChangeAt = nil
@@ -2418,6 +2431,11 @@ final class BandLink: NSObject, ObservableObject {
         let samples = capturedSamples
         capturedSamples = []
         drainStats = DrainStats(frames: drainFrames, samples: samples.count, acks: drainAcks)
+        backgroundSyncCompletion?(restoreConnectedState)
+        backgroundSyncCompletion = nil
+        if backgroundSyncEnabled {
+            BackgroundSyncScheduler.shared.scheduleIfPermitted(isPaired: preferredBandID != nil)
+        }
         historyRRRecords = pendingHistoryRRRecords
         historyRRDeclared = pendingHistoryRRDeclared
         historyRRAccepted = pendingHistoryRRAccepted
@@ -2861,7 +2879,8 @@ final class BandLink: NSObject, ObservableObject {
             latestSample: retainedHistoricalSamples.last,
             statusPacket: lastStatusPacket,
             statusObservedAt: lastStatusObservedAt,
-            fallbackWristState: wristState
+            fallbackWristState: wristState,
+            fallbackWristObservedAt: lastWristStateChangeAt
         )
     }
 

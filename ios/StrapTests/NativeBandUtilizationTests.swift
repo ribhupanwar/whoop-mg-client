@@ -72,6 +72,28 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertFalse(snapshot?.isFresh(at: now.addingTimeInterval(900)) ?? true)
     }
 
+    func testNativeSensorSnapshotPrefersNewerFallbackWristObservationOverStaleStatusPacket() {
+        let t1 = Date(timeIntervalSince1970: 1_700_000_000)
+        let t2 = t1.addingTimeInterval(30)
+        let staleStatus = WhoopStatusPacket(
+            rawBatteryTenths: 800,
+            batteryPercent: 80.0,
+            isCharging: false,
+            wristStateRaw: 0x0007,
+            contactState: .onWrist
+        )
+        let snapshot = NativeSensorSnapshot.build(
+            latestSample: nil,
+            statusPacket: staleStatus,
+            statusObservedAt: t1,
+            fallbackWristState: .offWrist,
+            fallbackWristObservedAt: t2
+        )
+        XCTAssertEqual(snapshot?.wristContact, .offWrist)
+        XCTAssertNil(snapshot?.wristStateRaw)
+        XCTAssertEqual(snapshot?.observedAt, t2)
+    }
+
     func testNativeCadenceRejectsOutOfRangeValues() {
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(0), 0)
         XCTAssertEqual(NativeSensorSnapshot.sanitizedCadence(180), 180)

@@ -52,30 +52,38 @@ struct NativeSensorSnapshot: Equatable, Codable {
         latestSample: V18Sample?,
         statusPacket: WhoopStatusPacket?,
         statusObservedAt: Date?,
-        fallbackWristState: WristContactState
+        fallbackWristState: WristContactState,
+        fallbackWristObservedAt: Date? = nil
     ) -> NativeSensorSnapshot? {
         let sampleDate = latestSample.map { Date(timeIntervalSince1970: TimeInterval($0.unix)) }
+        let contactDate = [statusObservedAt, fallbackWristObservedAt].compactMap { $0 }.max()
         let observedAt: Date
         let source: String
-        if let sampleDate, let statusObservedAt {
-            observedAt = max(sampleDate, statusObservedAt)
+        if let sampleDate, let contactDate {
+            observedAt = max(sampleDate, contactDate)
             source = "V18 + StatusPacket"
         } else if let sampleDate {
             observedAt = sampleDate
             source = "V18"
-        } else if let statusObservedAt {
-            observedAt = statusObservedAt
+        } else if let contactDate {
+            observedAt = contactDate
             source = "StatusPacket"
         } else {
             return nil
         }
 
-        let wristContact = statusPacket?.contactState ?? fallbackWristState
+        let preferFallbackContact: Bool = {
+            guard fallbackWristState != .unknown, let fallbackWristObservedAt else { return false }
+            guard let statusObservedAt else { return true }
+            return fallbackWristObservedAt > statusObservedAt
+        }()
+        let wristContact = preferFallbackContact ? fallbackWristState : (statusPacket?.contactState ?? fallbackWristState)
+        let wristStateRaw = preferFallbackContact ? nil : statusPacket?.wristStateRaw
         return NativeSensorSnapshot(
             observedAt: observedAt,
             source: source,
             wristContact: wristContact,
-            wristStateRaw: statusPacket?.wristStateRaw,
+            wristStateRaw: wristStateRaw,
             psnrA: sanitizedPSNR(latestSample?.psnrA),
             psnrB: sanitizedPSNR(latestSample?.psnrB),
             signalQualityLogVariance: latestSample?.signalQualityLogVariance,
