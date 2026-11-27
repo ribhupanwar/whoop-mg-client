@@ -467,7 +467,6 @@ struct StrapWidgetGuideView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 }
-
 /// A local voluntary timer, not a measured stress treatment.
 struct StrapGuidedBreathingView: View {
     @Environment(\.scenePhase) private var scenePhase

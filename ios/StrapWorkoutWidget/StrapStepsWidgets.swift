@@ -175,6 +175,9 @@ private struct HealthTimelineProvider: TimelineProvider {
         let now = Date()
         let snapshot = HealthWidgetSnapshot.load()
         var entries = [HealthTimelineEntry(date: now, snapshot: snapshot)]
+        if let snapshot {
+            entries += snapshot.refreshBoundaries(after: now).map { .init(date: $0, snapshot: snapshot) }
+        }
         if let midnight = Calendar.current.dateInterval(of: .day, for: now)?.end {
             entries.append(.init(date: midnight, snapshot: nil))
         }
@@ -196,7 +199,7 @@ private struct HealthSnapshotView: View {
             }
             HStack {
                 metric("STRAIN", current?.strain, suffix: "", color: .blue)
-                metric("BATTERY", current?.battery.map(Double.init), suffix: "%", color: .white)
+                metric("BATTERY", current.flatMap { HealthWidgetMetric.battery.value(in: $0, at: entry.date) }, suffix: "%", color: .white)
             }
             if let snapshot = current {
                 Text("SAVED " + snapshot.savedAt.formatted(date: .omitted, time: .shortened))
@@ -271,7 +274,7 @@ private struct SingleHealthMetricView: View {
                 Text("Saved " + snapshot.savedAt.formatted(date: .omitted, time: .shortened))
                     .font(.caption2).foregroundStyle(.secondary)
             } else {
-                Text("No current reading").font(.caption2).foregroundStyle(.secondary)
+                Text("No current reading · Open STRAP to sync").font(.caption2).foregroundStyle(.secondary)
             }
         }
         .privacySensitive()

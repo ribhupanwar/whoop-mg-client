@@ -34,6 +34,25 @@ final class StepWidgetSnapshotTests: XCTestCase {
         XCTAssertNil(HealthWidgetSnapshot.load(defaults: defaults))
     }
 
+    func testHealthTimelineExpiresLiveMetricsWithoutRemovingDailyMetrics() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let now = try XCTUnwrap(calendar.date(from: DateComponents(year: 2026, month: 11, day: 27, hour: 10)))
+        let snapshot = HealthWidgetSnapshot(dayKey: "2026-11-27", recovery: 62, sleep: 80,
+            strain: 2.7, battery: 85, savedAt: now, stress: 1.4,
+            stressObservedAt: now.addingTimeInterval(-540))
+        let stressExpiry = now.addingTimeInterval(60)
+        let batteryExpiry = now.addingTimeInterval(600)
+        XCTAssertEqual(snapshot.refreshBoundaries(after: now, calendar: calendar), [stressExpiry, batteryExpiry])
+        XCTAssertEqual(HealthWidgetMetric.stress.value(in: snapshot, at: stressExpiry.addingTimeInterval(-1), calendar: calendar), 1.4)
+        XCTAssertNil(HealthWidgetMetric.stress.value(in: snapshot, at: stressExpiry, calendar: calendar))
+        XCTAssertEqual(HealthWidgetMetric.battery.value(in: snapshot, at: stressExpiry, calendar: calendar), 85)
+        XCTAssertNil(HealthWidgetMetric.battery.value(in: snapshot, at: batteryExpiry, calendar: calendar))
+        XCTAssertEqual(HealthWidgetMetric.recovery.value(in: snapshot, at: batteryExpiry, calendar: calendar), 62)
+        XCTAssertTrue(snapshot.refreshBoundaries(after: batteryExpiry, calendar: calendar).isEmpty)
+        XCTAssertTrue(snapshot.refreshBoundaries(after: now.addingTimeInterval(86400), calendar: calendar).isEmpty)
+    }
+
     func testOldWorkoutLiveActivityDecodesWithoutNewStepFields() throws {
         let legacy = """
         {"heartRate":143,"zone":3,"distanceMeters":1234.0,
