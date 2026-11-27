@@ -170,3 +170,126 @@ struct DedicatedIMURawRecord: Equatable {
                     gyroscope: axes(gyroStart, g), alignmentBytes: Array(bytes[end..<aligned]))
     }
 }
+
+
+/// Compact per-second observations for comparing native motion with the
+/// existing classifiers. A dense buffer is required; no imputed seconds.
+/// The mean-axis angle is a GGIR-inspired proxy, not the GGIR classifier.
+struct NativeIMUClassifierEvidence: Equatable {
+    struct Second: Equatable {
+        let unix: Int
+        let recordIndex: UInt32
+        let subsecond: UInt16
+        let zAngle: Double?
+        let maxMagnitudeDelta: Double
+        let magnitudeVariation: Double
+        let meanRotation: Double
+
+        init?(_ record: Gen5IMUBuffer) {
+            guard record.accelerationG.count == 3,
+                  record.accelerationG.allSatisfy({ $0.count == 100 }),
+                  record.angularVelocityDPS.count == 3,
+                  record.angularVelocityDPS.allSatisfy({ $0.count == 100 }),
+                  let features = record.blockFeatures else { return nil }
+            unix = Int(record.unix)
+            recordIndex = record.recordIndex
+            subsecond = record.rawSubsecond
+            var maxDelta = 0.0
+            var previous: Double?
+            for index in 0..<100 {
+                let x = record.accelerationG[0][index]
+                let y = record.accelerationG[1][index]
+                let z = record.accelerationG[2][index]
+                let magnitude = sqrt(x*x + y*y + z*z)
+                if let previous { maxDelta = max(maxDelta, abs(magnitude - previous)) }
+                previous = magnitude
+            }
+            maxMagnitudeDelta = maxDelta
+            magnitudeVariation = features.magnitudeVariationG
+            meanRotation = features.meanAngularSpeedDPS
+            let x = Stats.mean(record.accelerationG[0])
+            let y = Stats.mean(record.accelerationG[1])
+            let z = Stats.mean(record.accelerationG[2])
+            let magnitude = sqrt(x*x + y*y + z*z)
+            zAngle = (0.7...1.3).contains(magnitude) ? atan2(z, sqrt(x*x + y*y)) * 180 / .pi : nil
+        }
+    }
+
+    struct Report: Equatable {
+        let pairedSeconds: Int
+        let motionComparisonSeconds: Int
+        let motionMeanAbsoluteDifferenceG: Double?
+        let sleepPairedSeconds: Int
+        let sleepAngleWindows: Int
+        let inactiveSleepWindows: Int
+        let activityPairedSeconds: Int
+        let activityHRAndMotionSeconds: Int
+    }
+
+    // Store compact values, not high-rate arrays. Bounded per drain.
+    static let maximumSeconds = 86_400
+    private(set) var rows: [Int: Second] = [:]
+    private var conflicts: Set<Int> = []
+
+    mutating func ingest(_ record: Gen5IMUBuffer) {
+        guard let row = Second(record), !conflicts.contains(row.unix) else { return }
+        if let existing = rows[row.unix] {
+            if existing != row {
+                rows.removeValue(forKey: row.unix)
+                conflicts.insert(row.unix)
+            }
+            return
+        }
+        guard rows.count + conflicts.count < Self.maximumSeconds else { return }
+        rows[row.unix] = row
+    }
+
+    /// The consumer uses the same final edited sleep and detected activity
+    /// intervals as the published analysis. Missing/replayed data never
+    /// becomes evidence for or against a classification.
+    func compare(samples: [V18Sample], sleep: [SleepPeriod],
+                 activities: [ActivitySession]) -> Report? {
+        guard !rows.isEmpty else { return nil }
+        let canonical = HistoricalCaptureRecovery.merged(samples)
+        var paired = 0
+        var motionErrors: [Double] = []
+        var sleepPairs = 0
+        var angleBuckets: [Int: [Double]] = [:]
+        var activityPairs = 0
+        var activityMotion = 0
+        for (unix, imu) in rows {
+            guard let sample = canonical[unix], sample.wearing,
+                  sample.header.recordIndex == imu.recordIndex,
+                  sample.header.subsecQ15 == Int(imu.subsecond) else { continue }
+            paired += 1
+            if let motion = sample.dynamicAccelG, motion.isFinite, motion >= 0 {
+                motionErrors.append(abs(motion - imu.maxMagnitudeDelta))
+            }
+            if let period = sleep.first(where: { $0.startUnix <= unix && unix <= $0.endUnix }) {
+                sleepPairs += 1
+                // Only fully contained 5-minute windows; do not mix sessions.
+                let start = period.startUnix + (unix - period.startUnix) / 300 * 300
+                if start + 299 <= period.endUnix, let angle = imu.zAngle {
+                    angleBuckets[start, default: []].append(angle)
+                }
+            }
+            if activities.contains(where: { $0.startUnix <= unix && unix <= $0.endUnix }) {
+                activityPairs += 1
+                // Diagnostic evidence count only. This does not create workouts.
+                if sample.heartRate >= 100, imu.maxMagnitudeDelta >= 0.03 {
+                    activityMotion += 1
+                }
+            }
+        }
+        let eligible = angleBuckets.values.filter { $0.count >= 240 }
+        let inactive = eligible.filter { angles in
+            guard let minimum = angles.min(), let maximum = angles.max() else { return false }
+            return maximum - minimum < 5
+        }.count
+        return Report(pairedSeconds: paired, motionComparisonSeconds: motionErrors.count,
+                      motionMeanAbsoluteDifferenceG: motionErrors.isEmpty ? nil : Stats.mean(motionErrors),
+                      sleepPairedSeconds: sleepPairs, sleepAngleWindows: eligible.count,
+                      inactiveSleepWindows: inactive, activityPairedSeconds: activityPairs,
+                      activityHRAndMotionSeconds: activityMotion)
+    }
+}

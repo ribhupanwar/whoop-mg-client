@@ -417,6 +417,18 @@ struct HealthView: View {
                         .foregroundStyle(Color.appMuted)
                 }
             }
+            if let evidence = store.band.nativeIMUClassifierReport {
+                let error = evidence.motionMeanAbsoluteDifferenceG.map { String(format: "%.4f g", $0) } ?? "—"
+                Text("Paired IMU/R18: \(evidence.pairedSeconds) seconds · motion difference \(error) (\(evidence.motionComparisonSeconds) pairs)")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text("Sleep evidence: \(evidence.sleepPairedSeconds) paired seconds · \(evidence.inactiveSleepWindows)/\(evidence.sleepAngleWindows) inactive orientation windows")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+                Text("Activity evidence: \(evidence.activityHRAndMotionSeconds)/\(evidence.activityPairedSeconds) paired HR + movement seconds · research only")
+                    .font(StrapTypography.body(12))
+                    .foregroundStyle(Color.appMuted)
+            }
             if let comparison = store.band.opticalRRComparison {
                 let rr = comparison.rrRPM.map { String(format: "%.1f", $0) } ?? "unavailable"
                 let agreement = comparison.agrees.map { $0 ? "agreement" : "disagreement" } ?? "insufficient overlap"

@@ -161,6 +161,9 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
     @Published private(set) var oxygenWindowEvidence: OxygenWindowEvidence?
     @Published private(set) var opticalRRComparison: OpticalRRRespirationComparison?
+    @Published private(set) var nativeIMUClassifierReport: NativeIMUClassifierEvidence.Report?
+    private var pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
+    private var completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
     private var pendingNativeDeepTelemetry = NativeDeepTelemetry()
     private var lastStatusPacket: WhoopStatusPacket?
     private var lastStatusObservedAt: Date?
@@ -876,6 +879,7 @@ final class BandLink: NSObject, ObservableObject {
                                           startedAt: began, lastStepAt: began)
         let databaseURL = archiveWriter.databaseURL
         let samples = retainedHistoricalSamples
+        let imuEvidence = completedIMUClassifierEvidence
         let sexSnapshot = sex
         let maxSnapshot = maxHR
         let needSnapshot = needHours
@@ -1039,6 +1043,12 @@ final class BandLink: NSObject, ObservableObject {
             guard !cancellation.isCancelled else { return }
             let scoredDays = freshDays
             let finalFresh = fresh
+            let imuSleep = (finalFresh.sleepSessions ?? []).map {
+                SleepPeriod(startUnix: $0.startUnix, endUnix: $0.endUnix - 1,
+                            quietFraction: 0, meanHR: 0, wakeEvents: $0.movementBouts)
+            }
+            let imuReport = imuEvidence.compare(samples: samples, sleep: imuSleep,
+                                                activities: finalFresh.activities)
             let checkpointError = cacheSetupError ?? cache?.lastError
             submittedResult = true
             DispatchQueue.main.async { [weak self] in
@@ -1056,6 +1066,7 @@ final class BandLink: NSObject, ObservableObject {
                 self.merge(scoredDays, coverageStart: finalFresh.firstUnix, coverageEnd: finalFresh.lastUnix,
                            editedDays: editedDays)
                 self.summary = finalFresh
+                self.nativeIMUClassifierReport = imuReport
                 self.lastSleepAnalysis = report
                 self.persistMetricsSnapshot()
                 self.isAnalyzingHistory = false
@@ -2366,6 +2377,9 @@ final class BandLink: NSObject, ObservableObject {
         nativeDeepTelemetry = pendingNativeDeepTelemetry
         oxygenWindowEvidence = nil
         opticalRRComparison = nil
+        pendingIMUClassifierEvidence = NativeIMUClassifierEvidence()
+        completedIMUClassifierEvidence = NativeIMUClassifierEvidence()
+        nativeIMUClassifierReport = nil
         captureWriter?.close()
         captureWriter = CaptureWriter()
         lastCapturePath = captureWriter?.url.path
@@ -2460,6 +2474,7 @@ final class BandLink: NSObject, ObservableObject {
         historyUndecodableFrames = pendingHistoryUndecodableFrames
         historyVersionCounts = pendingHistoryVersionCounts
         nativeDeepTelemetry = pendingNativeDeepTelemetry
+        completedIMUClassifierEvidence = pendingIMUClassifierEvidence
         oxygenWindowEvidence = OxygenWindowEvidence.calculate(samples)
         opticalRRComparison = pendingNativeDeepTelemetry.respiratoryEvidence.lastAccepted.map {
             OpticalRRRespirationComparison.compare($0, samples: samples)
@@ -2838,6 +2853,9 @@ final class BandLink: NSObject, ObservableObject {
             // OpenStrap: v26, v21, v20, and v22 are optical waveform, IMU, or
             // research telemetry records, NOT 1 Hz RR/HR biometric summaries.
             // Recognize them without inventing heartbeats or marking frames undecodable.
+            if let imu = Gen5IMUBuffer.decode(inner) {
+                pendingIMUClassifierEvidence.ingest(imu)
+            }
             if pendingNativeDeepTelemetry.ingest(inner) || MGEcgPacket.decodeVerifiedInner(inner) != nil { return }
             guard let sample = V18Decoder.decode(inner) else {
                 pendingHistoryUndecodableFrames += 1

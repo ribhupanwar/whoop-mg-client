@@ -436,6 +436,30 @@ final class NativeBandUtilizationTests: XCTestCase {
         XCTAssertEqual(result.overlappingRRSeconds, 0)
     }
 
+    func testNativeIMUClassifierEvidenceRequiresExactPairedRecords() {
+        var evidence = NativeIMUClassifierEvidence()
+        let zero = Array(repeating: 0.0, count: 100)
+        let one = Array(repeating: 1.0, count: 100)
+        func block(_ unix: UInt32, index: UInt32? = nil) -> Gen5IMUBuffer {
+            Gen5IMUBuffer(version: 21, recordIndex: index ?? unix, unix: unix, rawSubsecond: 0,
+                          accelerationG: [one, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        let samples = (100..<400).map { sec in
+            V18Sample(header: BandRecordHeader(version: 18, flags: 128, recordIndex: UInt32(sec),
+                unix: UInt32(sec), subsecQ15: 0), heartRate: 60, dynamicAccelG: 0)
+        }
+        for sec in 100..<400 { evidence.ingest(block(UInt32(sec))) }
+        evidence.ingest(block(100))
+        evidence.ingest(block(101, index: 999))
+        let sleep = [SleepPeriod(startUnix: 100, endUnix: 399, quietFraction: 1, meanHR: 60, wakeEvents: 0)]
+        let report = evidence.compare(samples: samples, sleep: sleep, activities: [])
+        XCTAssertEqual(report?.pairedSeconds, 299)
+        XCTAssertEqual(report?.sleepAngleWindows, 1)
+        XCTAssertEqual(report?.inactiveSleepWindows, 1)
+        XCTAssertEqual(report?.motionMeanAbsoluteDifferenceG, 0)
+        XCTAssertEqual(evidence.compare(samples: [], sleep: sleep, activities: [])?.pairedSeconds, 0)
+    }
+
     func testBackgroundSyncSchedulerRequestConfiguration() {
         let request = BackgroundSyncScheduler.shared.makeRequest()
         XCTAssertEqual(request.identifier, BackgroundSyncScheduler.taskIdentifier)
