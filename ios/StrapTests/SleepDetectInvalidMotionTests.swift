@@ -36,25 +36,32 @@ final class SleepDetectInvalidMotionTests: XCTestCase {
 
     func testMissingMotionDoesNotSupplyActiveReference() {
         let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
-        let rows = (0..<7800).map { i in
-            V18Sample(header: BandRecordHeader(version: 18, flags: 0x80,
-                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0),
-                heartRate: i < 600 ? 100 : 55,
-                dynamicAccelG: i < 600 ? nil : 0.01, sleepState: i < 600 ? 0 : 2)
+        var rows: [V18Sample] = []
+        for i in 0..<7800 {
+            let header = BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0)
+            let hr: Int = i < 600 ? 100 : 55
+            let motion: Double? = i < 600 ? nil : 0.01
+            let state: Int = i < 600 ? 0 : 2
+            rows.append(V18Sample(header: header, heartRate: hr,
+                                  dynamicAccelG: motion, sleepState: state))
         }
         XCTAssertTrue(SleepDetect.detect(rows).isEmpty)
     }
 
     func testSleepReplayAndMissingMotionDoNotInventDisturbances() throws {
         let start = Int(Calendar.current.date(from: DateComponents(year: 2026, month: 11, day: 17, hour: 23))!.timeIntervalSince1970)
-        let rows = (0..<8400).map { i in
+        var rows: [V18Sample] = []
+        for i in 0..<8400 {
             let asleep = (600..<7800).contains(i)
             let missing = (3000..<3030).contains(i)
-            return V18Sample(header: BandRecordHeader(version: 18, flags: 0x80,
-                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0),
-                heartRate: asleep ? 55 : 100,
-                dynamicAccelG: missing ? nil : (asleep ? 0.01 : 0.3),
-                sleepState: asleep ? 2 : 3)
+            let header = BandRecordHeader(version: 18, flags: 0x80,
+                recordIndex: UInt32(i), unix: UInt32(start + i), subsecQ15: 0)
+            let hr: Int = asleep ? 55 : 100
+            let motion: Double? = missing ? nil : (asleep ? 0.01 : 0.3)
+            let state: Int = asleep ? 2 : 3
+            rows.append(V18Sample(header: header, heartRate: hr,
+                                  dynamicAccelG: motion, sleepState: state))
         }
         let original = try XCTUnwrap(SleepDetect.detect(rows).first)
         let replayed = try XCTUnwrap(SleepDetect.detect(rows + rows).first)
