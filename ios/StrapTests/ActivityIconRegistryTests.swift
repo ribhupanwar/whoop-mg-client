@@ -13,6 +13,29 @@ final class ActivityIconRegistryTests: XCTestCase {
         XCTAssertEqual(IconAsset.navMore.sfSymbolFallback, "ellipsis.circle")
     }
 
+    func testSemanticDomainSymbolsResolveToExistingAssets() {
+        let expected: [(String, IconAsset)] = [
+            (StrapIcon.Metric.heartRate, .healthHeartRate),
+            (StrapIcon.Metric.hrv, .healthHrv),
+            (StrapIcon.Metric.respiration, .healthRespiratory),
+            (StrapIcon.Metric.bloodOxygen, .healthBloodOxygen),
+            (StrapIcon.Metric.skinTemp, .healthTemperature),
+            (StrapIcon.Metric.recovery, .healthRecovery),
+            (StrapIcon.Metric.sleep, .healthSleep),
+            (StrapIcon.Metric.strain, .healthStrain),
+            (StrapIcon.Device.batteryFull, .deviceBatteryFull),
+            (StrapIcon.Device.batteryLow, .deviceBatteryLow),
+            (StrapIcon.Device.batteryCritical, .deviceBatteryCritical),
+            (StrapIcon.Device.batteryCharging, .deviceBatteryCharging)
+        ]
+        for (symbol, asset) in expected {
+            XCTAssertEqual(StrapIconView.defaultAsset(for: symbol), asset, "Domain mapping changed: \\(symbol)")
+            XCTAssertNotNil(UIImage(named: asset.rawValue), "Mapped asset is missing: \\(asset.rawValue)")
+        }
+        XCTAssertNil(StrapIconView.defaultAsset(for: StrapIcon.Metric.steps))
+        XCTAssertNil(StrapIconView.defaultAsset(for: StrapIcon.Navigation.community))
+    }
+
     func testMappedLegacySportIDsSelectTheirEstablishedActivityKind() {
         let expected: [(Int, ActivityKind)] = [
             // Core cardio
