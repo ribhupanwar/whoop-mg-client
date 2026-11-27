@@ -28,16 +28,27 @@ final class ProfileTests: XCTestCase {
         let save = app.buttons["profile.save"]
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         XCTAssertTrue(save.isEnabled)
+        XCTAssertTrue(save.isHittable, "Save must remain reachable while the name field is being edited")
         save.tap()
+        // Verify the save has completed before leaving the current stack.
+        let savedName = app.staticTexts["profile.displayName"]
+        XCTAssertTrue(savedName.waitForExistence(timeout: 15))
+        XCTAssertTrue(savedName.label.contains("Morgan"))
+        XCTAssertTrue(app.buttons["profile.edit"].waitForExistence(timeout: 5))
 
         let moreTab = app.buttons["tab.more"]
         XCTAssertTrue(moreTab.waitForExistence(timeout: 5))
         moreTab.tap()
+        let selected = NSPredicate(format: "value == %@", "Selected")
+        expectation(for: selected, evaluatedWith: moreTab)
+        waitForExpectations(timeout: 10)
         let profile = app.buttons["more.profile"]
         XCTAssertTrue(profile.waitForExistence(timeout: 5))
         profile.tap()
 
-        XCTAssertTrue(app.staticTexts.containing(NSPredicate(format: "label CONTAINS %@", "Morgan")).firstMatch.waitForExistence(timeout: 10))
+        let reopenedName = app.staticTexts["profile.displayName"]
+        XCTAssertTrue(reopenedName.waitForExistence(timeout: 15))
+        XCTAssertTrue(reopenedName.label.contains("Morgan"))
         let editAgain = app.buttons["profile.edit"]
         XCTAssertTrue(editAgain.waitForExistence(timeout: 5))
         editAgain.tap()

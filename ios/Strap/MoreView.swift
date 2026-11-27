@@ -245,6 +245,7 @@ struct MoreView: View {
             .padding(16)
             .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.appCard))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityIdentifier("more.profile")

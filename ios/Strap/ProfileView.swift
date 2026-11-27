@@ -103,23 +103,25 @@ private struct ProfileEditor: View {
                     }
                     .buttonStyle(.plain)
                 }
-                Button {
-                    displayName = String(combinedName.prefix(60))
-                    avatar = draftAvatar
-                    dismiss()
-                } label: {
-                    Text("SAVE")
-                        .font(StrapTypography.body(15, weight: .bold))
-                        .frame(maxWidth: .infinity, minHeight: 52)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(combinedName.isEmpty)
-                .accessibilityIdentifier("profile.save")
             }
             .foregroundStyle(Color.appFG)
         }
         .navigationTitle("EDIT PROFILE")
         .navigationBarTitleDisplayMode(.inline)
+        // Keep Save outside the scrolling form and keyboard/tab-bar safe-area
+        // competition. The navigation action stays reachable while typing.
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("SAVE") {
+                    displayName = String(combinedName.prefix(60))
+                    avatar = draftAvatar
+                    dismiss()
+                }
+                .font(StrapTypography.body(15, weight: .bold))
+                .disabled(combinedName.isEmpty)
+                .accessibilityIdentifier("profile.save")
+            }
+        }
         .onAppear {
             guard !hasLoadedDraft else { return }
             let parts = displayName.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
@@ -250,6 +252,7 @@ struct ProfileView: View {
             HStack {
                 Text(displayName.isEmpty ? "Your profile" : displayName)
                     .font(StrapTypography.body(27, weight: .bold))
+                    .accessibilityIdentifier("profile.displayName")
                 Spacer()
                 NavigationLink(destination: ProfileEditor()) {
                     Label("Edit", systemImage: "pencil")

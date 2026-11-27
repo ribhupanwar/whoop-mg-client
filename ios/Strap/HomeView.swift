@@ -121,8 +121,8 @@ struct HomeView: View {
                 HistorySyncCard()
                 monitorDuo
                 myDayOutlook
-                if dayOffset == 0 { tonightCard }
                 activitiesCard
+                if dayOffset == 0 { tonightCard }
                 journalCard
                 planCard
                 dashboardSection
@@ -164,6 +164,8 @@ struct HomeView: View {
             }
             .frame(height: 44)
             .padding(.horizontal, AppLayout.screenInset)
+            // Keep the control row inside the safe-area hit region. The
+            // canvas remains continuous; do not paint a separate opaque bar.
             .padding(.top, 8)
             .overlay(alignment: .bottom) {
                 if isRefreshingVisible && compactScores {
@@ -174,10 +176,17 @@ struct HomeView: View {
                 }
             }
             .background {
-                // Keep the sticky header opaque and continuous with the app canvas.
-                // iOS 26 ultraThinMaterial produces a gray partition across the top.
-                Color.appCanvasTop
+                // Keep the sticky header opaque and continuous with the app canvas when compact.
+                // When expanded, let the unified screen canvas show through continuously without an abrupt bar.
+                if compactScores {
+                    LinearGradient(
+                        colors: [Color.appCanvasTop, Color(hex: 0x22292E)],
+                        startPoint: .top, endPoint: .bottom
+                    )
                     .ignoresSafeArea(edges: .top)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+                }
             }
         }
         .onScrollGeometryChange(for: CGFloat.self) { geometry in
@@ -366,7 +375,9 @@ struct HomeView: View {
             NavigationLink(value: Route.dayStreak) {
                 HStack(spacing: 4) {
                     Image("health_strain").resizable().aspectRatio(contentMode: .fit).frame(width: 14, height: 14).foregroundStyle(Color.orange)
-                    Text(appStreak.formatted()).font(StrapTypography.metric(14, weight: .bold))
+                    Text(appStreak.formatted())
+                        .font(StrapTypography.metric(14, weight: .bold))
+                        .foregroundStyle(Color.white)
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
@@ -381,23 +392,27 @@ struct HomeView: View {
                 Button {
                     if dayOffset > -6 { dayOffset -= 1 }
                 } label: {
-                    Text("‹").font(StrapTypography.body(16)).frame(width: 32, height: 32)
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset <= -6)
                 .foregroundStyle(dayOffset <= -6 ? Color.appLine : Color.appFG)
 
                 Text(dayLabel)
-                    .font(StrapTypography.body(11, weight: .medium))
+                    .font(StrapTypography.body(11, weight: .bold))
                     .tracking(0.9)
                     .foregroundStyle(Color.appFG)
-                    .frame(minWidth: 62)
+                    .frame(minWidth: 58)
                     .accessibilityIdentifier("home.today")
 
                 Button {
                     if dayOffset < 0 { dayOffset += 1 }
                 } label: {
-                    Text("›").font(StrapTypography.body(16)).frame(width: 32, height: 32)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 28, height: 28)
                 }
                 .buttonStyle(.plain)
                 .disabled(dayOffset >= 0)
@@ -422,9 +437,12 @@ struct HomeView: View {
                         isCharging: store.band.isCharging
                     )
                 }
+                .frame(minWidth: 44, minHeight: 34)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("home.deviceSettings")
             .accessibilityLabel("Band battery \(demo ? "\(SampleData.batteryPercent) percent" : batteryText), device settings")
             .accessibilityHint("Opens band status and advanced information")
 
@@ -1015,7 +1033,15 @@ struct HomeView: View {
             .foregroundStyle(Color.appMuted)
             .monospacedDigit()
         let tile = HStack(spacing: 6) {
-            Image(systemName: icon).font(.system(size: 14, weight: .medium))
+            if icon == ActivityIconRegistry.sleep || icon == "health_sleep" {
+                Image("health_sleep")
+                    .renderingMode(.template)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(width: 14, height: 14)
+            } else {
+                Image(systemName: icon).font(.system(size: 14, weight: .medium))
+            }
             Text(value)
                 .font(StrapTypography.metric(activityValueSize, weight: .bold))
                 .monospacedDigit()
@@ -1054,14 +1080,20 @@ struct HomeView: View {
             Capsule().fill(tint).frame(width: 2, height: 26)
                 .accessibilityHidden(true)
         }
-        .padding(.horizontal, 7)
+        .padding(.horizontal, 8)
         .padding(.vertical, 7)
         .frame(minHeight: 52)
         .background {
             RoundedRectangle(cornerRadius: 11)
-                .fill(Color.appRaised)
+                .fill(
+                    LinearGradient(
+                        colors: [Color(hex: 0x383D42), Color(hex: 0x303539)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                )
                 .overlay {
-                    RoundedRectangle(cornerRadius: 11).strokeBorder(Color.appCardBorder, lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 11)
+                        .strokeBorder(Color(hex: 0x484F54).opacity(0.35), lineWidth: 0.5)
                 }
         }
     }
@@ -1289,18 +1321,22 @@ struct HomeView: View {
                 Button {
                     showDashboardCustomize = true
                 } label: {
-                    Label("CUSTOMIZE", systemImage: "slider.horizontal.3")
-                        .font(StrapTypography.body(11, weight: .bold))
-                        .tracking(0.7)
-                        .foregroundStyle(Color.appFG)
-                        .padding(.horizontal, 11)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 7).fill(
-                                LinearGradient(colors: [Color.appCustomizeStart, Color.appCustomizeEnd],
-                                               startPoint: .leading, endPoint: .trailing)
-                            )
+                    HStack(spacing: 5) {
+                        Text("CUSTOMIZE")
+                            .font(StrapTypography.body(11, weight: .bold))
+                            .tracking(0.7)
+                        Image(systemName: "pencil")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(Color.appFG)
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule().fill(
+                            LinearGradient(colors: [Color.appCustomizeStart, Color.appCustomizeEnd],
+                                           startPoint: .leading, endPoint: .trailing)
                         )
+                    )
                 }
                 .buttonStyle(.plain)
             }

@@ -48,7 +48,7 @@ struct DashboardRows: View {
             historyRow(.hrv) {
                 MetricRow(icon: "waveform.path.ecg", title: "Heart rate variability",
                           value: demo ? String(format: "%.0f", SampleData.hrvMS) : hrvText,
-                          unit: (demo || latestNightHRV != nil) ? "ms" : nil,
+                          unit: nil,
                           detail: demo ? "\(SampleData.hrvCompare)" : compactComparison(hrvDetail),
                           detailColor: .appMuted,
                           trendUp: demo ? true : hrvTrendUp,
@@ -95,7 +95,7 @@ struct DashboardRows: View {
             historyRow(.calories) {
                 MetricRow(icon: "flame", title: "Calories",
                           value: demo ? SampleData.calories.formatted() : caloriesValue,
-                          unit: (!demo && store.captureActiveKcal != nil) ? "kcal" : nil,
+                          unit: nil,
                           detail: demo ? SampleData.caloriesCompare.formatted() : nil,
                           detailColor: demo ? .appWarn : .appMuted)
             }
@@ -254,7 +254,7 @@ struct DashboardRows: View {
                 .padding(.horizontal, AppLayout.cardInset)
                 .frame(minHeight: AppLayout.dashboardRowHeight)
                 .background(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).fill(LinearGradient.dashboardCard))
-                .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1))
+                .overlay(RoundedRectangle(cornerRadius: AppLayout.dashboardRowRadius).strokeBorder(Color.appLine.opacity(0.25), lineWidth: 0.5))
             }
             .buttonStyle(.plain)
 
