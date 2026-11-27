@@ -436,18 +436,22 @@ final class BandLink: NSObject, ObservableObject {
         return "Live R-R archive: \(beats) beats / \(records.count) seconds; longest contiguous: \(longest)s (not overnight HRV)"
     }
 
-    /// Export the exact retained channels and staged labels for this displayed
-    /// night. The file stays local until the user explicitly shares it.
+    /// Export the exact retained channels for this displayed night and bounded
+    /// surrounding context. Only the saved sleep window has staged labels.
+    /// The file stays local until the user explicitly shares it.
     func exportSleepDiagnostics() async throws -> URL {
         guard !isAnalyzingHistory, let session = latestSleepSession else { throw SleepDiagnostics.ExportError.noNight }
         // The in-memory analysis window may start exactly at detected sleep
         // onset. Fetch the preceding 30 minutes from the durable raw archive
         // instead of exporting only the currently retained analysis samples.
         let lookback = 30 * 60
+        let lookahead = SleepDiagnostics.maximumPostSleepSeconds
+        guard session.startUnix < session.endUnix else { throw SleepDiagnostics.ExportError.noNight }
+        let archiveEnd = SleepDiagnostics.contextEnd(session.endUnix, postSleepSeconds: lookahead)
         let (candidateStart, overflow) = session.startUnix.subtractingReportingOverflow(lookback)
         let archiveStart = overflow ? Int.min : candidateStart
         let archiveRows = try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[V18Sample], Error>) in
-            archiveWriter.samples(from: archiveStart, through: session.endUnix - 1) { result in
+            archiveWriter.samples(from: archiveStart, through: archiveEnd - 1) { result in
                 continuation.resume(with: result)
             }
         }
@@ -457,7 +461,7 @@ final class BandLink: NSObject, ObservableObject {
             .appendingPathComponent("sleep-exports", isDirectory: true)
         return try await Task.detached(priority: .utility) {
             try SleepDiagnostics.write(samples: samples, session: session, directory: directory,
-                                       preSleepSeconds: lookback)
+                                       preSleepSeconds: lookback, postSleepSeconds: lookahead)
         }.value
     }
 

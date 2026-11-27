@@ -542,7 +542,7 @@ struct SleepAnalysisView: View {
                         preparingSleepExport = false
                     }
                 } label: {
-                    Label(preparingSleepExport ? "Preparing sleep export…" : "Export sleep sensor data",
+                    Label(preparingSleepExport ? "Preparing sleep export…" : "Export sleep + wake context",
                           systemImage: "square.and.arrow.up")
                 }
                 .disabled(preparingSleepExport || store.band.isAnalyzingHistory)
@@ -550,7 +550,7 @@ struct SleepAnalysisView: View {
                 if let sleepExportURL {
                     ShareLink("Share sleep CSV", item: sleepExportURL)
                         .padding(.top, 6)
-                    Hint("Contains this night's recorded heart rate, R-R intervals, movement and estimated labels. Share only when you choose.")
+                    Hint("Includes available raw records from 30 minutes before sleep to 3 hours after the saved end. Context outside the saved window has no stage labels. Share only when you choose.")
                 }
                 Button {
                     preparingSleepExport = true
