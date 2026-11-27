@@ -10,6 +10,8 @@ struct HealthReading {
     let baselineDays: Int
     let reference: ClosedRange<Double>?
     var nightlyTemperatureCandidate: Double? = nil
+    // Research-only candidate; deliberately excluded from measured vital counts.
+    var nightlyOxygenCandidate: Double? = nil
     var verifiedWithinRange: Bool { status == .withinRange }
     var statusText: String {
         switch status {
@@ -21,7 +23,7 @@ struct HealthReading {
         }
     }
     var referenceText: String {
-        if vital == .oxygen { return "Unvalidated sensor estimate" }
+        if vital == .oxygen { return "Research estimate only — not a validated oxygen reading" }
         guard let reference else { return "Personal baseline: \(baselineDays)/7 prior nights" }
         let format = vital == .temperature ? "%+.1f to %+.1f °C" :
             (vital == .respiration ? "%.1f–%.1f rpm" : (vital == .rhr ? "%.0f–%.0f bpm" : "%.0f–%.0f ms"))
@@ -67,11 +69,10 @@ enum HealthMonitor {
             var range: ClosedRange<Double>?
             if enough, let low = values.min(), let high = values.max() { range = low...high }
             if vital == .oxygen {
-                // Raw v18 oxygen bytes have no validated red/IR calibration. Keep
-                // candidate provenance in DayMetrics, but never surface a
-                // clinical-looking percentage as a measured Health Monitor value.
+                // Expose only the saved same-night candidate, separately from
+                // the unavailable measured value. Never classify its range.
                 return HealthReading(vital: vital, value: nil, status: value == nil ? .unavailable : .candidate,
-                                     baselineDays: values.count, reference: nil)
+                                     baselineDays: values.count, reference: nil, nightlyOxygenCandidate: value)
             }
             if vital == .temperature {
                 let delta = value.flatMap { reading in center.map { reading - $0 } }

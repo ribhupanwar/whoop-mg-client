@@ -78,6 +78,35 @@ class TestRespRateFromRR(unittest.TestCase):
         self.assertIsNone(result.breaths_per_min)
         self.assertIn("exceeded elapsed", result.reason)
 
+    def test_compressed_beat_time_is_rejected(self):
+        result = resp_rate_from_rr(rsa_series(0, 900, 11, amplitude_ms=40, base_ms=500))
+        self.assertIsNone(result.breaths_per_min)
+        self.assertIn("insufficient RR beat-time coverage", result.reason)
+
+    def test_dominant_out_of_band_peak_cannot_masquerade_as_in_band_respiration(self):
+        from whoop.health import _spectral_window_rates
+        mixed = [80 * math.sin(2 * math.pi * 0.45 * i / 4)
+                 + 20 * math.sin(2 * math.pi * (17 / 60) * i / 4)
+                 for i in range(1200)]
+        self.assertEqual(_spectral_window_rates(mixed, 0.8), [])
+        in_band = [80 * math.sin(2 * math.pi * (17 / 60) * i / 4)
+                   for i in range(1200)]
+        result = _spectral_window_rates(in_band, 0.8)
+        self.assertEqual(len(result), 1)
+        self.assertAlmostEqual(result[0], 17, delta=0.4)
+
+    def test_slow_respiration_is_not_doubled(self):
+        result = resp_rate_from_rr(rsa_series(0, 900, 11))
+        self.assertIsNotNone(result.breaths_per_min)
+        self.assertAlmostEqual(result.breaths_per_min, 11, delta=1)
+
+    def test_sparse_accepted_peaks_do_not_represent_whole_night(self):
+        convincing = rsa_series(0, 900, 15)
+        flat = [sample(t, [1000]) for t in range(960, 2760)]
+        result = resp_rate_from_rr(convincing + flat)
+        self.assertIsNone(result.breaths_per_min)
+        self.assertIn("Insufficient RSA consensus", result.reason)
+
     def test_motion_and_missing_rr_are_boundaries(self):
         left = sample(0, [900])
         right = sample(2, [920])

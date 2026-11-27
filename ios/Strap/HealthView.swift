@@ -44,10 +44,11 @@ struct HealthView: View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible())], spacing: 18) {
             healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
-            // The V18 offset-74 byte is not calibrated SpO₂. Keep the raw candidate
-            // in diagnostics, but never render it as a measured oxygen percentage.
-            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen, value: "—",
-                         unit: "", reading: monitor[.oxygen])
+            // Explicitly named research estimate, never a measured oxygen value.
+            let oxygen = monitor[.oxygen]
+            healthMetric("SpO₂ (UNVERIFIED EST.)", symbol: StrapIcon.Metric.bloodOxygen,
+                         value: oxygen.nightlyOxygenCandidate.map { String(format: "≈%.1f", $0) } ?? "—",
+                         unit: "%", reading: oxygen)
             healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
                          unit: "bpm", reading: monitor[.rhr])
             healthMetric("HRV", symbol: StrapIcon.Metric.hrv, value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
