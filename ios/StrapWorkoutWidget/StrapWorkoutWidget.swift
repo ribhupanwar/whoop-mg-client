@@ -31,7 +31,7 @@ struct StrapWorkoutWidget: Widget {
                         }
                         if let strain = context.state.estimatedStrain {
                             Spacer()
-                            Text(String(format: "%.1f STRAIN", strain))
+                            Text(String(format: "%.1f EST. STRAIN", strain))
                         }
                     }
                     .font(.caption)

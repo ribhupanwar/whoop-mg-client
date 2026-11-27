@@ -51,19 +51,19 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
 @MainActor
 final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
-        var now = Date(timeIntervalSince1970: 1_700_000_000)
+        var now: TimeInterval = 100
         let coalescer = WidgetReloadCoalescer(minimumInterval: 0.15, now: { now })
         var fires = 0
 
         coalescer.requestReload { fires += 1 }
         XCTAssertEqual(fires, 1, "First request should fire immediately")
 
-        now = now.addingTimeInterval(0.02)
+        now += 0.02
         coalescer.requestReload { fires += 2 }
         coalescer.requestReload { fires += 10 }
         XCTAssertEqual(fires, 1, "Requests inside cooldown should coalesce")
 
-        now = now.addingTimeInterval(0.20)
+        now += 0.20
         try await Task.sleep(nanoseconds: 250_000_000)
         XCTAssertEqual(fires, 11, "Only the latest trailing request should fire after cooldown")
     }
@@ -91,6 +91,7 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         coordinator.handleLiveHR(bpm: 142, observedAt: t1, connected: true, now: t1.addingTimeInterval(1))
         let t2 = t1.addingTimeInterval(2)
         coordinator.handleLiveHR(bpm: 150, observedAt: t2, connected: true, now: t2)
+        coordinator.handleLiveHR(bpm: 142, observedAt: t1, connected: true, now: t2)
 
         recorder.pause()
         coordinator.handlePhaseChange(.paused)

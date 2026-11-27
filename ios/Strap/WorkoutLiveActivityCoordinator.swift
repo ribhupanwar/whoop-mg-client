@@ -84,12 +84,17 @@ final class WorkoutLiveActivityCoordinator {
 
         band.$lastLiveHRAt
             .dropFirst()
+            // Pair the BPM with the timestamp before asynchronous delivery.
+            .map { [weak band] observed in
+                (band?.liveHeartRate, observed, band?.isConnected ?? false)
+            }
             .receive(on: RunLoop.main)
-            .sink { [weak self] observed in
-                self?.handleLiveHR(
-                    bpm: self?.band.liveHeartRate,
-                    observedAt: observed,
-                    connected: self?.band.isConnected ?? false,
+            .sink { [weak self] observation in
+                guard let self else { return }
+                self.handleLiveHR(
+                    bpm: observation.0,
+                    observedAt: observation.1,
+                    connected: observation.2 && self.band.isConnected,
                     now: Date()
                 )
             }
@@ -173,7 +178,7 @@ final class WorkoutLiveActivityCoordinator {
     func handleLiveHR(bpm: Int?, observedAt: Date?, connected: Bool, now: Date = Date()) {
         guard let observedAt else { return }
         if recorder.phase == .recording,
-           observedAt != lastRecordedHRAt,
+           (lastRecordedHRAt.map { observedAt > $0 } ?? true),
            let freshBPM = LiveHeartRateState.fresh(bpm, receivedAt: observedAt, connected: connected, now: now) {
             recorder.addHeartRateSample(freshBPM)
             lastRecordedHRAt = observedAt

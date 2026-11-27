@@ -247,12 +247,14 @@ final class AppStore: ObservableObject {
         let observed = stress.diagnostics?.lastUpdateUnix.map { Date(timeIntervalSince1970: Double($0)) }
         let snapshot = HealthWidgetSnapshot(dayKey: key, recovery: recovery, sleep: sleep,
                                             strain: strain, battery: battery, savedAt: now,
-                                            stress: valid(stress.index, range: 0...3), stressObservedAt: observed)
+                                            stress: valid(stress.index, range: 0...3), stressObservedAt: observed,
+                                            batteryObservedAt: battery == nil ? nil : band.batteryObservedAt)
         let unchanged = lastSavedHealthWidgetSnapshot.map { prev in
             prev.dayKey == snapshot.dayKey && prev.recovery == snapshot.recovery &&
             prev.sleep == snapshot.sleep && prev.strain == snapshot.strain &&
             prev.battery == snapshot.battery && prev.stress == snapshot.stress &&
-            prev.stressObservedAt == snapshot.stressObservedAt
+            prev.stressObservedAt == snapshot.stressObservedAt &&
+            prev.batteryObservedAt == snapshot.batteryObservedAt
         } ?? false
         if !unchanged, HealthWidgetSnapshot.save(snapshot) {
             lastSavedHealthWidgetSnapshot = snapshot

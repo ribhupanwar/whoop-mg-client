@@ -5,19 +5,20 @@ import Foundation
 @MainActor
 final class WidgetReloadCoalescer {
     private let minimumInterval: TimeInterval
-    private let now: () -> Date
-    private var lastReloadAt: Date = .distantPast
+    private let now: () -> TimeInterval
+    private var lastReloadAt: TimeInterval?
     private var trailingTask: Task<Void, Never>?
     private var pendingAction: (@MainActor () -> Void)?
 
-    nonisolated init(minimumInterval: TimeInterval = 60, now: @escaping () -> Date = Date.init) {
+    nonisolated init(minimumInterval: TimeInterval = 60,
+                     now: @escaping () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }) {
         self.minimumInterval = minimumInterval
         self.now = now
     }
 
     func requestReload(_ action: @escaping @MainActor () -> Void) {
         let current = now()
-        let elapsed = current.timeIntervalSince(lastReloadAt)
+        let elapsed = lastReloadAt.map { max(0, current - $0) } ?? minimumInterval
         if elapsed >= minimumInterval {
             trailingTask?.cancel()
             trailingTask = nil

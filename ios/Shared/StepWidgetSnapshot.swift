@@ -53,6 +53,8 @@ struct HealthWidgetSnapshot: Codable, Equatable {
     let savedAt: Date
     var stress: Double? = nil
     var stressObservedAt: Date? = nil
+    // Unknown in legacy snapshots; saving does not prove a battery observation.
+    var batteryObservedAt: Date? = nil
 
     func isForDay(_ date: Date, calendar: Calendar = .current) -> Bool {
         let formatter = DateFormatter()
@@ -69,8 +71,8 @@ struct HealthWidgetSnapshot: Codable, Equatable {
         guard isForDay(now, calendar: calendar),
               let end = calendar.dateInterval(of: .day, for: now)?.end else { return [] }
         var boundaries = Set<Date>()
-        if battery != nil {
-            boundaries.insert(savedAt.addingTimeInterval(HealthWidgetMetric.freshnessSeconds))
+        if battery != nil, let batteryObservedAt {
+            boundaries.insert(batteryObservedAt.addingTimeInterval(HealthWidgetMetric.freshnessSeconds))
         }
         if stress != nil, let stressObservedAt {
             boundaries.insert(stressObservedAt.addingTimeInterval(HealthWidgetMetric.freshnessSeconds))
@@ -110,7 +112,8 @@ enum HealthWidgetMetric: String, CaseIterable {
         case .sleep: value = snapshot.sleep
         case .strain: value = snapshot.strain
         case .battery:
-            guard (0..<Self.freshnessSeconds).contains(date.timeIntervalSince(snapshot.savedAt)) else { return nil }
+            guard let observed = snapshot.batteryObservedAt,
+                  (0..<Self.freshnessSeconds).contains(date.timeIntervalSince(observed)) else { return nil }
             value = snapshot.battery.map(Double.init)
         case .stress:
             guard let observed = snapshot.stressObservedAt,
