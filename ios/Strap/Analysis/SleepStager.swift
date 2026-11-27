@@ -156,8 +156,8 @@ enum SleepStager {
                     // A genuinely active up epoch remains wake evidence.
                     for stageIndex in first..<index {
                         let epoch = epochs[stageIndex]
-                        let active = epoch.dynamicMotionFraction >= 0.25
-                            || epoch.moveFrac >= 0.20
+                        let active = (epoch.dynamicMotionFraction ?? 0) >= 0.25
+                            || (epoch.moveFrac ?? 0) >= 0.20
                             || epoch.jerkMax > epoch.jerkScale * jerkFloorGateMult
                         if active { labels[stageIndex] = .wake }
                     }
@@ -251,9 +251,9 @@ enum SleepStager {
         let hrVar: Double?
         let hrFlat11: Double?
         let jerks: [Double]
-        let gapCount: Int
+        let gravityPairCount: Int
         let jerkMax: Double
-        let dynamicMotionFraction: Double
+        let dynamicMotionFraction: Double?
         let respReg: Double?
         let clock: Double
         let minutes: Double
@@ -265,12 +265,12 @@ enum SleepStager {
         let hr: Double?
         let hrVar: Double?
         let hrFlat11: Double?
-        let moveFrac: Double
+        let moveFrac: Double?
         let jerkMax: Double
         let respReg: Double?
         let clock: Double
         let jerkScale: Double
-        let dynamicMotionFraction: Double
+        let dynamicMotionFraction: Double?
         let minutes: Double
     }
 
@@ -315,9 +315,10 @@ enum SleepStager {
             // Absolute dynamic acceleration complements orientation changes:
             // wrist motion can occur without a large gravity-vector delta.
             // Require dense coverage; never treat missing motion as wake.
-            let dynamicMotionFraction = dynamicValues.count >= (epochEnd - epochStart) * 4 / 5
-                ? Double(dynamicValues.filter { $0 >= 0.12 }.count) / Double(dynamicValues.count)
-                : 0
+            let dynamicMotionFraction = observedMotionFraction(
+                moving: dynamicValues.filter { $0 >= 0.12 }.count,
+                observed: dynamicValues.count, expected: epochEnd - epochStart
+            )
             if valid {
                 for second in epochStart..<epochEnd {
                     // Missing seconds are not consecutive motion observations.
@@ -353,7 +354,7 @@ enum SleepStager {
                     hrVar: valid ? windowStd(epochStart - 150, epochEnd + 150) : nil,
                     hrFlat11: valid ? windowStd(epochStart - 330, epochEnd + 360) : nil,
                     jerks: jerks,
-                    gapCount: max(1, jerks.count),
+                    gravityPairCount: jerks.count,
                     jerkMax: jerks.max() ?? 0,
                     dynamicMotionFraction: dynamicMotionFraction,
                     respReg: valid ? respRegularity(beats) : nil,
@@ -381,7 +382,8 @@ enum SleepStager {
                 hr: raw.hr,
                 hrVar: raw.hrVar,
                 hrFlat11: raw.hrFlat11,
-                moveFrac: Double(moves) / Double(raw.gapCount),
+                moveFrac: observedMotionFraction(moving: moves, observed: raw.gravityPairCount,
+                                                  expected: raw.end - raw.start - 1),
                 jerkMax: raw.jerkMax,
                 respReg: raw.respReg,
                 clock: raw.clock,
@@ -508,8 +510,29 @@ enum SleepStager {
         return Double(low) / Double(sorted.count)
     }
 
+    /// Missing motion is unknown, not measured stillness. Partial edge epochs
+    /// must meet the same proportional coverage gate as full epochs.
+    static func observedMotionFraction(moving: Int, observed: Int, expected: Int) -> Double? {
+        guard expected > 0, observed > 0, observed <= expected,
+              moving >= 0, moving <= observed,
+              Double(observed) / Double(expected) >= 0.8 else { return nil }
+        return Double(moving) / Double(observed)
+    }
+
+    /// A measured active channel must not be overridden by another quiet or
+    /// absent channel. The cardiac wake term is suppressed only with positive
+    /// evidence of quiescence.
+    static func motionQuiescent(moveFrac: Double?, jerkMax: Double, jerkScale: Double,
+                                dynamicMotionFraction: Double?) -> Bool {
+        guard moveFrac != nil || dynamicMotionFraction != nil else { return false }
+        if let moveFrac, moveFrac > 0 { return false }
+        if let dynamicMotionFraction, dynamicMotionFraction > 0 { return false }
+        return jerkMax <= jerkScale * jerkFloorGateMult
+    }
+
     private static func motionQuiescent(_ epoch: Epoch) -> Bool {
-        epoch.moveFrac <= 0 && epoch.jerkMax <= epoch.jerkScale * jerkFloorGateMult
+        motionQuiescent(moveFrac: epoch.moveFrac, jerkMax: epoch.jerkMax,
+                        jerkScale: epoch.jerkScale, dynamicMotionFraction: epoch.dynamicMotionFraction)
     }
 
     static func remGuard(_ minutesSinceOnset: Double) -> Double {
@@ -714,7 +737,7 @@ enum SleepStager {
         guard !epochs.isEmpty else { return [] }
         let localHRZ = localHRZScores(epochs)
         let zVar = zScorer(population.map { $0.hrVar })
-        let zMove = zScorer(population.map { Optional($0.moveFrac) })
+        let zMove = zScorer(population.map(\.moveFrac))
         let zResp = zScorer(population.map { $0.respReg })
         let flatSorted = population.compactMap { $0.hrFlat11 }.sorted()
 
@@ -746,7 +769,7 @@ enum SleepStager {
             }
             // Only substantial, sustained measured acceleration adds wake
             // evidence; ordinary wrist micro-motion must not erase REM/Deep.
-            if epoch.dynamicMotionFraction >= 0.25 {
+            if (epoch.dynamicMotionFraction ?? 0) >= 0.25 {
                 emission[.wake]! += motionGateBoost * 3
             }
             if let resp = epoch.respReg {
