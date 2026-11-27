@@ -160,13 +160,16 @@ final class AppStore: ObservableObject {
                 await self?.activateHealthKit(exportBacklog: true)
             }
         }
-        self.workoutCoordinator = WorkoutLiveActivityCoordinator(
-            band: band,
-            recorder: .shared,
-            maxHeartRate: { [weak self] in self?.maxHeartRate },
-            isPreview: { [weak self] in self?.isPreview ?? false },
-            onDayChange: { [weak self] in self?.refreshHealthWidget() }
-        )
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.workoutCoordinator = WorkoutLiveActivityCoordinator(
+                band: self.band,
+                recorder: .shared,
+                maxHeartRate: { [weak self] in self?.maxHeartRate },
+                isPreview: { [weak self] in self?.isPreview ?? false },
+                onDayChange: { [weak self] in self?.refreshHealthWidget() }
+            )
+        }
         band.autoConnectIfNeeded()
     }
 
@@ -253,8 +256,10 @@ final class AppStore: ObservableObject {
         } ?? false
         if !unchanged, HealthWidgetSnapshot.save(snapshot) {
             lastSavedHealthWidgetSnapshot = snapshot
-            healthWidgetCoalescer.requestReload {
-                for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+            Task { @MainActor [weak self] in
+                self?.healthWidgetCoalescer.requestReload {
+                    for kind in HealthWidgetMetric.kinds { WidgetCenter.shared.reloadTimelines(ofKind: kind) }
+                }
             }
         }
     }
