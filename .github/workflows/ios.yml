@@ -222,6 +222,8 @@ jobs:
           fi
           echo "Configured source entitlement:"
           /usr/libexec/PlistBuddy -c "Print :com.apple.developer.healthkit" ios/Strap/Strap.entitlements
+          /usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" ios/Strap/Strap.entitlements
+          /usr/libexec/PlistBuddy -c "Print :com.apple.security.application-groups:0" ios/StrapWorkoutWidget/StrapWorkoutWidget.entitlements
           echo "Xcode target entitlement build setting:"
           xcodebuild -project ios/Strap.xcodeproj -scheme Strap -configuration Release -showBuildSettings 2>/dev/null | grep -m 1 'CODE_SIGN_ENTITLEMENTS ='
 

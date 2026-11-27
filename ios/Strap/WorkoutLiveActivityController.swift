@@ -2,19 +2,29 @@ import ActivityKit
 import Foundation
 
 /// Bridges the existing workout recorder and live BLE HR into ActivityKit.
-/// ActivityKit updates are opportunistic: iOS may suspend the app in background.
+/// ActivityKit updates are serialized and opportunistic: iOS may still suspend
+/// the app in background when no permitted BLE/location event is waking it.
 @MainActor
 final class WorkoutLiveActivityController {
     static let shared = WorkoutLiveActivityController()
     private var active: Activity<WorkoutActivityAttributes>?
     private var lastUpdate = Date.distantPast
     private var lastState: WorkoutActivityAttributes.ContentState?
+    private var pendingTask: Task<Void, Never>?
     private init() {}
 
-    func start(session: WorkoutSession) {
+    private func enqueue(_ work: @escaping @MainActor () async -> Void) {
+        let previous = pendingTask
+        pendingTask = Task { @MainActor in
+            await previous?.value
+            await work()
+        }
+    }
+
+    func start(session: WorkoutSession, isConnected: Bool = true) {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
         let id = session.id.uuidString
-        if active?.attributes.sessionID == id { return }
+        let now = Date()
         let attrs = WorkoutActivityAttributes(
             sessionID: id, activityName: session.activityLabel,
             startedAt: session.startedAt, hasGPS: session.hasGPS
@@ -22,35 +32,45 @@ final class WorkoutLiveActivityController {
         let initial = WorkoutActivityAttributes.ContentState(
             heartRate: nil, zone: nil, distanceMeters: session.hasGPS ? 0 : nil,
             paceSecondsPerKilometer: nil, steps: nil, stepsObservedAt: nil,
-            paused: false, lastSampleAt: Date()
+            elapsedSeconds: 0, timerAnchor: now, isConnected: isConnected,
+            estimatedStrain: nil, paused: false, lastSampleAt: now
         )
-        Task {
+        if lastState == nil {
+            lastState = initial
+            lastUpdate = .distantPast
+        }
+        enqueue { [weak self] in
+            guard let self else { return }
+            if self.active?.attributes.sessionID == id { return }
             // Avoid duplicate cards after app recreation.
             for old in Activity<WorkoutActivityAttributes>.activities where old.attributes.sessionID != id {
                 await old.end(nil, dismissalPolicy: .immediate)
             }
             if let existing = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id }) {
-                active = existing
+                self.active = existing
             } else {
                 do {
-                    active = try Activity.request(attributes: attrs, content: ActivityContent(state: initial, staleDate: Date().addingTimeInterval(120)), pushType: nil)
+                    self.active = try Activity.request(
+                        attributes: attrs,
+                        content: ActivityContent(state: initial, staleDate: now.addingTimeInterval(120)),
+                        pushType: nil
+                    )
                 } catch {
-                    // ActivityKit can be disabled by system/user; workout continues normally.
+                    // ActivityKit can reject background creation; workout continues normally.
                     return
                 }
             }
-            lastState = initial
-            lastUpdate = .distantPast
         }
     }
 
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int? = nil,
-                stepsObservedAt: Date? = nil) {
-        guard let session, let active, active.attributes.sessionID == session.id.uuidString else { return }
-        guard phase == .recording || phase == .paused else { return }
+                stepsObservedAt: Date? = nil, isConnected: Bool = true,
+                estimatedStrain: Double? = nil) {
+        guard let session, phase == .recording || phase == .paused else { return }
+        let id = session.id.uuidString
         let now = Date()
-        let bpm = heartRate.flatMap { (35...220).contains($0) ? $0 : nil }
+        let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
         let zone: Int? = {
             guard let bpm, let maxHeartRate, maxHeartRate > 0 else { return nil }
             let ratio = Double(bpm) / maxHeartRate
@@ -58,38 +78,53 @@ final class WorkoutLiveActivityController {
         }()
         let pace: Int? = session.hasGPS && distanceMeters >= 100 && elapsedSeconds > 0
             ? Int(Double(elapsedSeconds) / (distanceMeters / 1000.0)) : nil
+        let paused = phase == .paused
+        let clampedElapsed = max(0, elapsedSeconds)
+        let anchor = paused ? nil : now.addingTimeInterval(-Double(clampedElapsed))
         let state = WorkoutActivityAttributes.ContentState(
             heartRate: bpm, zone: zone,
             distanceMeters: session.hasGPS ? max(0, distanceMeters) : nil,
             paceSecondsPerKilometer: pace, steps: steps, stepsObservedAt: stepsObservedAt,
-            paused: phase == .paused, lastSampleAt: now
+            elapsedSeconds: clampedElapsed, timerAnchor: anchor, isConnected: isConnected,
+            estimatedStrain: estimatedStrain, paused: paused, lastSampleAt: now
         )
-        // Rate-limit system updates, but always transmit pause/resume or HR changes after 5s.
-        guard lastState?.paused != state.paused || now.timeIntervalSince(lastUpdate) >= 5 else { return }
+        let urgentTransition = lastState?.paused != state.paused
+            || lastState?.isConnected != state.isConnected
+            || lastState?.steps != state.steps
+        guard urgentTransition || now.timeIntervalSince(lastUpdate) >= 5 else { return }
         lastUpdate = now
         lastState = state
-        Task { await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120))) }
+        enqueue { [weak self] in
+            guard let self else { return }
+            if self.active?.attributes.sessionID != id {
+                self.active = Activity<WorkoutActivityAttributes>.activities.first(where: { $0.attributes.sessionID == id })
+            }
+            guard let active = self.active, active.attributes.sessionID == id else { return }
+            await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120)))
+        }
     }
 
     /// BLE history may finish syncing while the workout screen is backgrounded.
     /// Keep the running workout card synchronized without starting a second one.
     func updateStepCount(_ steps: Int?, observedAt: Date?) {
-        guard let active, var state = lastState else { return }
+        guard var state = lastState else { return }
         guard state.steps != steps || state.stepsObservedAt != observedAt else { return }
         state.steps = steps
         state.stepsObservedAt = observedAt
         lastState = state
         let now = Date()
-        Task {
+        enqueue { [weak self] in
+            guard let self, let active = self.active else { return }
             await active.update(ActivityContent(state: state, staleDate: now.addingTimeInterval(120)))
         }
     }
 
     func end() {
-        let targets = Activity<WorkoutActivityAttributes>.activities
         active = nil
         lastState = nil
-        Task {
+        lastUpdate = .distantPast
+        enqueue {
+            let targets = Activity<WorkoutActivityAttributes>.activities
             for activity in targets {
                 await activity.end(nil, dismissalPolicy: .immediate)
             }

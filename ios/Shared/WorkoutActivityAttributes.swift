@@ -11,6 +11,10 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         // Optional for backward decoding of existing workout Live Activities.
         var steps: Int?
         var stepsObservedAt: Date?
+        var elapsedSeconds: Int?
+        var timerAnchor: Date?
+        var isConnected: Bool?
+        var estimatedStrain: Double?
         var paused: Bool
         var lastSampleAt: Date
     }
