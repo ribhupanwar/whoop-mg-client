@@ -25,7 +25,11 @@ final class MoreTabNavigationTests: XCTestCase {
         let bandAlarms = BandAlarmsView().environmentObject(store)
         XCTAssertNotNil(bandAlarms)
 
-        // 4. Health Integrations
+        // 4. Daily Journal
+        let journal = JournalView().environmentObject(store)
+        XCTAssertNotNil(journal)
+
+        // 5. Health Integrations
         let healthIntegrations = AppleHealthImportView()
         XCTAssertNotNil(healthIntegrations)
 
@@ -60,6 +64,7 @@ final class MoreTabNavigationTests: XCTestCase {
             ("DEVICE", "Device Settings", "radiowaves.right"),
             ("DEVICE", "Connection & Sync", "arrow.triangle.2.circlepath"),
             ("DEVICE", "Band Alarms", "alarm"),
+            ("HEALTH & DATA", "My Journal", "book.closed"),
             ("HEALTH & DATA", "Health Integrations", "link"),
             ("HEALTH & DATA", "Data Import & Export", "externaldrive"),
             ("HEALTH & DATA", "Health & Activity Settings", "figure.run"),
@@ -69,8 +74,8 @@ final class MoreTabNavigationTests: XCTestCase {
             ("ABOUT", "Diagnostics & Support", "wrench.and.screwdriver")
         ]
 
-        // Verify total row count is exactly 10
-        XCTAssertEqual(entries.count, 10, "More tab must contain exactly 10 unique rows")
+        // Verify total row count is exactly 11
+        XCTAssertEqual(entries.count, 11, "More tab must contain exactly 10 unique rows")
 
         // Verify all row titles are unique
         let titles = entries.map { $0.title }
