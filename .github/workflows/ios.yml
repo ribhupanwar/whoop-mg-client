@@ -6,11 +6,23 @@ on:
     branches: [main, ui/dsta-dashboard-polish]
     paths:
       - "ios/**"
+      - "whoop/health.py"
       - ".github/workflows/ios.yml"
+      - "docs/algorithm-freeze.json"
+      - "docs/ALGORITHM_FREEZE.md"
+      - "AGENTS.md"
+      - "scripts/check_algorithm_freeze.py"
+      - ".github/workflows/algorithm-freeze.yml"
   pull_request:
     paths:
       - "ios/**"
+      - "whoop/health.py"
       - ".github/workflows/ios.yml"
+      - "docs/algorithm-freeze.json"
+      - "docs/ALGORITHM_FREEZE.md"
+      - "AGENTS.md"
+      - "scripts/check_algorithm_freeze.py"
+      - ".github/workflows/algorithm-freeze.yml"
 
 permissions:
   contents: read
