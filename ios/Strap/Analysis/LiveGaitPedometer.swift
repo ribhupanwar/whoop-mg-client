@@ -150,6 +150,7 @@ struct LiveWorkoutStepAccumulator {
 
     mutating func interrupt() {
         magnitude.removeAll(keepingCapacity: true)
+        beganCounting = false
     }
 
     mutating func reconnect() {
@@ -181,7 +182,7 @@ struct LiveWorkoutStepAccumulator {
         let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100,
                                                   latestSecondOnly: beganCounting)
         total += estimate.fractionalSteps
-        beganCounting = beganCounting || total > 0
+        beganCounting = beganCounting || estimate.fractionalSteps > 0
         return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date)
     }
 }
