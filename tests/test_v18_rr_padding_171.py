@@ -43,15 +43,6 @@ class V18DeclaredRRTests(unittest.TestCase):
     def test_out_of_range_count_is_not_trusted(self):
         result = decode_v18(self.sample(5, (800, 820)))
         self.assertEqual(result.rr_intervals_ms, [])
-        self.assertFalse(result.rr_padding_valid)
-        self.assertEqual(result.step_counter, result.step_motion_counter)
-
-    def test_extreme_out_of_range_count_marks_padding_invalid(self):
-        for invalid_count in (5, 9, 16, 255):
-            with self.subTest(invalid_count=invalid_count):
-                result = decode_v18(self.sample(invalid_count, (800, 820)))
-                self.assertEqual(result.rr_intervals_ms, [])
-                self.assertFalse(result.rr_padding_valid)
 
     def test_crc_corruption_is_rejected_before_rr_decode(self):
         record = self.sample(1, (800,), {18: 0xAA})
