@@ -37,11 +37,11 @@ final class Gen5IMUBufferTests: XCTestCase {
 
     func testIMURhythmWindowRejectsWrongVersionAndHandlesWrapAndReplay() {
         func fullBlock(version: UInt8 = 21, unix: UInt32, index: UInt32) -> Gen5IMUBuffer {
-            let accel = (0..<3).map { _ in (0..<100).map { i in i % 2 == 0 ? 0.2 : -0.2 } }
-            let gyro = (0..<3).map { _ in [Double](repeating: 0, count: 100) }
+            let x = (0..<100).map { i in 1.0 + 0.3 * sin(2 * Double.pi * Double(i) / 50.0) }
+            let zero = [Double](repeating: 0, count: 100)
             return Gen5IMUBuffer(
                 version: version, recordIndex: index, unix: unix,
-                rawSubsecond: 0, accelerationG: accel, angularVelocityDPS: gyro
+                rawSubsecond: 0, accelerationG: [x, zero, zero], angularVelocityDPS: [zero, zero, zero]
             )
         }
 
