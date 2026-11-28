@@ -1175,7 +1175,26 @@ final class BandLink: NSObject, ObservableObject {
     /// neither the heart rates nor R-R measurements are modified.
     var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
-    func notifySleepCorrectionChanged() {
+    /// Reset only the latest selected night, never the archive or other manual edits.
+    func resetLatestSleepCorrection() {
+        guard !isAnalyzingHistory, let session = latestSleepSession, var saved = summary,
+              let sessions = saved.sleepSessions,
+              let index = sessions.firstIndex(of: session) else { return }
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let updated = SleepCorrectionStore.removing(for: session.sourcePeriod, overrides: overrides)
+        guard session.isEdited || updated != overrides else { return }
+        UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
+        var provisional = sessions
+        provisional[index] = session.resettingCorrection()
+        saved.sleepSessions = provisional
+        saved.sleepStaging = saved.latestSleepSession?.staging
+        summary = saved
+        lastSleepAnalysis = nil
+        persistMetricsSnapshot()
+        notifySleepCorrectionChanged(redetect: true)
+    }
+
+    func notifySleepCorrectionChanged(redetect: Bool = false) {
         sleepCorrectionRevision += 1
         analysisCancellation?.cancel()
         applySavedSleepBounds()
@@ -1183,7 +1202,13 @@ final class BandLink: NSObject, ObservableObject {
         let revision = sleepCorrectionRevision
         // Edited nights can be older than the active 72-hour analysis window.
         // Load their own durable samples rather than requiring a new BLE drain.
-        archiveWriter.samples(from: session.startUnix, through: session.endUnix - 1) { [weak self] result in
+        // A prematurely closed window needs subsequent archive records too.
+        // The observation horizon is not a proposed or fabricated sleep end.
+        let from = redetect ? max(1, session.startUnix - 30 * 60) : session.startUnix
+        let through = redetect
+            ? min(Int(Date().timeIntervalSince1970), max(session.endUnix - 1, session.startUnix + 12 * 3600 - 1))
+            : session.endUnix - 1
+        archiveWriter.samples(from: from, through: max(from, through)) { [weak self] result in
             guard let self, self.sleepCorrectionRevision == revision else { return }
             switch result {
             case .success(let rows):
