@@ -72,14 +72,14 @@ struct DashboardRows: View {
             }
         case .zonesLow:
             historyRow(.zonesLow) {
-                MetricRow(icon: "heart.pulse", title: "HR zones 1–3 · weekly",
+                MetricRow(icon: "zones.low", title: "HR zones 1–3 (weekly)",
                           value: demo ? SampleData.zones13 : zoneText(high: false),
                           detail: demo ? SampleData.zones13Compare : nil,
                           detailColor: demo ? .appGood : .appMuted)
             }
         case .zonesHigh:
             historyRow(.zonesHigh) {
-                MetricRow(icon: "heart.pulse", title: "HR zones 4–5 · weekly",
+                MetricRow(icon: "zones.high", title: "HR zones 4–5 (weekly)",
                           value: demo ? SampleData.zones45 : zoneText(high: true),
                           detail: demo ? SampleData.zones45Compare : nil,
                           detailColor: demo ? .appWarn : .appMuted)

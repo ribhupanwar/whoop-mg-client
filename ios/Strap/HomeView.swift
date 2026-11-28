@@ -1448,7 +1448,7 @@ struct HomeView: View {
                     .padding(.horizontal, 11)
                     .padding(.vertical, 5)
                     .background(
-                        Capsule().fill(
+                        RoundedRectangle(cornerRadius: 5).fill(
                             LinearGradient(colors: [Color.appCustomizeStart, Color.appCustomizeEnd],
                                            startPoint: .leading, endPoint: .trailing)
                         )

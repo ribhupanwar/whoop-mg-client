@@ -22,36 +22,22 @@ enum MoreMenuItem: String, CaseIterable {
 
     var metadata: (title: String, icon: String, section: String) {
         switch self {
-        case .deviceSettings: return ("Device Settings", "radiowaves.right", "DEVICE")
+        case .deviceSettings: return ("Device Settings", "applewatch", "DEVICE")
         case .connectionSync: return ("Connection & Sync", "arrow.triangle.2.circlepath", "DEVICE")
         case .bandAlarms: return ("Band Alarms", "alarm", "DEVICE")
         case .sleepPlanner: return ("Sleep Planner", "moon.stars", "HEALTH & ACTIVITY")
         case .journal: return ("Journal", "book.closed", "HEALTH & ACTIVITY")
         case .trainingPlan: return ("Training Plan", "calendar", "HEALTH & ACTIVITY")
         case .guidedBreathing: return ("Guided Breathing", "wind", "HEALTH & ACTIVITY")
-        case .healthIntegrations: return ("Health Integrations", "link", "DATA & INTEGRATIONS")
-        case .dataImportExport: return ("Data Import & Export", "externaldrive", "DATA & INTEGRATIONS")
-        case .backupRestore: return ("Backup & Restore", "externaldrive.badge.timemachine", "DATA & INTEGRATIONS")
-        case .healthActivitySettings: return ("Health & Activity Settings", "figure.run", "DATA & INTEGRATIONS")
+        case .healthIntegrations: return ("Health Integrations", "link.circle", "DATA & INTEGRATIONS")
+        case .dataImportExport: return ("Data Import & Export", "tray.and.arrow.down", "DATA & INTEGRATIONS")
+        case .backupRestore: return ("Backup & Restore", "clock.arrow.circlepath", "DATA & INTEGRATIONS")
+        case .healthActivitySettings: return ("Health & Activity Settings", "heart.text.square", "DATA & INTEGRATIONS")
         case .notifications: return ("Notifications", "bell", "PREFERENCES")
         case .appPreferences: return ("App Preferences", "gearshape", "PREFERENCES")
         case .homeWidgets: return ("Home Screen Widgets", "square.grid.2x2", "WIDGETS & LIVE ACTIVITIES")
         case .appInformation: return ("App Information", "info.circle", "ABOUT")
         case .diagnosticsSupport: return ("Diagnostics & Support", "wrench.and.screwdriver", "ABOUT")
-        }
-    }
-
-    // Select artwork by menu identity, never by an ambiguous SF Symbol.
-    var iconAsset: IconAsset? {
-        switch self {
-        case .deviceSettings: return .deviceStrapIdle
-        case .connectionSync: return .deviceBleConnected
-        case .bandAlarms: return .alarmWake
-        case .sleepPlanner: return .alarmSleepGoal
-        case .guidedBreathing: return .healthRespiratory
-        case .healthIntegrations: return .settingsIntegrations
-        case .notifications: return .settingsNotifications
-        default: return nil
         }
     }
 
@@ -75,123 +61,118 @@ struct MoreView: View {
                 profileHeaderCard
 
                 // SECTION 1: DEVICE
-                SectionTitle("DEVICE")
-                Panel {
+                MoreSettingsCard("DEVICE") {
                     NavigationLink { DeviceSettingsView() } label: {
                         moreRow(.deviceSettings, subtitle: deviceSettingsSubtitle)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
+                    .accessibilityIdentifier(MoreMenuItem.deviceSettings.accessibilityID)
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { ConnectionSyncView() } label: {
                         moreRow(.connectionSync, subtitle: store.band.status.title)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { BandAlarmsView() } label: {
                         moreRow(.bandAlarms, subtitle: bandAlarmsSubtitle)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("HEALTH & ACTIVITY")
-                Panel {
+                MoreSettingsCard("HEALTH & ACTIVITY") {
                     NavigationLink(value: Route.sleepCoach) {
                         moreRow(.sleepPlanner, subtitle: "Sleep need, bedtime & wake schedule")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink(value: Route.journal) {
                         moreRow(.journal, subtitle: "Daily behaviors and notes")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { PlanView() } label: {
                         moreRow(.trainingPlan, subtitle: "Daily goals and schedule")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { StrapGuidedBreathingView() } label: {
                         moreRow(.guidedBreathing, subtitle: "Optional paced breathing session")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("DATA & INTEGRATIONS")
-                Panel {
+                MoreSettingsCard("DATA & INTEGRATIONS") {
                     NavigationLink { AppleHealthImportView() } label: {
                         moreRow(.healthIntegrations, subtitle: "Apple HealthKit sync & data exchange")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { DataManagementView() } label: {
                         moreRow(.dataImportExport, subtitle: "Backup, restore, WHOOP archive & captures")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { BackupRestoreSettingsView() } label: {
                         moreRow(.backupRestore, subtitle: "Schedule, retention, export & restore")
                     }
-                    .buttonStyle(.plain)
-                    Divider().background(Color.appLine)
+                    .buttonStyle(MoreSettingsPressStyle())
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { SettingsView() } label: {
                         moreRow(.healthActivitySettings, subtitle: "Profile, heart rate zones & sleep need")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // SECTION 3: PREFERENCES
-                SectionTitle("PREFERENCES")
-                Panel {
+                MoreSettingsCard("PREFERENCES") {
                     NavigationLink { NotificationSettingsView() } label: {
                         moreRow(.notifications, subtitle: "Wake alarm & schedule alerts")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { AppPreferencesView() } label: {
                         moreRow(.appPreferences, subtitle: "Appearance, widget privacy & research")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("WIDGETS & LIVE ACTIVITIES")
-                Panel {
+                MoreSettingsCard("WIDGETS & LIVE ACTIVITIES") {
                     NavigationLink { StrapWidgetGuideView() } label: {
                         moreRow(.homeWidgets, subtitle: "Health, steps, workouts & Dynamic Island")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // SECTION 4: ABOUT
-                SectionTitle("ABOUT")
-                Panel {
+                MoreSettingsCard("ABOUT") {
                     NavigationLink { AppInfoView() } label: {
                         moreRow(.appInformation, subtitle: "Version 1.0 (Build \(BuildInfo.revision))")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { DiagnosticsSupportView() } label: {
                         moreRow(.diagnosticsSupport, subtitle: "System diagnostics & documentation")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // FOOTER
@@ -261,33 +242,32 @@ struct MoreView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MoreSettingsPressStyle())
         .accessibilityIdentifier("more.profile")
     }
 
     private func moreRow(_ item: MoreMenuItem, subtitle: String? = nil) -> some View {
-        HStack(spacing: 14) {
-            StrapIconView(item.metadata.icon, asset: item.iconAsset, size: 16,
-                          frameWidth: 24, color: .appAccent)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 11) {
+            MoreSettingsIcon(symbol: item.metadata.icon)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.metadata.title)
                     .font(StrapTypography.body(13.5, weight: .semibold))
                     .foregroundStyle(Color.appFG)
                 if let subtitle {
                     Text(subtitle)
-                        .font(StrapTypography.body(11))
+                        .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Color.appMuted)
                 .accessibilityHidden(true)
         }
-        .padding(.vertical, 9)
-        .frame(minHeight: 44)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityIdentifier(item.accessibilityID)
     }

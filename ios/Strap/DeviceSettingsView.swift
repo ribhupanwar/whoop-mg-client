@@ -110,7 +110,7 @@ struct DeviceSettingsView: View {
     // MARK: - STATUS TAB VIEW
 
     private var statusTabView: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: 6) {
             // 1. Connection Status Banner & Device Header
             statusHeaderPanel
 
@@ -373,8 +373,7 @@ struct DeviceSettingsView: View {
     }
 
     private var advancedHardwareSection: some View {
-        Panel {
-            SectionTitle("HARDWARE DETAILS")
+        MoreSettingsCard("HARDWARE DETAILS") {
 
             infoRow(
                 label: "DEVICE ID",
@@ -405,207 +404,98 @@ struct DeviceSettingsView: View {
     }
 
     private var advancedConnectivitySection: some View {
-        Panel {
-            SectionTitle("CONNECTIVITY & PAIRING")
-
-            // PAIR A DEVICE
+        MoreSettingsCard("CONNECTIVITY & PAIRING") {
             Button {
                 showPairingSheet = true
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("PAIR A DEVICE")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    Text("Pair a WHOOP to the WHOOP app. This will replace any existing WHOOP pairings.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
+                MoreSettingsDetailRow(title: "PAIR A DEVICE", icon: "link",
+                    subtitle: "Pair a band with STRAP. This replaces the existing STRAP pairing.",
+                    accessory: .navigation)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
 
-            // UNPAIR DEVICE
             if store.band.preferredBandID != nil || store.band.isConnected {
-                Divider().background(Color.appLine)
-
+                Divider().overlay(Color.appLine)
                 Button {
                     showUnpairConfirmation = true
                 } label: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("UNPAIR DEVICE")
-                                .font(StrapTypography.body(13, weight: .bold))
-                                .foregroundStyle(Color.appHigh)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(Color.appMuted)
-                        }
-                        Text("Unpair your WHOOP from the WHOOP app. This will remove the Bluetooth connection.")
-                            .font(StrapTypography.body(11))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    .contentShape(Rectangle())
+                    MoreSettingsDetailRow(title: "UNPAIR DEVICE", icon: "xmark.circle",
+                        subtitle: "Remove this band from STRAP and disconnect Bluetooth.",
+                        titleColor: .appHigh, accessory: .action("UNPAIR", .appHigh))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(MoreSettingsPressStyle())
             }
         }
     }
 
     private var advancedMaintenanceSection: some View {
-        Panel {
-            SectionTitle("MAINTENANCE CONTROLS")
-
+        MoreSettingsCard("MAINTENANCE CONTROLS") {
             NavigationLink {
                 FirmwareImageLabView()
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("FIRMWARE LAB")
-                        .font(StrapTypography.body(13, weight: .bold))
-                        .foregroundStyle(Color.appFG)
-                    Text("Inspect a local image. Hardware installation disabled.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
+                MoreSettingsDetailRow(title: "FIRMWARE LAB", icon: "cpu",
+                    subtitle: "Inspect a local image and run a simulation. Hardware installation disabled.",
+                    titleColor: .appAccent, accessory: .navigation)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
+            .accessibilityIdentifier("deviceSettings.firmwareLab")
 
-            Divider().background(Color.appLine)
-
-            // REBOOT DEVICE (VERIFIED 0x1D)
+            Divider().overlay(Color.appLine)
             Button {
                 showRebootConfirmation = true
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("REBOOT DEVICE")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        if store.band.isRebooting {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Text(store.band.isConnected ? "REBOOT" : "OFFLINE")
-                                .font(StrapTypography.metric(10, weight: .bold))
-                                .foregroundStyle(store.band.isConnected ? Color.appAccent : Color.appMuted)
-                        }
-                    }
-                    Text(store.band.rebootMessage ?? "Reboot your WHOOP to restart the device without losing stored flash data.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
+                MoreSettingsDetailRow(title: "REBOOT DEVICE", icon: "arrow.clockwise",
+                    subtitle: store.band.rebootMessage ?? "Reboot your WHOOP to restart the device without losing stored flash data.",
+                    accessory: store.band.isRebooting ? .progress :
+                        .action(store.band.isConnected ? "REBOOT" : "OFFLINE",
+                                store.band.isConnected ? .appAccent : .appMuted))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
             .disabled(!store.band.isConnected || store.band.isRebooting)
 
-            Divider().background(Color.appLine)
-
-            // CLEAR LOCAL APP CACHE (SAFE PHONE DATA RESET)
+            Divider().overlay(Color.appLine)
             Button {
                 showClearCacheConfirmation = true
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("CLEAR LOCAL APP CACHE")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Text("RESET")
-                            .font(StrapTypography.metric(10, weight: .bold))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    Text("Clear cached history and recalculations on this phone. On-band data remains untouched.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
+                MoreSettingsDetailRow(title: "CLEAR LOCAL APP CACHE", icon: "trash",
+                    subtitle: "Clear cached history and recalculations on this phone. On-band data remains untouched.",
+                    accessory: .action("RESET", .appHigh))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
 
-            Divider().background(Color.appLine)
-
-            // ON-BAND FLASH ERASE (QUARANTINED FACTORY CALIBRATION)
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("ON-BAND FLASH ERASE")
-                        .font(StrapTypography.body(13, weight: .bold))
-                        .foregroundStyle(Color.appMuted)
-                    Spacer()
-                    Text("QUARANTINED")
-                        .font(StrapTypography.metric(9, weight: .bold))
-                        .foregroundStyle(Color.appWarn)
-                }
-                Text("Destructive hardware flash wipe (FORCE_TRIM 0x19) is quarantined. Restricted to factory calibration harnesses.")
-                    .font(StrapTypography.body(11))
-                    .foregroundStyle(Color.appMuted.opacity(0.8))
-            }
+            Divider().overlay(Color.appLine)
+            MoreSettingsDetailRow(title: "ON-BAND FLASH ERASE", icon: "lock.shield",
+                subtitle: "Destructive hardware flash wipe (FORCE_TRIM 0x19) is quarantined. Restricted to factory calibration harnesses.",
+                titleColor: .appMuted, accessory: .restricted("QUARANTINED"))
         }
     }
 
     private var advancedRegulatorySection: some View {
-        Panel {
-            SectionTitle("LEGAL & REGULATORY")
-
-            // REGULATORY LABELS
+        MoreSettingsCard("LEGAL & REGULATORY") {
             NavigationLink {
                 RegulatoryLabelsView()
                     .environmentObject(store)
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("REGULATORY LABELS")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    Text("View regulatory labels and compliance information for your WHOOP device.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
+                MoreSettingsDetailRow(title: "REGULATORY LABELS", icon: "doc.text",
+                    subtitle: "View regulatory labels and compliance information for your WHOOP device.",
+                    accessory: .navigation)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
 
-            Divider().background(Color.appLine)
-
-            // SAFETY & REGULATORY
+            Divider().overlay(Color.appLine)
             Button {
                 showSafetySheet = true
             } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("SAFETY & REGULATORY")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.appMuted)
-                    }
-                    Text("Important safety information, regulatory statements and product compliance details.")
-                        .font(StrapTypography.body(11))
-                        .foregroundStyle(Color.appMuted)
-                }
-                .contentShape(Rectangle())
+                MoreSettingsDetailRow(title: "SAFETY & REGULATORY", icon: "checkmark.shield",
+                    subtitle: "Important safety information, regulatory statements and product compliance details.",
+                    accessory: .navigation)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(MoreSettingsPressStyle())
         }
     }
 
     private var diagnosticsTelemetrySection: some View {
-        Panel {
-            SectionTitle("DIAGNOSTICS & TELEMETRY")
+        MoreSettingsCard("DIAGNOSTICS & TELEMETRY") {
 
             VStack(alignment: .leading, spacing: 6) {
                 Text(store.band.hrConnectionDiagnostic)
@@ -665,7 +555,7 @@ struct DeviceSettingsView: View {
 
 
     private func infoRow(label: String, value: String) -> some View {
-        HStack {
+        HStack(alignment: .top, spacing: 12) {
             Text(label)
                 .font(StrapTypography.body(12, weight: .medium))
                 .foregroundStyle(Color.appMuted)
@@ -673,9 +563,9 @@ struct DeviceSettingsView: View {
             Text(value)
                 .font(StrapTypography.body(12, weight: .semibold))
                 .foregroundStyle(Color.appFG)
-                .lineLimit(1)
-                .truncationMode(.middle)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 9)
     }
 }

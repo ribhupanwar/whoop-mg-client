@@ -187,6 +187,11 @@ class V18Sample:
     # 4-bit quality counter. Semantics are inferred from OpenStrap/protocol and
     # require device validation before any clinical use.
     @property
+    def step_counter(self) -> int | None:
+        """Alias for step_motion_counter to match Swift V18Sample property naming."""
+        return self.step_motion_counter
+
+    @property
     def ir_source_selected(self) -> bool | None:
         if self.hr_quality_flags is None:
             return None
@@ -263,6 +268,10 @@ def decode_v18(inner: bytes) -> V18Sample | None:
             value = _i16(inner, 16 + 2 * i)
             if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
                 rr.append(value)
+    else:
+        # Corrupted/oversized declared beat count (> 4) fails padding validity
+        # matching Swift V18Decoder and Ghidra 0x1008d0a4c (RRIntervalsCountTooLarge).
+        rr_padding_valid = False
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
@@ -449,7 +458,7 @@ def decode_v21(inner: bytes) -> IMUBuffer | None:
     No capture from this device has contained a v21 record yet, so this is
     wired to diagnostics, never to a scored metric.
     """
-    if len(inner) != V21_INNER_LEN:
+    if len(inner) != V21_INNER_LEN or inner[0] not in (0x2F, 0x2B):
         return None
     accel_count = struct.unpack_from("<H", inner, V21_ACCEL_COUNT_OFFSET)[0]
     gyro_count = struct.unpack_from("<H", inner, V21_GYRO_COUNT_OFFSET)[0]
@@ -552,6 +561,24 @@ def decode_v20(inner: bytes) -> V20OpticalBuffer | None:
         ))
     rate, = struct.unpack_from("<H", inner, 15)
     return V20OpticalBuffer(header, inner[13:], rate or None, blocks)
+
+
+@dataclass
+class V20DrainQuality:
+    """Tracks aggregate sample quality metrics across decoded V20 optical frames."""
+    frames: int = 0
+    invalid_samples: int = 0
+    saturated_samples: int = 0
+    flatline_slots: int = 0
+
+    def record(self, frame: V20OpticalBuffer) -> None:
+        self.frames += 1
+        for block in frame.blocks:
+            for slot in (block.detector_a, block.detector_b):
+                self.invalid_samples += sum(sample is None for sample in slot.samples)
+                self.saturated_samples += slot.saturated_sample_count
+                if slot.is_flatline:
+                    self.flatline_slots += 1
 
 
 @dataclass

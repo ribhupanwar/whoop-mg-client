@@ -295,11 +295,13 @@ struct NativeIMUClassifierEvidence: Equatable {
 }
 
 
-/// APK-parser-derived Maverick/Goose R10 hypothesis, cross-checked against
-/// OpenWHOOP's synthetic payload fixture. No matching physical capture yet.
-/// Do not assign scales, RR, timestamps, or a validated HR measurement.
+/// Ghidra-verified Maverick/Goose Rev10 layout (`_TtC20WhoopBluetoothLegacy9R10Packet`).
+/// Offsets on the wire are 4-byte legacy envelope framed (e.g., HR at packet offset 0x15 = inner 17).
+/// Total inner payload is 1932 bytes.
 struct Gen5R10RawCandidate: Equatable {
     let packetType: UInt8
+    let timestamp: UInt32
+    let subsecondQ15: UInt16
     let rawHeartRate: UInt8
     let accelerometer: [[Int16]]
     let gyroscope: [[Int16]]
@@ -309,6 +311,8 @@ struct Gen5R10RawCandidate: Equatable {
         // Type-40 k10, Gen4 R10, and historical revision collisions are not it.
         guard bytes.count == 1932, bytes[1] == 10,
               bytes[0] == 0x28 || bytes[0] == 0x2B else { return nil }
+        let ts = UInt32(bytes[7]) | (UInt32(bytes[8]) << 8) | (UInt32(bytes[9]) << 16) | (UInt32(bytes[10]) << 24)
+        let sub = UInt16(bytes[11]) | (UInt16(bytes[12]) << 8)
         func axes(_ offsets: [Int]) -> [[Int16]] {
             offsets.map { offset in
                 (0..<100).map { index in
@@ -318,7 +322,10 @@ struct Gen5R10RawCandidate: Equatable {
                 }
             }
         }
-        return Self(packetType: bytes[0], rawHeartRate: bytes[17],
+        return Self(packetType: bytes[0],
+                    timestamp: ts,
+                    subsecondQ15: sub,
+                    rawHeartRate: bytes[17],
                     accelerometer: axes([85, 285, 485]),
                     gyroscope: axes([688, 888, 1088]))
     }

@@ -78,7 +78,8 @@ struct CaptureSummary: Codable, Equatable {
         awakeBaseline: Baseline? = nil,
         sleepCorrections: [String: [Int]] = [:],
         analysisCache: HistoryAnalysisCache? = nil,
-        sleepProgress: ((Int, Int, Bool) -> Void)? = nil
+        sleepProgress: ((Int, Int, Bool) -> Void)? = nil,
+        sleepTraceSink: SleepDetect.TraceSink? = nil
     ) -> CaptureSummary {
         let ordered = samples.sorted { $0.unix < $1.unix }
         guard !ordered.isEmpty else { return .empty }
@@ -105,7 +106,7 @@ struct CaptureSummary: Codable, Equatable {
         let resting = Hrv.restingHeartRate(ordered)
         let restingWindow = Hrv.restingHRV(ordered)
 
-        let periods = SleepDetect.detect(ordered)
+        let periods = SleepDetect.detect(ordered, traceSink: sleepTraceSink)
         let sessions = SleepSession.makeAll(samples: ordered, periods: periods, overrides: sleepCorrections,
                                             cache: analysisCache, progress: sleepProgress)
         // Sleep duration, nightly biometrics and awake load must share the
