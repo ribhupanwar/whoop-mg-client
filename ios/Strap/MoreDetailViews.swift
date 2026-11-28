@@ -112,7 +112,8 @@ struct ConnectionSyncView: View {
                         store.band.autoConnectIfNeeded()
                     } label: {
                         HStack {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
+                            StrapIconView(asset: .deviceBleConnected, size: 16, frameWidth: 20, color: .appAccent)
+                                .accessibilityHidden(true)
                             Text("Reconnect Band Session")
                                 .font(StrapTypography.body(13, weight: .semibold))
                             Spacer()

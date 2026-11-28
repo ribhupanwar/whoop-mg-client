@@ -52,10 +52,12 @@ enum IconAsset: String, CaseIterable {
         switch self {
         case .deviceStrapIdle, .deviceStrapConnected, .deviceStrapDisconnected:
             return "sensor.fill"
-        case .deviceBatteryFull, .deviceBatteryLow, .deviceBatteryCritical, .deviceBatteryCharging:
-            return "battery.100"
-        case .deviceBleConnected, .deviceBleSearching:
-            return "antenna.radiowaves.left.and.right"
+        case .deviceBatteryFull: return StrapIcon.Device.batteryFull
+        case .deviceBatteryLow: return StrapIcon.Device.batteryLow
+        case .deviceBatteryCritical: return StrapIcon.Device.batteryCritical
+        case .deviceBatteryCharging: return StrapIcon.Device.batteryCharging
+        case .deviceBleConnected: return StrapIcon.Device.bluetoothConnected
+        case .deviceBleSearching: return StrapIcon.Device.bluetoothConnecting
         case .healthHeartRate:
             return "heart.fill"
         case .healthHrv:

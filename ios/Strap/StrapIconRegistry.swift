@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Centralized Icon Registry for STRAP.
 ///
@@ -197,6 +198,17 @@ struct StrapIconView: View {
         case StrapIcon.Device.batteryCritical: return .deviceBatteryCritical
         case StrapIcon.Device.batteryCharging: return .deviceBatteryCharging
         default: return nil
+        }
+    }
+
+    /// Explicit context at production call sites avoids ambiguous SF Symbol names.
+    static func healthAsset(for vital: HealthVital) -> IconAsset {
+        switch vital {
+        case .respiration: return .healthRespiratory
+        case .oxygen: return .healthBloodOxygen
+        case .rhr: return .healthHeartRate
+        case .hrv: return .healthHrv
+        case .temperature: return .healthTemperature
         }
     }
 

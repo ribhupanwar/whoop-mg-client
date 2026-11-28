@@ -99,3 +99,7 @@ The earlier SEMANTIC MAPPING — visual parity unverified claims for SF Symbol s
 - Every listed bundled asset must have independently verified redistribution rights before release. No WHOOP IPA extraction grants those rights.
 - Native regression checks now exercise all 12 implicit `StrapIconView` domain-to-asset routes and verify the mapped image sets exist; unmapped symbols must continue to use SF fallback.
 - Remaining acceptance: full SwiftUI and WidgetKit call-site inventory, light/dark/adaptive tint screenshots on device, and asset provenance review. Do not mark #164 complete based on green CI alone.
+
+## 28 November production wiring update
+
+Existing bundled icon artwork is now explicitly routed in Health Monitor, Health Hub, eligible More rows, floating Home/More tabs, Sleep Planner, GPS workout heart-rate displays and band reconnect. Battery/BLE fallback states remain distinct. Explicit mapping tests added. This is a partial visual replacement, not full app-wide completion: activity pictograms, missing navigation/controls, sleep-stage, widget/Live Activity and remaining screen artwork still need rights-verified or independently authored assets and on-device comparison. Keep this PR draft until that inventory is implemented. Do not touch frozen biometric algorithms.

@@ -66,10 +66,9 @@ struct HealthView: View {
         let hasNightlyCandidate = !hasDelta && reading.nightlyTemperatureCandidate != nil
         return VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
-                Image(systemName: "thermometer")
-                    .font(.system(size: 16, weight: .light))
-                    .foregroundStyle(Color.appMuted)
-                    .frame(width: 20)
+                StrapIconView(asset: .healthTemperature, size: 16, weight: .light,
+                              frameWidth: 20, color: .appMuted)
+                    .accessibilityHidden(true)
                 Text(hasNightlyCandidate ? "SKIN TEMP\n(NIGHTLY CANDIDATE)" : "SKIN TEMP\n(FROM BASELINE)")
                     .font(StrapTypography.body(10, weight: .bold))
                     .tracking(0.6)
@@ -97,10 +96,9 @@ struct HealthView: View {
                               unit: String, reading: HealthReading) -> some View {
         VStack(alignment: .leading, spacing: 15) {
             HStack(alignment: .top, spacing: 7) {
-                Image(systemName: symbol)
-                    .font(.system(size: 16, weight: .light))
-                    .foregroundStyle(Color.appMuted)
-                    .frame(width: 20)
+                StrapIconView(symbol, asset: StrapIconView.healthAsset(for: reading.vital),
+                              size: 16, weight: .light, frameWidth: 20, color: .appMuted)
+                    .accessibilityHidden(true)
                 Text(title)
                     .font(StrapTypography.body(10, weight: .bold))
                     .tracking(0.6)
@@ -220,9 +218,8 @@ struct HealthView: View {
                             .font(StrapTypography.body(16, weight: .bold))
                             .tracking(1.4)
                             .padding(.bottom, 14)
-                        Image(systemName: "heart.fill")
-                            .font(.system(size: 27))
-                            .foregroundStyle(Color(hex: 0x159EF0))
+                        StrapIconView(asset: .healthHeartRate, size: 27, frameWidth: 27, color: Color(hex: 0x159EF0))
+                            .accessibilityHidden(true)
                             .padding(.bottom, 10)
                         Text(lastHR.map(String.init) ?? "—")
                             .font(StrapTypography.metric(49, weight: .bold))
