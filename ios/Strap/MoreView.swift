@@ -57,127 +57,121 @@ struct MoreView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 20) {
                 profileHeaderCard
 
                 // SECTION 1: DEVICE
-                SectionTitle("DEVICE")
-                Panel {
+                MoreSettingsCard("DEVICE") {
                     NavigationLink { DeviceSettingsView() } label: {
                         moreRow(.deviceSettings, subtitle: deviceSettingsSubtitle)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { ConnectionSyncView() } label: {
                         moreRow(.connectionSync, subtitle: store.band.status.title)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { BandAlarmsView() } label: {
                         moreRow(.bandAlarms, subtitle: bandAlarmsSubtitle)
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("HEALTH & ACTIVITY")
-                Panel {
+                MoreSettingsCard("HEALTH & ACTIVITY") {
                     NavigationLink(value: Route.sleepCoach) {
                         moreRow(.sleepPlanner, subtitle: "Sleep need, bedtime & wake schedule")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink(value: Route.journal) {
                         moreRow(.journal, subtitle: "Daily behaviors and notes")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { PlanView() } label: {
                         moreRow(.trainingPlan, subtitle: "Daily goals and schedule")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { StrapGuidedBreathingView() } label: {
                         moreRow(.guidedBreathing, subtitle: "Optional paced breathing session")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("DATA & INTEGRATIONS")
-                Panel {
+                MoreSettingsCard("DATA & INTEGRATIONS") {
                     NavigationLink { AppleHealthImportView() } label: {
                         moreRow(.healthIntegrations, subtitle: "Apple HealthKit sync & data exchange")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { DataManagementView() } label: {
                         moreRow(.dataImportExport, subtitle: "Backup, restore, WHOOP archive & captures")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { BackupRestoreSettingsView() } label: {
                         moreRow(.backupRestore, subtitle: "Schedule, retention, export & restore")
                     }
-                    .buttonStyle(.plain)
-                    Divider().background(Color.appLine)
+                    .buttonStyle(MoreSettingsPressStyle())
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { SettingsView() } label: {
                         moreRow(.healthActivitySettings, subtitle: "Profile, heart rate zones & sleep need")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // SECTION 3: PREFERENCES
-                SectionTitle("PREFERENCES")
-                Panel {
+                MoreSettingsCard("PREFERENCES") {
                     NavigationLink { NotificationSettingsView() } label: {
                         moreRow(.notifications, subtitle: "Wake alarm & schedule alerts")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { AppPreferencesView() } label: {
                         moreRow(.appPreferences, subtitle: "Appearance, widget privacy & research")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
-                SectionTitle("WIDGETS & LIVE ACTIVITIES")
-                Panel {
+                MoreSettingsCard("WIDGETS & LIVE ACTIVITIES") {
                     NavigationLink { StrapWidgetGuideView() } label: {
                         moreRow(.homeWidgets, subtitle: "Health, steps, workouts & Dynamic Island")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // SECTION 4: ABOUT
-                SectionTitle("ABOUT")
-                Panel {
+                MoreSettingsCard("ABOUT") {
                     NavigationLink { AppInfoView() } label: {
                         moreRow(.appInformation, subtitle: "Version 1.0 (Build \(BuildInfo.revision))")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
 
-                    Divider().background(Color.appLine)
+                    Divider().overlay(Color.appLine)
 
                     NavigationLink { DiagnosticsSupportView() } label: {
                         moreRow(.diagnosticsSupport, subtitle: "System diagnostics & documentation")
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 // FOOTER
@@ -247,7 +241,7 @@ struct MoreView: View {
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine, lineWidth: 1))
             .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(MoreSettingsPressStyle())
         .accessibilityIdentifier("more.profile")
     }
 
@@ -264,18 +258,19 @@ struct MoreView: View {
                     .foregroundStyle(Color.appFG)
                 if let subtitle {
                     Text(subtitle)
-                        .font(StrapTypography.body(11))
+                        .font(StrapTypography.body(11.5))
                         .foregroundStyle(Color.appMuted)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
-            Spacer()
+            Spacer(minLength: 0)
             Image(systemName: "chevron.right")
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(Color.appMuted)
                 .accessibilityHidden(true)
         }
-        .padding(.vertical, 9)
-        .frame(minHeight: 44)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityIdentifier(item.accessibilityID)
     }
