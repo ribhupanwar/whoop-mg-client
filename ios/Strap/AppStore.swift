@@ -324,8 +324,14 @@ final class AppStore: ObservableObject {
     /// full recalculation and morning journal progression.
     func endSleepNow() {
         guard let session = band.latestSleepSession, let lastUnix = band.summary?.lastUnix else { return }
-        let nowUnix = max(session.startUnix + 60, min(Int(Date().timeIntervalSince1970), lastUnix + 60))
+        let now = Int(Date().timeIntervalSince1970)
         let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        // A stale lifecycle card or archive frontier must not save a historical
+        // candidate as a newly confirmed manual wake time.
+        guard sleepLifecycle.phase == .detected,
+              sleepLifecycle.sessionID == sessionID,
+              session.canEndNow(lastObservedUnix: lastUnix, nowUnix: now) else { return }
+        let nowUnix = max(session.startUnix + 60, min(now, lastUnix + 60))
 
         let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let updated = SleepCorrectionStore.saving([session.startUnix, nowUnix], for: session.sourcePeriod,
