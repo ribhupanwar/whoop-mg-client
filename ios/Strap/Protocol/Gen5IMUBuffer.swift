@@ -9,6 +9,22 @@ struct Gen5IMUBuffer: Equatable {
     let rawSubsecond: UInt16
     let accelerationG: [[Double]]
     let angularVelocityDPS: [[Double]]
+    // Metadata is diagnostic only. Existing scales and acceptance gates stay fixed.
+    var rawMetadata: RawMetadata? = nil
+
+    struct RawMetadata: Equatable {
+        // Preserve exact unclassified header bytes. Do not label them as ODR,
+        // sensor range or bias until the parser load widths/offsets are verified.
+        let accelPrefix: [UInt8] // inner 13..<20
+        let gyroPrefix: [UInt8] // inner 620..<632
+
+        var summary: String {
+            func hex(_ bytes: [UInt8]) -> String {
+                bytes.map { String(format: "%02X", Int($0)) }.joined(separator: " ")
+            }
+            return "A[13–19] " + hex(accelPrefix) + " · G[620–631] " + hex(gyroPrefix)
+        }
+    }
 
     struct BlockFeatures: Equatable {
         let magnitudeVariationG: Double
@@ -65,7 +81,8 @@ struct Gen5IMUBuffer: Equatable {
         }
         return Gen5IMUBuffer(version: bytes[1], recordIndex: dword(3), unix: dword(7),
             rawSubsecond: word(11), accelerationG: axes([20, 220, 420], count: accelCount, scale: 1.0 / 4096),
-            angularVelocityDPS: axes([632, 832, 1032], count: gyroCount, scale: 2000.0 / 32768))
+            angularVelocityDPS: axes([632, 832, 1032], count: gyroCount, scale: 2000.0 / 32768),
+            rawMetadata: RawMetadata(accelPrefix: Array(bytes[13..<20]), gyroPrefix: Array(bytes[620..<632])))
     }
 }
 

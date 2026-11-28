@@ -22,6 +22,26 @@ final class Gen5IMUBufferTests: XCTestCase {
             XCTAssertEqual(decoded.angularVelocityDPS[0], [1000])
         }
     }
+    func testRawHeaderEvidencePreservesBytesWithoutChangingMotion() throws {
+        for type: UInt8 in [0x2F, 0x2B] {
+            var bytes = fixture(type: type)
+            let original = try XCTUnwrap(Gen5IMUBuffer.decode(bytes))
+            let accel: [UInt8] = [0xA1, 0x64, 0x00, 2, 0, 3, 0xB7]
+            let gyro: [UInt8] = [0x64, 0, 1, 0, 5, 0xC8, 0xFF, 0x7F, 0, 0x80, 0x12, 0x34]
+            bytes.replaceSubrange(13..<20, with: accel)
+            bytes.replaceSubrange(620..<632, with: gyro)
+            let decoded = try XCTUnwrap(Gen5IMUBuffer.decode(bytes))
+            XCTAssertEqual(decoded.accelerationG, original.accelerationG)
+            XCTAssertEqual(decoded.angularVelocityDPS, original.angularVelocityDPS)
+            XCTAssertEqual(decoded.blockFeatures, original.blockFeatures)
+            let metadata = try XCTUnwrap(decoded.rawMetadata)
+            XCTAssertEqual(metadata.accelPrefix, accel)
+            XCTAssertEqual(metadata.gyroPrefix, gyro)
+            XCTAssertEqual(NativeDeepTelemetry.Motion(decoded).rawMetadata, metadata)
+            XCTAssertTrue(metadata.summary.contains("FF 7F 00 80 12 34"))
+        }
+    }
+
     func testMalformedCountsLengthsAndUnverifiedPacketRoutesRejected() {
         for count in [UInt8(0), 101, 255] {
             var bytes = fixture(); bytes[16] = count

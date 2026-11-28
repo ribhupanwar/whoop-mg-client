@@ -413,6 +413,11 @@ struct HealthView: View {
                 Text(String(format: "Centered acceleration RMS %.3f g · gyro RMS %.1f °/s", motion.centeredAccelerationRMSG, motion.angularVelocityRMSDPS))
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let metadata = motion.rawMetadata {
+                    Text("IMU raw metadata (unclassified): " + metadata.summary)
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
                 if let features = motion.features {
                     let change = features.adjacentMagnitudeChangeRMSG.map { String(format: "%.3f g/sample", $0) } ?? "—"
                     Text(String(format: "Magnitude variation %.3f g · mean rotation %.1f °/s", features.magnitudeVariationG, features.meanAngularSpeedDPS) + " · adjacent change " + change)
@@ -508,6 +513,11 @@ struct HealthView: View {
                 Text("Type-43 IMU: \(motion.accelerationSamples) accel / \(motion.gyroSamples) gyro samples · \(recent ? "recent" : "stale")")
                     .font(StrapTypography.body(12))
                     .foregroundStyle(Color.appMuted)
+                if let metadata = motion.rawMetadata {
+                    Text("IMU raw metadata (unclassified): " + metadata.summary)
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
             }
             if let candidate = deep.respiratoryEvidence.candidate {
                 Text(String(format: "V26 optical respiration candidate %.1f rpm · RIIV/RIAV agreement (unvalidated)", candidate.breathsPerMinute))
