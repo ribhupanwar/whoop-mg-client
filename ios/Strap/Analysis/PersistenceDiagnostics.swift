@@ -160,6 +160,22 @@ enum PersistenceDiagnostics {
             try fm.copyItem(at: gps, to: folder.appendingPathComponent("Strap/gps-runs-v2.json"))
             try record("Strap/gps-runs-v2.json")
         }
+        // Evidence is diagnostics-only, excluded from restorable backups.
+        if !fullBackup {
+            let shadow = WorkoutCalorieShadowCapture.directory(support: support)
+            if let entries = try? fm.contentsOfDirectory(at: shadow, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]) {
+                for url in entries where url.pathExtension == "json" && UUID(uuidString: url.deletingPathExtension().lastPathComponent) != nil {
+                    let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+                    guard values.isRegularFile == true, values.isSymbolicLink != true,
+                          let size = values.fileSize, size <= 32_000_000 else { continue }
+                    let relative = "calorie-shadow/" + url.lastPathComponent
+                    let target = folder.appendingPathComponent(relative)
+                    try fm.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try fm.copyItem(at: url, to: target)
+                    try record(relative)
+                }
+            }
+        }
         let vault = support.appendingPathComponent("sleep-recovery", isDirectory: true)
         if fm.fileExists(atPath: vault.path) {
             try fm.copyItem(at: vault, to: folder.appendingPathComponent("sleep-recovery", isDirectory: true))

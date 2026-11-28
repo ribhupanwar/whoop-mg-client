@@ -41,6 +41,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private var exportHeartRate: [WorkoutExportHeartRate] = []
     private var exportPauses: [WorkoutExportPause] = []
     private var exportPauseStarted: Date?
+    private var calorieShadow = WorkoutCalorieShadowCapture()
     private var hrSampleCount: Int = 0
     private var energyTotal = 0.0
     private var activityTRIMP = 0.0
@@ -88,6 +89,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         exportHeartRate = []
         exportPauses = []
         exportPauseStarted = nil
+        calorieShadow = WorkoutCalorieShadowCapture()
         hrSampleCount = 0
         energyTotal = 0
         activityTRIMP = 0
@@ -215,6 +217,12 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                 phase = .recording
                 return
             }
+            // Separate diagnostic evidence, after the ordinary workout save succeeds.
+            if let evidence = calorieShadow.evidence(for: session),
+               let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+                do { try WorkoutCalorieShadowCapture.write(evidence, support: support) }
+                catch { BLEDiagnosticLog.shared.log("Calorie shadow diagnostic write failed; workout preserved") }
+            }
             savedWorkouts = history.all()
             currentSession = session
             phase = .saved
@@ -257,6 +265,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         heartRateSamples.append(hr)
         // Keep observed timestamps separately; existing metrics remain unchanged.
         exportHeartRate.append(.init(unix: observedAt.timeIntervalSince1970, bpm: hr))
+        calorieShadow.append(hr: hr, at: observedAt, anchors: shadowAnchors)
         hrSampleCount += 1
         // Never charge an interval through a pause, invalid reading or
         // long BLE gap. Use the same established Keytel/BMR/gate as the
@@ -294,8 +303,19 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         lastEnergySample = (observedAt, hr)
     }
 
+    private var shadowAnchors: WorkoutCalorieShadowCapture.Anchors? {
+        guard let weight = profileWeightKg, let height = profileHeightCm, let age = profileAge,
+              let sex = profileSex, let resting = profileRestingHR, let maximum = profileMaxHR,
+              Calories.bmrKcalPerDay(weightKg: weight, heightCm: height, age: Double(age), sex: sex) != nil,
+              Calories.gateHR(restingHR: resting, maxHR: maximum) != nil else { return nil }
+        let baseline = sex == .male ? 0 : (sex == .female ? 1 : 2)
+        return .init(profile: .init(weightKg: weight, heightCm: height, age: Double(age), sex: sex,
+                                   recoveredBaseline: baseline), restingHR: resting, maxHR: maximum)
+    }
+
     func breakEnergyInterval() {
         lastEnergySample = nil
+        if phase == .recording || phase == .paused { calorieShadow.interrupt() }
     }
 
     private func averageHeartRate() -> Int? {
@@ -336,6 +356,9 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         guard history.delete(id: id) else {
             status = "Could not delete workout."
             return
+        }
+        if let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first {
+            WorkoutCalorieShadowCapture.remove(id: id, support: support)
         }
         savedWorkouts = history.all()
     }
