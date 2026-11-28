@@ -544,6 +544,18 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(remaining, [String(start): eveningEdit])
     }
 
+    func testResetClearsAliasAtShiftedDetectorStartForTheSameNight() {
+        let older = period(8 * 3600)
+        let shifted = SleepPeriod(startUnix: start + 300, endUnix: older.endUnix,
+                                   quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let edited = [start + 120, start + 4 * 3600]
+        let overrides = [String(start): edited, String(shifted.startUnix): edited]
+        let cleared = SleepCorrectionStore.removing(for: older, overrides: overrides,
+                                                     competingPeriods: [older, shifted])
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertNil(SleepCorrectionStore.times(for: shifted, overrides: cleared))
+    }
+
     func testResetRequiresSourceCoverageInsteadOfOnlyTheEditedTail() {
         let source = period(3600)
         let rows = (source.startUnix...source.endUnix).map { sample($0) }

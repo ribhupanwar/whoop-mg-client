@@ -436,6 +436,11 @@ enum SleepCorrectionStore {
             let otherOwnsCorrection = competingPeriods.contains { other in
                 guard other.startUnix != period.startUnix,
                       let distance = matchDistance(source: source, times: existing, period: other) else { return false }
+                // A replay can report a shifted detector window for the same
+                // substantially overlapping edit. Such a window is an alias,
+                // while a separate, disjoint edit can still have its own source.
+                let otherBounds = [other.startUnix, other.endUnix + 1]
+                if overlaps(reference, existing), overlaps(sourceBounds, otherBounds) { return false }
                 // Respect the same earliest-end tie break as makeAll.
                 return distance < ownDistance || (distance == ownDistance && other.endUnix <= period.endUnix)
             }
