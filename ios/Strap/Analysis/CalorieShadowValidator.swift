@@ -339,8 +339,21 @@ enum CalorieShadowValidator {
             return failed(name: "recovered", reason: "invalid reference rate at maxHR")
         }
 
-        let hrStream: [Double?] = sorted.map { $0.bpm }
-        let tsStream: [Double?] = sorted.map { Double($0.unix) }
+        // The recovered arithmetic caps a positive interval at three seconds,
+        // rather than rejecting gaps longer than three seconds. For this
+        // diagnostic comparison, insert a missing-data boundary so BLE outages
+        // cannot be counted as observed coverage. Preserve valid intervals on
+        // either side of the outage and leave the recovered engine untouched.
+        var hrStream = [Double?]()
+        var tsStream = [Double?]()
+        for (index, sample) in sorted.enumerated() {
+            if index > 0 && sample.unix - sorted[index - 1].unix > 3 {
+                hrStream.append(nil)
+                tsStream.append(nil)
+            }
+            hrStream.append(sample.bpm)
+            tsStream.append(Double(sample.unix))
+        }
 
         do {
             let r = try WhoopRecoveredCalories.integrate(
