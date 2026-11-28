@@ -66,6 +66,7 @@ struct MoreView: View {
                         moreRow(.deviceSettings, subtitle: deviceSettingsSubtitle)
                     }
                     .buttonStyle(MoreSettingsPressStyle())
+                    .accessibilityIdentifier(MoreMenuItem.deviceSettings.accessibilityID)
 
                     Divider().overlay(Color.appLine)
 
