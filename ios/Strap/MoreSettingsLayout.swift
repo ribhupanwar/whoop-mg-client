@@ -33,8 +33,7 @@ struct MoreSettingsIcon: View {
     var tint: Color = .appAccent
 
     var body: some View {
-        Image(systemName: symbol)
-            .font(.system(size: 18, weight: .medium))
+        ReferencePictogram(symbol: symbol, size: 21)
             .foregroundStyle(tint)
             .frame(width: 32, height: 32)
             .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
