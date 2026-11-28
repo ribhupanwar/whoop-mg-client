@@ -328,7 +328,8 @@ final class AppStore: ObservableObject {
         let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
 
         let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
-        let updated = SleepCorrectionStore.saving([session.startUnix, nowUnix], for: session.sourcePeriod, overrides: overrides)
+        let updated = SleepCorrectionStore.saving([session.startUnix, nowUnix], for: session.sourcePeriod,
+                                                  overrides: overrides, explicitlyEndSleep: true)
         UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
 
         sleepLifecycle.end(sessionID: sessionID, at: nowUnix)
