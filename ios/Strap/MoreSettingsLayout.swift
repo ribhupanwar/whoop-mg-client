@@ -16,13 +16,29 @@ struct MoreSettingsCard<Content: View>: View {
             if let title {
                 SectionTitle(title)
                     .accessibilityAddTraits(.isHeader)
-                    .padding(.bottom, 2)
+                    .padding(.bottom, 8)
             }
             content
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(AppLayout.cardInset)
-        .background(RoundedRectangle(cornerRadius: AppLayout.cardRadius).fill(LinearGradient.appCard))
+        .background(RoundedRectangle(cornerRadius: 14).fill(LinearGradient.dashboardCard))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 0.5))
+    }
+}
+
+/// Uniform outline artwork, sized independently of the row text.
+struct MoreSettingsIcon: View {
+    let symbol: String
+    var tint: Color = .appAccent
+
+    var body: some View {
+        Image(systemName: symbol)
+            .font(.system(size: 18, weight: .medium))
+            .foregroundStyle(tint)
+            .frame(width: 32, height: 32)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 9))
+            .accessibilityHidden(true)
     }
 }
 
@@ -49,12 +65,16 @@ struct MoreSettingsDetailRow: View {
     }
 
     let title: String
+    var icon: String? = nil
     let subtitle: String
     var titleColor: Color = .appFG
     let accessory: Accessory
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
+        HStack(alignment: .center, spacing: 10) {
+            if let icon {
+                MoreSettingsIcon(symbol: icon, tint: iconTint)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(StrapTypography.body(13, weight: .bold))
@@ -67,11 +87,18 @@ struct MoreSettingsDetailRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             accessoryView
-                .padding(.top, 2)
         }
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
         .contentShape(Rectangle())
+    }
+
+    private var iconTint: Color {
+        switch accessory {
+        case .navigation, .progress: return .appAccent
+        case .action(_, let color): return color
+        case .restricted: return .appMuted
+        }
     }
 
     @ViewBuilder private var accessoryView: some View {
@@ -86,6 +113,9 @@ struct MoreSettingsDetailRow: View {
             Text(text)
                 .font(StrapTypography.metric(10, weight: .bold))
                 .foregroundStyle(color)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(color.opacity(0.12), in: RoundedRectangle(cornerRadius: 6))
                 .fixedSize()
         case .progress:
             ProgressView().controlSize(.small)
@@ -93,6 +123,9 @@ struct MoreSettingsDetailRow: View {
             Text(text)
                 .font(StrapTypography.metric(9, weight: .bold))
                 .foregroundStyle(Color.appWarn)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 5)
+                .background(Color.appWarn.opacity(0.10), in: RoundedRectangle(cornerRadius: 6))
                 .fixedSize()
         }
     }
