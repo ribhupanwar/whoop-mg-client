@@ -228,7 +228,7 @@ struct SleepAnalysisView: View {
 
     private var componentsPanel: some View {
         Panel {
-            componentRow(title: "Hours vs. needed", symbol: "moon.zzz", percent: demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct)
+            componentRow(title: "Hours vs. needed", symbol: "moon.zzz", asset: .alarmSleepGoal, percent: demo ? Double(SampleData.hoursVsNeeded) : reconciledHoursVsNeededPct)
             Divider().overlay(Color.appLine)
             componentRow(title: "Sleep consistency", symbol: "moon", percent: demo ? Double(SampleData.sleepConsistency) : analysis?.consistencyPct)
             Divider().overlay(Color.appLine)
@@ -252,11 +252,10 @@ struct SleepAnalysisView: View {
         }
     }
 
-    private func componentRow(title: String, symbol: String, percent: Double?, lowerIsBetter: Bool = false) -> some View {
+    private func componentRow(title: String, symbol: String, asset: IconAsset? = nil, percent: Double?, lowerIsBetter: Bool = false) -> some View {
         let level = percent.map { lowerIsBetter ? ($0 <= 5 ? 2 : $0 <= 15 ? 1 : 0) : ($0 >= 80 ? 2 : $0 >= 70 ? 1 : 0) }
         return HStack(spacing: 9) {
-            Image(systemName: symbol).font(.system(size: 16, weight: .light))
-                .foregroundStyle(Color.appMuted).frame(width: 21)
+            StrapIconView(symbol, asset: asset, size: 16, weight: .light, frameWidth: 21, color: .appMuted)
             Text(title.uppercased()).font(StrapTypography.body(10, weight: .bold)).tracking(0.7)
             Spacer(minLength: 4)
             HStack(spacing: 2) {
