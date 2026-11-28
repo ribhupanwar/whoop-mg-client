@@ -36,6 +36,11 @@ struct WorkoutRoutePoint: Codable, Equatable {
     let heartRate: Int?
 }
 
+struct WorkoutExportPause: Codable, Equatable {
+    let start: Date
+    let end: Date
+}
+
 struct WorkoutExportHeartRate: Codable, Equatable {
     let unix: TimeInterval
     let bpm: Int
@@ -53,6 +58,7 @@ struct WorkoutSession: Codable, Identifiable, Equatable {
     var hasGPS: Bool = false
     // Optional for backward compatibility with existing saved workouts.
     var exportHeartRate: [WorkoutExportHeartRate]? = nil
+    var exportPauses: [WorkoutExportPause]? = nil
 
     var duration: TimeInterval? {
         guard let endedAt else { return nil }

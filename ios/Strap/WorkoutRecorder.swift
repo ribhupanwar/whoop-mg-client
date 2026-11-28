@@ -39,6 +39,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
 
     private var heartRateSamples: [Int] = []
     private var exportHeartRate: [WorkoutExportHeartRate] = []
+    private var exportPauses: [WorkoutExportPause] = []
+    private var exportPauseStarted: Date?
     private var hrSampleCount: Int = 0
     private var energyTotal = 0.0
     private var activityTRIMP = 0.0
@@ -84,6 +86,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         lastSplitElapsed = 0
         heartRateSamples = []
         exportHeartRate = []
+        exportPauses = []
+        exportPauseStarted = nil
         hrSampleCount = 0
         energyTotal = 0
         activityTRIMP = 0
@@ -141,6 +145,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         accumulated += Date().timeIntervalSince(activeSince ?? Date())
         activeSince = nil
         phase = .paused
+        exportPauseStarted = Date()
         breakEnergyInterval()
         lastFix = nil
         if gpsEnabled {
@@ -154,6 +159,10 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         phase = .recording
         breakEnergyInterval()
         activeSince = Date()
+        if let pause = exportPauseStarted, let resumed = activeSince, resumed > pause {
+            exportPauses.append(.init(start: pause, end: resumed))
+        }
+        exportPauseStarted = nil
         lastFix = nil
         if gpsEnabled {
             manager.startUpdatingLocation()
@@ -196,6 +205,11 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                 )
             }
             session.exportHeartRate = exportHeartRate
+            if let pause = exportPauseStarted, let end = session.endedAt, end > pause {
+                exportPauses.append(.init(start: pause, end: end))
+            }
+            exportPauseStarted = nil
+            session.exportPauses = exportPauses
             guard history.save(session) else {
                 status = "Workout finished, but saving failed."
                 phase = .recording

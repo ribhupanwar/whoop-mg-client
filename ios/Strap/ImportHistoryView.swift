@@ -241,9 +241,12 @@ struct AppleHealthImportView: View {
 
 
 /// Free export routes; no Strava credentials or third-party network client.
+@MainActor
 struct StravaIntegrationView: View {
     @EnvironmentObject private var store: AppStore
     @ObservedObject private var recorder = WorkoutRecorder.shared
+    @ObservedObject private var relay = RecordedRunHealthRelay.shared
+    @AppStorage(RecordedRunHealthRelay.enabledKey) private var relayEnabled = false
     @State private var selectedID: UUID?
     @State private var exported: URL?
     @State private var error: String?
@@ -253,14 +256,37 @@ struct StravaIntegrationView: View {
             Section("Method 1 · Apple Health / WorkoutPort") {
                 Toggle("Export measured band workouts to Health", isOn: Binding(
                     get: { store.settings.healthKitEnabled },
-                    set: { store.setHealthKit($0) }
+                    set: { enabled in
+                        if enabled { relayEnabled = false }
+                        store.setHealthKit(enabled)
+                    }
                 ))
                 Text(store.healthKitStatus)
                     .font(.footnote)
                 Link("Install WorkoutPort", destination: URL(string: "https://apps.apple.com/app/id6779691091")!)
                 Text("In WorkoutPort, grant Health workout access, connect your own Strava account, and create an auto-sync rule for STRAP as the source. Preview matching workouts before enabling it. Enabling Health export may also export previously saved measured band sessions.")
                     .font(.footnote)
-                Text("This is an external relay, not a direct STRAP connection. The current Health exporter writes measured band workout summaries; full GPS route and HR streams from the GPS recorder are not yet exported by this path. Background delivery and actual Strava sync need an on-device test.")
+                Toggle("Auto-export recorded runs (GPS + HR)", isOn: Binding(
+                    get: { relayEnabled && !store.settings.healthKitEnabled },
+                    set: { enabled in
+                        if !enabled { relayEnabled = false; return }
+                        Task {
+                            if await relay.authorize(), !store.settings.healthKitEnabled { relayEnabled = true }
+                        }
+                    }
+                ))
+                .disabled(store.settings.healthKitEnabled || relay.busy)
+                if store.settings.healthKitEnabled {
+                    Text("Turn off band-summary export above before enabling the recorded-run relay. Use one source to avoid duplicate activities.")
+                        .font(.footnote)
+                }
+                Text(relay.status).font(.footnote)
+                Button("Export selected saved run to Apple Health") {
+                    guard let session = recorder.savedWorkouts.first(where: { $0.id == selectedID }) else { return }
+                    Task { await relay.export(session) }
+                }
+                .disabled(!relayEnabled || store.settings.healthKitEnabled || selectedID == nil || relay.busy)
+                Text("Choose a saved workout below for manual retry. Newly saved runs export automatically while STRAP is running. WorkoutPort handles delivery to Strava; its background timing and route availability require device testing. Do not use TCX for an already synced run.")
                     .font(.footnote)
             }
             Section("Method 2 · Manual TCX") {
