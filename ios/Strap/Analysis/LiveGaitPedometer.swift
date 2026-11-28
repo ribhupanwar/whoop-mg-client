@@ -10,6 +10,7 @@ enum LiveGaitPedometer {
         let durationSeconds: Double
         let cadenceSPM: Double
         let confidence: Double
+        var fractionalSteps: Double = 0
     }
 
     private static func correlation(_ values: [Double], lag: Int) -> Double {
@@ -27,7 +28,7 @@ enum LiveGaitPedometer {
 
     /// Takes raw accelerometer magnitude in g. A minimum 8-second contiguous
     /// gait run is required to reject isolated wrist motion.
-    static func estimate(magnitude: [Double], sampleRateHz: Double) -> Result {
+    static func estimate(magnitude: [Double], sampleRateHz: Double, latestSecondOnly: Bool = false) -> Result {
         guard sampleRateHz.isFinite, (20...200).contains(sampleRateHz),
               magnitude.count >= Int(sampleRateHz * 8),
               magnitude.allSatisfy({ $0.isFinite }) else {
@@ -61,6 +62,7 @@ enum LiveGaitPedometer {
         }
         var run = 0, runSteps = 0.0, totalSteps = 0.0, regularity = 0.0
         var acceptedWindows = 0
+        var latestSecondSteps = 0.0
         for start in stride(from: 0, through: filtered.count - window, by: hop) {
             let slice = Array(filtered[start..<(start + window)])
             let mean = slice.reduce(0, +) / Double(slice.count)
@@ -97,10 +99,12 @@ enum LiveGaitPedometer {
                 strideAC >= (run > 0 ? 0.2 : 0.6)
             if qualifies, let stepSeconds {
                 run += 1
+                latestSecondSteps = run >= 8 ? Double(hop) / fs / stepSeconds : 0
                 runSteps += Double(hop) / fs / stepSeconds
                 regularity += strideAC
                 acceptedWindows += 1
             } else {
+                latestSecondSteps = 0
                 if run >= 8 { totalSteps += runSteps }
                 run = 0
                 runSteps = 0
@@ -108,11 +112,13 @@ enum LiveGaitPedometer {
         }
         if run >= 8 { totalSteps += runSteps }
         let duration = Double(magnitude.count) / sampleRateHz
-        let steps = max(0, Int(totalSteps.rounded()))
+        let count = latestSecondOnly ? latestSecondSteps : totalSteps
+        let steps = max(0, Int(count.rounded()))
         return Result(steps: steps, durationSeconds: duration,
                       cadenceSPM: duration > 0 ? Double(steps) * 60 / duration : 0,
                       confidence: acceptedWindows > 0
-                        ? min(1, max(0, regularity / Double(acceptedWindows))) : 0)
+                        ? min(1, max(0, regularity / Double(acceptedWindows))) : 0,
+                      fractionalSteps: count)
     }
 
     static func estimate(x: [Double], y: [Double], z: [Double],
@@ -127,5 +133,55 @@ enum LiveGaitPedometer {
             magnitude.append(sqrt(xx + yy + zz))
         }
         return estimate(magnitude: magnitude, sampleRateHz: sampleRateHz)
+    }
+}
+
+struct LiveWorkoutStepReading: Equatable {
+    let count: Int
+    let observedAt: Date
+}
+
+/// Owns each decoded second exactly once. Gaps reset estimation context.
+struct LiveWorkoutStepAccumulator {
+    private var lastBlock: Gen5IMUBuffer?
+    private var magnitude: [Double] = []
+    private var total = 0.0
+    private var beganCounting = false
+
+    mutating func interrupt() {
+        magnitude.removeAll(keepingCapacity: true)
+    }
+
+    mutating func reconnect() {
+        interrupt()
+        lastBlock = nil
+    }
+
+    mutating func ingest(_ block: Gen5IMUBuffer, at date: Date) -> LiveWorkoutStepReading? {
+        guard block.version == 21, block.accelerationG.count == 3,
+              block.accelerationG.allSatisfy({ $0.count == 100 && $0.allSatisfy(\.isFinite) }) else {
+            interrupt()
+            return nil
+        }
+        if let previous = lastBlock {
+            guard block.unix > previous.unix else { return nil }
+            if block.unix - previous.unix != 1 || block.recordIndex != previous.recordIndex &+ 1
+                || block.rawSubsecond != previous.rawSubsecond {
+                interrupt()
+            }
+        }
+        lastBlock = block
+        let axes = block.accelerationG
+        for i in 0..<100 {
+            let (x, y, z) = (axes[0][i], axes[1][i], axes[2][i])
+            magnitude.append(sqrt(x * x + y * y + z * z))
+        }
+        if magnitude.count > 1100 { magnitude.removeFirst(magnitude.count - 1100) }
+        guard magnitude.count == 1100 else { return nil }
+        let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100,
+                                                  latestSecondOnly: beganCounting)
+        total += estimate.fractionalSteps
+        beganCounting = beganCounting || total > 0
+        return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date)
     }
 }

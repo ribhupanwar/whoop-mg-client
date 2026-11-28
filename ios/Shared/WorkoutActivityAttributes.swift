@@ -18,9 +18,16 @@ struct WorkoutActivityAttributes: ActivityAttributes {
         var estimatedActiveCalories: Int? = nil
         var paused: Bool
         var lastSampleAt: Date
+        var stepsAreEstimated: Bool? = nil
 
         enum CompactMetric: Equatable {
             case steps, calories, pace, distance, strain, elapsed
+        }
+
+        func freshIslandSteps(at date: Date) -> Int? {
+            guard isConnected != false, let steps, let stepsObservedAt,
+                  (0...(stepsAreEstimated == true ? 5.0 : 120.0)).contains(date.timeIntervalSince(stepsObservedAt)) else { return nil }
+            return steps
         }
 
         /// Rotate only on real ActivityKit state deliveries.
@@ -62,6 +69,10 @@ struct WorkoutActivityAttributes: ActivityAttributes {
 
     var displayKind: DisplayKind {
         Self.displayKind(activityKind ?? activityName)
+    }
+
+    var showsPersistentIslandSteps: Bool {
+        displayKind == .walking || displayKind == .running
     }
 
     static func displayKind(_ value: String) -> DisplayKind {

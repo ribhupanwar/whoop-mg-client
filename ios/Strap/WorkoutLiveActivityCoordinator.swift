@@ -7,7 +7,7 @@ protocol WorkoutLiveActivitySink: AnyObject {
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
                 stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?,
-                estimatedActiveCalories: Int?)
+                estimatedActiveCalories: Int?, stepsAreEstimated: Bool)
     func end()
 }
 
@@ -20,12 +20,12 @@ final class DefaultWorkoutLiveActivitySink: WorkoutLiveActivitySink {
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
                 stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?,
-                estimatedActiveCalories: Int?) {
+                estimatedActiveCalories: Int?, stepsAreEstimated: Bool) {
         WorkoutLiveActivityController.shared.update(
             session: session, phase: phase, heartRate: heartRate, maxHeartRate: maxHeartRate,
             distanceMeters: distanceMeters, elapsedSeconds: elapsedSeconds, steps: steps,
             stepsObservedAt: stepsObservedAt, isConnected: isConnected, estimatedStrain: estimatedStrain,
-            estimatedActiveCalories: estimatedActiveCalories
+            estimatedActiveCalories: estimatedActiveCalories, stepsAreEstimated: stepsAreEstimated
         )
     }
 
@@ -131,6 +131,17 @@ final class WorkoutLiveActivityCoordinator {
             }
             .store(in: &cancellables)
 
+        band.$liveWorkoutSteps
+            .removeDuplicates()
+            .dropFirst()
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                guard let self, self.recorder.phase == .recording else { return }
+                self.recorder.tick()
+                self.pushUpdate()
+            }
+            .store(in: &cancellables)
+
         NotificationCenter.default.publisher(for: .NSCalendarDayChanged)
             .merge(with: NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange))
             .receive(on: RunLoop.main)
@@ -143,6 +154,7 @@ final class WorkoutLiveActivityCoordinator {
     }
 
     func handlePhaseChange(_ phase: WorkoutPhase) {
+        reconcileBandSteps()
         switch phase {
         case .recording:
             if let session = recorder.currentSession {
@@ -204,8 +216,19 @@ final class WorkoutLiveActivityCoordinator {
         band.refreshWorkoutStepHistoryIfNeeded(now: now)
     }
 
+    private func reconcileBandSteps() {
+        let session = recorder.currentSession
+        let kind = session.map { WorkoutActivityAttributes.displayKind($0.activityKind) }
+        let eligible = !isPreviewProvider() && (kind == .walking || kind == .running)
+        let active = recorder.phase == .recording || recorder.phase == .paused
+        band.reconcileWorkoutStepStream(sessionID: eligible && active ? session?.id : nil,
+                                        recording: recorder.phase == .recording)
+    }
+
     private func pushUpdate(now: Date = Date(), connectedOverride: Bool? = nil) {
+        reconcileBandSteps()
         let connected = connectedOverride ?? band.isConnected
+        let liveSteps = band.liveWorkoutSteps
         let freshBPM = LiveHeartRateState.fresh(
             band.liveHeartRate, receivedAt: band.lastLiveHRAt, connected: connected, now: now
         )
@@ -217,11 +240,12 @@ final class WorkoutLiveActivityCoordinator {
             maxHeartRate: maxHeartRateProvider(),
             distanceMeters: recorder.distanceMeters,
             elapsedSeconds: recorder.elapsedSeconds,
-            steps: band.recordedTodayFromLedger,
-            stepsObservedAt: band.capturedTodayStepAt,
+            steps: liveSteps?.count ?? band.recordedTodayFromLedger,
+            stepsObservedAt: liveSteps?.observedAt ?? band.capturedTodayStepAt,
             isConnected: connected,
             estimatedStrain: estimatedStrain,
-            estimatedActiveCalories: recorder.liveCalories
+            estimatedActiveCalories: recorder.liveCalories,
+            stepsAreEstimated: liveSteps != nil
         )
     }
 }

@@ -130,13 +130,11 @@ enum StrapCommand: Int {
 - **Behavior:** Instructs the band to advertise standard Bluetooth SIG Heart Rate Service (`0x180D`) with continuous heart rate measurement notifications (`0x2A37`), enabling third-party fitness equipment (Garmin, Peloton, Wahoo) to pair directly with the strap.
 - **Safety Status:** **VERIFIED & ACTIVE IN STRAP**.
 
-### 3.2 Live Steps Toggle (`toggleRealtimeSteps` - New in 5.80.2)
-- **Command Opcode:** Recovered from 5.80.2 `[DeviceAdvancedSettings]` diagnostic routines.
-- **Payload Structure:**
-  - Start Live Steps: `[opcode, 0x01]`
-  - Stop Live Steps: `[opcode, 0x00]`
-- **Behavior:** Streams real-time cadence and step increment events without waiting for historical sync bundles.
-- **Safety Status:** Active in diagnostic telemetry logger.
+### 3.2 Live steps diagnostic
+
+WHOOP 5.80.2 includes a `toggleRealtimeSteps` diagnostic and logs a `stepCount` value. STRAP currently reads the verified band counter from V18 history. The transport command and incoming live step packet for the diagnostic still need a paired wire capture on the supported firmware.
+
+OpenStrap protocol maps Gen5 opcode `0x74` to its next device-configuration key iterator. The diagnostic symbol alone is insufficient to assign an opcode or packet layout for live steps. [OpenStrap command definitions](https://github.com/OpenStrap/protocol/blob/dc699ce491c5eec4c924fafe8e29c637ea758b5a/lib/src/commands.dart)
 
 ---
 

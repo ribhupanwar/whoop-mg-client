@@ -156,6 +156,10 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var commandFailureCount: Int = 0
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
     @Published private(set) var nativeDeepTelemetry = NativeDeepTelemetry()
+    @Published private(set) var liveWorkoutSteps: LiveWorkoutStepReading?
+    private var liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
+    private var liveWorkoutStepSession: UUID?
+    private var workoutIMURequested = false
     @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
@@ -1950,10 +1954,32 @@ final class BandLink: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    func reconcileWorkoutStepStream(sessionID: UUID?, recording: Bool) {
+        if liveWorkoutStepSession != sessionID {
+            liveWorkoutStepSession = sessionID
+            liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
+            liveWorkoutSteps = nil
+        }
+        let enabled = sessionID != nil && recording && isConnected
+            && hrBondConfirmed && commandCharacteristic != nil
+        guard workoutIMURequested != enabled else { return }
+        workoutIMURequested = enabled
+        if !enabled {
+            liveWorkoutStepAccumulator.interrupt()
+            liveWorkoutSteps = nil
+        }
+        guard isConnected, commandCharacteristic != nil else { return }
+        // The fd4b Gen5 transport uses the revision-prefixed IMU toggle.
+        enqueue(BandCommand.setIMUStream.rawValue, body: [0x01, enabled ? 0x01 : 0x00])
+    }
+
     private func resetLink() {
         linkGeneration = UUID()
         liveRRSourceWindows = LiveRRSourceWindows()
         liveIMUTelemetry = nil
+        workoutIMURequested = false
+        liveWorkoutStepAccumulator.reconnect()
+        liveWorkoutSteps = nil
         liveIMURhythm = IMURhythmWindow()
         dedicatedIMURaw = nil
         gen5R10Candidate = nil
@@ -2855,6 +2881,13 @@ final class BandLink: NSObject, ObservableObject {
         // OpenStrap protocol: live type-43 uses the same Gen5 IMU shape.
         // Keep this distinct from historical data, ECG, and measured HR.
         if uuid == BandUUID.data, type == 0x2B, let motion = Gen5IMUBuffer.decode(inner) {
+            if workoutIMURequested, wristState != .offWrist {
+                liveWorkoutSteps = liveWorkoutStepAccumulator.ingest(motion, at: Date())
+                    ?? liveWorkoutSteps
+            } else {
+                liveWorkoutStepAccumulator.interrupt()
+                liveWorkoutSteps = nil
+            }
             if liveIMUTelemetry.map({ motion.unix > $0.unix }) ?? true {
                 liveIMUTelemetry = NativeDeepTelemetry.Motion(motion)
                 liveIMURhythm.ingest(motion)
