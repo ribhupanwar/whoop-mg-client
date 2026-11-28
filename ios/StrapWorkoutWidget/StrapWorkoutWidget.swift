@@ -15,8 +15,11 @@ struct StrapWorkoutWidget: Widget {
                         .foregroundStyle(.orange)
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    secondaryMetric(context)
-                        .monospacedDigit()
+                    if context.attributes.showsPersistentIslandSteps {
+                        islandStepCount(context)
+                    } else {
+                        secondaryMetric(context).monospacedDigit()
+                    }
                 }
                 DynamicIslandExpandedRegion(.bottom) {
                     HStack(spacing: 8) {
@@ -24,6 +27,16 @@ struct StrapWorkoutWidget: Widget {
                         Spacer()
                         elapsedTimerView(context).monospacedDigit()
                         Spacer()
+                        if context.attributes.showsPersistentIslandSteps {
+                            Label(calorieText(context.state.estimatedActiveCalories),
+                                  systemImage: "flame.fill")
+                                .foregroundStyle(.orange)
+                                .monospacedDigit()
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                                .accessibilityLabel("Estimated active calories")
+                                .accessibilityValue(calorieText(context.state.estimatedActiveCalories))
+                        }
                         Text(strainText(context.state.estimatedStrain) + " EST. STRAIN")
                             .lineLimit(1).minimumScaleFactor(0.7)
                     }
@@ -39,6 +52,8 @@ struct StrapWorkoutWidget: Widget {
                     Text("STALE").font(.caption2.bold()).foregroundStyle(.orange)
                 } else if context.state.paused {
                     elapsedTimerView(context).monospacedDigit()
+                } else if context.attributes.showsPersistentIslandSteps {
+                    islandStepCount(context)
                 } else {
                     secondaryMetric(context)
                 }
@@ -126,12 +141,12 @@ private struct WorkoutLockScreenView: View {
                         metric(paceText(context.state.paceSecondsPerKilometer), label: "PACE / KM")
                         Divider()
                     } else {
-                        metric(stepText(context), label: "RECORDED STEPS")
+                        metric(stepText(context), label: context.state.stepsAreEstimated == true ? "EST. WORKOUT STEPS" : "RECORDED STEPS")
                         Divider()
                     }
                     metric(calorieText(context.state.estimatedActiveCalories), label: "EST. ACTIVE KCAL")
                 case .walking:
-                    metric(stepText(context), label: "RECORDED STEPS")
+                    metric(stepText(context), label: context.state.stepsAreEstimated == true ? "EST. WORKOUT STEPS" : "RECORDED STEPS")
                     Divider()
                     if context.attributes.hasGPS {
                         metric(distanceText(context.state.distanceMeters), label: "DISTANCE")
@@ -181,15 +196,31 @@ private func strainText(_ value: Double?) -> String {
     return String(format: "%.1f", value)
 }
 
+private func islandStepCount(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> some View {
+    TimelineView(.periodic(from: .now, by: context.state.stepsAreEstimated == true ? 1 : 15)) { timeline in
+        let steps = context.isStale ? nil : context.state.freshIslandSteps(at: timeline.date)
+        let prefix = context.state.stepsAreEstimated == true ? "≈" : ""
+        Label(steps.map { prefix + $0.formatted() } ?? "—", systemImage: "figure.walk")
+            .foregroundStyle(.mint)
+            .monospacedDigit()
+            .accessibilityLabel(context.state.stepsAreEstimated == true ? "Estimated workout steps from band" : "Recorded daily steps")
+            .accessibilityValue(steps?.formatted() ?? "Awaiting band data")
+    }
+}
+
 private func stepText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {
-    context.state.steps?.formatted() ?? "—"
+    if context.state.stepsAreEstimated == true {
+        return context.state.freshIslandSteps(at: .now).map { "≈" + $0.formatted() } ?? "—"
+    }
+    return context.state.steps?.formatted() ?? "—"
 }
 
 private func stepFreshnessText(_ context: ActivityViewContext<WorkoutActivityAttributes>) -> String {
     guard let observed = context.state.stepsObservedAt, context.state.steps != nil else {
         return "Daily steps · awaiting band history"
     }
-    return "Daily steps · recorded " + observed.formatted(date: .omitted, time: .shortened)
+    let source = context.state.stepsAreEstimated == true ? "Workout estimate · band " : "Daily steps · recorded "
+    return source + observed.formatted(date: .omitted, time: .shortened)
 }
 
 @ViewBuilder

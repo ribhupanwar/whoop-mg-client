@@ -289,7 +289,7 @@ From Swift reflection descriptors in `WhoopBluetoothLegacy` (`WHPBLECommandManag
 | `0x07` | 7 | `setAlarmInfo` | **VERIFIED** | Programs RTC alarm time and haptic pattern. |
 | `0x08` | 8 | `getAlarmInfo` | **VERIFIED** | Reads programmed alarm parameters. |
 | `0x11` | 17 | `getBatteryLevel` | **VERIFIED** | Queries fuel gauge state of charge. |
-| `0x74` | 116 | `toggleRealtimeSteps` | **VERIFIED** | Diagnostic live step counter stream. |
+| Pending wire capture | — | `toggleRealtimeSteps` | **UI evidence only** | Gen5 opcode `0x74` is independently mapped to the next configuration key iterator. The live step command and response layout still need wire evidence. |
 | `0x20` | 32 | `rebootStrap` | **QUARANTINED** | **DANGEROUS.** MCU reset drops un-synced circular buffer flash data. Must never be sent. |
 | `0x21` | 33 | `powerCycleStrap` | **QUARANTINED** | **DANGEROUS.** Cold hardware restart. |
 | `0x0F` | 15 | `eraseStrapData` | **QUARANTINED** | **CATASTROPHIC.** Erases raw NOR flash sectors. |

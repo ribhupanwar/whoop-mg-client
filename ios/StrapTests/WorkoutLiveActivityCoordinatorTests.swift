@@ -26,7 +26,8 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
 
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int?,
-                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?, estimatedActiveCalories: Int?) {
+                stepsObservedAt: Date?, isConnected: Bool, estimatedStrain: Double?, estimatedActiveCalories: Int?,
+                stepsAreEstimated: Bool) {
         let zone: Int? = {
             guard let bpm = heartRate, let maxHeartRate, maxHeartRate > 0 else { return nil }
             return min(5, max(1, Int((Double(bpm) / maxHeartRate) / 0.1) - 4))
@@ -52,6 +53,79 @@ private final class MockWorkoutLiveActivitySink: WorkoutLiveActivitySink {
 
 @MainActor
 final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
+    func testBandIMUStepsAdvanceWithoutRecountingDuplicateOrGappedBlocks() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        func block(_ unix: UInt32) -> Gen5IMUBuffer {
+            let axis = (0..<100).map { sample in
+                1 + 0.22 * sin(2 * Double.pi * 1.8 * (Double(unix) + Double(sample) / 100))
+            }
+            let zero = Array(repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(version: 21, recordIndex: unix, unix: unix, rawSubsecond: 0,
+                                 accelerationG: [axis, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        var accumulator = LiveWorkoutStepAccumulator()
+        for second in UInt32(1)..<11 {
+            XCTAssertNil(accumulator.ingest(block(second), at: date))
+        }
+        let first = try XCTUnwrap(accumulator.ingest(block(11), at: date))
+        let next = try XCTUnwrap(accumulator.ingest(block(12), at: date))
+        XCTAssertGreaterThan(first.count, 0)
+        XCTAssertGreaterThan(next.count, first.count)
+        XCTAssertLessThanOrEqual(next.count - first.count, 4)
+        XCTAssertNil(accumulator.ingest(block(12), at: date))
+        XCTAssertNil(accumulator.ingest(block(14), at: date))
+        accumulator.interrupt()
+        XCTAssertNil(accumulator.ingest(block(15), at: date))
+        for second in UInt32(16)..<25 {
+            XCTAssertNil(accumulator.ingest(block(second), at: date))
+        }
+        let resumed = try XCTUnwrap(accumulator.ingest(block(25), at: date))
+        XCTAssertGreaterThan(resumed.count - next.count, 4, "Restart should credit the qualifying warm-up run")
+    }
+
+    func testContinuousStationaryIntervalRestoresGaitWarmupCredit() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        func block(_ unix: UInt32, moving: Bool) -> Gen5IMUBuffer {
+            let axis = (0..<100).map { sample in
+                moving ? 1 + 0.22 * sin(2 * Double.pi * 1.8 * (Double(unix) + Double(sample) / 100)) : 1.0
+            }
+            let zero = Array(repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(version: 21, recordIndex: unix, unix: unix, rawSubsecond: 0,
+                                 accelerationG: [axis, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        var accumulator = LiveWorkoutStepAccumulator()
+        for second in UInt32(1)...40 {
+            _ = accumulator.ingest(block(second, moving: second <= 15),
+                at: date.addingTimeInterval(Double(second)))
+        }
+        let stationary = try XCTUnwrap(accumulator.ingest(block(41, moving: false), at: date.addingTimeInterval(41)))
+        var resumed: LiveWorkoutStepReading?
+        for second in UInt32(42)...71 {
+            if let reading = accumulator.ingest(block(second, moving: true), at: date.addingTimeInterval(Double(second))),
+               reading.count > stationary.count {
+                resumed = reading
+                break
+            }
+        }
+        let firstCredit = try XCTUnwrap(resumed)
+        XCTAssertGreaterThan(firstCredit.count - stationary.count, 4)
+    }
+
+    func testOverlappingGaitWindowsAreCreditedAtMostOnceAfterClassificationDrop() {
+        var ledger = LiveGaitCreditLedger()
+        func windows() -> [LiveGaitPedometer.WindowCredit] {
+            (3...10).map { .init(endSecond: $0, steps: 2) }
+        }
+        let first = ledger.accept(windows(), endingAt: 11)
+        XCTAssertEqual(first.map { $0.second }, Array(UInt32(4)...11))
+        XCTAssertTrue(ledger.accept([], endingAt: 12).isEmpty)
+        let resumed = ledger.accept(windows(), endingAt: 13)
+        XCTAssertEqual(resumed.map { $0.second }, [12, 13])
+        XCTAssertTrue(ledger.accept(windows(), endingAt: 13).isEmpty)
+        XCTAssertTrue(ledger.accept(windows(), endingAt: 11).isEmpty)
+        XCTAssertEqual(ledger.accept(windows(), endingAt: 30).count, 8)
+    }
+
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
         var now: TimeInterval = 100
         let coalescer = WidgetReloadCoalescer(minimumInterval: 0.15, now: { now })
@@ -144,6 +218,15 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertNil(decoded.isConnected)
         XCTAssertNil(decoded.estimatedStrain)
         XCTAssertNil(decoded.estimatedActiveCalories)
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        XCTAssertNil(decoded.freshIslandSteps(at: now))
+        var observed = decoded
+        observed.stepsObservedAt = now
+        XCTAssertEqual(observed.freshIslandSteps(at: now.addingTimeInterval(120)), 1800)
+        XCTAssertNil(observed.freshIslandSteps(at: now.addingTimeInterval(121)))
+        XCTAssertNil(observed.freshIslandSteps(at: now.addingTimeInterval(-1)))
+        observed.isConnected = false
+        XCTAssertNil(observed.freshIslandSteps(at: now))
         var rotating = decoded
         rotating.estimatedActiveCalories = 12
         rotating.estimatedStrain = 2.4

@@ -77,7 +77,8 @@ final class WorkoutLiveActivityController {
     func update(session: WorkoutSession?, phase: WorkoutPhase, heartRate: Int?, maxHeartRate: Double?,
                 distanceMeters: Double, elapsedSeconds: Int, steps: Int? = nil,
                 stepsObservedAt: Date? = nil, isConnected: Bool = true,
-                estimatedStrain: Double? = nil, estimatedActiveCalories: Int? = nil) {
+                estimatedStrain: Double? = nil, estimatedActiveCalories: Int? = nil,
+                stepsAreEstimated: Bool = false) {
         guard let session, phase == .recording || phase == .paused else { return }
         let now = Date()
         let bpm = isConnected ? heartRate.flatMap { (35...220).contains($0) ? $0 : nil } : nil
@@ -97,11 +98,13 @@ final class WorkoutLiveActivityController {
             paceSecondsPerKilometer: pace, steps: steps, stepsObservedAt: stepsObservedAt,
             elapsedSeconds: clampedElapsed, timerAnchor: anchor, isConnected: isConnected,
             estimatedStrain: estimatedStrain, estimatedActiveCalories: estimatedActiveCalories,
-            paused: paused, lastSampleAt: now
+            paused: paused, lastSampleAt: now, stepsAreEstimated: stepsAreEstimated
         )
         let urgentTransition = lastState?.paused != state.paused
             || lastState?.isConnected != state.isConnected
             || lastState?.steps != state.steps
+            || lastState?.stepsAreEstimated != state.stepsAreEstimated
+            || (!stepsAreEstimated && lastState?.stepsObservedAt != state.stepsObservedAt)
         guard urgentTransition || now.timeIntervalSince(lastUpdate) >= 5 else { return }
         lastUpdate = now
         lastState = state

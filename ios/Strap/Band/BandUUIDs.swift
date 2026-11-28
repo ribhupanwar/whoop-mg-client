@@ -55,6 +55,7 @@ enum BandCommand: UInt8 {
     case rebootStrap = 0x1D            // 29: Verified warm MCU reboot
     case powerCycleStrap = 0x20        // 32: Quarantined cold power cycle
     case getDataRange = 0x22
+    case setIMUStream = 0x6A
     case clientHello = 0x91
 }
 

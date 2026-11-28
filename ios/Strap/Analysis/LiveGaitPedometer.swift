@@ -5,11 +5,19 @@ import Foundation
 /// This is an optional 50–100 Hz IMU cross-check, NOT a replacement for the
 /// band's decoded historical step counter and NOT a 1 Hz step estimator.
 enum LiveGaitPedometer {
+    struct WindowCredit: Equatable {
+        // Relative end second of the four-second analysis window.
+        let endSecond: Int
+        let steps: Double
+    }
+
     struct Result: Equatable {
         let steps: Int
         let durationSeconds: Double
         let cadenceSPM: Double
         let confidence: Double
+        var fractionalSteps: Double = 0
+        var qualifiedWindows: [WindowCredit] = []
     }
 
     private static func correlation(_ values: [Double], lag: Int) -> Double {
@@ -27,7 +35,7 @@ enum LiveGaitPedometer {
 
     /// Takes raw accelerometer magnitude in g. A minimum 8-second contiguous
     /// gait run is required to reject isolated wrist motion.
-    static func estimate(magnitude: [Double], sampleRateHz: Double) -> Result {
+    static func estimate(magnitude: [Double], sampleRateHz: Double, latestSecondOnly: Bool = false) -> Result {
         guard sampleRateHz.isFinite, (20...200).contains(sampleRateHz),
               magnitude.count >= Int(sampleRateHz * 8),
               magnitude.allSatisfy({ $0.isFinite }) else {
@@ -61,6 +69,9 @@ enum LiveGaitPedometer {
         }
         var run = 0, runSteps = 0.0, totalSteps = 0.0, regularity = 0.0
         var acceptedWindows = 0
+        var latestSecondSteps = 0.0
+        var pendingWindows: [WindowCredit] = []
+        var qualifiedWindows: [WindowCredit] = []
         for start in stride(from: 0, through: filtered.count - window, by: hop) {
             let slice = Array(filtered[start..<(start + window)])
             let mean = slice.reduce(0, +) / Double(slice.count)
@@ -97,22 +108,35 @@ enum LiveGaitPedometer {
                 strideAC >= (run > 0 ? 0.2 : 0.6)
             if qualifies, let stepSeconds {
                 run += 1
-                runSteps += Double(hop) / fs / stepSeconds
+                latestSecondSteps = run >= 8 ? Double(hop) / fs / stepSeconds : 0
+                let steps = Double(hop) / fs / stepSeconds
+                runSteps += steps
+                pendingWindows.append(WindowCredit(endSecond: (start + window) / hop - 1, steps: steps))
                 regularity += strideAC
                 acceptedWindows += 1
             } else {
-                if run >= 8 { totalSteps += runSteps }
+                latestSecondSteps = 0
+                if run >= 8 {
+                    totalSteps += runSteps
+                    qualifiedWindows.append(contentsOf: pendingWindows)
+                }
+                pendingWindows.removeAll(keepingCapacity: true)
                 run = 0
                 runSteps = 0
             }
         }
-        if run >= 8 { totalSteps += runSteps }
+        if run >= 8 {
+            totalSteps += runSteps
+            qualifiedWindows.append(contentsOf: pendingWindows)
+        }
         let duration = Double(magnitude.count) / sampleRateHz
-        let steps = max(0, Int(totalSteps.rounded()))
+        let count = latestSecondOnly ? latestSecondSteps : totalSteps
+        let steps = max(0, Int(count.rounded()))
         return Result(steps: steps, durationSeconds: duration,
                       cadenceSPM: duration > 0 ? Double(steps) * 60 / duration : 0,
                       confidence: acceptedWindows > 0
-                        ? min(1, max(0, regularity / Double(acceptedWindows))) : 0)
+                        ? min(1, max(0, regularity / Double(acceptedWindows))) : 0,
+                      fractionalSteps: count, qualifiedWindows: qualifiedWindows)
     }
 
     static func estimate(x: [Double], y: [Double], z: [Double],
@@ -127,5 +151,78 @@ enum LiveGaitPedometer {
             magnitude.append(sqrt(xx + yy + zz))
         }
         return estimate(magnitude: magnitude, sampleRateHz: sampleRateHz)
+    }
+}
+
+struct LiveWorkoutStepReading: Equatable {
+    let count: Int
+    let observedAt: Date
+}
+
+/// The rolling estimator may reclassify overlapping windows. Never credit a
+/// previously credited absolute window end, even after a gap or reconnect.
+struct LiveGaitCreditLedger {
+    private var lastCreditedEnd: UInt32?
+
+    mutating func accept(_ windows: [LiveGaitPedometer.WindowCredit], endingAt end: UInt32) -> [(second: UInt32, steps: Double)] {
+        var accepted: [(second: UInt32, steps: Double)] = []
+        // Live buffers contain exactly eleven one-second blocks.
+        for window in windows.sorted(by: { $0.endSecond < $1.endSecond }) {
+            guard (3...10).contains(window.endSecond), window.steps.isFinite, window.steps > 0 else { continue }
+            let age = UInt32(10 - window.endSecond)
+            guard end >= age else { continue }
+            let second = end - age
+            guard lastCreditedEnd.map({ second > $0 }) ?? true else { continue }
+            accepted.append((second, window.steps))
+            lastCreditedEnd = second
+        }
+        return accepted
+    }
+}
+
+/// Owns each decoded second exactly once. Gaps reset estimation context.
+struct LiveWorkoutStepAccumulator {
+    private var lastBlock: Gen5IMUBuffer?
+    private var magnitude: [Double] = []
+    private var total = 0.0
+    private var credits = LiveGaitCreditLedger()
+    private var highWaterUnix: UInt32?
+
+    mutating func interrupt() {
+        magnitude.removeAll(keepingCapacity: true)
+    }
+
+    mutating func reconnect() {
+        interrupt()
+        lastBlock = nil
+    }
+
+    mutating func ingest(_ block: Gen5IMUBuffer, at date: Date) -> LiveWorkoutStepReading? {
+        guard block.version == 21, block.accelerationG.count == 3,
+              block.accelerationG.allSatisfy({ $0.count == 100 && $0.allSatisfy(\.isFinite) }) else {
+            interrupt()
+            return nil
+        }
+        if let highWaterUnix, block.unix <= highWaterUnix { return nil }
+        if let previous = lastBlock {
+            if block.unix - previous.unix != 1 || block.recordIndex != previous.recordIndex &+ 1
+                || block.rawSubsecond != previous.rawSubsecond {
+                interrupt()
+            }
+        }
+        highWaterUnix = block.unix
+        lastBlock = block
+        let axes = block.accelerationG
+        for i in 0..<100 {
+            let (x, y, z) = (axes[0][i], axes[1][i], axes[2][i])
+            magnitude.append(sqrt(x * x + y * y + z * z))
+        }
+        if magnitude.count > 1100 { magnitude.removeFirst(magnitude.count - 1100) }
+        guard magnitude.count == 1100 else { return nil }
+        let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100)
+        for credit in credits.accept(estimate.qualifiedWindows, endingAt: block.unix) {
+            total += credit.steps
+        }
+        return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date)
     }
 }

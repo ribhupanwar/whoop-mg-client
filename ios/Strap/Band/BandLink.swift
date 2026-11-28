@@ -156,6 +156,13 @@ final class BandLink: NSObject, ObservableObject {
     @Published private(set) var commandFailureCount: Int = 0
     @Published private(set) var nativeSensorSnapshot: NativeSensorSnapshot?
     @Published private(set) var nativeDeepTelemetry = NativeDeepTelemetry()
+    @Published private(set) var liveWorkoutSteps: LiveWorkoutStepReading?
+    private var liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
+    private var liveWorkoutStepSession: UUID?
+    private var workoutIMURequested = false
+    private var workoutIMULastSent: (sequence: UInt8, enabled: Bool)?
+    private var workoutIMURejectedState: Bool?
+    private var workoutIMURetryAfter: Date?
     @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
@@ -1952,10 +1959,39 @@ final class BandLink: NSObject, ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: work)
     }
 
+    func reconcileWorkoutStepStream(sessionID: UUID?, recording: Bool) {
+        if liveWorkoutStepSession != sessionID {
+            liveWorkoutStepSession = sessionID
+            liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
+            liveWorkoutSteps = nil
+        }
+        let enabled = sessionID != nil && recording && isConnected
+            && hrBondConfirmed && commandCharacteristic != nil
+        let retry = workoutIMURejectedState == enabled
+        guard workoutIMURequested != enabled || retry else { return }
+        if retry, let retryAfter = workoutIMURetryAfter, Date() < retryAfter { return }
+        workoutIMURejectedState = nil
+        workoutIMURetryAfter = nil
+        workoutIMURequested = enabled
+        if !enabled {
+            liveWorkoutStepAccumulator.interrupt()
+            liveWorkoutSteps = nil
+        }
+        guard isConnected, commandCharacteristic != nil else { return }
+        // The fd4b Gen5 transport uses the revision-prefixed IMU toggle.
+        enqueue(BandCommand.setIMUStream.rawValue, body: [0x01, enabled ? 0x01 : 0x00])
+    }
+
     private func resetLink() {
         linkGeneration = UUID()
         liveRRSourceWindows = LiveRRSourceWindows()
         liveIMUTelemetry = nil
+        workoutIMURequested = false
+        workoutIMULastSent = nil
+        workoutIMURejectedState = nil
+        workoutIMURetryAfter = nil
+        liveWorkoutStepAccumulator.reconnect()
+        liveWorkoutSteps = nil
         liveIMURhythm = IMURhythmWindow()
         dedicatedIMURaw = nil
         gen5R10Candidate = nil
@@ -2321,6 +2357,9 @@ final class BandLink: NSObject, ObservableObject {
         let writeID = UUID()
         currentWriteID = writeID
         let inner: [UInt8] = [BandPacket.command, commandSeq, next.opcode] + next.body
+        if next.opcode == BandCommand.setIMUStream.rawValue, next.body.count == 2, next.body[0] == 0x01 {
+            workoutIMULastSent = (commandSeq, next.body[1] == 0x01)
+        }
         if next.opcode == BandCommand.clientHello.rawValue {
             helloExchange = BandHelloExchange(sequence: commandSeq)
         }
@@ -2857,6 +2896,13 @@ final class BandLink: NSObject, ObservableObject {
         // OpenStrap protocol: live type-43 uses the same Gen5 IMU shape.
         // Keep this distinct from historical data, ECG, and measured HR.
         if uuid == BandUUID.data, type == 0x2B, let motion = Gen5IMUBuffer.decode(inner) {
+            if workoutIMURequested, wristState != .offWrist {
+                liveWorkoutSteps = liveWorkoutStepAccumulator.ingest(motion, at: Date())
+                    ?? liveWorkoutSteps
+            } else {
+                liveWorkoutStepAccumulator.interrupt()
+                liveWorkoutSteps = nil
+            }
             if liveIMUTelemetry.map({ motion.unix > $0.unix }) ?? true {
                 liveIMUTelemetry = NativeDeepTelemetry.Motion(motion)
                 liveIMURhythm.ingest(motion)
@@ -2992,6 +3038,16 @@ final class BandLink: NSObject, ObservableObject {
             lastCommandResponse = cmdResult
             if !cmdResult.isSuccess {
                 commandFailureCount += 1
+                if cmdResult.commandOpcode == BandCommand.setIMUStream.rawValue,
+                   let sent = workoutIMULastSent, sent.sequence == cmdResult.originSequence,
+                   sent.enabled == workoutIMURequested {
+                    workoutIMURequested = false
+                    workoutIMURejectedState = sent.enabled
+                    workoutIMURetryAfter = Date().addingTimeInterval(5)
+                    liveWorkoutStepAccumulator.interrupt()
+                    liveWorkoutSteps = nil
+                    workoutIMULastSent = nil
+                }
             }
             BLEDiagnosticLog.shared.log(
                 "commandResponse cmd=\(cmdResult.commandName) seq=\(cmdResult.originSequence) result=\(cmdResult.resultCode)"

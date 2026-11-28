@@ -1,3 +1,9 @@
-# Live steps (#243)
+# WHOOP step sources
 
-Use band-derived step counts, not GPS. Add persisted daily totals with replay/reset/wrap dedup. Surface fresh steps on Home, ActivityKit Dynamic Island/Lock Screen, and WidgetKit Home Screen snapshot with stale state. Add tests and iOS CI. Implementation pending.
+STRAP's daily step ledger consumes the cumulative V18 counter from BLE history. The Dynamic Island receives the ledger's count and observation time after history sync. The reviewed diagnostic archive contained 913,254 parsed frames from 776 JSONL captures, including V18 history and Type-40 live HR. It contained zero Type-43 live IMU frames.
+
+- **Woop IPA 4a3ef0e**. The symbol audit found the V18 historical cadence field. It did not establish the official WHOOP diagnostic's live step command or decoder.
+- **NOOP**. Its WhoopProtocol history decoder reads the Gen5 cumulative motion counter. The StepSample documentation calls its equivalence to the official WHOOP count unverified. [NOOP history decoder](https://github.com/ryanbr/noop/blob/2a1de7609843b095505274ad6fc811757210be80/Packages/WhoopProtocol/Sources/WhoopProtocol/HistoricalStreams.swift)
+- **OpenStrap Edge**. Its live workout pipeline starts a strap IMU stream and computes steps from high-rate motion samples with gait and sample-rate gates. That is a band-derived estimate. [Stream controller](https://github.com/OpenStrap/edge/blob/f6faa2390376a2dc27db01fa8586dee42b264462/lib/ble/ble_engine.dart) · [Step accumulation](https://github.com/OpenStrap/edge/blob/f6faa2390376a2dc27db01fa8586dee42b264462/lib/ble/live_step_runs.dart)
+
+During walking and running workouts, STRAP requests the Gen5 revision-1 IMU stream after the band connects and bonds. It stops the stream on pause or workout exit. After 11 contiguous 100 Hz blocks, the existing gait estimator supplies an estimated workout count. Subsequent blocks contribute only their newest second. The Island marks the estimate with `≈`, expires it after five seconds, and keeps the recorded daily count as a separate history value. The reviewed captures cannot validate end-to-end delivery on this band.
