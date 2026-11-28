@@ -5,6 +5,25 @@ import UIKit
 
 final class MoreTabNavigationTests: XCTestCase {
 
+    func testReferencePictogramsCoverDashboardHealthNavigationAndMore() {
+        let dashboard = ["waveform.path.ecg", "heart.pulse", "figure.walk", "zones.low", "zones.high", "dumbbell", "lungs", "flame"]
+        let health = ["drop", "thermometer"]
+        let tabs = AppTab.allCases.map { "nav." + $0.rawValue }
+        let menus = MoreMenuItem.allCases.map { $0.metadata.icon }
+        for symbol in Set(dashboard + health + tabs + menus) {
+            guard let path = ReferencePictogram.outline(for: symbol) else {
+                XCTFail("Missing custom outline for \(symbol)")
+                continue
+            }
+            XCTAssertFalse(path.isEmpty, symbol)
+            let bounds = path.boundingRect
+            XCTAssertGreaterThan(bounds.width, 0, symbol)
+            XCTAssertGreaterThan(bounds.height, 0, symbol)
+            XCTAssertTrue(CGRect(x: 0, y: 0, width: 24, height: 24).contains(bounds), symbol)
+        }
+        XCTAssertNil(ReferencePictogram.outline(for: "unsupported-test-symbol"))
+    }
+
     func testMoreViewInitializesWithoutCrashing() {
         let store = AppStore()
         let moreView = MoreView().environmentObject(store)
