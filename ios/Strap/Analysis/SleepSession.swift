@@ -83,6 +83,17 @@ struct SleepSession: Codable, Equatable {
         return nil
     }
 
+    /// Explicit user reset restores the detector source window provisionally.
+    /// Old edited stages cannot be reused for the automatic window.
+    func resettingCorrection() -> SleepSession {
+        let period = sourcePeriod
+        return SleepSession(version: Self.algorithmVersion, sourceStartUnix: period.startUnix,
+            startUnix: period.startUnix, endUnix: period.endUnix + 1,
+            staging: .unavailable, heartRate: [], movementBouts: 0, isEdited: false,
+            sourceEndUnix: period.endUnix + 1, bandSleepConfirmed: nil,
+            timezoneIdentifier: timezoneIdentifier)
+    }
+
     /// Apply authoritative saved bounds immediately, without doing staging on
     /// the UI thread or briefly restoring an older persisted score on relaunch.
     func applyingSavedBounds(_ overrides: [String: [Int]]) -> SleepSession {
@@ -354,6 +365,14 @@ enum SleepCorrectionStore {
         _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]]
     ) -> [String: [Int]] {
         guard let times = validated(times) else { return overrides }
+        var result = removing(for: period, overrides: overrides)
+        result[String(period.startUnix)] = times
+        return result
+    }
+
+    /// Explicit reset only: remove the selected night's correction and its aliases,
+    /// without touching unrelated nights or any raw sensor records.
+    static func removing(for period: SleepPeriod, overrides: [String: [Int]]) -> [String: [Int]] {
         let reference = self.times(for: period, overrides: overrides)
             ?? [period.startUnix, period.endUnix + 1]
         var result = overrides
@@ -366,7 +385,6 @@ enum SleepCorrectionStore {
                 result.removeValue(forKey: key)
             }
         }
-        result[String(period.startUnix)] = times
         return result
     }
 
