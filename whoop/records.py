@@ -449,7 +449,7 @@ def decode_v21(inner: bytes) -> IMUBuffer | None:
     No capture from this device has contained a v21 record yet, so this is
     wired to diagnostics, never to a scored metric.
     """
-    if len(inner) != V21_INNER_LEN:
+    if len(inner) != V21_INNER_LEN or inner[0] not in (0x2F, 0x2B):
         return None
     accel_count = struct.unpack_from("<H", inner, V21_ACCEL_COUNT_OFFSET)[0]
     gyro_count = struct.unpack_from("<H", inner, V21_GYRO_COUNT_OFFSET)[0]
