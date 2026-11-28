@@ -16,6 +16,7 @@ struct SleepAnalysisView: View {
     @State private var showSleepEditor = false
     @State private var confirmEndSleep = false
     @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
+    @State private var sleepEditorSessionID: String?
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
 
@@ -98,16 +99,22 @@ struct SleepAnalysisView: View {
                     Button("End Sleep") {
                         confirmEndSleep = true
                     }
-                    .disabled(correctedSleepEnd <= correctedSleepStart || editablePeriod == nil)
+                    .disabled(correctedSleepEnd <= correctedSleepStart || !sleepEditorIsCurrent)
                     .accessibilityHint("Confirm the selected wake-up time as the end of this sleep session")
                     if session?.isEdited == true {
                         Button("Use Automatic Detection", role: .destructive) {
-                            store.band.resetLatestSleepCorrection()
+                            guard sleepEditorIsCurrent, let id = sleepEditorSessionID else { return }
+                            store.band.resetLatestSleepCorrection(expectedSessionID: id)
                             showSleepEditor = false
                         }
-                        .disabled(store.band.isAnalyzingHistory)
+                        .disabled(!sleepEditorIsCurrent || sleepEditorSessionID == nil)
                         Text("Remove this night's saved bed/wake correction and re-detect using retained sensor history. Raw records and other nights are preserved.")
                             .font(StrapTypography.body(11))
+                    }
+                    if store.band.isAnalyzingHistory {
+                        Text("Sleep history is updating. Your draft is still open.")
+                    } else if !sleepEditorIsCurrent {
+                        Text("Sleep times changed. Close and reopen the editor to review the current window.")
                     }
                     Text("Sleep duration and its Recovery input update; HRV/RHR require overnight sensor data.")
                         .font(StrapTypography.body(11))
@@ -121,7 +128,8 @@ struct SleepAnalysisView: View {
                         Button("Save") {
                             saveSleepCorrection()
                         }
-                        .disabled(correctedSleepEnd <= correctedSleepStart || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
+                        .disabled(!sleepEditorIsCurrent || correctedSleepEnd <= correctedSleepStart
+                            || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
                 }
             }
@@ -171,12 +179,13 @@ struct SleepAnalysisView: View {
     private func saveSleepCorrection(explicitlyEndSleep: Bool = false) {
         let times = [Int(correctedSleepStart.timeIntervalSince1970),
                      Int(correctedSleepEnd.timeIntervalSince1970)]
-        guard let current = currentSleepEditorSnapshot,
-              sleepEditorSnapshot?.canSave(times, current: current, explicitlyEnding: explicitlyEndSleep) == true
+        guard sleepEditorIsCurrent, let current = currentSleepEditorSnapshot else { return }
+        guard sleepEditorSnapshot?.canSave(times, current: current, explicitlyEnding: explicitlyEndSleep) == true
         else { showSleepEditor = false; return }
         let oldCorrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let corrections = SleepCorrectionStore.saving(
-            times, for: current.period, overrides: oldCorrections, explicitlyEndSleep: explicitlyEndSleep
+            times, for: current.period, overrides: oldCorrections, explicitlyEndSleep: explicitlyEndSleep,
+            competingPeriods: store.band.sleepCorrectionSourcePeriods
         )
         guard corrections != oldCorrections else { showSleepEditor = false; return }
         UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
@@ -302,6 +311,13 @@ struct SleepAnalysisView: View {
         return periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
+    private var sleepEditorIsCurrent: Bool {
+        guard sleepEditorSessionID == session?.lifecycleID, let current = currentSleepEditorSnapshot else {
+            return false
+        }
+        return sleepEditorSnapshot?.matches(current) == true
+    }
+
     private var currentSleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot? {
         guard let period = editablePeriod else { return nil }
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
@@ -314,6 +330,7 @@ struct SleepAnalysisView: View {
     private func openSleepEditor() {
         guard let snapshot = currentSleepEditorSnapshot else { return }
         sleepEditorSnapshot = snapshot
+        sleepEditorSessionID = session?.lifecycleID
         correctedSleepStart = Date(timeIntervalSince1970: Double(snapshot.displayed[0]))
         correctedSleepEnd = Date(timeIntervalSince1970: Double(snapshot.displayed[1]))
         showSleepEditor = true
@@ -336,6 +353,7 @@ struct SleepAnalysisView: View {
             return
         }
         sleepEditorSnapshot = snapshot
+        sleepEditorSessionID = session?.lifecycleID
         correctedSleepStart = start
         correctedSleepEnd = now
         confirmEndSleep = true

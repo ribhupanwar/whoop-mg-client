@@ -516,6 +516,30 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(cleared, [otherNight: overrides[otherNight]!])
     }
 
+    func testResetPreservesCorrectionOwnedByDifferentDetectorPeriod() {
+        let evening = period(2 * 3600)
+        let overnightStart = start + 3 * 3600
+        let overnight = SleepPeriod(startUnix: overnightStart, endUnix: overnightStart + 8 * 3600 - 1,
+                                    quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let eveningEdit = [start + 90 * 60, start + 270 * 60]
+        let nightEdit = [start + 5 * 3600, overnight.endUnix + 1]
+        let olderAlias = [overnightStart + 60, start + 4 * 3600]
+        let overrides = [String(start): eveningEdit, String(overnightStart): nightEdit,
+                         String(overnightStart + 60): olderAlias]
+        let remaining = SleepCorrectionStore.removing(for: overnight, overrides: overrides,
+                                                       competingPeriods: [evening, overnight])
+        XCTAssertEqual(remaining, [String(start): eveningEdit])
+    }
+
+    func testResetRequiresSourceCoverageInsteadOfOnlyTheEditedTail() {
+        let source = period(3600)
+        let rows = (source.startUnix...source.endUnix).map { sample($0) }
+        XCTAssertTrue(SleepCorrectionStore.coversSourceWindow(source, with: rows))
+        XCTAssertFalse(SleepCorrectionStore.coversSourceWindow(source, with: Array(rows.suffix(2000))))
+        let sparseWithReplays = [rows[0]] + Array(repeating: rows[10], count: 3600) + [rows.last!]
+        XCTAssertFalse(SleepCorrectionStore.coversSourceWindow(source, with: sparseWithReplays))
+    }
+
     func testMissingRawCoverageRetainsEditedCanonicalNight() {
         let old = knownNight()
         XCTAssertEqual(SleepSession.retainingUncovered(

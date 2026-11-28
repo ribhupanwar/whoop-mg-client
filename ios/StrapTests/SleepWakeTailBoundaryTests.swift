@@ -269,12 +269,34 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
             coverageStart: full.first?.unix, coverageEnd: full.last?.unix, samples: full)
         XCTAssertEqual(retained.map(\.endUnix), [finalWake])
 
+        // A partial offload can stop inside the interruption. Reconciliation
+        // uses the corroborated transition from the later, complete replay.
+        let frontier = interruption + 64
+        let provisionalPeriod = SleepPeriod(startUnix: start, endUnix: frontier - 1,
+            quietFraction: 0.99, meanHR: 55, wakeEvents: 1)
+        let provisional = SleepSession.make(samples: partial, period: provisionalPeriod)
+        let restored = try JSONDecoder().decode(SleepSession.self, from: JSONEncoder().encode(provisional))
+        let extended = SleepSession.retainingUncovered(previous: [restored], fresh: [next],
+            coverageStart: full.first?.unix, coverageEnd: full.last?.unix, samples: full)
+        XCTAssertEqual(extended.map(\.endUnix), [finalWake])
+
         // Quiet elevated-HR reading after the same movement is not a return to sleep.
         let awakeInBed = (resumed..<finalWake).map { row($0, hr: 70, accel: 0.008, state: 3) }
         XCTAssertEqual(SleepDetect.detect(partial + awakeInBed + awake).first?.endUnix, interruption - 1)
         XCTAssertEqual(SleepDetect.detect(partial + Array(returned.enumerated().compactMap {
             $0.offset.isMultiple(of: 2) ? $0.element : nil
         }) + awake).first?.endUnix, interruption - 1)
+    }
+
+    func testWakeAnchorMinuteCanBeQuietBeforeObservedMovementAndResettling() throws {
+        let (early, wake, _) = capture(upSeconds: 0)
+        let anchor = (wake..<(wake + 60)).map { row($0, hr: 55, accel: 0.008, state: 3) }
+        let interruption = ((wake + 60)..<(wake + 180)).map { row($0, hr: 85, accel: 0.2, state: 3) }
+        let end = wake + 12 * 60
+        let returned = ((wake + 180)..<end).map { row($0, hr: 56, accel: 0.008, state: 3) }
+        let period = try XCTUnwrap(SleepDetect.detect(early).first)
+        let rows = early + anchor + interruption + returned
+        XCTAssertEqual(SleepDetect.observedShortResumption(after: period, samples: rows, before: end), end - 1)
     }
 
     func testPartialArchiveFrontierReplaysIntoOneFullSessionAfterRelaunch() throws {

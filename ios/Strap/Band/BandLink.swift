@@ -1175,22 +1175,30 @@ final class BandLink: NSObject, ObservableObject {
     /// neither the heart rates nor R-R measurements are modified.
     var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
+    var sleepCorrectionSourcePeriods: [SleepPeriod] {
+        (summary?.sleepPeriods ?? []) + (summary?.sleepSessions ?? []).map(\.sourcePeriod)
+    }
+
     /// Load the redetection context before removing the correction so a
     /// failed read can be retried with the original edit still intact.
-    func resetLatestSleepCorrection() {
-        guard !isAnalyzingHistory, let session = latestSleepSession else { return }
+    func resetLatestSleepCorrection(expectedSessionID: String) {
+        guard !isAnalyzingHistory, !hasIncompleteHistory, let session = latestSleepSession,
+              session.lifecycleID == expectedSessionID else { return }
         let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
-        let updated = SleepCorrectionStore.removing(for: session.sourcePeriod, overrides: overrides)
+        let source = session.sourcePeriod
+        let updated = SleepCorrectionStore.removing(for: source, overrides: overrides,
+                                                    competingPeriods: sleepCorrectionSourcePeriods)
         guard session.isEdited || updated != overrides else { return }
         let revision = sleepCorrectionRevision
-        let from = max(1, session.startUnix - 90 * 60)
-        let through = max(session.endUnix - 1, min(Int(Date().timeIntervalSince1970), session.startUnix + 12 * 3600 - 1))
+        let from = max(1, source.startUnix - 90 * 60)
+        let through = max(source.endUnix, session.endUnix - 1,
+                          min(Int(Date().timeIntervalSince1970), source.startUnix + 12 * 3600 - 1))
         archiveWriter.samples(from: from, through: through) { [weak self] result in
-            guard let self, self.sleepCorrectionRevision == revision, self.latestSleepSession == session,
-                  var saved = self.summary, var sessions = saved.sleepSessions,
+            guard let self, self.sleepCorrectionRevision == revision, !self.hasIncompleteHistory,
+                  self.latestSleepSession == session, var saved = self.summary, var sessions = saved.sleepSessions,
                   let index = sessions.firstIndex(of: session) else { return }
             switch result {
-            case .success(let rows) where !rows.isEmpty:
+            case .success(let rows) where SleepCorrectionStore.coversSourceWindow(source, with: rows):
                 self.sleepCorrectionRevision += 1
                 self.analysisCancellation?.cancel()
                 self.mergeSleepReplayRows(rows)
@@ -1203,7 +1211,7 @@ final class BandLink: NSObject, ObservableObject {
                 self.persistMetricsSnapshot()
                 self.recalculateRetainedMetrics()
             case .success:
-                self.historySyncError = "Saved sleep times preserved; no retained history is available for this night."
+                self.historySyncError = "Saved sleep times preserved; retained history does not cover the original sleep window."
             case .failure(let error):
                 self.historySyncError = "Saved sleep times preserved; sensor history could not be read: \(error.localizedDescription)"
             }

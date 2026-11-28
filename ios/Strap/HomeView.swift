@@ -298,6 +298,11 @@ struct HomeView: View {
                         Label("Mark sleep ended now", systemImage: "moon.zzz")
                             .font(StrapTypography.body(14, weight: .bold))
                     }
+                    if store.band.isAnalyzingHistory {
+                        Text("Sleep history is updating. Your draft is still open.")
+                    } else if !sleepEditorIsCurrent {
+                        Text("Sleep times changed. Close and reopen the editor to review the current window.")
+                    }
                     Text("Bed and wake times are editable. Recovery uses estimated time asleep (excluding awake periods); HRV and RHR remain sensor-derived.")
                         .font(StrapTypography.body(11))
                 }
@@ -310,18 +315,19 @@ struct HomeView: View {
                         Button("Save") {
                             let times = [Int(correctedSleepStart.timeIntervalSince1970),
                                          Int(correctedSleepEnd.timeIntervalSince1970)]
-                            if let current = currentSleepEditorSnapshot,
-                               sleepEditorSnapshot?.canSave(times, current: current) == true {
-                                let old = sleepCorrections
-                                let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old)
-                                if corrections != old {
-                                    UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
-                                    store.band.notifySleepCorrectionChanged()
-                                }
+                            guard let current = currentSleepEditorSnapshot,
+                                  sleepEditorSnapshot?.matches(current) == true else { return }
+                            let old = sleepCorrections
+                            let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old,
+                                competingPeriods: store.band.sleepCorrectionSourcePeriods)
+                            if times != current.displayed && corrections != old {
+                                UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
+                                store.band.notifySleepCorrectionChanged()
                             }
                             showSleepEditor = false
                         }
-                        .disabled(correctedSleepEnd <= correctedSleepStart || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
+                        .disabled(!sleepEditorIsCurrent || correctedSleepEnd <= correctedSleepStart
+                            || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
                 }
             }
@@ -1017,6 +1023,11 @@ struct HomeView: View {
     }
 
     // MARK: Activity rows
+
+    private var sleepEditorIsCurrent: Bool {
+        guard let current = currentSleepEditorSnapshot else { return false }
+        return sleepEditorSnapshot?.matches(current) == true
+    }
 
     private var currentSleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot? {
         guard let period = latestSleepPeriod else { return nil }

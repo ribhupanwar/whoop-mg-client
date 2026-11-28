@@ -502,7 +502,8 @@ enum SleepDetect {
             }.count
             return SleepPeriod(startUnix: period.startUnix, endUnix: end,
                 quietFraction: Double(quietCount) / Double(rows.count),
-                meanHR: Stats.mean(worn.map { Double($0.heartRate) }), wakeEvents: period.wakeEvents + 1)
+                meanHR: Stats.mean(worn.map { Double($0.heartRate) }), wakeEvents: period.wakeEvents + 1,
+                resumptionWakeUnix: period.endUnix + 1)
         }
     }
 
@@ -566,6 +567,12 @@ enum SleepDetect {
         var confirmed = false
         for minute in stride(from: wake, to: horizon - 59, by: 60) {
             let window = (minute..<(minute + 60)).compactMap { rows[$0] }.filter(observed)
+            if minute == wake {
+                gapCoverage = window.count
+                traceSink?(["gate": "resumptionMinute", "verdict": "wakeAnchor",
+                            "start": minute, "observed": window.count])
+                continue
+            }
             let quiet = window.filter { ($0.dynamicAccelG ?? .infinity) <= 0.015 }
             let settled = window.count >= 50 && quiet.count >= 38
                 && Stats.median(quiet.map { Double($0.heartRate) }) <= resting + 6
@@ -577,12 +584,12 @@ enum SleepDetect {
             if declared || returned {
                 if firstQuiet == nil {
                     let gap = minute - wake
-                    guard gap > 0, gapCoverage * 5 >= gap * 4 else { return nil }
+                    guard gapCoverage * 5 >= gap * 4 else { return nil }
                     firstQuiet = minute
                 }
                 quietMinutes += 1
                 if declared { declaredMinutes += 1 }
-                lastQuietEnd = minute + 59
+                lastQuietEnd = window.last?.unix
                 rejectedMinutes = 0
                 if quietMinutes >= 6 || declaredMinutes >= 5 { confirmed = true }
             } else if firstQuiet != nil {

@@ -335,7 +335,8 @@ final class AppStore: ObservableObject {
 
         let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let updated = SleepCorrectionStore.saving([session.startUnix, nowUnix], for: session.sourcePeriod,
-                                                  overrides: overrides, explicitlyEndSleep: true)
+                                                  overrides: overrides, explicitlyEndSleep: true,
+                                                  competingPeriods: band.sleepCorrectionSourcePeriods)
         UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
 
         let correctedID = session.applyingSavedBounds(updated).lifecycleID
