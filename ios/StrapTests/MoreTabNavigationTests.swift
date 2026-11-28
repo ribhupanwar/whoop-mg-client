@@ -5,6 +5,43 @@ import UIKit
 
 final class MoreTabNavigationTests: XCTestCase {
 
+    func testReferencePictogramsCoverDashboardHealthNavigationAndMore() {
+        let dashboard = ["waveform.path.ecg", "heart.pulse", "figure.walk", "zones.low", "zones.high", "dumbbell", "lungs", "flame"]
+        let health = ["drop", "thermometer"]
+        let tabs = AppTab.allCases.map { "nav." + $0.rawValue }
+        let menus = MoreMenuItem.allCases.map { $0.metadata.icon }
+        for symbol in Set(dashboard + health + tabs + menus) {
+            guard let path = ReferencePictogram.outline(for: symbol) else {
+                XCTFail("Missing custom outline for \(symbol)")
+                continue
+            }
+            XCTAssertFalse(path.isEmpty, symbol)
+            let bounds = path.boundingRect
+            XCTAssertGreaterThan(bounds.width, 0, symbol)
+            XCTAssertGreaterThan(bounds.height, 0, symbol)
+            XCTAssertTrue(CGRect(x: 0, y: 0, width: 24, height: 24).contains(bounds), symbol)
+        }
+        XCTAssertNil(ReferencePictogram.outline(for: "unsupported-test-symbol"))
+    }
+
+    func testReferencePictogramsFitIndividualOpticalBounds() {
+        let keys = ["waveform.path.ecg", "heart.pulse", "figure.walk", "zones.low", "zones.high", "dumbbell", "lungs", "flame", "nav.home", "nav.health", "nav.humans", "nav.more"]
+        for key in keys {
+            guard let spec = ReferencePictogram.opticalSpec(for: key),
+                  let path = ReferencePictogram.outline(for: key) else {
+                XCTFail("Missing optical geometry: \(key)")
+                continue
+            }
+            let size = spec.canvas
+            let stroke = ReferencePictogram.strokeWidth(for: key, size: size)
+            let bounds = ReferencePictogram.fittedOutline(path, symbol: key, size: size).boundingRect
+            XCTAssertEqual(bounds.width + stroke, spec.width, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.height + stroke, spec.height, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.midX, size / 2, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.midY, size / 2, accuracy: 0.01, key)
+        }
+    }
+
     func testMoreViewInitializesWithoutCrashing() {
         let store = AppStore()
         let moreView = MoreView().environmentObject(store)

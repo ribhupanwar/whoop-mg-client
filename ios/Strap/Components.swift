@@ -579,39 +579,286 @@ struct ChartLegend: View {
     }
 }
 
-// Dashboard pictograms: consistent thin outline treatment matching the WHOOP reference.
+// Original, reference-inspired 24-unit outline pictograms. No third-party artwork.
+// All paths use a shared optical grid; tint is inherited from the owning surface.
+struct ReferencePictogram: View {
+    let symbol: String
+    var size: CGFloat = 20
+
+    var body: some View {
+        Group {
+            if let path = Self.outline(for: symbol) {
+                Self.fittedOutline(path, symbol: symbol, size: size)
+                    .stroke(style: StrokeStyle(lineWidth: Self.strokeWidth(for: symbol, size: size), lineCap: .round, lineJoin: .round))
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.9, weight: .light))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    // Optical ink extents from the 707px-wide supplied reference screenshot,
+    // measured with local background + 30 intensity threshold. Point sizes
+    // approximate a 440pt screen; actual-device visual verification is required.
+    struct OpticalSpec {
+        let width: CGFloat
+        let height: CGFloat
+        let stroke: CGFloat
+        let canvas: CGFloat
+    }
+
+    static func opticalSpec(for symbol: String) -> OpticalSpec? {
+        let measured: (CGFloat, CGFloat)
+        let tab = symbol.hasPrefix("nav.")
+        switch symbol {
+        case "waveform.path.ecg": measured = (32, 24)
+        case "heart.pulse": measured = (31, 18)
+        case "figure.walk": measured = (30, 32)
+        case "zones.low": measured = (31, 26)
+        case "zones.high": measured = (31, 27)
+        case "dumbbell": measured = (33, 20)
+        case "lungs": measured = (31, 25)
+        case "flame": measured = (20, 30)
+        case "nav.home": measured = (37, 35)
+        case "nav.health": measured = (36, 31)
+        case "nav.humans": measured = (37, 32)
+        case "nav.more": measured = (35, 25)
+        default: return nil
+        }
+        let pxPerPoint: CGFloat = 707.0 / 440.0
+        return OpticalSpec(width: measured.0 / pxPerPoint,
+                           height: measured.1 / pxPerPoint,
+                           stroke: symbol == "nav.health" ? 1.85 : (tab ? 1.45 : (symbol == "flame" ? 0.95 : 1.28)),
+                           canvas: tab ? 23 : 21)
+    }
+
+    static func strokeWidth(for symbol: String, size: CGFloat) -> CGFloat {
+        guard let spec = opticalSpec(for: symbol) else { return 1.45 * size / 24 }
+        return spec.stroke * size / spec.canvas
+    }
+
+    static func fittedOutline(_ path: Path, symbol: String, size: CGFloat) -> Path {
+        guard let spec = opticalSpec(for: symbol) else {
+            return path.applying(CGAffineTransform(scaleX: size / 24, y: size / 24))
+        }
+        let ratio = size / spec.canvas
+        let stroke = strokeWidth(for: symbol, size: size)
+        let bounds = path.boundingRect
+        let sx = max(0.1, spec.width * ratio - stroke) / max(bounds.width, 0.1)
+        let sy = max(0.1, spec.height * ratio - stroke) / max(bounds.height, 0.1)
+        return path.applying(CGAffineTransform(a: sx, b: 0, c: 0, d: sy,
+                                               tx: size / 2 - bounds.midX * sx,
+                                               ty: size / 2 - bounds.midY * sy))
+    }
+
+    static func outline(for symbol: String) -> Path? {
+        var p = Path()
+        func move(_ x: CGFloat, _ y: CGFloat) { p.move(to: CGPoint(x: x, y: y)) }
+        func line(_ x: CGFloat, _ y: CGFloat) { p.addLine(to: CGPoint(x: x, y: y)) }
+        func curve(_ x: CGFloat, _ y: CGFloat, _ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat) {
+            p.addCurve(to: CGPoint(x: x, y: y), control1: CGPoint(x: a, y: b), control2: CGPoint(x: c, y: d))
+        }
+        func oval(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
+            p.addEllipse(in: CGRect(x: x, y: y, width: w, height: h))
+        }
+        func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat = 1.5) {
+            p.addRoundedRect(in: CGRect(x: x, y: y, width: w, height: h), cornerSize: CGSize(width: r, height: r))
+        }
+        func heart() {
+            move(12, 21); line(4.4, 13.2)
+            curve(3.5, 6.6, 2.4, 11.1, 1.8, 8.9)
+            curve(10.1, 5.4, 5.1, 4.4, 8.1, 3.8)
+            line(12, 7.3); line(13.9, 5.4)
+            curve(20.5, 6.6, 15.9, 3.8, 18.9, 4.4)
+            curve(19.6, 13.2, 22.2, 8.9, 21.6, 11.1)
+            line(12, 21); p.closeSubpath()
+        }
+        func pulse() {
+            // Rounded, closed ribbon: short left ledge, deep lower turn,
+            // tall right peak and stepped right ledge.
+            move(3.2, 9.6); line(8.1, 9.6)
+            curve(9.5, 11.1, 9.0, 9.6, 9.5, 10.1)
+            line(9.5, 15.5); line(15.8, 4.3)
+            curve(18.0, 4.7, 16.7, 2.7, 18.0, 3.2)
+            line(18.0, 9.7); line(21.4, 9.7)
+            curve(22.5, 11.1, 22.5, 9.7, 23.0, 10.3)
+            line(21.9, 12.1); line(15.5, 12.1)
+            line(9.0, 20.3)
+            curve(6.6, 19.5, 8.0, 21.8, 6.5, 21.1)
+            line(6.6, 12.1); line(2.4, 12.1)
+            curve(1.8, 11.0, 1.3, 12.1, 1.3, 11.6)
+            line(3.2, 9.6); p.closeSubpath()
+        }
+        func lungs() {
+            move(12, 2); line(12, 11.1)
+            move(9.4, 4.9); line(12, 2); line(14.6, 4.9)
+            move(12, 11.1); line(6.3, 16.5)
+            move(6.3, 13.4); line(6.3, 16.5); line(9.2, 16.5)
+            move(12, 11.1); line(17.7, 16.5)
+            move(17.7, 13.4); line(17.7, 16.5); line(14.8, 16.5)
+            move(9.2, 7.8); curve(6.0, 6.7, 8.6, 6.0, 7.0, 5.9)
+            curve(2.8, 14.4, 4.4, 8.1, 3.2, 12.2)
+            curve(5.3, 20.7, 1.4, 18.1, 2.8, 20.7)
+            line(8.2, 20.7); curve(9.7, 18.7, 9.4, 20.7, 9.7, 19.9)
+            move(14.8, 7.8); curve(18, 6.7, 15.4, 6.0, 17.0, 5.9)
+            curve(21.2, 14.4, 19.6, 8.1, 20.8, 12.2)
+            curve(18.7, 20.7, 22.6, 18.1, 21.2, 20.7)
+            line(15.8, 20.7); curve(14.3, 18.7, 14.6, 20.7, 14.3, 19.9)
+        }
+        func moon() {
+            move(14, 3); curve(21, 16, 8, 12, 15, 19)
+            curve(5, 19, 17, 23, 9, 23); curve(14, 3, 0, 12, 5, 4); p.closeSubpath()
+        }
+        switch symbol {
+        case "waveform.path.ecg": pulse()
+        case "heart.pulse":
+            move(15.3, 14.9); line(10.8, 19)
+            curve(8.5, 19.0, 10.0, 19.8, 9.3, 19.8)
+            line(2.7, 12.1); curve(2.9, 6.5, 0.9, 10.1, 1.1, 8.2)
+            curve(7.8, 6.1, 4.5, 4.8, 6.2, 4.7)
+            line(9.7, 8.0); line(11.6, 6.1)
+            curve(16.5, 6.5, 13.2, 4.7, 14.9, 4.8)
+            curve(17.2, 12.1, 18.0, 8.1, 18.0, 10.1)
+            move(19.1, 5.9); line(19.1, 18.7)
+            move(15.3, 14.8); line(19.1, 18.7); line(23.0, 14.8)
+        case "figure.walk":
+            move(12.2, 2.3); line(14.0, 4.5); line(17.2, 5.8)
+            line(14.9, 9.1); line(16.1, 10.1)
+            line(14.0, 11.1); line(16.3, 15.3); line(16.2, 16.6)
+            line(20.4, 17.8); curve(21.0, 21.0, 22.1, 18.4, 22.1, 20.7)
+            line(12.0, 21.0); curve(10.2, 20.2, 11.2, 21.0, 10.7, 20.7)
+            line(3.1, 12.8); curve(3.1, 10.0, 2.1, 11.7, 2.1, 11.0)
+            line(12.2, 2.3); p.closeSubpath()
+            move(10.1, 4.6); curve(10.3, 10.2, 8.1, 7.1, 7.8, 8.9)
+            curve(14.9, 9.1, 11.7, 11.1, 13.2, 10.2)
+            move(5.4, 8.1); line(12.6, 16.8)
+        case "zones.low", "zones.high":
+            heart()
+            if symbol == "zones.low" {
+                move(6.2, 12.0); line(17.8, 12.0)
+                move(8.8, 15.1); line(15.2, 15.1)
+                move(11.3, 18.1); line(12.7, 18.1)
+            } else {
+                move(5.3, 9.0); line(10.0, 9.0); line(7.6, 6.7); line(5.3, 9.0)
+                move(14.0, 9.0); line(18.7, 9.0); line(16.4, 6.7); line(14.0, 9.0)
+                move(4.5, 11.6); line(19.5, 11.6)
+            }
+        case "dumbbell":
+            rect(4.2, 4.7, 2.7, 14.6, 0.9); rect(17.1, 4.7, 2.7, 14.6, 0.9)
+            rect(2.1, 6.8, 2.1, 10.4, 0.7); rect(19.8, 6.8, 2.1, 10.4, 0.7)
+            move(0.9, 10.5); line(0.9, 13.5); move(23.1, 10.5); line(23.1, 13.5)
+            move(6.9, 12); line(17.1, 12)
+        case "lungs", "wind": lungs()
+        case "flame":
+            move(10, 1.3)
+            curve(15.5, 7.6, 13.8, 3.1, 16.4, 5.5)
+            curve(12.2, 13.2, 14.8, 9.7, 11.6, 11.0)
+            curve(15.6, 15.4, 12.3, 14.9, 14.0, 16.1)
+            curve(17.1, 11.4, 17.6, 14.6, 18.0, 13.0)
+            curve(20.1, 17.3, 19.1, 12.8, 20.5, 15.0)
+            curve(12.0, 22.5, 19.8, 20.5, 16.0, 22.5)
+            curve(4.0, 16.5, 7.1, 22.5, 3.7, 19.5)
+            curve(8.0, 9.1, 4.1, 13.2, 6.6, 11.4)
+            curve(10, 1.3, 11.0, 5.9, 12.0, 4.0); p.closeSubpath()
+        case "drop":
+            move(11, 3); curve(18, 15, 13, 7, 18, 11); curve(11, 21, 18, 19, 15, 21)
+            curve(4, 15, 7, 21, 4, 19); curve(11, 3, 4, 11, 9, 7); p.closeSubpath()
+            move(7, 15); curve(10, 18, 7, 17, 8, 18); oval(17.5, 3, 3, 3)
+        case "thermometer":
+            move(9, 14); line(9, 5); curve(15, 5, 9, 1.5, 15, 1.5); line(15, 14)
+            curve(12, 22, 21, 20, 15, 23); curve(9, 14, 5, 22, 4, 18); p.closeSubpath()
+            oval(10, 16, 4, 4); move(12, 7); line(12, 16)
+        case "nav.home":
+            move(1.5, 12); line(12, 2.5); line(22.5, 12)
+            move(4.7, 12.2); line(4.7, 21.2); line(19.3, 21.2); line(19.3, 12.2)
+            move(8.5, 16.2); line(11, 13.7); line(13.1, 15.1); line(16.1, 11.6)
+        case "nav.health":
+            heart()
+            move(7.6, 12.2); line(9.4, 12.2); line(10.5, 9.6)
+            line(12.2, 15.1); line(13.5, 11.8); line(14.6, 12.8); line(16.2, 12.8)
+        case "nav.humans":
+            oval(9.5, 2.1, 5, 6.1); oval(3.0, 5.0, 3.7, 5.1); oval(17.3, 5.0, 3.7, 5.1)
+            move(9.1, 21.7); line(8.4, 14.8); curve(10.4, 12.0, 8.3, 13.0, 8.9, 12.0)
+            line(13.6, 12.0); curve(15.6, 14.8, 15.1, 12.0, 15.7, 13.0); line(14.9, 21.7)
+            move(3.0, 19.8); line(2.6, 15.1); curve(6.2, 13.0, 2.6, 13.6, 3.6, 13.0)
+            move(17.8, 13.0); curve(21.4, 15.1, 20.4, 13.0, 21.4, 13.6); line(21.0, 19.8)
+        case "nav.more":
+            move(2, 5.2); line(22, 5.2); move(12.8, 12.1); line(22, 12.1); move(12.8, 18.8); line(22, 18.8)
+            rect(2.5, 12.2, 8.3, 7.8, 0.8); move(1.8, 12.2); line(11.5, 12.2)
+            move(6.65, 12.2); line(6.65, 20)
+            move(6.65, 12.2); curve(3.8, 9, 4.4, 12, 2.8, 10)
+            curve(6.65, 12.2, 4.8, 8.1, 6.3, 10.7)
+            curve(9.5, 9, 7, 10.7, 8.5, 8.1); curve(6.65, 12.2, 10.5, 10, 8.9, 12)
+        case "applewatch":
+            oval(7, 2, 13, 20); move(11, 2); curve(5, 21, 3, 3, 1, 19)
+            line(13, 22); move(4.5, 6); line(11, 6); move(3, 16); line(10, 16)
+        case "arrow.triangle.2.circlepath":
+            move(3, 10); curve(20, 8, 5, 2, 16, 2); move(16, 8); line(20, 8); line(20, 4)
+            move(21, 14); curve(4, 16, 19, 22, 8, 22); move(8, 16); line(4, 16); line(4, 20)
+        case "alarm":
+            oval(4, 5, 16, 16); move(12, 8); line(12, 13); line(15, 15)
+            move(3, 5); line(6, 2); move(18, 2); line(21, 5)
+        case "moon.stars": moon(); move(19, 3); line(19, 7); move(17, 5); line(21, 5)
+        case "book.closed":
+            rect(5, 3, 14, 18); move(8, 3); line(8, 21); move(11, 8); line(16, 8); move(11, 12); line(16, 12)
+        case "calendar":
+            rect(3, 5, 18, 16); move(3, 10); line(21, 10); move(8, 3); line(8, 7); move(16, 3); line(16, 7)
+            for x in [CGFloat(7), 12, 17] { oval(x - 0.6, 14, 1.2, 1.2) }
+        case "link.circle":
+            oval(9, 9, 6, 6); oval(9, 1.5, 6, 5); oval(2, 17, 6, 5); oval(16, 17, 6, 5)
+            move(12, 6.5); line(12, 9); move(9.5, 14); line(7, 17); move(14.5, 14); line(17, 17)
+        case "tray.and.arrow.down":
+            move(3, 13); line(6, 6); line(18, 6); line(21, 13); line(21, 20); line(3, 20); p.closeSubpath()
+            move(3, 13); line(9, 13); line(10, 16); line(14, 16); line(15, 13); line(21, 13)
+            move(12, 2); line(12, 10); move(9, 7); line(12, 10); line(15, 7)
+        case "clock.arrow.circlepath":
+            move(3, 10); curve(12, 3, 4, 6, 8, 3); curve(21, 12, 17, 3, 21, 7)
+            curve(12, 21, 21, 17, 17, 21); curve(3, 14, 7, 21, 4, 18)
+            move(3, 4); line(3, 10); line(9, 10); move(12, 7); line(12, 12); line(16, 14)
+        case "heart.text.square":
+            rect(3, 3, 18, 18); move(12, 14); curve(7, 9, 9, 12, 7, 11)
+            curve(12, 7, 7, 6, 10, 6); curve(17, 9, 14, 6, 17, 6)
+            curve(12, 14, 17, 11, 14, 12); move(7, 17); line(17, 17)
+        case "bell":
+            move(5, 16); curve(7, 8, 7, 14, 7, 11); curve(17, 8, 7, 2, 17, 2)
+            curve(19, 16, 17, 11, 17, 14); line(21, 18); line(3, 18); line(5, 16)
+            move(9, 20); curve(15, 20, 10, 23, 14, 23)
+        case "gearshape":
+            oval(8, 8, 8, 8)
+            for i in 0..<8 {
+                let angle = CGFloat(i) * .pi / 4
+                let next = angle + .pi / 8
+                move(12 + 9 * cos(angle), 12 + 9 * sin(angle))
+                line(12 + 11 * cos(angle), 12 + 11 * sin(angle))
+                line(12 + 11 * cos(next), 12 + 11 * sin(next))
+                line(12 + 9 * cos(next), 12 + 9 * sin(next))
+                let end = angle + .pi / 4
+                line(12 + 9 * cos(end), 12 + 9 * sin(end))
+            }
+        case "square.grid.2x2":
+            rect(3, 3, 7, 7); rect(14, 3, 7, 7); rect(3, 14, 7, 7); rect(14, 14, 7, 7)
+        case "info.circle":
+            oval(3, 3, 18, 18); oval(11.3, 7, 1.4, 1.4); move(12, 11); line(12, 17)
+        case "wrench.and.screwdriver":
+            move(4, 19); line(14, 9); curve(15, 3, 12, 5, 13, 3); line(16, 7); line(20, 8)
+            line(21, 4); curve(19, 11, 23, 7, 22, 10); line(8, 22); line(4, 19); p.closeSubpath()
+            move(3, 3); line(11, 11); move(14, 14); line(21, 21)
+        default: return nil
+        }
+        return p
+    }
+}
+
+// Dashboard pictograms: consistent thin outline treatment matching the reference.
 struct DashboardMetricIcon: View {
     let symbol: String
     var body: some View {
-        Group {
-            switch symbol {
-            case "heart.pulse":
-                HStack(spacing: -2) {
-                    Image(systemName: "heart")
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 11, weight: .medium))
-                }
-            case "zones.low", "zones.high":
-                ZStack {
-                    Image(systemName: "heart")
-                    VStack(spacing: 2) {
-                        Capsule().frame(width: 9, height: 1)
-                        if symbol == "zones.high" {
-                            Capsule().frame(width: 6, height: 1)
-                        }
-                    }
-                    .offset(y: symbol == "zones.high" ? -2 : 2)
-                }
-            case "figure.walk":
-                Image(systemName: UIImage(systemName: "shoe") != nil ? "shoe" : "shoeprints.fill")
-            default:
-                Image(systemName: symbol)
-            }
-        }
-        .font(.system(size: 18, weight: .light))
-        .foregroundStyle(Color.appMuted)
-        .frame(width: 24, height: 25)
-        .accessibilityHidden(true)
+        ReferencePictogram(symbol: symbol, size: 21)
+            .foregroundStyle(Color.appMuted)
+            .frame(width: 24, height: 25)
+            .accessibilityHidden(true)
     }
 }
 
