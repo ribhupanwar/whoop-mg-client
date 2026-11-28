@@ -24,6 +24,24 @@ final class MoreTabNavigationTests: XCTestCase {
         XCTAssertNil(ReferencePictogram.outline(for: "unsupported-test-symbol"))
     }
 
+    func testReferencePictogramsFitIndividualOpticalBounds() {
+        let keys = ["waveform.path.ecg", "heart.pulse", "figure.walk", "zones.low", "zones.high", "dumbbell", "lungs", "flame", "nav.home", "nav.health", "nav.humans", "nav.more"]
+        for key in keys {
+            guard let spec = ReferencePictogram.opticalSpec(for: key),
+                  let path = ReferencePictogram.outline(for: key) else {
+                XCTFail("Missing optical geometry: \(key)")
+                continue
+            }
+            let size = spec.canvas
+            let stroke = ReferencePictogram.strokeWidth(for: key, size: size)
+            let bounds = ReferencePictogram.fittedOutline(path, symbol: key, size: size).boundingRect
+            XCTAssertEqual(bounds.width + stroke, spec.width, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.height + stroke, spec.height, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.midX, size / 2, accuracy: 0.01, key)
+            XCTAssertEqual(bounds.midY, size / 2, accuracy: 0.01, key)
+        }
+    }
+
     func testMoreViewInitializesWithoutCrashing() {
         let store = AppStore()
         let moreView = MoreView().environmentObject(store)
