@@ -12,38 +12,77 @@ struct FirmwareImageLabView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
-                Panel {
-                    SectionTitle("DEVICE INFORMATION")
-                    Text("Reported firmware: " + (store.band.firmwareRevision ?? "Unavailable"))
-                    Text("Reported model: " + (store.band.modelNumber ?? "Unavailable"))
-                    Text("Reported battery: " + (store.band.batteryPercent.map { "\($0)%" } ?? "Unavailable"))
+            VStack(alignment: .leading, spacing: 20) {
+                MoreSettingsCard("DEVICE INFORMATION") {
+                    VStack(alignment: .leading, spacing: 12) {
+                        informationRow("Firmware", value: store.band.firmwareRevision ?? "Unavailable")
+                        Divider().overlay(Color.appLine)
+                        informationRow("Model", value: store.band.modelNumber ?? "Unavailable")
+                        Divider().overlay(Color.appLine)
+                        informationRow("Battery", value: store.band.batteryPercent.map { "\($0)%" } ?? "Unavailable")
+                    }
                     Hint("These values may be cached. No online update or compatibility check is performed.")
                 }
-                Panel {
-                    SectionTitle("LOCAL IMAGE INSPECTION")
+                MoreSettingsCard("LOCAL IMAGE INSPECTION") {
                     Hint("Experimental read-only laboratory. Incorrect firmware can permanently damage a device. This screen cannot write to the band.")
-                    Button("Choose local image") { picking = true }
-                        .disabled(loading)
-                    if loading { ProgressView() }
-                    if let image {
-                        Text(image.name).font(.headline)
-                        Text("\(image.byteCount) bytes · \(image.chunkCount) planned chunks")
-                        Text("SHA-256").font(.caption.bold())
-                        Text(image.sha256).font(.system(.caption, design: .monospaced))
-                            .textSelection(.enabled)
-                        Hint("Fingerprint only. Signature, hardware target and downgrade compatibility are unverified.")
-                        Button("Run local simulation") { simulate(image) }
+                    Button {
+                        picking = true
+                    } label: {
+                        MoreSettingsDetailRow(title: "CHOOSE LOCAL IMAGE",
+                            subtitle: "Select a firmware file for local inspection.",
+                            titleColor: .appAccent, accessory: loading ? .progress : .action("CHOOSE", .appAccent))
                     }
-                    if let error { Text(error).foregroundStyle(Color.appWarn) }
+                    .buttonStyle(MoreSettingsPressStyle())
+                    .disabled(loading)
+                    .accessibilityIdentifier("firmwareLab.chooseImage")
+                    if let image {
+                        Divider().overlay(Color.appLine)
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(image.name)
+                                .font(StrapTypography.body(14, weight: .bold))
+                                .foregroundStyle(Color.appFG)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Text("\(image.byteCount) bytes · \(image.chunkCount) planned chunks")
+                                .font(StrapTypography.body(11.5))
+                                .foregroundStyle(Color.appMuted)
+                            Text("SHA-256")
+                                .font(StrapTypography.body(11, weight: .bold))
+                                .foregroundStyle(Color.appMuted)
+                            Text(image.sha256)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(Color.appFG)
+                                .textSelection(.enabled)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Hint("Fingerprint only. Signature, hardware target and downgrade compatibility are unverified.")
+                        }
+                        .padding(.vertical, 12)
+                        Divider().overlay(Color.appLine)
+                        Button {
+                            simulate(image)
+                        } label: {
+                            MoreSettingsDetailRow(title: "RUN LOCAL SIMULATION",
+                                subtitle: "Simulate staging locally. No data is written to the band.",
+                                titleColor: .appAccent, accessory: .action("RUN", .appAccent))
+                        }
+                        .buttonStyle(MoreSettingsPressStyle())
+                    }
+                    if let error {
+                        Text(error)
+                            .font(StrapTypography.body(11.5))
+                            .foregroundStyle(Color.appWarn)
+                            .padding(.top, 8)
+                    }
                     if let simulationResult {
-                        Text(simulationResult).foregroundStyle(Color.appMuted)
+                        Text(simulationResult)
+                            .font(StrapTypography.body(11.5))
+                            .foregroundStyle(Color.appMuted)
+                            .padding(.top, 8)
                     }
                 }
-                Panel {
-                    SectionTitle("HARDWARE INSTALLATION")
-                    Text("DISABLED").font(.headline).foregroundStyle(Color.appWarn)
-                    Hint("No firmware bytes or commands are sent. Trusted signed firmware, model compatibility, independent transport validation and spare-device testing are required.")
+                MoreSettingsCard("HARDWARE INSTALLATION") {
+                    MoreSettingsDetailRow(title: "INSTALL FIRMWARE",
+                        subtitle: "No firmware bytes or commands are sent. Trusted signed firmware, model compatibility, independent transport validation and spare-device testing are required.",
+                        titleColor: .appMuted, accessory: .restricted("DISABLED"))
                 }
             }
         }
@@ -70,6 +109,20 @@ struct FirmwareImageLabView: View {
                     loading = false
                 }
             }
+        }
+    }
+
+    private func informationRow(_ title: String, value: String) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Text(title.uppercased())
+                .font(StrapTypography.body(12, weight: .medium))
+                .foregroundStyle(Color.appMuted)
+            Spacer(minLength: 8)
+            Text(value)
+                .font(StrapTypography.body(12, weight: .semibold))
+                .foregroundStyle(Color.appFG)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 
