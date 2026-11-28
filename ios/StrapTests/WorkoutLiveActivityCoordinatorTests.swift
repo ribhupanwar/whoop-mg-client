@@ -76,6 +76,11 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertNil(accumulator.ingest(block(14), at: date))
         accumulator.interrupt()
         XCTAssertNil(accumulator.ingest(block(15), at: date))
+        for second in UInt32(16)..<25 {
+            XCTAssertNil(accumulator.ingest(block(second), at: date))
+        }
+        let resumed = try XCTUnwrap(accumulator.ingest(block(25), at: date))
+        XCTAssertGreaterThan(resumed.count - next.count, 4, "Restart should credit the qualifying warm-up run")
     }
 
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
