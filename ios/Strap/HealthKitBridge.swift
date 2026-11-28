@@ -419,7 +419,22 @@ final class RecordedRunHealthRelay: ObservableObject {
                 [HKWorkoutEvent(type: .pause, dateInterval: DateInterval(start: pause.start, duration: 0), metadata: nil),
                  HKWorkoutEvent(type: .resume, dateInterval: DateInterval(start: pause.end, duration: 0), metadata: nil)]
             }
-            if !events.isEmpty { try await builder.addWorkoutEvents(events) }
+            if !events.isEmpty {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    builder.addWorkoutEvents(events) { success, error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else if success {
+                            continuation.resume(returning: ())
+                        } else {
+                            continuation.resume(throwing: NSError(
+                                domain: "Strap.HealthKitBridge", code: 1,
+                                userInfo: [NSLocalizedDescriptionKey: "Could not add workout pause events"]
+                            ))
+                        }
+                    }
+                }
+            }
             try await builder.endCollection(at: end)
             guard defaults.bool(forKey: Self.enabledKey) else { builder.discardWorkout(); return }
             // Record attempted finalization before committing; a locked device
