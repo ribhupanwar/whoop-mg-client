@@ -26,7 +26,7 @@ struct HealthView: View {
                     }
                     .padding(.bottom, 14)
                 }
-                Hint("Personal ranges need seven qualifying prior nights. Arrows describe direction, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
+                Hint("Personal ranges need seven qualifying prior nights. Green chips describe personal trends, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
             }
         }
         .navigationTitle("HEALTH MONITOR")
@@ -123,13 +123,12 @@ struct HealthView: View {
                         .baselineOffset(unit == "%" ? 0 : 1)
                 }
             }
-            let tint = demo ? Color.appMuted : (reading.verifiedWithinRange ? Color.appGood :
+            let positive = reading.verifiedWithinRange || reading.monitorShowsPositiveDirection
+            let tint = demo ? Color.appMuted : (positive ? Color.appGood :
                 (reading.monitorShowsWarning ? Color.appWarn : Color.appMuted))
             HStack(spacing: 5) {
-                if !demo && reading.verifiedWithinRange {
+                if !demo && positive {
                     Image(systemName: "checkmark")
-                } else if !demo && reading.isFavourableDirection {
-                    Image(systemName: reading.vital == .rhr ? "arrow.down" : "arrow.up")
                 } else {
                     Circle().fill(tint).frame(width: 7, height: 7)
                 }
@@ -139,12 +138,14 @@ struct HealthView: View {
             .foregroundStyle(tint)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
-            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 4))
+            .background(tint.opacity(0.16), in: RoundedRectangle(cornerRadius: 4))
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            Text(demo ? "Design preview" : reading.referenceText)
-                .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
-                .fixedSize(horizontal: false, vertical: true)
+            if demo || reading.reference == nil || reading.status == .candidate {
+                Text(demo ? "Design preview" : reading.referenceText)
+                    .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
         .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)

@@ -30,15 +30,27 @@ struct HealthReading {
         return (vital == .rhr && value < reference.lowerBound)
             || (vital == .hrv && value > reference.upperBound)
     }
+    // Green describes the direction relative to history, never clinical
+    // normality. Very low resting HR keeps a caution indicator.
+    var monitorShowsPositiveDirection: Bool {
+        isFavourableDirection && (vital != .rhr || (value ?? 0) >= 50)
+    }
     var monitorStatusText: String {
-        if status == .candidate { return "UNVERIFIED ESTIMATE" }
-        if isFavourableDirection {
-            return vital == .rhr ? "BELOW PERSONAL RANGE" : "ABOVE PERSONAL RANGE"
+        if status == .candidate { return "Unverified estimate" }
+        guard let value, let reference else { return statusText }
+        let format = vital == .respiration || vital == .temperature ? "%.1f" : "%.0f"
+        let low = String(format: format, reference.lowerBound)
+        let high = String(format: format, reference.upperBound)
+        switch status {
+        case .withinRange: return "within \(low) – \(high)"
+        case .outsideRange:
+            if value < reference.lowerBound { return "low < \(low)" }
+            return vital == .hrv ? "elevated > \(high)" : "high > \(high)"
+        default: return statusText
         }
-        return statusText
     }
     var monitorShowsWarning: Bool {
-        status == .outsideRange && !isFavourableDirection
+        status == .outsideRange && !monitorShowsPositiveDirection
     }
     var referenceText: String {
         if vital == .oxygen { return "Research estimate only — not a validated oxygen reading" }
