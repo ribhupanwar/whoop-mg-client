@@ -73,9 +73,13 @@ struct Gen5V26Record: Equatable {
         if let f = V18Decoder.f32(bytes, 67), (0...V18Decoder.fullScaleG).contains(f) {
             accel = V18Decoder.round4(f)
         }
+        let rawAnchor = u32(15)
+        let anchor: Int32 = (rawAnchor >= 524_288 && rawAnchor < 1_048_576)
+            ? Int32(rawAnchor) - 1_048_576
+            : Int32(bitPattern: rawAnchor)
         return Gen5V26Record(
             header: header, pipStateCounter: u16(13),
-            firstSampleADC: Int32(bitPattern: u32(15)),
+            firstSampleADC: anchor,
             opticalDeltas: deltas,
             accelDeltaG: accel,
             channelStateWord: u16(71),

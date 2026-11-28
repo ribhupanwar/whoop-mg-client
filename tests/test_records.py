@@ -442,6 +442,9 @@ class TestV21(unittest.TestCase):
         self.assertIsNone(decode_v21(imu_inner()[:1231]))
         self.assertIsNone(decode_v21(imu_inner() + b"\x00"))
 
+    def test_unverified_packet_type_rejected(self):
+        self.assertIsNone(decode_v21(imu_inner(packet_type=0x34)))
+
     def test_v21_is_not_mixed_into_the_per_second_stream(self):
         self.assertIsNone(decode_record(imu_inner()))
 

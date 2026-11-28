@@ -25,4 +25,20 @@ final class Gen5V26Tests: XCTestCase {
         bytes[1] = 18
         XCTAssertNil(Gen5V26Record.decode(bytes))
     }
+
+    func testTwentyBitNegativeAnchorSignExtendsToParityWithPython() throws {
+        var bytes = [UInt8](repeating: 0, count: 76)
+        bytes[0] = 0x2F
+        bytes[1] = 26
+        // 20-bit signed -16 = 0x000FFFF0 in little-endian at offset 15..18
+        bytes[15] = 0xF0
+        bytes[16] = 0xFF
+        bytes[17] = 0x0F
+        bytes[18] = 0x00
+
+        let waveform = try XCTUnwrap(Gen5V26Record.decode(bytes))
+        XCTAssertEqual(waveform.firstSampleADC, -16)
+        XCTAssertEqual(waveform.reconstruction.codes.first, -16)
+        XCTAssertEqual(waveform.reconstruction.outOfRangeCount, 0)
+    }
 }
