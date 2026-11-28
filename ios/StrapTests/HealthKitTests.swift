@@ -57,3 +57,32 @@ final class HealthKitMappingTests: XCTestCase {
         XCTAssertFalse(decoded.healthKitEnabled)
     }
 }
+
+final class RecordedRunRelayTests: XCTestCase {
+    @MainActor
+    func testExplicitRecordedSportMapping() {
+        XCTAssertEqual(RecordedRunHealthRelay.activityType("run"), .running)
+        XCTAssertEqual(RecordedRunHealthRelay.activityType("treadmill"), .running)
+        XCTAssertEqual(RecordedRunHealthRelay.activityType("trailRun"), .running)
+        XCTAssertEqual(RecordedRunHealthRelay.activityType("walk"), .walking)
+        XCTAssertEqual(RecordedRunHealthRelay.activityType("cycling"), .cycling)
+        XCTAssertNil(RecordedRunHealthRelay.activityType("unknown"))
+        XCTAssertNil(RecordedRunHealthRelay.activityType("lift"))
+    }
+
+    func testExportPauseAndHRTimestampsRoundTrip() throws {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        var run = WorkoutSession(id: UUID(), activityKind: "run", activityLabel: "Run",
+            startedAt: start, endedAt: start.addingTimeInterval(90), phase: .saved)
+        run.exportHeartRate = [.init(unix: 1_700_000_010, bpm: 140)]
+        run.exportPauses = [.init(start: start.addingTimeInterval(30), end: start.addingTimeInterval(40))]
+        let decoded = try JSONDecoder().decode(WorkoutSession.self, from: JSONEncoder().encode(run))
+        XCTAssertEqual(decoded.exportHeartRate, run.exportHeartRate)
+        XCTAssertEqual(decoded.exportPauses, run.exportPauses)
+        run.exportPauses = nil
+        run.exportHeartRate = nil
+        let legacy = try JSONDecoder().decode(WorkoutSession.self, from: JSONEncoder().encode(run))
+        XCTAssertNil(legacy.exportPauses)
+        XCTAssertNil(legacy.exportHeartRate)
+    }
+}
