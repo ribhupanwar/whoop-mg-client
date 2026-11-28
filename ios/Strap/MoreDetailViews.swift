@@ -693,7 +693,7 @@ struct DataManagementView: View {
 
                     NavigationLink(value: Route.sleepAnalysis) {
                         HStack {
-                            Image(systemName: "moon.stars")
+                            StrapIconView(asset: .healthSleep, size: 16, frameWidth: 16, color: .appFG)
                             Text("Sleep Staging Epoch Export (CSV)")
                                 .font(StrapTypography.body(13.5, weight: .semibold))
                             Spacer()
