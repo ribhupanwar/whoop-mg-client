@@ -46,7 +46,6 @@ struct DashboardCustomizeSheet: View {
                 }
             }
         }
-        .preferredColorScheme(.dark)
     }
 
     private func rowCard(_ row: DashboardRow, index: Int) -> some View {

@@ -182,7 +182,7 @@ struct LiveWorkoutStepAccumulator {
         let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100,
                                                   latestSecondOnly: beganCounting)
         total += estimate.fractionalSteps
-        beganCounting = beganCounting || estimate.fractionalSteps > 0
+        beganCounting = estimate.fractionalSteps > 0
         return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date)
     }
 }

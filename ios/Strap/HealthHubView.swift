@@ -332,9 +332,9 @@ struct HealthHubView: View {
                     .strokeBorder(present ? Color(hex: 0x59D5E8) : Color.appLine,
                                   lineWidth: 1)
                     .frame(width: 43, height: 43)
-                Image(systemName: icon)
-                    .font(.system(size: 19, weight: .medium))
-                    .foregroundStyle(present ? Color(hex: 0x7CE3F1) : Color.appMuted)
+                StrapIconView(icon, asset: StrapIconView.healthAsset(for: reading.vital),
+                              size: 19, frameWidth: 23, color: present ? Color(hex: 0x7CE3F1) : .appMuted)
+                    .accessibilityHidden(true)
             }
             Text(label)
                 .font(StrapTypography.body(10, weight: .bold))

@@ -55,9 +55,7 @@ struct SleepCoachView: View {
     private var planCard: some View {
         let rec = recommendation
         return Panel {
-            Image(systemName: "moon.stars")
-                .font(.system(size: 27, weight: .light))
-                .foregroundStyle(Color.appSleep)
+            StrapIconView(asset: .alarmSleepGoal, size: 27, weight: .light, frameWidth: 27, color: .appSleep)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 10)
                 .accessibilityHidden(true)

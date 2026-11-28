@@ -83,6 +83,34 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertGreaterThan(resumed.count - next.count, 4, "Restart should credit the qualifying warm-up run")
     }
 
+    func testContinuousStationaryIntervalRestoresGaitWarmupCredit() throws {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        func block(_ unix: UInt32, moving: Bool) -> Gen5IMUBuffer {
+            let axis = (0..<100).map { sample in
+                moving ? 1 + 0.22 * sin(2 * Double.pi * 1.8 * (Double(unix) + Double(sample) / 100)) : 1.0
+            }
+            let zero = Array(repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(version: 21, recordIndex: unix, unix: unix, rawSubsecond: 0,
+                                 accelerationG: [axis, zero, zero], angularVelocityDPS: [zero, zero, zero])
+        }
+        var accumulator = LiveWorkoutStepAccumulator()
+        for second in UInt32(1)...40 {
+            _ = accumulator.ingest(block(second, moving: second <= 15),
+                at: date.addingTimeInterval(Double(second)))
+        }
+        let stationary = try XCTUnwrap(accumulator.ingest(block(41, moving: false), at: date.addingTimeInterval(41)))
+        var resumed: LiveWorkoutStepReading?
+        for second in UInt32(42)...71 {
+            if let reading = accumulator.ingest(block(second, moving: true), at: date.addingTimeInterval(Double(second))),
+               reading.count > stationary.count {
+                resumed = reading
+                break
+            }
+        }
+        let firstCredit = try XCTUnwrap(resumed)
+        XCTAssertGreaterThan(firstCredit.count - stationary.count, 4)
+    }
+
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
         var now: TimeInterval = 100
         let coalescer = WidgetReloadCoalescer(minimumInterval: 0.15, now: { now })

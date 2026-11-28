@@ -85,6 +85,35 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertNil(weakReport[.rhr].value)
         XCTAssertEqual(weakReport[.rhr].status, .unavailable)
     }
+    func testMonitorDirectionDoesNotChangeMeasuredStatusOrRangeCount() {
+        let prior = (-7 ... -1).map { day($0, rhr: 63, hrv: 49) }
+        let report = HealthMonitor.make(days: prior + [day(0, rhr: 62, hrv: 57)], session: session, calendar: calendar)
+        XCTAssertEqual(report[.rhr].status, .outsideRange)
+        XCTAssertEqual(report[.hrv].status, .outsideRange)
+        XCTAssertEqual(report[.rhr].monitorStatusText, "low < 63")
+        XCTAssertEqual(report[.hrv].monitorStatusText, "elevated > 49")
+        XCTAssertTrue(report[.rhr].monitorShowsPositiveDirection)
+        XCTAssertTrue(report[.hrv].monitorShowsPositiveDirection)
+        XCTAssertEqual(report[.respiration].monitorStatusText, "within 16.0 – 16.0")
+        let veryLow = HealthMonitor.make(days: prior + [day(0, rhr: 40, hrv: 57)], session: session, calendar: calendar)
+        XCTAssertFalse(veryLow[.rhr].monitorShowsPositiveDirection)
+        XCTAssertTrue(veryLow[.rhr].monitorShowsWarning)
+        XCTAssertFalse(report[.rhr].monitorShowsWarning)
+        XCTAssertFalse(report[.hrv].monitorShowsWarning)
+        XCTAssertFalse(report[.rhr].verifiedWithinRange)
+        XCTAssertFalse(report[.hrv].verifiedWithinRange)
+        XCTAssertEqual(report.withinCount, 1)
+        XCTAssertEqual(report[.oxygen].monitorStatusText, "Unverified estimate")
+        XCTAssertFalse(report[.oxygen].verifiedWithinRange)
+        XCTAssertNil(report[.oxygen].value)
+        XCTAssertEqual(report[.temperature].monitorStatusText, "Unverified estimate")
+        let reverse = HealthMonitor.make(days: prior + [day(0, rhr: 76, hrv: 23)], session: session, calendar: calendar)
+        XCTAssertTrue(reverse[.rhr].monitorShowsWarning)
+        XCTAssertTrue(reverse[.hrv].monitorShowsWarning)
+        let short = HealthMonitor.make(days: Array(prior.dropFirst()) + [day(0, rhr: 62, hrv: 57)], session: session, calendar: calendar)
+        XCTAssertEqual(short[.rhr].monitorStatusText, "BUILDING BASELINE")
+        XCTAssertFalse(short[.rhr].isFavourableDirection)
+    }
     func testTemperatureDeviationAndEmpiricalRangeUseMatchingRecordedSource() throws {
         let prior = (-7 ... -1).map { day($0, temp: 34) }
         let report = HealthMonitor.make(days: prior + [day(0, temp: 34.6)], session: session, calendar: calendar)

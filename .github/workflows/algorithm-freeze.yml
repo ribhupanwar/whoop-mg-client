@@ -1,0 +1,30 @@
+name: algorithm-freeze
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  protected-algorithms:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Check protected source and regression tests
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          if [ -n "$BASE_SHA" ]; then
+            # Use the existing base guard when available, not a modified PR copy.
+            if git cat-file -e "$BASE_SHA:scripts/check_algorithm_freeze.py" 2>/dev/null; then
+              git show "$BASE_SHA:scripts/check_algorithm_freeze.py" > "$RUNNER_TEMP/check_algorithm_freeze.py"
+              python3 "$RUNNER_TEMP/check_algorithm_freeze.py" --base "$BASE_SHA"
+            else
+              python3 scripts/check_algorithm_freeze.py --base "$BASE_SHA"
+            fi
+          else
+            python3 scripts/check_algorithm_freeze.py
+          fi
