@@ -28,8 +28,18 @@ struct CaptureSummary: Codable, Equatable {
     var sleepSessions: [SleepSession]? = nil
 
     var latestSleepSession: SleepSession? {
-        sleepSessions?.filter { $0.classification == .overnight && $0.endUnix > $0.startUnix }
-            .max { $0.endUnix < $1.endUnix }
+        Self.latestPrimaryOvernight(sleepSessions ?? [])
+    }
+
+    private static func latestPrimaryOvernight(_ sessions: [SleepSession]) -> SleepSession? {
+        let overnight = sessions.filter { $0.classification == .overnight && $0.endUnix > $0.startUnix }
+        guard let lastEnd = overnight.map(\.endUnix).max() else { return nil }
+        let calendar = Calendar.current
+        let lastWake = Date(timeIntervalSince1970: Double(lastEnd - 1))
+        let sameDay = overnight.filter {
+            calendar.isDate(Date(timeIntervalSince1970: Double($0.endUnix - 1)), inSameDayAs: lastWake)
+        }
+        return DailyAnalysis.primaryNight(sameDay)
     }
     let activities: [ActivitySession]
     /// Awake 5-minute stress share against the awake baseline. nil when the
@@ -113,7 +123,7 @@ struct CaptureSummary: Codable, Equatable {
         }
 
         let steps = StepCounter.total(ordered)
-        let staging = sessions.last?.staging
+        let staging = latestPrimaryOvernight(sessions)?.staging ?? sessions.last?.staging
         let activities = ActivityDetect.detect(
             ordered, sleepPeriods: canonicalPeriods, restingHR: resting, maxHR: maxHR
         )

@@ -129,6 +129,19 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(DailyAnalysis.recoveryDay(for: session, in: [canonical, stale]), canonical)
     }
 
+    func testHomeAndDailyBiometricsSelectTheSamePrimaryNight() throws {
+        let midnight = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+        let main = SleepPeriod(startUnix: midnight - 2 * 3600, endUnix: midnight + 4 * 3600 - 1,
+                               quietFraction: 0.98, meanHR: 60, wakeEvents: 0)
+        let tail = SleepPeriod(startUnix: midnight + 5 * 3600, endUnix: midnight + 6 * 3600 - 1,
+                               quietFraction: 0.98, meanHR: 60, wakeEvents: 0)
+        let sessions = SleepSession.makeAll(samples: [], periods: [main, tail], overrides: [:])
+        var summary = CaptureSummary.empty
+        summary.sleepSessions = sessions
+        XCTAssertEqual(try XCTUnwrap(summary.latestSleepSession).startUnix, main.startUnix)
+        XCTAssertEqual(summary.latestSleepSession, DailyAnalysis.primaryNight(sessions))
+    }
+
     private let start = 1_800_000_000
 
     private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01, stepCounter: Int? = nil) -> V18Sample {
