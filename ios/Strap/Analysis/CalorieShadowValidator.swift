@@ -244,11 +244,6 @@ enum CalorieShadowValidator {
             return failed(name: "production", reason: "invalid HR anchors for 40% HRR gate")
         }
 
-        let valid: [(unix: Int, bpm: Double)] = sorted.compactMap { s in
-            guard let bpm = s.bpm, bpm.isFinite, (35...220).contains(bpm) else { return nil }
-            return (s.unix, bpm)
-        }
-
         var activeKcal = 0.0
         var grossKcal  = 0.0
         var coveredS   = 0.0
@@ -256,31 +251,39 @@ enum CalorieShadowValidator {
         var segments   = [SegmentEnergy]()
         let basalPerS  = bmr / 86400.0
 
-        for i in 0..<(valid.count - 1) {
-            let curr = valid[i], next = valid[i + 1]
-            let gap = Double(next.unix - curr.unix)
-            // Skip duplicate timestamps, missing gaps, and gaps > 30 s.
-            guard gap > 0, gap <= 30.0,
-                  next.bpm.isFinite, (35...220).contains(next.bpm) else {
-                excluded += 1; continue
+        // Empty / single-sample streams have no adjacent interval. Never build
+        // 0..<(count - 1) for count == 0: it traps at runtime on Swift.
+        if sorted.count > 1 {
+            for i in 0..<(sorted.count - 1) {
+                let curr = sorted[i], next = sorted[i + 1]
+                let gap = Double(next.unix - curr.unix)
+                // Keep nil / invalid HR samples in the sequence: filtering them
+                // first bridges a gap and invents coverage over missing data.
+                guard gap > 0, gap <= 30.0,
+                      let currBpm = curr.bpm, currBpm.isFinite,
+                      (35...220).contains(currBpm),
+                      let nextBpm = next.bpm, nextBpm.isFinite,
+                      (35...220).contains(nextBpm) else {
+                    excluded += 1; continue
+                }
+                let keytelPerS = Calories.keytelKcalPerS(
+                    hr: currBpm, maxHR: context.maxHR,
+                    weightKg: p.weightKg, age: p.age, sex: p.sex
+                )
+                let segActive  = currBpm >= gate ? max(0, keytelPerS - basalPerS) * gap : 0.0
+                let segGross   = keytelPerS * gap
+                let segResting = basalPerS * gap
+                activeKcal += segActive
+                grossKcal  += segGross
+                coveredS   += gap
+                segments.append(SegmentEnergy(
+                    startUnix: curr.unix, endUnix: next.unix,
+                    coveredSeconds: gap, grossKcal: segGross,
+                    activeKcal: segActive, netAboveRestingKcal: segGross - segResting
+                ))
             }
-            let keytelPerS = Calories.keytelKcalPerS(
-                hr: curr.bpm, maxHR: context.maxHR,
-                weightKg: p.weightKg, age: p.age, sex: p.sex
-            )
-            let segActive  = curr.bpm >= gate ? max(0, keytelPerS - basalPerS) * gap : 0.0
-            let segGross   = keytelPerS * gap
-            let segResting = basalPerS * gap
-            activeKcal += segActive
-            grossKcal  += segGross
-            coveredS   += gap
-            segments.append(SegmentEnergy(
-                startUnix: curr.unix, endUnix: next.unix,
-                coveredSeconds: gap, grossKcal: segGross,
-                activeKcal: segActive, netAboveRestingKcal: segGross - segResting
-            ))
         }
-        if valid.isEmpty { excluded = sorted.count }
+        if sorted.count < 2 { excluded = sorted.count }
 
         let restingForCovered = basalPerS * coveredS
         return ModelResult(
@@ -336,8 +339,21 @@ enum CalorieShadowValidator {
             return failed(name: "recovered", reason: "invalid reference rate at maxHR")
         }
 
-        let hrStream: [Double?] = sorted.map { $0.bpm }
-        let tsStream: [Double?] = sorted.map { Double($0.unix) }
+        // The recovered arithmetic caps a positive interval at three seconds,
+        // rather than rejecting gaps longer than three seconds. For this
+        // diagnostic comparison, insert a missing-data boundary so BLE outages
+        // cannot be counted as observed coverage. Preserve valid intervals on
+        // either side of the outage and leave the recovered engine untouched.
+        var hrStream = [Double?]()
+        var tsStream = [Double?]()
+        for (index, sample) in sorted.enumerated() {
+            if index > 0 && sample.unix - sorted[index - 1].unix > 3 {
+                hrStream.append(nil)
+                tsStream.append(nil)
+            }
+            hrStream.append(sample.bpm)
+            tsStream.append(Double(sample.unix))
+        }
 
         do {
             let r = try WhoopRecoveredCalories.integrate(
