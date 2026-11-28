@@ -157,6 +157,9 @@ enum LiveGaitPedometer {
 struct LiveWorkoutStepReading: Equatable {
     let count: Int
     let observedAt: Date
+    var sessionCadenceSPM: Int? = nil
+    var gaitObservedSeconds: Int = 0
+    var deliveredSampleRateHz: Double? = nil
 }
 
 /// The rolling estimator may reclassify overlapping windows. Never credit a
@@ -182,19 +185,73 @@ struct LiveGaitCreditLedger {
 
 /// Owns each decoded second exactly once. Gaps reset estimation context.
 struct LiveWorkoutStepAccumulator {
+    struct GaitRun: Equatable {
+        let startUnix: UInt32
+        var endUnixInclusive: UInt32
+        var estimatedSteps: Double
+    }
     private var lastBlock: Gen5IMUBuffer?
+    private var highWaterUnix: UInt32?
     private var magnitude: [Double] = []
+    private var receipts: [Date] = []
     private var total = 0.0
     private var credits = LiveGaitCreditLedger()
-    private var highWaterUnix: UInt32?
+    private(set) var gaitRuns: [GaitRun] = []
+    private(set) var omittedCoverageRuns = 0
+    private(set) var gaitObservedSeconds = 0
+    // Bounded histogram of observed positive gait cadence (1 SPM bins).
+    private var cadenceHistogram: [Int: Int] = [:]
 
     mutating func interrupt() {
         magnitude.removeAll(keepingCapacity: true)
+        receipts.removeAll(keepingCapacity: true)
     }
 
     mutating func reconnect() {
         interrupt()
         lastBlock = nil
+        // Keep the session high-water mark: reconnect replay is not new gait.
+    }
+
+    static func deliveredRate(_ receipts: [Date]) -> Double? {
+        guard receipts.count == 11, let first = receipts.first, let last = receipts.last,
+              zip(receipts.dropFirst(), receipts).allSatisfy({ $0.0 >= $0.1 }) else { return nil }
+        let span = last.timeIntervalSince(first)
+        guard span.isFinite, span > 0 else { return nil }
+        // Ten inter-block intervals, each associated with 100 samples.
+        let hz = 1000 / span
+        return (50...200).contains(hz) ? hz : nil
+    }
+
+    var sessionCadenceSPM: Int? {
+        let count = cadenceHistogram.values.reduce(0, +)
+        guard count >= 180 else { return nil }
+        var running = 0
+        for key in cadenceHistogram.keys.sorted() {
+            running += cadenceHistogram[key, default: 0]
+            if running >= (count + 1) / 2 { return key }
+        }
+        return nil
+    }
+
+    private mutating func recordGait(end: UInt32, seconds: Int, steps: Double) {
+        guard seconds > 0, steps.isFinite, steps > 0, end >= UInt32(seconds - 1) else { return }
+        let start = end - UInt32(seconds - 1)
+        // Counting intervals are disjoint even after pause/reconnect.
+        if let last = gaitRuns.last, start <= last.endUnixInclusive { return }
+        gaitObservedSeconds += seconds
+        let spm = Int((steps * 60 / Double(seconds)).rounded())
+        if (60...240).contains(spm) { cadenceHistogram[spm, default: 0] += seconds }
+        if let last = gaitRuns.last, UInt64(last.endUnixInclusive) + 1 == UInt64(start) {
+            gaitRuns[gaitRuns.count - 1].endUnixInclusive = end
+            gaitRuns[gaitRuns.count - 1].estimatedSteps += steps
+        } else {
+            if gaitRuns.count == 512 {
+                gaitRuns.removeFirst()
+                omittedCoverageRuns += 1
+            }
+            gaitRuns.append(GaitRun(startUnix: start, endUnixInclusive: end, estimatedSteps: steps))
+        }
     }
 
     mutating func ingest(_ block: Gen5IMUBuffer, at date: Date) -> LiveWorkoutStepReading? {
@@ -217,12 +274,23 @@ struct LiveWorkoutStepAccumulator {
             let (x, y, z) = (axes[0][i], axes[1][i], axes[2][i])
             magnitude.append(sqrt(x * x + y * y + z * z))
         }
+        receipts.append(date)
+        if receipts.count > 11 { receipts.removeFirst() }
         if magnitude.count > 1100 { magnitude.removeFirst(magnitude.count - 1100) }
         guard magnitude.count == 1100 else { return nil }
+        // Delivery duty is a separate gate, not the device's ADC rate.
+        // No resampling of delayed frames or fabricated missing steps.
+        guard let delivered = Self.deliveredRate(receipts) else {
+            interrupt()
+            return nil
+        }
         let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100)
         for credit in credits.accept(estimate.qualifiedWindows, endingAt: block.unix) {
+            recordGait(end: credit.second, seconds: 1, steps: credit.steps)
             total += credit.steps
         }
-        return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date)
+        return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date,
+            sessionCadenceSPM: sessionCadenceSPM, gaitObservedSeconds: gaitObservedSeconds,
+            deliveredSampleRateHz: delivered)
     }
 }

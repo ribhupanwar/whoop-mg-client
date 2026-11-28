@@ -213,6 +213,9 @@ final class WorkoutLiveActivityCoordinator {
               let session = recorder.currentSession else { return }
         let kind = WorkoutActivityAttributes.displayKind(session.activityKind)
         guard kind == .walking || kind == .running else { return }
+        // Avoid workout-triggered history reads while fresh IMU is supplying steps.
+        // Normal scheduled history sync remains unchanged.
+        if let live = band.liveWorkoutSteps, (0...5).contains(now.timeIntervalSince(live.observedAt)) { return }
         band.refreshWorkoutStepHistoryIfNeeded(now: now)
     }
 

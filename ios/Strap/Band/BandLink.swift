@@ -163,6 +163,7 @@ final class BandLink: NSObject, ObservableObject {
     private var workoutIMULastSent: (sequence: UInt8, enabled: Bool)?
     private var workoutIMURejectedState: Bool?
     private var workoutIMURetryAfter: Date?
+    private var workoutStepRecordingRequested = false
     @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
@@ -1363,6 +1364,8 @@ final class BandLink: NSObject, ObservableObject {
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
+                sensorCalibrationEvidence: SensorCalibrationResearch.nightEvidence(
+                    samples: samples, startUnix: session.startUnix, endUnix: session.endUnix),
                 temperatureFunnel: NightTemperature.funnel(archived, session: session),
                 oxygenCandidateSummary: Recovery.spo2Summary(samples),
                 stageDecisionEvidence: stageEvidence,
@@ -1970,6 +1973,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func reconcileWorkoutStepStream(sessionID: UUID?, recording: Bool) {
+        workoutStepRecordingRequested = recording
         if liveWorkoutStepSession != sessionID {
             liveWorkoutStepSession = sessionID
             liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
@@ -1977,6 +1981,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let enabled = sessionID != nil && recording && isConnected
             && hrBondConfirmed && commandCharacteristic != nil
+            && wristState != .offWrist && !isCharging
         let retry = workoutIMURejectedState == enabled
         guard workoutIMURequested != enabled || retry else { return }
         if retry, let retryAfter = workoutIMURetryAfter, Date() < retryAfter { return }
@@ -3151,7 +3156,10 @@ final class BandLink: NSObject, ObservableObject {
                 BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
             }
         }
-        if wristState != previousState { refreshNativeSensorSnapshot() }
+        if wristState != previousState {
+            refreshNativeSensorSnapshot()
+            reconcileWorkoutStepStream(sessionID: liveWorkoutStepSession, recording: workoutStepRecordingRequested)
+        }
     }
 
     private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {
