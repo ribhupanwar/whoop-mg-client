@@ -36,6 +36,7 @@ struct HomeView: View {
     @State private var showDeviceSettings = false
     @State private var showDashboardCustomize = false
     @State private var showSleepEditor = false
+    @State private var confirmHomeEndSleep = false
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
     private var sleepCorrections: [String: [Int]] {
@@ -871,7 +872,7 @@ struct HomeView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            store.endSleepNow()
+                            confirmHomeEndSleep = true
                         } label: {
                             Text("END SLEEP")
                                 .font(StrapTypography.body(11, weight: .bold))
@@ -881,6 +882,12 @@ struct HomeView: View {
                                 .foregroundStyle(Color.black)
                         }
                         .buttonStyle(.plain)
+                        .alert("End Sleep?", isPresented: $confirmHomeEndSleep) {
+                            Button("Cancel", role: .cancel) {}
+                            Button("End Sleep", role: .destructive) { store.endSleepNow() }
+                        } message: {
+                            Text("Only confirm if you have finished sleeping. This saves an explicit wake time; otherwise automatic detection can continue.")
+                        }
 
                         Button {
                             store.processSleepNow()
