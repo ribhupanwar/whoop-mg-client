@@ -267,6 +267,50 @@ class TestV18(unittest.TestCase):
                 self.assertEqual(sample.heart_rate, 94)
                 self.assertEqual(sample.sleep_state, 0)
 
+    def test_valid_rr_survives_when_byte_28_bit_7_is_unset(self):
+        # Issue #126: In real physical WHOOP captures, byte 28 bit 7 is unset
+        # for 100% of samples while valid RR is present. Never gate RR on bit 7.
+        record = bytearray(REAL_V18)
+        record[28] = 0x0E  # bit 7 unset
+        record[15] = 2
+        record[16:18] = (818).to_bytes(2, "little", signed=True)
+        record[18:20] = (780).to_bytes(2, "little", signed=True)
+        record[20:24] = b"\x00\x00\x00\x00"
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample.hr_quality_flags, 14)
+        self.assertEqual(sample.rr_intervals_ms, [818, 780])
+
+    def test_psnr_unavailable_does_not_reject_sample(self):
+        record = bytearray(REAL_V18)
+        record[100] = 0x80  # -128
+        record[101] = 0x80  # -128
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertEqual(sample.heart_rate, 94)
+        self.assertEqual(sample.psnr_b, -128)
+        self.assertEqual(sample.psnr_a, -128)
+
+        # Positive dB values decode as signed int8
+        record[100] = 0x1E  # +30 dB
+        record[101] = 0x1E  # +30 dB
+        sample_valid = decode_v18(bytes(record))
+        self.assertEqual(sample_valid.psnr_b, 30)
+        self.assertEqual(sample_valid.psnr_a, 30)
+
+    def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
+        # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
+        record = bytearray(REAL_V18)
+        record[14] = 45
+        # Set skin temp to 21.5C (2150 in scale 100)
+        record[65:67] = (2150).to_bytes(2, "little", signed=True)
+        # Set dynamic accel to 0.001 g
+        import struct
+        record[33:37] = struct.pack("<f", 0.001)
+        sample = decode_v18(bytes(record))
+        self.assertIsNotNone(sample)
+        self.assertFalse(sample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
+
 
 class TestV26(unittest.TestCase):
     def test_real_record_fields(self):
@@ -447,50 +491,6 @@ class TestV21(unittest.TestCase):
 
     def test_v21_is_not_mixed_into_the_per_second_stream(self):
         self.assertIsNone(decode_record(imu_inner()))
-
-    def test_valid_rr_survives_when_byte_28_bit_7_is_unset(self):
-        # Issue #126: In real physical WHOOP captures, byte 28 bit 7 is unset
-        # for 100% of samples while valid RR is present. Never gate RR on bit 7.
-        record = bytearray(REAL_V18)
-        record[28] = 0x0E  # bit 7 unset
-        record[15] = 2
-        record[16:18] = (818).to_bytes(2, "little", signed=True)
-        record[18:20] = (780).to_bytes(2, "little", signed=True)
-        record[20:24] = b"\x00\x00\x00\x00"
-        sample = decode_v18(bytes(record))
-        self.assertIsNotNone(sample)
-        self.assertEqual(sample.hr_quality_flags, 14)
-        self.assertEqual(sample.rr_intervals_ms, [818, 780])
-
-    def test_psnr_unavailable_does_not_reject_sample(self):
-        record = bytearray(REAL_V18)
-        record[100] = 0x80  # -128
-        record[101] = 0x80  # -128
-        sample = decode_v18(bytes(record))
-        self.assertIsNotNone(sample)
-        self.assertEqual(sample.heart_rate, 94)
-        self.assertEqual(sample.psnr_b, -128)
-        self.assertEqual(sample.psnr_a, -128)
-
-        # Positive dB values decode as signed int8
-        record[100] = 0x1E  # +30 dB
-        record[101] = 0x1E  # +30 dB
-        sample_valid = decode_v18(bytes(record))
-        self.assertEqual(sample_valid.psnr_b, 30)
-        self.assertEqual(sample_valid.psnr_a, 30)
-
-    def test_tabletop_stillness_and_cold_temp_rejected_as_off_wrist(self):
-        # Spurious optical HR (45 bpm) on cold tabletop (21.5C) with 0 motion must not be wearing
-        record = bytearray(REAL_V18)
-        record[14] = 45
-        # Set skin temp to 21.5C (2150 in scale 100)
-        record[65:67] = (2150).to_bytes(2, "little", signed=True)
-        # Set dynamic accel to 0.001 g
-        import struct
-        record[33:37] = struct.pack("<f", 0.001)
-        sample = decode_v18(bytes(record))
-        self.assertIsNotNone(sample)
-        self.assertFalse(sample.wearing, "Tabletop stillness and cold ambient temperature must be rejected as off-wrist")
 
 
 class TestV20(unittest.TestCase):

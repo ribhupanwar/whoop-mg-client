@@ -63,4 +63,32 @@ final class Gen5IMUBufferTests: XCTestCase {
         window.ingest(fullBlock(version: 21, unix: 199, index: 999))
         XCTAssertEqual(window.candidate, firstCandidate)
     }
+
+    func testLiveWorkoutStepAccumulatorReplayAndDiscontinuity() {
+        var accumulator = LiveWorkoutStepAccumulator()
+        let now = Date()
+
+        func makeBlock(recordIndex: UInt32, unix: UInt32, subsecond: UInt16 = 500) -> Gen5IMUBuffer {
+            let accel = (0..<100).map { _ in 1.0 }
+            let zero = [Double](repeating: 0.0, count: 100)
+            return Gen5IMUBuffer(
+                version: 21,
+                recordIndex: recordIndex,
+                unix: unix,
+                rawSubsecond: subsecond,
+                accelerationG: [accel, zero, zero],
+                angularVelocityDPS: [zero, zero, zero]
+            )
+        }
+
+        let b1 = makeBlock(recordIndex: 100, unix: 10_000)
+        let _ = accumulator.ingest(b1, at: now)
+
+        // Replay of older timestamp returns nil
+        let bOld = makeBlock(recordIndex: 99, unix: 9_999)
+        XCTAssertNil(accumulator.ingest(bOld, at: now.addingTimeInterval(1)))
+
+        // Duplicate timestamp returns nil
+        XCTAssertNil(accumulator.ingest(b1, at: now.addingTimeInterval(2)))
+    }
 }
