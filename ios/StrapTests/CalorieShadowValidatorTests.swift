@@ -120,6 +120,17 @@ final class CalorieShadowValidatorTests: XCTestCase {
         XCTAssertEqual(report.shortGapCount, 1)
     }
 
+    func testRecoveredPreservesObservedIntervalsOnBothSidesOfOutage() {
+        let samples = [sample(0, 150), sample(1, 150),
+                       sample(61, 150), sample(62, 150)]
+        let report = CalorieShadowValidator.compare(
+            samples: samples, context: context(endUnix: 62))
+        XCTAssertEqual(report.production.coveredSeconds, 2, accuracy: 0.001)
+        XCTAssertEqual(report.recovered.coveredSeconds, 2, accuracy: 0.001,
+                       "Only the two observed 1-second intervals may be billed")
+        XCTAssertEqual(report.longGapCount, 1)
+    }
+
     func testNormalGapUpToThreeSecondsCoveredByBothModels() {
         // 1-second intervals — both engines cover them.
         let samples = [sample(0, 150.0), sample(1, 150.0), sample(2, 150.0)]
