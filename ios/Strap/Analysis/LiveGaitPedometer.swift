@@ -5,12 +5,19 @@ import Foundation
 /// This is an optional 50–100 Hz IMU cross-check, NOT a replacement for the
 /// band's decoded historical step counter and NOT a 1 Hz step estimator.
 enum LiveGaitPedometer {
+    struct WindowCredit: Equatable {
+        // Relative end second of the four-second analysis window.
+        let endSecond: Int
+        let steps: Double
+    }
+
     struct Result: Equatable {
         let steps: Int
         let durationSeconds: Double
         let cadenceSPM: Double
         let confidence: Double
         var fractionalSteps: Double = 0
+        var qualifiedWindows: [WindowCredit] = []
     }
 
     private static func correlation(_ values: [Double], lag: Int) -> Double {
@@ -63,6 +70,8 @@ enum LiveGaitPedometer {
         var run = 0, runSteps = 0.0, totalSteps = 0.0, regularity = 0.0
         var acceptedWindows = 0
         var latestSecondSteps = 0.0
+        var pendingWindows: [WindowCredit] = []
+        var qualifiedWindows: [WindowCredit] = []
         for start in stride(from: 0, through: filtered.count - window, by: hop) {
             let slice = Array(filtered[start..<(start + window)])
             let mean = slice.reduce(0, +) / Double(slice.count)
@@ -100,17 +109,26 @@ enum LiveGaitPedometer {
             if qualifies, let stepSeconds {
                 run += 1
                 latestSecondSteps = run >= 8 ? Double(hop) / fs / stepSeconds : 0
-                runSteps += Double(hop) / fs / stepSeconds
+                let steps = Double(hop) / fs / stepSeconds
+                runSteps += steps
+                pendingWindows.append(WindowCredit(endSecond: (start + window) / hop - 1, steps: steps))
                 regularity += strideAC
                 acceptedWindows += 1
             } else {
                 latestSecondSteps = 0
-                if run >= 8 { totalSteps += runSteps }
+                if run >= 8 {
+                    totalSteps += runSteps
+                    qualifiedWindows.append(contentsOf: pendingWindows)
+                }
+                pendingWindows.removeAll(keepingCapacity: true)
                 run = 0
                 runSteps = 0
             }
         }
-        if run >= 8 { totalSteps += runSteps }
+        if run >= 8 {
+            totalSteps += runSteps
+            qualifiedWindows.append(contentsOf: pendingWindows)
+        }
         let duration = Double(magnitude.count) / sampleRateHz
         let count = latestSecondOnly ? latestSecondSteps : totalSteps
         let steps = max(0, Int(count.rounded()))
@@ -118,7 +136,7 @@ enum LiveGaitPedometer {
                       cadenceSPM: duration > 0 ? Double(steps) * 60 / duration : 0,
                       confidence: acceptedWindows > 0
                         ? min(1, max(0, regularity / Double(acceptedWindows))) : 0,
-                      fractionalSteps: count)
+                      fractionalSteps: count, qualifiedWindows: qualifiedWindows)
     }
 
     static func estimate(x: [Double], y: [Double], z: [Double],
@@ -144,6 +162,27 @@ struct LiveWorkoutStepReading: Equatable {
     var deliveredSampleRateHz: Double? = nil
 }
 
+/// The rolling estimator may reclassify overlapping windows. Never credit a
+/// previously credited absolute window end, even after a gap or reconnect.
+struct LiveGaitCreditLedger {
+    private var lastCreditedEnd: UInt32?
+
+    mutating func accept(_ windows: [LiveGaitPedometer.WindowCredit], endingAt end: UInt32) -> [(second: UInt32, steps: Double)] {
+        var accepted: [(second: UInt32, steps: Double)] = []
+        // Live buffers contain exactly eleven one-second blocks.
+        for window in windows.sorted(by: { $0.endSecond < $1.endSecond }) {
+            guard (3...10).contains(window.endSecond), window.steps.isFinite, window.steps > 0 else { continue }
+            let age = UInt32(10 - window.endSecond)
+            guard end >= age else { continue }
+            let second = end - age
+            guard lastCreditedEnd.map({ second > $0 }) ?? true else { continue }
+            accepted.append((second, window.steps))
+            lastCreditedEnd = second
+        }
+        return accepted
+    }
+}
+
 /// Owns each decoded second exactly once. Gaps reset estimation context.
 struct LiveWorkoutStepAccumulator {
     struct GaitRun: Equatable {
@@ -156,7 +195,7 @@ struct LiveWorkoutStepAccumulator {
     private var magnitude: [Double] = []
     private var receipts: [Date] = []
     private var total = 0.0
-    private var contextCredited = false
+    private var credits = LiveGaitCreditLedger()
     private(set) var gaitRuns: [GaitRun] = []
     private(set) var omittedCoverageRuns = 0
     private(set) var gaitObservedSeconds = 0
@@ -166,7 +205,6 @@ struct LiveWorkoutStepAccumulator {
     mutating func interrupt() {
         magnitude.removeAll(keepingCapacity: true)
         receipts.removeAll(keepingCapacity: true)
-        contextCredited = false
     }
 
     mutating func reconnect() {
@@ -246,17 +284,10 @@ struct LiveWorkoutStepAccumulator {
             interrupt()
             return nil
         }
-        let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100,
-                                                  latestSecondOnly: contextCredited)
-        if estimate.fractionalSteps > 0 {
-            // Exactly eight qualifying one-second hops in the initial 11 s
-            // context; subsequent updates own only the newest hop.
-            let seconds = contextCredited ? 1 : 8
-            recordGait(end: block.unix, seconds: seconds, steps: estimate.fractionalSteps)
-            total += estimate.fractionalSteps
-            contextCredited = true
-        } else {
-            contextCredited = false
+        let estimate = LiveGaitPedometer.estimate(magnitude: magnitude, sampleRateHz: 100)
+        for credit in credits.accept(estimate.qualifiedWindows, endingAt: block.unix) {
+            recordGait(end: credit.second, seconds: 1, steps: credit.steps)
+            total += credit.steps
         }
         return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date,
             sessionCadenceSPM: sessionCadenceSPM, gaitObservedSeconds: gaitObservedSeconds,
