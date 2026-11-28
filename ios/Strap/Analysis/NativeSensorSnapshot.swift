@@ -141,9 +141,11 @@ struct NativeDeepTelemetry: Equatable {
         let centeredAccelerationRMSG: Double
         let angularVelocityRMSDPS: Double
         let features: Gen5IMUBuffer.BlockFeatures?
+        let rawMetadata: Gen5IMUBuffer.RawMetadata?
 
         init(_ record: Gen5IMUBuffer) {
             features = record.blockFeatures
+            rawMetadata = record.rawMetadata
             version = record.version
             unix = record.unix
             accelerationSamples = record.accelerationG.first?.count ?? 0
