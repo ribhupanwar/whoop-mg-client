@@ -491,6 +491,18 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(SleepCorrectionStore.saving(times, for: shifted, overrides: saved), saved)
     }
 
+    func testResetRemovesAlternateAliasThatMatchesOriginalSourceBounds() {
+        let source = period(8 * 3600)
+        let exact = [start + 7200, start + 14400]
+        let olderAlias = [start, start + 9000]
+        let otherNight = String(start + 86400)
+        let overrides = [String(start): exact, String(start + 60): olderAlias,
+                         otherNight: [start + 86400, start + 93600]]
+        let cleared = SleepCorrectionStore.removing(for: source, overrides: overrides)
+        XCTAssertNil(SleepCorrectionStore.times(for: source, overrides: cleared))
+        XCTAssertEqual(cleared, [otherNight: overrides[otherNight]!])
+    }
+
     func testMissingRawCoverageRetainsEditedCanonicalNight() {
         let old = knownNight()
         XCTAssertEqual(SleepSession.retainingUncovered(

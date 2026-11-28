@@ -398,32 +398,28 @@ enum SleepCorrectionStore {
         return result
     }
 
-    /// Explicit reset only: remove the selected night's correction and its aliases,
-    /// without touching unrelated nights or any raw sensor records.
+    private static func overlaps(_ a: [Int], _ b: [Int]) -> Bool {
+        let overlap = min(a[1], b[1]) - max(a[0], b[0])
+        return overlap > 0 && overlap * 2 >= min(a[1] - a[0], b[1] - b[0])
+    }
+
+    /// Explicit reset removes the selected correction and its aliases.
     static func removing(for period: SleepPeriod, overrides: [String: [Int]]) -> [String: [Int]] {
-        let reference = self.times(for: period, overrides: overrides)
-            ?? [period.startUnix, period.endUnix + 1]
-        var result = overrides
-        for (key, value) in overrides {
+        let sourceBounds = [period.startUnix, period.endUnix + 1]
+        let reference = self.times(for: period, overrides: overrides) ?? sourceBounds
+        return overrides.filter { key, value in
             guard let source = Int(key), sourceDistance(source, period.startUnix) != nil,
-                  let existing = validated(value) else { continue }
-            let overlap = min(reference[1], existing[1]) - max(reference[0], existing[0])
-            if source == period.startUnix
-                || (overlap > 0 && overlap * 2 >= min(reference[1] - reference[0], existing[1] - existing[0])) {
-                result.removeValue(forKey: key)
-            }
+                  let existing = validated(value) else { return true }
+            return source != period.startUnix && !overlaps(sourceBounds, existing) && !overlaps(reference, existing)
         }
-        return result
     }
 
     static func times(for period: SleepPeriod, overrides: [String: [Int]]) -> [Int]? {
         if let exact = validated(overrides[String(period.startUnix)]) { return exact }
+        let sourceBounds = [period.startUnix, period.endUnix + 1]
         let candidates = overrides.compactMap { key, value -> (Int, [Int])? in
             guard let source = Int(key), let distance = sourceDistance(source, period.startUnix),
-                  let times = validated(value) else { return nil }
-            let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
-            let shorter = min(period.durationS, times[1] - times[0])
-            guard overlap > 0, overlap * 2 >= shorter else { return nil }
+                  let times = validated(value), overlaps(sourceBounds, times) else { return nil }
             return (distance, times)
         }
         // Dictionary iteration order is undefined. Equal-distance aliases must
