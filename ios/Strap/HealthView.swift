@@ -42,16 +42,16 @@ struct HealthView: View {
 
     private var fiveMetricGrid: some View {
         LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible())], spacing: 18) {
-            healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].value.map { String(format: "%.1f", $0) } ?? "—",
+            healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].monitorValueText ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
             // Explicitly named research estimate, never a measured oxygen value.
             let oxygen = monitor[.oxygen]
             healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen,
                          value: oxygen.nightlyOxygenCandidate.map { String(format: "≈%.1f", $0) } ?? "—",
                          unit: "%", reading: oxygen)
-            healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
+            healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : monitor[.rhr].monitorValueText ?? "—",
                          unit: "bpm", reading: monitor[.rhr])
-            healthMetric("HRV", symbol: StrapIcon.Metric.hrv, value: demo ? "58" : ActivityFormat.whole(monitor[.hrv].value) ?? "—",
+            healthMetric("HRV", symbol: StrapIcon.Metric.hrv, value: demo ? "58" : monitor[.hrv].monitorValueText ?? "—",
                          unit: "ms", reading: monitor[.hrv])
             skinTemperatureCard
         }
