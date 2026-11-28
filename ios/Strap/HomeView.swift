@@ -380,7 +380,7 @@ struct HomeView: View {
                     Image("health_strain").resizable().aspectRatio(contentMode: .fit).frame(width: 14, height: 14).foregroundStyle(Color.orange)
                     Text(appStreak.formatted())
                         .font(StrapTypography.metric(14, weight: .bold))
-                        .foregroundStyle(Color.white)
+                        .foregroundStyle(Color.appFG)
                 }
                 .padding(.horizontal, 8).padding(.vertical, 7)
                 .background(LinearGradient.appCard, in: RoundedRectangle(cornerRadius: 10))
@@ -1134,7 +1134,7 @@ struct HomeView: View {
                 .minimumScaleFactor(0.8)
                 .lineLimit(1)
         }
-        .foregroundStyle(isSleep ? Color.white : Color.appFG)
+        .foregroundStyle(Color.white)
         .padding(.horizontal, 8)
         .frame(width: isSleep ? activityTileWidth * 96 / 84 : activityTileWidth,
                height: isSleep ? 40 : 36)
@@ -1174,13 +1174,13 @@ struct HomeView: View {
             RoundedRectangle(cornerRadius: 11)
                 .fill(
                     LinearGradient(
-                        colors: [Color(hex: 0x383D42), Color(hex: 0x303539)],
+                        colors: [Color.adaptive(dark: 0x383D42, light: 0xFFFFFF), Color.adaptive(dark: 0x303539, light: 0xE8EDF0)],
                         startPoint: .top, endPoint: .bottom
                     )
                 )
                 .overlay {
                     RoundedRectangle(cornerRadius: 11)
-                        .strokeBorder(Color(hex: 0x484F54).opacity(0.35), lineWidth: 0.5)
+                        .strokeBorder(Color.adaptive(dark: 0x484F54, light: 0xAAB8C2).opacity(0.35), lineWidth: 0.5)
                 }
         }
     }
