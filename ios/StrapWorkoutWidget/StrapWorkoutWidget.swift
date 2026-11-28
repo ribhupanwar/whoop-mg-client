@@ -28,7 +28,7 @@ struct StrapWorkoutWidget: Widget {
                         elapsedTimerView(context).monospacedDigit()
                         Spacer()
                         if context.attributes.showsPersistentIslandSteps {
-                            Label(calorieText(context.state.estimatedActiveCalories) + " kcal",
+                            Label(calorieText(context.state.estimatedActiveCalories),
                                   systemImage: "flame.fill")
                                 .foregroundStyle(.orange)
                                 .monospacedDigit()
