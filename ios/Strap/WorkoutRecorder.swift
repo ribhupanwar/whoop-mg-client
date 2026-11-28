@@ -38,6 +38,9 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private var profileAge: Int?
 
     private var heartRateSamples: [Int] = []
+    private var exportHeartRate: [WorkoutExportHeartRate] = []
+    private var exportPauses: [WorkoutExportPause] = []
+    private var exportPauseStarted: Date?
     private var hrSampleCount: Int = 0
     private var energyTotal = 0.0
     private var activityTRIMP = 0.0
@@ -82,6 +85,9 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         nextSplitMeters = 1000
         lastSplitElapsed = 0
         heartRateSamples = []
+        exportHeartRate = []
+        exportPauses = []
+        exportPauseStarted = nil
         hrSampleCount = 0
         energyTotal = 0
         activityTRIMP = 0
@@ -139,6 +145,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         accumulated += Date().timeIntervalSince(activeSince ?? Date())
         activeSince = nil
         phase = .paused
+        exportPauseStarted = Date()
         breakEnergyInterval()
         lastFix = nil
         if gpsEnabled {
@@ -152,6 +159,10 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         phase = .recording
         breakEnergyInterval()
         activeSince = Date()
+        if let pause = exportPauseStarted, let resumed = activeSince, resumed > pause {
+            exportPauses.append(.init(start: pause, end: resumed))
+        }
+        exportPauseStarted = nil
         lastFix = nil
         if gpsEnabled {
             manager.startUpdatingLocation()
@@ -193,6 +204,12 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                     heartRate: nil // HR is sampled separately
                 )
             }
+            session.exportHeartRate = exportHeartRate
+            if let pause = exportPauseStarted, let end = session.endedAt, end > pause {
+                exportPauses.append(.init(start: pause, end: end))
+            }
+            exportPauseStarted = nil
+            session.exportPauses = exportPauses
             guard history.save(session) else {
                 status = "Workout finished, but saving failed."
                 phase = .recording
@@ -238,6 +255,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
             return
         }
         heartRateSamples.append(hr)
+        // Keep observed timestamps separately; existing metrics remain unchanged.
+        exportHeartRate.append(.init(unix: observedAt.timeIntervalSince1970, bpm: hr))
         hrSampleCount += 1
         // Never charge an interval through a pause, invalid reading or
         // long BLE gap. Use the same established Keytel/BMR/gate as the

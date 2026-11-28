@@ -144,6 +144,27 @@ struct AppleHealthImportView: View {
                 }
 
                 Panel {
+                    SectionTitle("WORKOUT SHARING")
+                    NavigationLink {
+                        StravaIntegrationView()
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text("Strava")
+                                .font(StrapTypography.body(14, weight: .bold))
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                        }
+                        .foregroundStyle(Color.appFG)
+                        .padding(.vertical, 8)
+                    }
+                    .accessibilityIdentifier("integrations.strava")
+                    Text("Free Apple Health relay or manual TCX file upload.")
+                        .font(StrapTypography.body(11))
+                        .foregroundStyle(Color.appMuted)
+                }
+
+                Panel {
                     SectionTitle("LOCAL-FIRST INTEGRITY")
                     Text("STRAP interacts with Apple Health strictly via native HealthKit APIs on your iPhone. Workouts are exported with unique external UUIDs for deduplication. No third-party servers or unauthorized cloud services are ever contacted.")
                         .font(StrapTypography.body(11.5))
@@ -215,5 +236,96 @@ struct AppleHealthImportView: View {
         case "Write denied": return Color.appWarn
         default: return Color.appMuted
         }
+    }
+}
+
+
+/// Free export routes; no Strava credentials or third-party network client.
+@MainActor
+struct StravaIntegrationView: View {
+    @EnvironmentObject private var store: AppStore
+    @ObservedObject private var recorder = WorkoutRecorder.shared
+    @ObservedObject private var relay = RecordedRunHealthRelay.shared
+    @AppStorage(RecordedRunHealthRelay.enabledKey) private var relayEnabled = false
+    @State private var selectedID: UUID?
+    @State private var exported: URL?
+    @State private var error: String?
+
+    var body: some View {
+        Form {
+            Section("Method 1 · Apple Health / WorkoutPort") {
+                Toggle("Export measured band workouts to Health", isOn: Binding(
+                    get: { store.settings.healthKitEnabled },
+                    set: { enabled in
+                        if enabled { relayEnabled = false }
+                        store.setHealthKit(enabled)
+                    }
+                ))
+                Text(store.healthKitStatus)
+                    .font(.footnote)
+                Link("Install WorkoutPort", destination: URL(string: "https://apps.apple.com/app/id6779691091")!)
+                Text("In WorkoutPort, grant Health workout access, connect your own Strava account, and create an auto-sync rule for STRAP as the source. Preview matching workouts before enabling it. Enabling Health export may also export previously saved measured band sessions.")
+                    .font(.footnote)
+                Toggle("Auto-export recorded runs (GPS + HR)", isOn: Binding(
+                    get: { relayEnabled && !store.settings.healthKitEnabled },
+                    set: { enabled in
+                        if !enabled { relayEnabled = false; return }
+                        Task {
+                            if await relay.authorize(), !store.settings.healthKitEnabled { relayEnabled = true }
+                        }
+                    }
+                ))
+                .disabled(store.settings.healthKitEnabled || relay.busy)
+                if store.settings.healthKitEnabled {
+                    Text("Turn off band-summary export above before enabling the recorded-run relay. Use one source to avoid duplicate activities.")
+                        .font(.footnote)
+                }
+                Text(relay.status).font(.footnote)
+                Button("Export selected saved run to Apple Health") {
+                    guard let session = recorder.savedWorkouts.first(where: { $0.id == selectedID }) else { return }
+                    Task { await relay.export(session) }
+                }
+                .disabled(!relayEnabled || store.settings.healthKitEnabled || selectedID == nil || relay.busy)
+                Text("Choose a saved workout below for manual retry. Newly saved runs export automatically while STRAP is running. WorkoutPort handles delivery to Strava; its background timing and route availability require device testing. Do not use TCX for an already synced run.")
+                    .font(.footnote)
+            }
+            Section("Method 2 · Manual TCX") {
+                if recorder.savedWorkouts.isEmpty {
+                    Text("Record and save a workout first.")
+                } else {
+                    Picker("Saved workout", selection: $selectedID) {
+                        Text("Select").tag(UUID?.none)
+                        ForEach(recorder.savedWorkouts) { session in
+                            Text(session.activityLabel + " · " + session.startedAt.formatted(date: .abbreviated, time: .shortened))
+                                .tag(Optional(session.id))
+                        }
+                    }
+                    Button("Prepare TCX file") {
+                        exported = nil
+                        error = nil
+                        guard let session = recorder.savedWorkouts.first(where: { $0.id == selectedID }) else { return }
+                        do { exported = try StravaTCXExport.write(session) }
+                        catch { self.error = error.localizedDescription }
+                    }
+                    .disabled(selectedID == nil)
+                    if let exported {
+                        ShareLink("Save or share TCX", item: exported)
+                        Link("Open Strava file uploader", destination: URL(string: "https://www.strava.com/upload/select")!)
+                        Text("Save the TCX to Files, then select it in Strava. This is manual; STRAP cannot verify the upload.")
+                            .font(.footnote)
+                    }
+                }
+                if let error { Text(error).foregroundStyle(.red).font(.footnote) }
+                Text("Exports only recorded route and timestamped heart rate. Older indoor workouts without samples cannot be converted into a valid track. No invented measurements.")
+                    .font(.footnote)
+            }
+            Section("Avoid duplicate uploads") {
+                Text("Use one method per workout. STRAP does not have access to your Strava upload history. No Strava API credentials are stored.")
+                    .font(.footnote)
+            }
+        }
+        .navigationTitle("Strava")
+        .navigationBarTitleDisplayMode(.inline)
+        .onChange(of: selectedID) { _, _ in exported = nil; error = nil }
     }
 }

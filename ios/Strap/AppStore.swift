@@ -40,6 +40,7 @@ final class AppStore: ObservableObject {
     private var healthWidgetCancellable: AnyCancellable?
     private var batteryNoticeCancellable: AnyCancellable?
     private var workoutCoordinator: WorkoutLiveActivityCoordinator?
+    private var recordedRunRelayCancellable: AnyCancellable?
     private let healthWidgetCoalescer = WidgetReloadCoalescer(minimumInterval: 60)
     private var lastSavedHealthWidgetSnapshot: HealthWidgetSnapshot?
     @Published private(set) var healthMonitor = HealthMonitor.make(days: [], session: nil)
@@ -175,6 +176,19 @@ final class AppStore: ObservableObject {
                 isPreview: { [weak self] in self?.isPreview ?? false },
                 onDayChange: { [weak self] in self?.refreshHealthWidget() }
             )
+            // Observe only newly saved recorder sessions, not historical backlog.
+            var known = Set(WorkoutRecorder.shared.savedWorkouts.map(\.id))
+            self.recordedRunRelayCancellable = WorkoutRecorder.shared.$savedWorkouts.dropFirst()
+                .sink { [weak self] sessions in
+                    let added = sessions.filter { !known.contains($0.id) }
+                    known.formUnion(sessions.map(\.id))
+                    Task { @MainActor [weak self] in
+                        guard let self, !self.isPreview, !self.settings.healthKitEnabled else { return }
+                        for session in added {
+                            await RecordedRunHealthRelay.shared.export(session)
+                        }
+                    }
+                }
         }
         band.autoConnectIfNeeded()
     }
