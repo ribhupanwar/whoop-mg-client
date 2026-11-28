@@ -476,14 +476,29 @@ final class NativeBandUtilizationTests: XCTestCase {
         var bytes = [UInt8](repeating: 0, count: 1932)
         bytes[0] = 0x28
         bytes[1] = 10
+        // Timestamp at inner 7..10: 0x12345678 (LE: 0x78, 0x56, 0x34, 0x12)
+        bytes[7] = 0x78
+        bytes[8] = 0x56
+        bytes[9] = 0x34
+        bytes[10] = 0x12
+        // Subsecond Q15 at inner 11..12: 0xABCD (LE: 0xCD, 0xAB)
+        bytes[11] = 0xCD
+        bytes[12] = 0xAB
+        // HR at inner 17: 72
         bytes[17] = 72
+        // Accel X sample 0 at inner 85..86: -1 (0xFFFF)
         bytes[85] = 0xFF
         bytes[86] = 0xFF
+        // Gyro Z sample 0 at inner 1088..1089: 55
         bytes[1088] = 55
         let inner = try XCTUnwrap(Gen5Frame.parse(Gen5Frame.build(bytes)))
         let record = try XCTUnwrap(Gen5R10RawCandidate.decodeVerifiedInner(inner))
+        XCTAssertEqual(record.packetType, 0x28)
+        XCTAssertEqual(record.timestamp, 0x12345678)
+        XCTAssertEqual(record.subsecondQ15, 0xABCD)
         XCTAssertEqual(record.rawHeartRate, 72)
         XCTAssertEqual(record.accelerometer.map(\.count), [100, 100, 100])
+        XCTAssertEqual(record.gyroscope.map(\.count), [100, 100, 100])
         XCTAssertEqual(record.accelerometer[0][0], -1)
         XCTAssertEqual(record.gyroscope[2][0], 55)
         XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(bytes.prefix(96))))
@@ -493,6 +508,131 @@ final class NativeBandUtilizationTests: XCTestCase {
         bytes[0] = 0x2B
         bytes[1] = 21
         XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+    }
+
+    func testGen5R10LayoutAndOffsetAlignment() throws {
+        // Construct synthetic inner payload conforming to Ghidra Rev10 structure:
+        // Outer packet offsets:
+        //   Timestamp: 0x0B (11) -> Inner offset 7 (4 bytes LE)
+        //   Subsecond: 0x0F (15) -> Inner offset 11 (2 bytes LE)
+        //   HR: 0x15 (21) -> Inner offset 17 (1 byte)
+        //   Accel X: 0x59 (89) -> Inner offset 85 (100 Int16 LE samples = 200 bytes)
+        //   Accel Y: 0x121 (289) -> Inner offset 285 (100 Int16 LE samples = 200 bytes)
+        //   Accel Z: 0x1E9 (489) -> Inner offset 485 (100 Int16 LE samples = 200 bytes)
+        //   Gyro X: 0x2B4 (692) -> Inner offset 688 (100 Int16 LE samples = 200 bytes)
+        //   Gyro Y: 0x37C (892) -> Inner offset 888 (100 Int16 LE samples = 200 bytes)
+        //   Gyro Z: 0x444 (1092) -> Inner offset 1088 (100 Int16 LE samples = 200 bytes)
+        var bytes = [UInt8](repeating: 0, count: 1932)
+        bytes[0] = 0x2B // Also valid packet type 0x2B
+        bytes[1] = 10   // Revision 10
+
+        // Timestamp = 1,700,000,000 (0x65556700 -> LE: 0x00, 0x67, 0x55, 0x65)
+        let expectedTs: UInt32 = 1_700_000_000
+        bytes[7] = UInt8(expectedTs & 0xFF)
+        bytes[8] = UInt8((expectedTs >> 8) & 0xFF)
+        bytes[9] = UInt8((expectedTs >> 16) & 0xFF)
+        bytes[10] = UInt8((expectedTs >> 24) & 0xFF)
+
+        // Subsecond Q15 = 16384 (0x4000 -> LE: 0x00, 0x40 = 0.5s)
+        let expectedSub: UInt16 = 16384
+        bytes[11] = UInt8(expectedSub & 0xFF)
+        bytes[12] = UInt8((expectedSub >> 8) & 0xFF)
+
+        // Heart rate = 145
+        bytes[17] = 145
+
+        // Fill axes with known distinct boundary values:
+        // Accel X (offset 85): sample 0 = Int16.min (-32768, 0x8000), sample 99 = Int16.max (32767, 0x7FFF)
+        bytes[85] = 0x00
+        bytes[86] = 0x80
+        bytes[85 + 2 * 99] = 0xFF
+        bytes[85 + 2 * 99 + 1] = 0x7F
+
+        // Accel Y (offset 285): sample 0 = 500 (0x01F4), sample 99 = -500 (-500 as UInt16 = 0xFE0C)
+        bytes[285] = 0xF4
+        bytes[285 + 1] = 0x01
+        bytes[285 + 2 * 99] = 0x0C
+        bytes[285 + 2 * 99 + 1] = 0xFE
+
+        // Accel Z (offset 485): sample 0 = 1000 (0x03E8)
+        bytes[485] = 0xE8
+        bytes[485 + 1] = 0x03
+
+        // Gyro X (offset 688): sample 0 = -1 (0xFFFF), sample 99 = 256 (0x0100)
+        bytes[688] = 0xFF
+        bytes[688 + 1] = 0xFF
+        bytes[688 + 2 * 99] = 0x00
+        bytes[688 + 2 * 99 + 1] = 0x01
+
+        // Gyro Y (offset 888): sample 0 = 128 (0x0080)
+        bytes[888] = 0x80
+        bytes[888 + 1] = 0x00
+
+        // Gyro Z (offset 1088): sample 99 = -32768 (0x8000)
+        bytes[1088 + 2 * 99] = 0x00
+        bytes[1088 + 2 * 99 + 1] = 0x80
+
+        let decoded = try XCTUnwrap(Gen5R10RawCandidate.decodeVerifiedInner(bytes))
+        XCTAssertEqual(decoded.packetType, 0x2B)
+        XCTAssertEqual(decoded.timestamp, expectedTs)
+        XCTAssertEqual(decoded.subsecondQ15, expectedSub)
+        XCTAssertEqual(decoded.rawHeartRate, 145)
+
+        // Verify array lengths: exactly 3 axes with 100 samples each
+        XCTAssertEqual(decoded.accelerometer.count, 3)
+        XCTAssertEqual(decoded.gyroscope.count, 3)
+        for axis in decoded.accelerometer {
+            XCTAssertEqual(axis.count, 100)
+        }
+        for axis in decoded.gyroscope {
+            XCTAssertEqual(axis.count, 100)
+        }
+
+        // Verify sample values
+        XCTAssertEqual(decoded.accelerometer[0][0], Int16.min)
+        XCTAssertEqual(decoded.accelerometer[0][99], Int16.max)
+        XCTAssertEqual(decoded.accelerometer[1][0], 500)
+        XCTAssertEqual(decoded.accelerometer[1][99], -500)
+        XCTAssertEqual(decoded.accelerometer[2][0], 1000)
+        XCTAssertEqual(decoded.gyroscope[0][0], -1)
+        XCTAssertEqual(decoded.gyroscope[0][99], 256)
+        XCTAssertEqual(decoded.gyroscope[1][0], 128)
+        XCTAssertEqual(decoded.gyroscope[2][99], Int16.min)
+    }
+
+    func testGen5R10RejectionCases() {
+        var base = [UInt8](repeating: 0, count: 1932)
+        base[0] = 0x28
+        base[1] = 10
+
+        // Valid base check
+        XCTAssertNotNil(Gen5R10RawCandidate.decodeVerifiedInner(base))
+
+        // Truncated packet lengths
+        let truncatedLengths = [0, 1, 2, 16, 85, 285, 485, 688, 888, 1088, 1288, 1931]
+        for len in truncatedLengths {
+            XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(Array(base.prefix(len))), "Expected nil for length \(len)")
+        }
+
+        // Oversized packet lengths
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(base + [0x00]))
+        XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(base + [UInt8](repeating: 0, count: 116)))
+
+        // Invalid revisions (only revision 10 allowed)
+        let invalidRevisions: [UInt8] = [0, 1, 9, 11, 18, 20, 21, 22, 26, 255]
+        for rev in invalidRevisions {
+            var mutated = base
+            mutated[1] = rev
+            XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(mutated), "Expected nil for revision \(rev)")
+        }
+
+        // Invalid packet types (only 0x28 and 0x2B allowed)
+        let invalidTypes: [UInt8] = [0x00, 0x10, 0x24, 0x27, 0x29, 0x2A, 0x2C, 0x2F, 0x32, 0xFF]
+        for pt in invalidTypes {
+            var mutated = base
+            mutated[0] = pt
+            XCTAssertNil(Gen5R10RawCandidate.decodeVerifiedInner(mutated), "Expected nil for packet type \(pt)")
+        }
     }
 
     func testBackgroundSyncSchedulerRequestConfiguration() {
