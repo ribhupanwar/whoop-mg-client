@@ -215,6 +215,7 @@ enum RecoveryDiagnostics {
         var sleepPerformancePct: Double? = nil
         var skinTemperatureC: Double? = nil
         var oxygenCandidatePct: Double? = nil
+        var sensorCalibrationEvidence: SensorCalibrationResearch.NightEvidence? = nil
         var temperatureFunnel: NightTemperature.Funnel? = nil
         var oxygenCandidateSummary: Spo2Summary? = nil
         var stageDecisionEvidence: [SleepStager.StageDecisionEvidence]? = nil
