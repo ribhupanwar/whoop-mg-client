@@ -362,9 +362,15 @@ enum SleepCorrectionStore {
     }
     /// Saving a recovered edit replaces its aliases instead of creating another night.
     static func saving(
-        _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]]
+        _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]],
+        explicitlyEndSleep: Bool = false
     ) -> [String: [Int]] {
         guard let times = validated(times) else { return overrides }
+        // Merely saving an unchanged automatic window must not freeze an
+        // archive-frontier candidate before the rest of the night arrives.
+        // A deliberate End Sleep or an existing edit remains authoritative.
+        if !explicitlyEndSleep, self.times(for: period, overrides: overrides) == nil,
+           times == [period.startUnix, period.endUnix + 1] { return overrides }
         var result = removing(for: period, overrides: overrides)
         result[String(period.startUnix)] = times
         return result
