@@ -867,7 +867,7 @@ struct SleepAnalysisView: View {
             .tint(Color.appMuted)
         }
         .padding(16)
-        .background(Color(hex: 0x16181D), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.adaptive(dark: 0x16181D, light: 0xFFFFFF), in: RoundedRectangle(cornerRadius: 12))
         .foregroundStyle(Color.appFG)
     }
 
