@@ -258,7 +258,7 @@ final class CalorieShadowValidatorTests: XCTestCase {
         // HR=100: below production gate (no active kcal) but above recovered threshold.
         let samples = (0..<60).map { sample($0, 100.0) }
         let report = CalorieShadowValidator.compare(
-            samples: samples, context: context(restingHR: 55, maxHR: 187, endUnix: 59))
+            samples: samples, context: context(endUnix: 59, restingHR: 55, maxHR: 187))
         XCTAssertEqual(report.production.activeKcal ?? -1, 0,
                        "Production must bill zero active kcal below 40% HRR gate at HR=100")
         // Recovered integrates above resting rate for HR=100 > 94.6 threshold.
