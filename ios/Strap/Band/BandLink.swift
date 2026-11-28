@@ -875,8 +875,9 @@ final class BandLink: NSObject, ObservableObject {
     var isDetectedActivityDeleted: (ActivitySession) -> Bool = { _ in false }
 
     func recalculateRetainedMetrics() {
-        guard !hasIncompleteHistory else {
-            BLEDiagnosticLog.shared.log("analysis deferred: historical transfer is incomplete")
+        guard drainStartedAt == nil else {
+            metricsRefreshPending = true
+            BLEDiagnosticLog.shared.log("analysis deferred: active historical drain in progress")
             return
         }
         // Repeated settings, recovery and drain callbacks request one follow-up,
@@ -893,6 +894,7 @@ final class BandLink: NSObject, ObservableObject {
         let request = metricsRequest
         let correctionRevision = sleepCorrectionRevision
         let syncGeneration = historySyncGeneration
+        metricsRefreshPending = false
         isAnalyzingHistory = true
         let began = Date()
         historyProgress = HistoryProgress(stage: .preparing, completed: 0, total: 0, reused: 0,
@@ -944,6 +946,14 @@ final class BandLink: NSObject, ObservableObject {
                         guard let self, self.metricsRequest == request else { return }
                         self.historyProgress = snapshot
                     }
+                },
+                sleepTraceSink: { trace in
+                    let gate = trace["gate"] as? String ?? "unknown"
+                    let verdict = trace["verdict"] as? String ?? "unknown"
+                    let detail = trace.keys.sorted().filter { $0 != "gate" && $0 != "verdict" }
+                        .compactMap { key in trace[key].map { "\(key)=\($0)" } }
+                        .joined(separator: " ")
+                    BLEDiagnosticLog.shared.log("sleepDetect gate=\(gate) verdict=\(verdict)\(detail.isEmpty ? "" : " " + detail)")
                 }
             )
             guard !cancellation.isCancelled else { return }
@@ -1079,7 +1089,7 @@ final class BandLink: NSObject, ObservableObject {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.metricsRequest == request else { return }
                 guard self.sleepCorrectionRevision == correctionRevision,
-                      self.historySyncGeneration == syncGeneration, !self.hasIncompleteHistory else {
+                      self.historySyncGeneration == syncGeneration, self.drainStartedAt == nil else {
                     // Never publish/persist a calculation begun before a new edit.
                     self.isAnalyzingHistory = false
                     self.historyProgress = nil
@@ -2625,8 +2635,12 @@ final class BandLink: NSObject, ObservableObject {
                     guard let self else { return }
                     UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
                     if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
+                    self.metricsRefreshPending = false
                     self.recalculateRetainedMetrics()
                 }
+            } else if metricsRefreshPending {
+                metricsRefreshPending = false
+                recalculateRetainedMetrics()
             }
             if completed && historicalRecordFrames == 0 {
                 lastMessage = "History sync completed. No new stored sensor records."
