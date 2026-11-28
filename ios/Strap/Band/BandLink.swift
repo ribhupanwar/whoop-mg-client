@@ -160,6 +160,7 @@ final class BandLink: NSObject, ObservableObject {
     private var liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
     private var liveWorkoutStepSession: UUID?
     private var workoutIMURequested = false
+    private var workoutStepRecordingRequested = false
     @Published private(set) var liveIMUTelemetry: NativeDeepTelemetry.Motion?
     @Published private(set) var liveIMURhythm = IMURhythmWindow()
     @Published private(set) var dedicatedIMURaw: DedicatedIMURawRecord?
@@ -1955,6 +1956,7 @@ final class BandLink: NSObject, ObservableObject {
     }
 
     func reconcileWorkoutStepStream(sessionID: UUID?, recording: Bool) {
+        workoutStepRecordingRequested = recording
         if liveWorkoutStepSession != sessionID {
             liveWorkoutStepSession = sessionID
             liveWorkoutStepAccumulator = LiveWorkoutStepAccumulator()
@@ -1962,6 +1964,7 @@ final class BandLink: NSObject, ObservableObject {
         }
         let enabled = sessionID != nil && recording && isConnected
             && hrBondConfirmed && commandCharacteristic != nil
+            && wristState != .offWrist && !isCharging
         guard workoutIMURequested != enabled else { return }
         workoutIMURequested = enabled
         if !enabled {
@@ -3112,7 +3115,10 @@ final class BandLink: NSObject, ObservableObject {
                 BLEDiagnosticLog.shared.log("wristState -> unknown (\(source))")
             }
         }
-        if wristState != previousState { refreshNativeSensorSnapshot() }
+        if wristState != previousState {
+            refreshNativeSensorSnapshot()
+            reconcileWorkoutStepStream(sessionID: liveWorkoutStepSession, recording: workoutStepRecordingRequested)
+        }
     }
 
     private func handleHardwareEventPacket(_ packet: BandHardwareEventPacket, innerType: UInt8) {
