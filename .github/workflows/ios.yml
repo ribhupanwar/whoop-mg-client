@@ -6,6 +6,7 @@ on:
     branches: [main, ui/dsta-dashboard-polish]
     paths:
       - "ios/**"
+      - "whoop/health.py"
       - ".github/workflows/ios.yml"
       - "docs/algorithm-freeze.json"
       - "docs/ALGORITHM_FREEZE.md"
@@ -15,6 +16,7 @@ on:
   pull_request:
     paths:
       - "ios/**"
+      - "whoop/health.py"
       - ".github/workflows/ios.yml"
       - "docs/algorithm-freeze.json"
       - "docs/ALGORITHM_FREEZE.md"
