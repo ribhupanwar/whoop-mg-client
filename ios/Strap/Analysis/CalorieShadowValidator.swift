@@ -21,6 +21,10 @@ enum CalorieShadowValidator {
         let unix: Int
         /// nil = missing / BLE gap. Non-finite or out-of-(35...220) also excluded.
         let bpm: Double?
+        // Recorder observations retain fractional receipt timestamps and explicit continuity breaks.
+        var preciseUnix: Double? = nil
+        var segment: Int = 0
+        var time: Double { preciseUnix ?? Double(unix) }
     }
 
     /// Body profile required by both calculators.
@@ -47,6 +51,7 @@ enum CalorieShadowValidator {
         /// Maximum HR anchor. User-configured or observed peak — never invented.
         let maxHR: Double
         let profile: BodyProfile
+        var activeSeconds: Double? = nil
     }
 
     enum WorkoutKind: String, Codable, CaseIterable {
@@ -62,9 +67,9 @@ enum CalorieShadowValidator {
             case normal
             /// Duplicate timestamp (zero duration).
             case duplicate
-            /// Gap 4–30 s: production bills up to 30 s; recovered engine caps at 3 s and skips.
+            /// Gap 4–30 s: recorder bills the interval; recovered engine caps at 3 s.
             case shortGap
-            /// Gap > 30 s: both engines treat as BLE outage / pause — no energy billed.
+            /// Gap > 30 s: recorder rejects; recovered caps at 3 s unless an explicit break.
             case longGap
         }
         let startUnix: Int
@@ -103,11 +108,11 @@ enum CalorieShadowValidator {
         /// the workout had measurable cadence (Tudor-Locke MET fallback).
         let cadenceFallbackKcal: Double?
 
-        /// recovered.activeKcal − production.activeKcal.
+        /// Recovered net minus production active; distinct model coverage may differ.
         /// Positive = recovered estimates more above-resting energy.
         /// Nil when either model failed.
         var activeKcalDelta: Double? {
-            guard let p = production.activeKcal, let r = recovered.activeKcal else { return nil }
+            guard let p = production.activeKcal, let r = recovered.reportedNetAboveRestingKcal else { return nil }
             return r - p
         }
 
@@ -118,7 +123,7 @@ enum CalorieShadowValidator {
         /// Single-line summary for diagnostic logs.
         var summaryLine: String {
             let p = production.activeKcal.map { String(format: "%.1f", $0) } ?? "—"
-            let r = recovered.activeKcal.map { String(format: "%.1f", $0) } ?? "—"
+            let r = recovered.reportedNetAboveRestingKcal.map { String(format: "%.1f", $0) } ?? "—"
             let d = activeKcalDelta.map { String(format: "%+.1f", $0) } ?? "—"
             return "[\(context.kind.rawValue)] prod=\(p) rec=\(r) delta=\(d) kcal" +
                    " samples=\(validSamples)/\(totalSamples)" +
@@ -130,7 +135,7 @@ enum CalorieShadowValidator {
         let name: String
         /// Total energy including resting metabolic rate for covered seconds.
         let grossKcal: Double?
-        /// Energy above resting rate (or above Keytel gate for production).
+        /// Production active estimate; nil for recovered (export semantics unverified).
         let activeKcal: Double?
         /// Resting energy for covered window (BMR × coveredSeconds).
         let restingKcalForWindow: Double?
@@ -139,6 +144,13 @@ enum CalorieShadowValidator {
         /// Non-nil when the model could not produce a result.
         let failureReason: String?
         var segments: [SegmentEnergy] = []
+        // Signed mathematical difference, not verified WHOOP active-energy semantics.
+        var netAboveRestingKcal: Double? {
+            guard let grossKcal, let restingKcalForWindow else { return nil }
+            return grossKcal - restingKcalForWindow
+        }
+        // Explicitly encode net as a separate field in reports.
+        var reportedNetAboveRestingKcal: Double? = nil
     }
 
     // MARK: - Main entry point
@@ -146,8 +158,7 @@ enum CalorieShadowValidator {
     /// Run a shadow comparison on the same timestamped HR samples.
     ///
     /// - Parameters:
-    ///   - samples: HR observations. May contain nil bpm (BLE gaps), duplicates, and
-    ///              out-of-order entries — these are sorted and annotated without crashing.
+    ///   - samples: HR observations in arrival order, with optional invalid HR and break markers.
     ///   - context: Workout metadata and body profile.
     ///   - tailPolicy: Tail handling for the recovered engine. `.observedIntervalsOnly`
     ///                 is the conservative default; the binary count predicate for
@@ -161,20 +172,28 @@ enum CalorieShadowValidator {
         tailPolicy: WhoopRecoveredCalories.TailPolicy = .observedIntervalsOnly
     ) -> CalorieShadowReport {
 
-        let sorted = samples.sorted { $0.unix < $1.unix }
-        let totalSamples = sorted.count
+        // Keep arrival order: never sort a replayed/clock-reversed observation into invented coverage.
+        let sorted = samples.filter { $0.time.isFinite && $0.time >= Double(context.startUnix) && $0.time <= Double(context.endUnix) }
+        let monotonic = zip(sorted, sorted.dropFirst()).allSatisfy { $0.0.time <= $0.1.time }
+        let gaps = annotateGaps(sorted)
+        guard monotonic else {
+            return CalorieShadowReport(context: context, totalSamples: samples.count, validSamples: 0,
+                gapAnnotations: gaps, production: failed(name: "production", reason: "out-of-order observations"),
+                recovered: failed(name: "recovered", reason: "out-of-order observations"), cadenceFallbackKcal: nil)
+        }
+        let totalSamples = samples.count
         let validSamples = sorted.filter {
             guard let bpm = $0.bpm else { return false }
             return bpm.isFinite && (35...220).contains(bpm)
         }.count
 
-        let gaps = annotateGaps(sorted)
-        let prodResult = runProduction(sorted: sorted, context: context)
-        let recResult  = runRecovered(sorted: sorted, context: context, tailPolicy: tailPolicy)
+        let normalized = normalizeDuplicates(sorted)
+        let prodResult = runProduction(sorted: normalized, context: context)
+        let recResult = runRecovered(sorted: normalized, context: context, tailPolicy: tailPolicy)
 
         // Cadence fallback only fires when the HR path produced zero covered seconds.
         let cadenceFallback: Double?
-        if (prodResult.coveredSeconds > 0) {
+        if prodResult.coveredSeconds > 0 && (prodResult.activeKcal ?? 0) > 0 {
             cadenceFallback = nil
         } else {
             cadenceFallback = computeCadenceFallback(context: context)
@@ -244,55 +263,26 @@ enum CalorieShadowValidator {
             return failed(name: "production", reason: "invalid HR anchors for 40% HRR gate")
         }
 
-        let valid: [(unix: Int, bpm: Double)] = sorted.compactMap { s in
-            guard let bpm = s.bpm, bpm.isFinite, (35...220).contains(bpm) else { return nil }
-            return (s.unix, bpm)
-        }
-
         var activeKcal = 0.0
-        var grossKcal  = 0.0
-        var coveredS   = 0.0
-        var excluded   = 0
-        var segments   = [SegmentEnergy]()
-        let basalPerS  = bmr / 86400.0
-
-        for i in 0..<(valid.count - 1) {
-            let curr = valid[i], next = valid[i + 1]
-            let gap = Double(next.unix - curr.unix)
-            // Skip duplicate timestamps, missing gaps, and gaps > 30 s.
-            guard gap > 0, gap <= 30.0,
-                  next.bpm.isFinite, (35...220).contains(next.bpm) else {
+        var coveredS = 0.0
+        var excluded = 0
+        let basalPerS = bmr / 86400
+        for (curr, next) in zip(sorted, sorted.dropFirst()) {
+            let gap = next.time - curr.time
+            guard curr.segment == next.segment, gap > 0, gap <= 30,
+                  let hr = validBPM(curr.bpm), validBPM(next.bpm) != nil else {
                 excluded += 1; continue
             }
-            let keytelPerS = Calories.keytelKcalPerS(
-                hr: curr.bpm, maxHR: context.maxHR,
-                weightKg: p.weightKg, age: p.age, sex: p.sex
-            )
-            let segActive  = curr.bpm >= gate ? max(0, keytelPerS - basalPerS) * gap : 0.0
-            let segGross   = keytelPerS * gap
-            let segResting = basalPerS * gap
-            activeKcal += segActive
-            grossKcal  += segGross
-            coveredS   += gap
-            segments.append(SegmentEnergy(
-                startUnix: curr.unix, endUnix: next.unix,
-                coveredSeconds: gap, grossKcal: segGross,
-                activeKcal: segActive, netAboveRestingKcal: segGross - segResting
-            ))
+            let rate = Calories.keytelKcalPerS(hr: hr, maxHR: context.maxHR,
+                weightKg: p.weightKg, age: p.age, sex: p.sex)
+            activeKcal += hr >= gate ? max(0, rate - basalPerS) * gap : 0
+            coveredS += gap
         }
-        if valid.isEmpty { excluded = sorted.count }
-
-        let restingForCovered = basalPerS * coveredS
-        return ModelResult(
-            name: "production",
-            grossKcal: coveredS > 0 ? grossKcal : nil,
-            activeKcal: coveredS > 0 ? activeKcal : nil,
-            restingKcalForWindow: coveredS > 0 ? restingForCovered : nil,
-            coveredSeconds: coveredS,
-            excludedIntervals: excluded,
-            failureReason: coveredS > 0 ? nil : "no covered intervals",
-            segments: segments
-        )
+        guard coveredS > 0 else { return failed(name: "production", reason: "no covered intervals") }
+        let basal = basalPerS * coveredS
+        return ModelResult(name: "production", grossKcal: basal + activeKcal,
+            activeKcal: activeKcal, restingKcalForWindow: basal, coveredSeconds: coveredS,
+            excludedIntervals: excluded, failureReason: nil, reportedNetAboveRestingKcal: activeKcal)
     }
 
     // MARK: - Internal: Recovered (HB, 30 % HRR, 3 s cap)
@@ -305,9 +295,7 @@ enum CalorieShadowValidator {
 
         let p = context.profile
         guard let baseline = WhoopRecoveredCalories.Baseline(rawValue: p.recoveredBaseline) else {
-            // rawValue out of range: fall back to raw2Mean (mean of both formulae).
-            return runRecoveredWith(baseline: .raw2Mean, sorted: sorted,
-                                   context: context, tailPolicy: tailPolicy)
+            return failed(name: "recovered", reason: "unknown baseline code")
         }
         return runRecoveredWith(baseline: baseline, sorted: sorted,
                                context: context, tailPolicy: tailPolicy)
@@ -336,33 +324,49 @@ enum CalorieShadowValidator {
             return failed(name: "recovered", reason: "invalid reference rate at maxHR")
         }
 
-        let hrStream: [Double?] = sorted.map { $0.bpm }
-        let tsStream: [Double?] = sorted.map { Double($0.unix) }
-
+        // Split on explicit pause/disconnect/invalid-reading markers. An unmarked
+        // gap is capped by the recovered calculator itself, not silently discarded.
+        var hrStream: [Double?] = []
+        var tsStream: [Double?] = []
+        var previousSegment: Int?
+        for sample in sorted {
+            if let previousSegment, sample.segment != previousSegment {
+                hrStream.append(nil); tsStream.append(nil)
+            }
+            hrStream.append(validBPM(sample.bpm)); tsStream.append(sample.time)
+            previousSegment = sample.segment
+        }
         do {
             let r = try WhoopRecoveredCalories.integrate(
-                heartRates: hrStream,
-                timestamps: tsStream,
-                profile: recProfile,
-                restingHR: context.restingHR,
-                maxHR: context.maxHR,
-                referenceRate: refRate,
-                tailPolicy: tailPolicy
-            )
-            return ModelResult(
-                name: "recovered",
-                grossKcal: r.integratedKcal,
-                activeKcal: r.netAboveRestingKcal,
-                restingKcalForWindow: r.restingKcalForCoveredSeconds,
-                coveredSeconds: r.coveredSeconds,
-                excludedIntervals: r.excludedIntervals,
-                failureReason: nil
-            )
-        } catch let e as WhoopRecoveredCalories.Failure {
-            return failed(name: "recovered", reason: "\(e)")
+                heartRates: hrStream, timestamps: tsStream, profile: recProfile,
+                restingHR: context.restingHR, maxHR: context.maxHR,
+                referenceRate: refRate, tailPolicy: tailPolicy)
+            return ModelResult(name: "recovered", grossKcal: r.integratedKcal,
+                activeKcal: nil, restingKcalForWindow: r.restingKcalForCoveredSeconds,
+                coveredSeconds: r.coveredSeconds, excludedIntervals: r.excludedIntervals,
+                failureReason: nil, reportedNetAboveRestingKcal: r.netAboveRestingKcal)
         } catch {
-            return failed(name: "recovered", reason: "unexpected: \(error)")
+            return failed(name: "recovered", reason: String(describing: error))
         }
+    }
+
+    private static func validBPM(_ bpm: Double?) -> Double? {
+        guard let bpm, bpm.isFinite, (35...220).contains(bpm) else { return nil }
+        return bpm
+    }
+
+    private static func normalizeDuplicates(_ samples: [HRSample]) -> [HRSample] {
+        var result: [HRSample] = []
+        for sample in samples {
+            if let previous = result.last, previous.time == sample.time {
+                // Conflicting observations become a break, not an arbitrary HR choice.
+                if previous.segment != sample.segment || validBPM(previous.bpm) != validBPM(sample.bpm) {
+                    result[result.count - 1] = HRSample(unix: sample.unix, bpm: nil,
+                        preciseUnix: sample.preciseUnix, segment: sample.segment)
+                }
+            } else { result.append(sample) }
+        }
+        return result
     }
 
     // MARK: - Internal: Cadence fallback (Tudor-Locke MET)
@@ -371,9 +375,9 @@ enum CalorieShadowValidator {
     /// timestamped HR path has zero covered seconds (HR permanently below gate,
     /// or all samples missing).
     private static func computeCadenceFallback(context: WorkoutContext) -> Double? {
-        guard context.steps > 0 else { return nil }
+        guard context.kind == .walk, context.steps > 0 else { return nil }
         let p = context.profile
-        let durationMin = Double(context.endUnix - context.startUnix) / 60.0
+        let durationMin = (context.activeSeconds ?? (Double(context.endUnix) - Double(context.startUnix))) / 60
         guard durationMin > 0 else { return nil }
         return Calories.sessionActiveKcal(
             meanHR: nil,
@@ -393,7 +397,8 @@ enum CalorieShadowValidator {
     private static func annotateGaps(_ sorted: [HRSample]) -> [IntervalAnnotation] {
         guard sorted.count > 1 else { return [] }
         return (0..<(sorted.count - 1)).map { i in
-            let gap = sorted[i + 1].unix - sorted[i].unix
+            let elapsed = sorted[i + 1].time - sorted[i].time
+            let gap = Int(min(Double(Int32.max), max(-Double(Int32.max), elapsed.rounded(.up))))
             let kind: IntervalAnnotation.Kind
             switch gap {
             case 0:         kind = .duplicate
@@ -425,5 +430,108 @@ extension CalorieShadowValidator.CalorieShadowReport {
         guard let data = try? JSONEncoder().encode(self),
               let str = String(data: data, encoding: .utf8) else { return nil }
         return str
+    }
+}
+
+
+/// Private diagnostic evidence only; never read by any score or history writer.
+struct WorkoutCalorieShadowCapture {
+    typealias Validator = CalorieShadowValidator
+    struct Anchors: Codable, Equatable {
+        let profile: Validator.BodyProfile
+        let restingHR: Double
+        let maxHR: Double
+    }
+    struct Evidence: Codable {
+        let schema: Int
+        let workoutID: UUID
+        let activityKind: String
+        let startedAt: Date
+        let endedAt: Date
+        let activeSeconds: Int
+        let pauses: [WorkoutExportPause]
+        let samples: [Validator.HRSample]
+        let savedActiveKcal: Int?
+        let anchors: Anchors?
+        let report: Validator.CalorieShadowReport?
+        let status: String
+        let provenance: String
+    }
+    private(set) var samples: [Validator.HRSample] = []
+    private var segment = 0
+    private var anchors: Anchors?
+    private var observedAnchors = false
+    private var changed = false
+    private var truncated = false
+
+    mutating func interrupt() { segment += 1 }
+    mutating func append(hr: Int, at: Date, anchors: Anchors?) {
+        let time = at.timeIntervalSince1970
+        guard time.isFinite, abs(time) < 4_000_000_000, (35...220).contains(hr) else {
+            interrupt(); return
+        }
+        guard samples.count < 100_000 else { truncated = true; return }
+        if observedAnchors { if self.anchors != anchors { changed = true } }
+        else { self.anchors = anchors; observedAnchors = true }
+        samples.append(.init(unix: Int(time.rounded(.down)), bpm: Double(hr),
+                             preciseUnix: time, segment: segment))
+    }
+
+    static func kind(_ activity: String) -> Validator.WorkoutKind {
+        switch ActivityKind(rawValue: activity) {
+        case .run, .outdoorRun, .trailRun, .intervalRun: return .run
+        case .treadmill, .indoorRun: return .treadmill
+        case .walk, .indoorWalk, .dogWalking, .strollerWalking: return .walk
+        case .lift, .strengthTraining, .weightlifting, .powerlifting, .calisthenics: return .strength
+        case .cardio: return .cardio
+        default: return .unknown
+        }
+    }
+
+    func evidence(for session: WorkoutSession) -> Evidence? {
+        guard session.phase == .saved, let end = session.endedAt, end > session.startedAt,
+              !samples.isEmpty else { return nil }
+        let startUnix = session.startedAt.timeIntervalSince1970, endUnix = end.timeIntervalSince1970
+        guard startUnix.isFinite, endUnix.isFinite, abs(startUnix) < 4_000_000_000,
+              abs(endUnix) < 4_000_000_000 else { return nil }
+        let report: Validator.CalorieShadowReport?
+        let status: String
+        if changed || truncated {
+            report = nil; status = changed ? "profile or HR anchors changed during workout" : "sample limit reached"
+        } else if let anchors {
+            let valid = samples.filter { (startUnix...endUnix).contains($0.time) }
+            let context = Validator.WorkoutContext(kind: Self.kind(session.activityKind),
+                startUnix: Int(startUnix.rounded(.down)), endUnix: Int(endUnix.rounded(.up)),
+                steps: 0, restingHR: anchors.restingHR, maxHR: anchors.maxHR, profile: anchors.profile,
+                activeSeconds: Double(session.metrics.elapsedSeconds))
+            report = Validator.compare(samples: valid, context: context)
+            status = valid.count == samples.count ? "observed receipt timestamps; reference not matched" :
+                "out-of-window samples excluded; reference not matched"
+        } else {
+            report = nil; status = "missing contemporaneous profile or HR anchors"
+        }
+        return Evidence(schema: 1, workoutID: session.id, activityKind: session.activityKind,
+            startedAt: session.startedAt, endedAt: end, activeSeconds: session.metrics.elapsedSeconds,
+            pauses: session.exportPauses ?? [], samples: samples, savedActiveKcal: session.metrics.calories,
+            anchors: anchors, report: report, status: status,
+            provenance: "Local receipt timestamps, not beat waveform. Baseline mapped by profile sex as research assumption; reference rate at maxHR experimental. Recovered net is not verified active energy. Recorded sessions lack a measured step total; no invented cadence. Existing production fallback unchanged.")
+    }
+
+    static func directory(support: URL) -> URL {
+        support.appendingPathComponent("calorie-shadow", isDirectory: true)
+    }
+
+    static func write(_ evidence: Evidence, support: URL) throws {
+        let root = directory(support: support)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(evidence).write(to: root.appendingPathComponent(evidence.workoutID.uuidString + ".json"),
+                                            options: [.atomic, .completeFileProtectionUnlessOpen])
+    }
+
+    static func remove(id: UUID, support: URL) {
+        try? FileManager.default.removeItem(at: directory(support: support).appendingPathComponent(id.uuidString + ".json"))
     }
 }

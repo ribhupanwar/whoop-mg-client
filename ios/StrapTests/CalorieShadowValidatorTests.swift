@@ -91,22 +91,22 @@ final class CalorieShadowValidatorTests: XCTestCase {
 
     // MARK: - 3. Long pauses (> 30 s) produce zero energy in BOTH models
 
-    func testLongBLEGapProducesZeroCoverageInBothModels() {
+    func testUnmarkedLongGapRejectedByRecorderCappedByRecovered() {
         // Two samples separated by 60 s — both engines should skip this interval.
         let samples = [sample(0, 155.0), sample(60, 155.0)]
         let report = CalorieShadowValidator.compare(
             samples: samples, context: context(startUnix: 0, endUnix: 60))
         XCTAssertEqual(report.production.coveredSeconds, 0,
                        "Production must not bill a 60 s gap (> 30 s cap)")
-        XCTAssertEqual(report.recovered.coveredSeconds, 0,
-                       "Recovered must not bill a 60 s gap (> 3 s cap)")
+        XCTAssertEqual(report.recovered.coveredSeconds, 3,
+                       "Recovered caps unmarked interval to 3 seconds")
         XCTAssertNil(report.production.activeKcal, "No covered interval → nil active kcal")
-        XCTAssertNil(report.recovered.activeKcal,  "No covered interval → nil active kcal")
+        XCTAssertNil(report.recovered.activeKcal, "Recovered active semantics unknown")
     }
 
     // MARK: - 4. Short gaps (4–30 s): production bills, recovered excludes
 
-    func testShortGapBilledByProductionExcludedByRecovered() {
+    func testShortGapBilledByProductionCappedByRecovered() {
         // Gap of 10 s between samples — production can bill (≤ 30 s cap),
         // recovered must skip (> 3 s cap).
         let samples = [sample(0, 150.0), sample(10, 150.0)]
@@ -115,8 +115,8 @@ final class CalorieShadowValidatorTests: XCTestCase {
         // Production: 10 s gap ≤ 30 s → bills it.
         XCTAssertEqual(report.production.coveredSeconds, 10, accuracy: 0.001)
         // Recovered: 10 s gap > 3 s → skips it.
-        XCTAssertEqual(report.recovered.coveredSeconds, 0,
-                       "Recovered must skip 10 s gap (> 3 s interval cap)")
+        XCTAssertEqual(report.recovered.coveredSeconds, 3,
+                       "Recovered caps 10 s gap to 3 seconds")
         XCTAssertEqual(report.shortGapCount, 1)
     }
 
@@ -133,7 +133,7 @@ final class CalorieShadowValidatorTests: XCTestCase {
 
     func testDuplicateTimestampsDoNotCrashOrInventSeconds() {
         // Duplicate first timestamp.
-        let samples = [sample(0, 155.0), sample(0, 158.0), sample(1, 155.0)]
+        let samples = [sample(0, 155.0), sample(0, 155.0), sample(1, 155.0)]
         let report = CalorieShadowValidator.compare(
             samples: samples, context: context(startUnix: 0, endUnix: 1))
         // After sort, pair (0,0) is duplicate (0 s duration), (0,1) is 1 s normal.
@@ -210,7 +210,7 @@ final class CalorieShadowValidatorTests: XCTestCase {
         let report = CalorieShadowValidator.compare(
             samples: samples, context: context(endUnix: 59))
         guard let prodActive = report.production.activeKcal,
-              let recActive = report.recovered.activeKcal,
+              let recActive = report.recovered.reportedNetAboveRestingKcal,
               let delta = report.activeKcalDelta else {
             XCTFail("Both models should produce active kcal on clean 60 s input")
             return
@@ -262,7 +262,7 @@ final class CalorieShadowValidatorTests: XCTestCase {
         XCTAssertEqual(report.production.activeKcal ?? -1, 0,
                        "Production must bill zero active kcal below 40% HRR gate at HR=100")
         // Recovered integrates above resting rate for HR=100 > 94.6 threshold.
-        if let recActive = report.recovered.activeKcal {
+        if let recActive = report.recovered.reportedNetAboveRestingKcal {
             XCTAssertGreaterThan(recActive, 0,
                 "Recovered must bill positive active-above-resting kcal for HR 100 > 94.6 threshold")
         }
@@ -337,5 +337,58 @@ final class CalorieShadowValidatorTests: XCTestCase {
                         "Production must report failure for weightKg=0 (outside 30-300 range)")
         XCTAssertNotNil(report.recovered.failureReason,
                         "Recovered must report failure for weightKg=0 (invalidProfile)")
+    }
+}
+
+
+final class WorkoutCalorieShadowCaptureTests: XCTestCase {
+    private let anchors = WorkoutCalorieShadowCapture.Anchors(
+        profile: .init(weightKg: 70, heightCm: 175, age: 30, sex: .male, recoveredBaseline: 0),
+        restingHR: 55, maxHR: 187)
+
+    func testRealTimestampPathPreservesPauseAndFractionalCoverage() throws {
+        var capture = WorkoutCalorieShadowCapture()
+        let start = Date(timeIntervalSince1970: 1000)
+        for t in [0.25, 1.5] { capture.append(hr: 150, at: start.addingTimeInterval(t), anchors: anchors) }
+        capture.interrupt()
+        for t in [8.25, 9.5] { capture.append(hr: 150, at: start.addingTimeInterval(t), anchors: anchors) }
+        var session = WorkoutSession(id: UUID(), activityKind: "treadmill", activityLabel: "Treadmill",
+            startedAt: start, endedAt: start.addingTimeInterval(10), phase: .saved)
+        session.metrics.elapsedSeconds = 3
+        session.metrics.calories = 12
+        session.exportPauses = [.init(start: start.addingTimeInterval(2), end: start.addingTimeInterval(8))]
+        let evidence = try XCTUnwrap(capture.evidence(for: session))
+        let report = try XCTUnwrap(evidence.report)
+        XCTAssertEqual(report.context.kind, .treadmill)
+        XCTAssertEqual(report.production.coveredSeconds, 2.5, accuracy: 1e-8)
+        XCTAssertEqual(report.recovered.coveredSeconds, 2.5, accuracy: 1e-8)
+        XCTAssertNil(report.recovered.activeKcal)
+        XCTAssertNotNil(report.recovered.reportedNetAboveRestingKcal)
+        XCTAssertEqual(evidence.savedActiveKcal, 12)
+        XCTAssertEqual(evidence.pauses.count, 1)
+        XCTAssertEqual(session.metrics.calories, 12)
+    }
+
+    func testConflictingDuplicateAndExplicitBreakDoNotInventEnergy() {
+        let context = CalorieShadowValidator.WorkoutContext(kind: .strength, startUnix: 0, endUnix: 3,
+            steps: 0, restingHR: 55, maxHR: 187, profile: anchors.profile)
+        let report = CalorieShadowValidator.compare(samples: [
+            .init(unix: 0, bpm: 140), .init(unix: 0, bpm: 180),
+            .init(unix: 1, bpm: 150), .init(unix: 2, bpm: 150, segment: 1),
+            .init(unix: 3, bpm: 150, segment: 1)], context: context)
+        XCTAssertEqual(report.production.coveredSeconds, 1)
+        XCTAssertEqual(report.recovered.coveredSeconds, 1)
+    }
+
+    func testChangedProfileFailsClosed() throws {
+        var capture = WorkoutCalorieShadowCapture()
+        let start = Date(timeIntervalSince1970: 1000)
+        capture.append(hr: 150, at: start, anchors: anchors)
+        capture.append(hr: 150, at: start.addingTimeInterval(1), anchors: nil)
+        let session = WorkoutSession(id: UUID(), activityKind: "run", activityLabel: "Run",
+            startedAt: start, endedAt: start.addingTimeInterval(2), phase: .saved)
+        let evidence = try XCTUnwrap(capture.evidence(for: session))
+        XCTAssertNil(evidence.report)
+        XCTAssertEqual(evidence.samples.count, 2)
     }
 }

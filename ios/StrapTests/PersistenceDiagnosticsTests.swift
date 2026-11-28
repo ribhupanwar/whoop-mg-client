@@ -59,3 +59,23 @@ final class PersistenceDiagnosticsTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: XCTUnwrap(files.first)), bytes)
     }
 }
+
+
+extension PersistenceDiagnosticsTests {
+    func testCalorieShadowEvidenceOnlyInDiagnosticNotRestoreBackup() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let start = Date(timeIntervalSince1970: 1000)
+        var capture = WorkoutCalorieShadowCapture()
+        capture.append(hr: 150, at: start, anchors: nil)
+        let session = WorkoutSession(id: UUID(), activityKind: "run", activityLabel: "Run",
+            startedAt: start, endedAt: start.addingTimeInterval(2), phase: .saved)
+        try WorkoutCalorieShadowCapture.write(XCTUnwrap(capture.evidence(for: session)), support: root)
+        let path = "calorie-shadow/" + session.id.uuidString + ".json"
+        let diagnostic = try PersistenceDiagnostics.write(support: root, documents: root, preferences: [:], destinationDirectory: root)
+        let backup = try PersistenceDiagnostics.write(support: root, documents: root, preferences: [:], destinationDirectory: root, fullBackup: true)
+        XCTAssertNotNil(try Archive(url: diagnostic, accessMode: .read)[path])
+        XCTAssertNil(try Archive(url: backup, accessMode: .read)[path])
+    }
+}
