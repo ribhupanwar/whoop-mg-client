@@ -583,42 +583,32 @@ struct ChartLegend: View {
 struct DashboardMetricIcon: View {
     let symbol: String
     var body: some View {
-        ZStack {
-            if symbol == "waveform.path.ecg" {
-                Image("health_hrv")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 19, height: 19)
-            } else if symbol == "heart.pulse" {
-                Image("health_heart_rate")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 19, height: 19)
-            } else if symbol == "lungs" {
-                Image("health_respiratory")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 19, height: 19)
-            } else if symbol == "flame" {
-                Image("health_strain")
-                    .renderingMode(.template)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(width: 19, height: 19)
-            } else if symbol == "figure.walk" {
-                Image(systemName: "figure.walk")
-                    .font(.system(size: 19, weight: .light))
-            } else if symbol == "dumbbell" {
-                Image(systemName: "dumbbell.fill")
-                    .font(.system(size: 15, weight: .light))
-            } else {
+        Group {
+            switch symbol {
+            case "heart.pulse":
+                HStack(spacing: -2) {
+                    Image(systemName: "heart")
+                    Image(systemName: "arrow.down")
+                        .font(.system(size: 11, weight: .medium))
+                }
+            case "zones.low", "zones.high":
+                ZStack {
+                    Image(systemName: "heart")
+                    VStack(spacing: 2) {
+                        Capsule().frame(width: 9, height: 1)
+                        if symbol == "zones.high" {
+                            Capsule().frame(width: 6, height: 1)
+                        }
+                    }
+                    .offset(y: symbol == "zones.high" ? -2 : 2)
+                }
+            case "figure.walk":
+                Image(systemName: UIImage(systemName: "shoe") != nil ? "shoe" : "shoeprints.fill")
+            default:
                 Image(systemName: symbol)
-                    .font(.system(size: 19, weight: .ultraLight))
             }
         }
+        .font(.system(size: 18, weight: .light))
         .foregroundStyle(Color.appMuted)
         .frame(width: 24, height: 25)
         .accessibilityHidden(true)
