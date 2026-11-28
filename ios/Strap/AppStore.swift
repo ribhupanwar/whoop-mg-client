@@ -303,7 +303,10 @@ final class AppStore: ObservableObject {
         DispatchQueue.main.async { [weak self] in
             guard let self, self.band.latestSleepSession?.lifecycleID == sessionID else { return }
             let previous = self.sleepLifecycle
-            _ = self.sleepLifecycle.reconcileDetectedWindow(session.sourcePeriod, id: sessionID)
+            let reconciledActive = self.sleepLifecycle.reconcileDetectedWindow(session.sourcePeriod, id: sessionID)
+            let reconciledEnded = self.sleepLifecycle.reconcileAutomaticExtension(
+                session.sourcePeriod, id: sessionID, isEdited: session.isEdited, isOngoing: isOngoing
+            )
             self.sleepLifecycle.completeWhenSuperseded(by: session.startUnix)
             if isOngoing {
                 self.sleepLifecycle.resume(sessionID: sessionID)
@@ -316,7 +319,14 @@ final class AppStore: ObservableObject {
                 }
                 self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: !self.journalEntries.isEmpty)
             }
-            if self.sleepLifecycle != previous { self.sleepLifecyclePersistence.save(self.sleepLifecycle) }
+            if self.sleepLifecycle != previous {
+                BLEDiagnosticLog.shared.log(
+                    "sleepLifecycle phase=\(self.sleepLifecycle.phase.rawValue) session=\(sessionID) " +
+                    "start=\(session.startUnix) end=\(session.endUnix) ongoing=\(isOngoing) " +
+                    "reconciledActive=\(reconciledActive) reconciledEnded=\(reconciledEnded)"
+                )
+                self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+            }
         }
     }
 
@@ -784,6 +794,31 @@ struct SleepLifecycleSnapshot: Codable, Equatable {
               start <= period.endUnix, period.startUnix < end else { return false }
         sessionID = id
         confirmedStartUnix = period.startUnix
+        return true
+    }
+
+    /// Delayed historical data can extend or shift an un-edited night even after
+    /// an earlier partial drain crossed the provisional wake observation window.
+    mutating func reconcileAutomaticExtension(
+        _ period: SleepPeriod, id: String, isEdited: Bool, isOngoing: Bool
+    ) -> Bool {
+        guard !isEdited,
+              phase == .processing || phase == .journalPending || phase == .completed,
+              sessionID != id, let start = confirmedStartUnix, let previousEnd = endedAtUnix else { return false }
+        let updatedEnd = period.endUnix + 1
+        let extendsSameNight = period.startUnix < previousEnd && updatedEnd > previousEnd
+        let shiftsOnsetEarlier = period.startUnix < start && updatedEnd >= previousEnd
+        guard extendsSameNight || shiftsOnsetEarlier else { return false }
+        sessionID = id
+        confirmedStartUnix = period.startUnix
+        journalPresented = false
+        if isOngoing {
+            endedAtUnix = nil
+            phase = .detected
+        } else {
+            endedAtUnix = updatedEnd
+            phase = .processing
+        }
         return true
     }
 
