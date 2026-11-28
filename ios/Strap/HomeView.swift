@@ -183,7 +183,7 @@ struct HomeView: View {
                 // When expanded, let the unified screen canvas show through continuously without an abrupt bar.
                 if compactScores {
                     LinearGradient(
-                        colors: [Color.appCanvasTop, Color(hex: 0x22292E)],
+                        colors: [Color.appCanvasTop, Color.adaptive(dark: 0x22292E, light: 0xE8EDF0)],
                         startPoint: .top, endPoint: .bottom
                     )
                     .ignoresSafeArea(edges: .top)
@@ -800,7 +800,7 @@ struct HomeView: View {
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
                 .background(
-                    LinearGradient(colors: [Color(hex: 0x302751), Color(hex: 0x234C58)], startPoint: .leading, endPoint: .trailing)
+                    LinearGradient(colors: [Color.adaptive(dark: 0x302751, light: 0xECE8F5), Color.adaptive(dark: 0x234C58, light: 0xE2F0F3)], startPoint: .leading, endPoint: .trailing)
                         .clipShape(RoundedRectangle(cornerRadius: 12))
                 )
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.appLine.opacity(0.35), lineWidth: 0.5))
@@ -1770,7 +1770,7 @@ private struct HomeBandDeviceSettingsView: View {
             }
             .scrollIndicators(.hidden)
         }
-        .foregroundStyle(Color.white)
+        .foregroundStyle(Color.appFG)
         .sheet(isPresented: $showPairingSheet) { PairDeviceView().environmentObject(store) }
         .sheet(isPresented: $showRegulatoryLabels) { regulatoryLabelsSheet }
         .confirmationDialog("Unpair WHOOP Band?", isPresented: $showUnpairConfirmation, titleVisibility: .visible) {
@@ -1793,9 +1793,9 @@ private struct HomeBandDeviceSettingsView: View {
                 Text(name)
                     .font(StrapTypography.body(11, weight: .bold))
                     .tracking(1.0)
-                    .foregroundStyle(selected ? Color.white : muted)
+                    .foregroundStyle(selected ? Color.appFG : muted)
                 Rectangle()
-                    .fill(selected ? Color.white : Color.clear)
+                    .fill(selected ? Color.appFG : Color.clear)
                     .frame(height: 2)
             }
             .fixedSize(horizontal: true, vertical: false)
