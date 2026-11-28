@@ -65,17 +65,37 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         }
         var accumulator = LiveWorkoutStepAccumulator()
         for second in UInt32(1)..<11 {
-            XCTAssertNil(accumulator.ingest(block(second), at: date))
+            XCTAssertNil(accumulator.ingest(block(second), at: date.addingTimeInterval(Double(second))))
         }
-        let first = try XCTUnwrap(accumulator.ingest(block(11), at: date))
-        let next = try XCTUnwrap(accumulator.ingest(block(12), at: date))
+        let first = try XCTUnwrap(accumulator.ingest(block(11), at: date.addingTimeInterval(11)))
+        let next = try XCTUnwrap(accumulator.ingest(block(12), at: date.addingTimeInterval(12)))
         XCTAssertGreaterThan(first.count, 0)
         XCTAssertGreaterThan(next.count, first.count)
         XCTAssertLessThanOrEqual(next.count - first.count, 4)
-        XCTAssertNil(accumulator.ingest(block(12), at: date))
-        XCTAssertNil(accumulator.ingest(block(14), at: date))
+        XCTAssertNil(accumulator.ingest(block(12), at: date.addingTimeInterval(12)))
+        XCTAssertNil(accumulator.ingest(block(14), at: date.addingTimeInterval(14)))
         accumulator.interrupt()
-        XCTAssertNil(accumulator.ingest(block(15), at: date))
+        XCTAssertNil(accumulator.ingest(block(15), at: date.addingTimeInterval(15)))
+        for second in UInt32(16)..<25 {
+            XCTAssertNil(accumulator.ingest(block(second), at: date.addingTimeInterval(Double(second))))
+        }
+        let resumed = try XCTUnwrap(accumulator.ingest(block(25), at: date.addingTimeInterval(25)))
+        XCTAssertGreaterThan(resumed.count - next.count, 4)
+        XCTAssertEqual(resumed.gaitObservedSeconds, 17)
+        XCTAssertEqual(accumulator.gaitRuns.count, 2)
+        accumulator.reconnect()
+        XCTAssertNil(accumulator.ingest(block(25), at: date.addingTimeInterval(27)))
+    }
+
+    func testMeasuredIMUDeliveryRateRejectsSlowOrBurstTransport() {
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        func times(_ interval: Double) -> [Date] {
+            (0..<11).map { date.addingTimeInterval(Double($0) * interval) }
+        }
+        XCTAssertEqual(LiveWorkoutStepAccumulator.deliveredRate(times(1)), 100)
+        XCTAssertNil(LiveWorkoutStepAccumulator.deliveredRate(times(3)))
+        XCTAssertNil(LiveWorkoutStepAccumulator.deliveredRate(times(0.1)))
+        XCTAssertNil(LiveWorkoutStepAccumulator.deliveredRate(times(0)))
     }
 
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
