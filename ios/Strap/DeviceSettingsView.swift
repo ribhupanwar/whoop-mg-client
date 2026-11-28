@@ -354,7 +354,7 @@ struct DeviceSettingsView: View {
     // MARK: - ADVANCED TAB VIEW
 
     private var advancedTabView: some View {
-        VStack(spacing: 20) {
+        VStack(spacing: 16) {
             // 1. Hardware Details (Device ID, Firmware Version)
             advancedHardwareSection
 
@@ -408,8 +408,8 @@ struct DeviceSettingsView: View {
             Button {
                 showPairingSheet = true
             } label: {
-                MoreSettingsDetailRow(title: "PAIR A DEVICE",
-                    subtitle: "Pair a WHOOP to the WHOOP app. This will replace any existing WHOOP pairings.",
+                MoreSettingsDetailRow(title: "PAIR A DEVICE", icon: "link",
+                    subtitle: "Pair a band with STRAP. This replaces the existing STRAP pairing.",
                     accessory: .navigation)
             }
             .buttonStyle(MoreSettingsPressStyle())
@@ -419,8 +419,8 @@ struct DeviceSettingsView: View {
                 Button {
                     showUnpairConfirmation = true
                 } label: {
-                    MoreSettingsDetailRow(title: "UNPAIR DEVICE",
-                        subtitle: "Unpair your WHOOP from the WHOOP app. This will remove the Bluetooth connection.",
+                    MoreSettingsDetailRow(title: "UNPAIR DEVICE", icon: "xmark.circle",
+                        subtitle: "Remove this band from STRAP and disconnect Bluetooth.",
                         titleColor: .appHigh, accessory: .action("UNPAIR", .appHigh))
                 }
                 .buttonStyle(MoreSettingsPressStyle())
@@ -433,7 +433,7 @@ struct DeviceSettingsView: View {
             NavigationLink {
                 FirmwareImageLabView()
             } label: {
-                MoreSettingsDetailRow(title: "FIRMWARE LAB",
+                MoreSettingsDetailRow(title: "FIRMWARE LAB", icon: "cpu",
                     subtitle: "Inspect a local image and run a simulation. Hardware installation disabled.",
                     titleColor: .appAccent, accessory: .navigation)
             }
@@ -444,7 +444,7 @@ struct DeviceSettingsView: View {
             Button {
                 showRebootConfirmation = true
             } label: {
-                MoreSettingsDetailRow(title: "REBOOT DEVICE",
+                MoreSettingsDetailRow(title: "REBOOT DEVICE", icon: "arrow.clockwise",
                     subtitle: store.band.rebootMessage ?? "Reboot your WHOOP to restart the device without losing stored flash data.",
                     accessory: store.band.isRebooting ? .progress :
                         .action(store.band.isConnected ? "REBOOT" : "OFFLINE",
@@ -457,14 +457,14 @@ struct DeviceSettingsView: View {
             Button {
                 showClearCacheConfirmation = true
             } label: {
-                MoreSettingsDetailRow(title: "CLEAR LOCAL APP CACHE",
+                MoreSettingsDetailRow(title: "CLEAR LOCAL APP CACHE", icon: "trash",
                     subtitle: "Clear cached history and recalculations on this phone. On-band data remains untouched.",
                     accessory: .action("RESET", .appHigh))
             }
             .buttonStyle(MoreSettingsPressStyle())
 
             Divider().overlay(Color.appLine)
-            MoreSettingsDetailRow(title: "ON-BAND FLASH ERASE",
+            MoreSettingsDetailRow(title: "ON-BAND FLASH ERASE", icon: "lock.shield",
                 subtitle: "Destructive hardware flash wipe (FORCE_TRIM 0x19) is quarantined. Restricted to factory calibration harnesses.",
                 titleColor: .appMuted, accessory: .restricted("QUARANTINED"))
         }
@@ -476,7 +476,7 @@ struct DeviceSettingsView: View {
                 RegulatoryLabelsView()
                     .environmentObject(store)
             } label: {
-                MoreSettingsDetailRow(title: "REGULATORY LABELS",
+                MoreSettingsDetailRow(title: "REGULATORY LABELS", icon: "doc.text",
                     subtitle: "View regulatory labels and compliance information for your WHOOP device.",
                     accessory: .navigation)
             }
@@ -486,7 +486,7 @@ struct DeviceSettingsView: View {
             Button {
                 showSafetySheet = true
             } label: {
-                MoreSettingsDetailRow(title: "SAFETY & REGULATORY",
+                MoreSettingsDetailRow(title: "SAFETY & REGULATORY", icon: "checkmark.shield",
                     subtitle: "Important safety information, regulatory statements and product compliance details.",
                     accessory: .navigation)
             }
