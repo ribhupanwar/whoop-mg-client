@@ -148,3 +148,39 @@ final class SleepLifecycleReconciliationTests: XCTestCase {
         XCTAssertTrue(gates.contains("hrConfirm"))
     }
 }
+
+final class HomeProvisionalSleepNoticeTests: XCTestCase {
+    private func shows(_ phase: SleepLifecyclePhase, id: String? = "100-18100",
+                       latest: String? = "100-18100", edited: Bool = false,
+                       today: Bool = true, preview: Bool = false) -> Bool {
+        HomeProvisionalSleepNotice.shouldShow(phase: phase, lifecycleID: id, latestID: latest,
+            isEdited: edited, isCurrentDay: today, isPreview: preview)
+    }
+
+    func testOnlyMatchingUneditedCurrentProvisionalWakeShowsNotice() {
+        XCTAssertTrue(shows(.provisionalWake))
+        XCTAssertFalse(shows(.provisionalWake, id: nil))
+        XCTAssertFalse(shows(.provisionalWake, latest: nil))
+        XCTAssertFalse(shows(.provisionalWake, latest: "100-25000"))
+        XCTAssertFalse(shows(.provisionalWake, edited: true))
+        XCTAssertFalse(shows(.provisionalWake, today: false))
+        XCTAssertFalse(shows(.provisionalWake, preview: true))
+    }
+
+    func testResumedSleepAndCompletedShortNightAreNotSuppressed() {
+        var lifecycle = SleepLifecycleSnapshot()
+        let id = "100-18100" // five-hour window
+        lifecycle.confirm(sessionID: id, startUnix: 100)
+        lifecycle.observeProvisionalWake(sessionID: id)
+        XCTAssertTrue(shows(lifecycle.phase))
+        lifecycle.resume(sessionID: id)
+        XCTAssertFalse(shows(lifecycle.phase))
+        lifecycle.end(sessionID: id, at: 18100)
+        XCTAssertFalse(shows(lifecycle.phase))
+        lifecycle.finishProcessing(sessionID: id, hasJournalQuestions: false)
+        XCTAssertEqual(lifecycle.phase, .completed)
+        XCTAssertFalse(shows(lifecycle.phase))
+        XCTAssertFalse(shows(.journalPending))
+        XCTAssertFalse(shows(.idle))
+    }
+}

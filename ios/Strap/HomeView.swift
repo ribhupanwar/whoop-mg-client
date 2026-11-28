@@ -1,5 +1,16 @@
 import SwiftUI
 
+/// Presentation only: an existing unresolved wake is not a confirmed split sleep.
+/// Never infer pending sleep from a six-hour duration or a sync freshness limit.
+enum HomeProvisionalSleepNotice {
+    static func shouldShow(phase: SleepLifecyclePhase, lifecycleID: String?, latestID: String?,
+                           isEdited: Bool, isCurrentDay: Bool, isPreview: Bool) -> Bool {
+        guard phase == .provisionalWake, let lifecycleID, !lifecycleID.isEmpty,
+              lifecycleID == latestID, !isEdited, isCurrentDay, !isPreview else { return false }
+        return true
+    }
+}
+
 /// Home — ports the approved mockup's structure and ordering.
 /// Live mode: every unmeasured metric is "—"; waiting states say what is needed.
 /// Demo mode: labelled sample values behind the persistent banner.
@@ -123,6 +134,7 @@ struct HomeView: View {
                         }
                     }
                 HistorySyncCard()
+                if showProvisionalSleepNotice { provisionalSleepNotice }
                 monitorDuo
                 myDayOutlook
                 if store.sleepLifecycle.phase == .detected || store.sleepLifecycle.phase == .processing {
@@ -832,6 +844,36 @@ struct HomeView: View {
             return "Day in Review"
         }
         return "\(first)’s Day in Review"
+    }
+
+    private var showProvisionalSleepNotice: Bool {
+        guard dayOffset == 0, let session = store.band.latestSleepSession,
+              case .overnight = session.classification, session.endUnix > session.startUnix else { return false }
+        let currentDay = JournalStore.dayKey(for: Date())
+        let wakeDay = JournalStore.dayKey(for: Date(timeIntervalSince1970: Double(session.endUnix - 1)))
+        return HomeProvisionalSleepNotice.shouldShow(
+            phase: store.sleepLifecycle.phase, lifecycleID: store.sleepLifecycle.sessionID,
+            latestID: session.lifecycleID, isEdited: session.isEdited,
+            isCurrentDay: currentDay == wakeDay, isPreview: demo)
+    }
+
+    private var provisionalSleepNotice: some View {
+        Panel {
+            HStack(alignment: .top, spacing: 12) {
+                SleepCrescentGlyph(size: 16, color: Color.appSleep)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("WAKE CONFIRMATION PENDING")
+                        .font(StrapTypography.body(12, weight: .bold))
+                        .foregroundStyle(Color.appSleep)
+                    Text("Sleep and recovery values are provisional and may change when more band history arrives.")
+                        .font(StrapTypography.body(12))
+                        .foregroundStyle(Color.appMuted)
+                }
+                Spacer(minLength: 0)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("home.sleep.provisionalWake")
+        }
     }
 
     // MARK: Sleep Detected (Issue #160)
