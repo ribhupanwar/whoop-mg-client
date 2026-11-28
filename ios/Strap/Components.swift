@@ -588,8 +588,8 @@ struct ReferencePictogram: View {
     var body: some View {
         Group {
             if let path = Self.outline(for: symbol) {
-                path.applying(CGAffineTransform(scaleX: size / 24, y: size / 24))
-                    .stroke(style: StrokeStyle(lineWidth: 1.45 * size / 24, lineCap: .round, lineJoin: .round))
+                Self.fittedOutline(path, symbol: symbol, size: size)
+                    .stroke(style: StrokeStyle(lineWidth: Self.strokeWidth(for: symbol, size: size), lineCap: .round, lineJoin: .round))
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: size * 0.9, weight: .light))
@@ -597,6 +597,60 @@ struct ReferencePictogram: View {
         }
         .frame(width: size, height: size)
         .accessibilityHidden(true)
+    }
+
+    // Optical ink extents from the 707px-wide supplied reference screenshot,
+    // measured with local background + 30 intensity threshold. Point sizes
+    // approximate a 440pt screen; actual-device visual verification is required.
+    struct OpticalSpec {
+        let width: CGFloat
+        let height: CGFloat
+        let stroke: CGFloat
+        let canvas: CGFloat
+    }
+
+    static func opticalSpec(for symbol: String) -> OpticalSpec? {
+        let measured: (CGFloat, CGFloat)
+        let tab = symbol.hasPrefix("nav.")
+        switch symbol {
+        case "waveform.path.ecg": measured = (32, 24)
+        case "heart.pulse": measured = (31, 18)
+        case "figure.walk": measured = (30, 32)
+        case "zones.low": measured = (31, 26)
+        case "zones.high": measured = (31, 27)
+        case "dumbbell": measured = (33, 20)
+        case "lungs": measured = (31, 25)
+        case "flame": measured = (20, 30)
+        case "nav.home": measured = (37, 35)
+        case "nav.health": measured = (36, 31)
+        case "nav.humans": measured = (37, 32)
+        case "nav.more": measured = (35, 25)
+        default: return nil
+        }
+        let pxPerPoint: CGFloat = 707.0 / 440.0
+        return OpticalSpec(width: measured.0 / pxPerPoint,
+                           height: measured.1 / pxPerPoint,
+                           stroke: tab ? 1.45 : 1.08,
+                           canvas: tab ? 23 : 21)
+    }
+
+    static func strokeWidth(for symbol: String, size: CGFloat) -> CGFloat {
+        guard let spec = opticalSpec(for: symbol) else { return 1.45 * size / 24 }
+        return spec.stroke * size / spec.canvas
+    }
+
+    static func fittedOutline(_ path: Path, symbol: String, size: CGFloat) -> Path {
+        guard let spec = opticalSpec(for: symbol) else {
+            return path.applying(CGAffineTransform(scaleX: size / 24, y: size / 24))
+        }
+        let ratio = size / spec.canvas
+        let stroke = strokeWidth(for: symbol, size: size)
+        let bounds = path.boundingRect
+        let sx = max(0.1, spec.width * ratio - stroke) / max(bounds.width, 0.1)
+        let sy = max(0.1, spec.height * ratio - stroke) / max(bounds.height, 0.1)
+        return path.applying(CGAffineTransform(a: sx, b: 0, c: 0, d: sy,
+                                               tx: size / 2 - bounds.midX * sx,
+                                               ty: size / 2 - bounds.midY * sy))
     }
 
     static func outline(for symbol: String) -> Path? {
@@ -651,9 +705,15 @@ struct ReferencePictogram: View {
         switch symbol {
         case "waveform.path.ecg": pulse()
         case "heart.pulse":
-            move(10, 18); curve(2, 9, 6, 15, 2, 12); curve(10, 5.5, 2, 4, 7, 3)
-            curve(17, 9, 13, 3, 17, 4); curve(10, 18, 17, 12, 13, 15)
-            move(20, 8); line(20, 17); move(16.5, 13.5); line(20, 17); line(23, 13.5)
+            move(10.1, 19); line(3.2, 11.6)
+            curve(3.2, 5.7, 1.4, 9.6, 1.4, 7.5)
+            curve(8.2, 5.4, 4.6, 4.3, 6.7, 4.2)
+            line(10.1, 7.3); line(12, 5.4)
+            curve(17, 5.7, 13.5, 4.2, 15.6, 4.3)
+            curve(17, 11.6, 18.8, 7.5, 18.8, 9.6)
+            line(10.1, 19); p.closeSubpath()
+            move(20, 6.5); line(20, 18.2)
+            move(16.7, 14.8); line(20, 18.2); line(23.3, 14.8)
         case "figure.walk":
             move(10, 2.7); line(14.7, 5.6); line(12.3, 9.2)
             curve(14, 13.5, 12.5, 11, 13.5, 12)
@@ -680,14 +740,16 @@ struct ReferencePictogram: View {
             move(6.8, 12); line(17.2, 12)
         case "lungs", "wind": lungs()
         case "flame":
-            move(10.3, 2); curve(15.3, 7.9, 13.8, 3.2, 16.7, 5.8)
-            curve(13.4, 13.3, 14.4, 10.1, 11.9, 11.2)
-            curve(17.8, 10.3, 15.5, 15.5, 19.2, 12.3)
-            curve(20.8, 16, 20, 11.8, 21, 14.1)
-            curve(12.3, 21.8, 20.3, 19.9, 16.4, 22.3)
-            curve(4, 15.9, 8.1, 21.3, 4, 19.6)
-            curve(8.5, 8.5, 3.6, 12.8, 7.5, 10.2)
-            curve(10.3, 2, 10.7, 5.6, 11.6, 4); p.closeSubpath()
+            move(10.2, 1.8)
+            curve(14.9, 7.3, 13.1, 3.2, 15.6, 5.1)
+            curve(12.2, 12.8, 14.1, 9.5, 11.5, 10.8)
+            curve(15.3, 15.4, 12.5, 14.8, 13.9, 16.1)
+            curve(17.1, 10.9, 17.5, 14.2, 17.6, 12.3)
+            curve(20.5, 17.0, 19.5, 12.2, 20.7, 14.7)
+            curve(12, 22.2, 20.2, 20.1, 16.2, 22.4)
+            curve(4.1, 16.1, 7.4, 22.0, 4.0, 19.7)
+            curve(8.5, 8.7, 4.2, 12.6, 7.3, 10.7)
+            curve(10.2, 1.8, 10.7, 5.7, 11.4, 4.1); p.closeSubpath()
         case "drop":
             move(11, 3); curve(18, 15, 13, 7, 18, 11); curve(11, 21, 18, 19, 15, 21)
             curve(4, 15, 7, 21, 4, 19); curve(11, 3, 4, 11, 9, 7); p.closeSubpath()
