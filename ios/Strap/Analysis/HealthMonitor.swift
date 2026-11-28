@@ -35,12 +35,32 @@ struct HealthReading {
     var monitorShowsPositiveDirection: Bool {
         isFavourableDirection && (vital != .rhr || (value ?? 0) >= 50)
     }
+    private var monitorNumberFormat: String {
+        let base = vital == .respiration || vital == .temperature ? 1 : 0
+        guard let value, let reference else { return "%." + String(base) + "f" }
+        for digits in base...4 {
+            let format = "%." + String(digits) + "f"
+            let low = String(format: format, reference.lowerBound)
+            let high = String(format: format, reference.upperBound)
+            let shown = String(format: format, value)
+            if reference.lowerBound != reference.upperBound && low == high { continue }
+            if value < reference.lowerBound && shown == low { continue }
+            if value > reference.upperBound && shown == high { continue }
+            return format
+        }
+        return "%.4f"
+    }
+    var monitorValueText: String? {
+        value.map { String(format: monitorNumberFormat, $0) }
+    }
     var monitorStatusText: String {
         if status == .candidate { return "Unverified estimate" }
         guard let value, let reference else { return statusText }
-        let format = vital == .respiration || vital == .temperature ? "%.1f" : "%.0f"
+        let format = monitorNumberFormat
         let low = String(format: format, reference.lowerBound)
         let high = String(format: format, reference.upperBound)
+        let shown = String(format: format, value)
+        if (value < reference.lowerBound && shown == low) || (value > reference.upperBound && shown == high) || (reference.lowerBound != reference.upperBound && low == high) { return statusText }
         switch status {
         case .withinRange: return "within \(low) – \(high)"
         case .outsideRange:
