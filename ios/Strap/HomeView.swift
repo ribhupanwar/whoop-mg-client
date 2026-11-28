@@ -37,6 +37,7 @@ struct HomeView: View {
     @State private var showDashboardCustomize = false
     @State private var showSleepEditor = false
     @State private var confirmHomeEndSleep = false
+    @State private var confirmHomeSleepCorrection = false
     @State private var endSleepSessionID: String?
     @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
     @State private var correctedSleepStart = Date()
@@ -303,6 +304,13 @@ struct HomeView: View {
                     } else if !sleepEditorIsCurrent {
                         Text("Sleep times changed. Close and reopen the editor to review the current window.")
                     }
+                    if let change = homeSleepCorrectionDescription {
+                        Text(change)
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appMuted)
+                        Text("Saving creates a manual correction. Later band history will not extend it automatically. Use Automatic Detection in Sleep Analysis to remove it.")
+                            .font(StrapTypography.body(11))
+                    }
                     Text("Bed and wake times are editable. Recovery uses estimated time asleep (excluding awake periods); HRV and RHR remain sensor-derived.")
                         .font(StrapTypography.body(11))
                 }
@@ -313,22 +321,21 @@ struct HomeView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            let times = [Int(correctedSleepStart.timeIntervalSince1970),
-                                         Int(correctedSleepEnd.timeIntervalSince1970)]
-                            guard let current = currentSleepEditorSnapshot,
-                                  sleepEditorSnapshot?.matches(current) == true else { return }
-                            let old = sleepCorrections
-                            let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old,
-                                competingPeriods: store.band.sleepCorrectionSourcePeriods)
-                            if times != current.displayed && corrections != old {
-                                UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
-                                store.band.notifySleepCorrectionChanged()
+                            if homeSleepCorrectionDescription != nil {
+                                confirmHomeSleepCorrection = true
+                            } else {
+                                saveHomeSleepCorrection()
                             }
-                            showSleepEditor = false
                         }
                         .disabled(!sleepEditorIsCurrent || correctedSleepEnd <= correctedSleepStart
                             || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
+                }
+                .alert("Save manual sleep times?", isPresented: $confirmHomeSleepCorrection) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Save manual times", role: .destructive) { saveHomeSleepCorrection() }
+                } message: {
+                    Text((homeSleepCorrectionDescription ?? "Review the selected times.") + "\n\nAutomatic extension will stop for this night. If you are still sleeping, cancel and let the band continue recording.")
                 }
             }
         }
@@ -896,7 +903,7 @@ struct HomeView: View {
                             Button("Cancel", role: .cancel) {}
                             Button("End Sleep", role: .destructive) { store.endSleepNow(expectedSessionID: endSleepSessionID) }
                         } message: {
-                            Text("Only confirm if you have finished sleeping. This saves an explicit wake time; otherwise automatic detection can continue.")
+                            Text("Only confirm if you have finished sleeping. This saves a manual wake time that later band history will not extend automatically. If you plan to return to bed, cancel. You can remove the correction using Automatic Detection in Sleep Analysis.")
                         }
 
                         Button {
@@ -1036,6 +1043,30 @@ struct HomeView: View {
         return .init(period: period, displayed: times ?? [
             session?.startUnix ?? period.startUnix, session?.endUnix ?? (period.endUnix + 1)
         ])
+    }
+
+    private var homeSleepCorrectionDescription: String? {
+        guard let snapshot = sleepEditorSnapshot, snapshot.displayed.count == 2 else { return nil }
+        let times = [Int(correctedSleepStart.timeIntervalSince1970), Int(correctedSleepEnd.timeIntervalSince1970)]
+        guard times != snapshot.displayed, times[1] > times[0] else { return nil }
+        let previous = snapshot.displayed[1] - snapshot.displayed[0]
+        let proposed = times[1] - times[0]
+        return "Time in bed: \(CoachFormat.duration(Double(previous) / 3600)) → \(CoachFormat.duration(Double(proposed) / 3600))."
+    }
+
+    private func saveHomeSleepCorrection() {
+        let times = [Int(correctedSleepStart.timeIntervalSince1970),
+                     Int(correctedSleepEnd.timeIntervalSince1970)]
+        guard let current = currentSleepEditorSnapshot,
+              sleepEditorSnapshot?.matches(current) == true else { return }
+        let old = sleepCorrections
+        let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old,
+            competingPeriods: store.band.sleepCorrectionSourcePeriods)
+        if times != current.displayed && corrections != old {
+            UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
+            store.band.notifySleepCorrectionChanged()
+        }
+        showSleepEditor = false
     }
 
     private func openHomeSleepEditor() {
