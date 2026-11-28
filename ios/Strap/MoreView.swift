@@ -22,36 +22,22 @@ enum MoreMenuItem: String, CaseIterable {
 
     var metadata: (title: String, icon: String, section: String) {
         switch self {
-        case .deviceSettings: return ("Device Settings", "radiowaves.right", "DEVICE")
+        case .deviceSettings: return ("Device Settings", "applewatch", "DEVICE")
         case .connectionSync: return ("Connection & Sync", "arrow.triangle.2.circlepath", "DEVICE")
         case .bandAlarms: return ("Band Alarms", "alarm", "DEVICE")
         case .sleepPlanner: return ("Sleep Planner", "moon.stars", "HEALTH & ACTIVITY")
         case .journal: return ("Journal", "book.closed", "HEALTH & ACTIVITY")
         case .trainingPlan: return ("Training Plan", "calendar", "HEALTH & ACTIVITY")
         case .guidedBreathing: return ("Guided Breathing", "wind", "HEALTH & ACTIVITY")
-        case .healthIntegrations: return ("Health Integrations", "link", "DATA & INTEGRATIONS")
-        case .dataImportExport: return ("Data Import & Export", "externaldrive", "DATA & INTEGRATIONS")
-        case .backupRestore: return ("Backup & Restore", "externaldrive.badge.timemachine", "DATA & INTEGRATIONS")
-        case .healthActivitySettings: return ("Health & Activity Settings", "figure.run", "DATA & INTEGRATIONS")
+        case .healthIntegrations: return ("Health Integrations", "link.circle", "DATA & INTEGRATIONS")
+        case .dataImportExport: return ("Data Import & Export", "tray.and.arrow.down", "DATA & INTEGRATIONS")
+        case .backupRestore: return ("Backup & Restore", "clock.arrow.circlepath", "DATA & INTEGRATIONS")
+        case .healthActivitySettings: return ("Health & Activity Settings", "heart.text.square", "DATA & INTEGRATIONS")
         case .notifications: return ("Notifications", "bell", "PREFERENCES")
         case .appPreferences: return ("App Preferences", "gearshape", "PREFERENCES")
         case .homeWidgets: return ("Home Screen Widgets", "square.grid.2x2", "WIDGETS & LIVE ACTIVITIES")
         case .appInformation: return ("App Information", "info.circle", "ABOUT")
         case .diagnosticsSupport: return ("Diagnostics & Support", "wrench.and.screwdriver", "ABOUT")
-        }
-    }
-
-    // Select artwork by menu identity, never by an ambiguous SF Symbol.
-    var iconAsset: IconAsset? {
-        switch self {
-        case .deviceSettings: return .deviceStrapIdle
-        case .connectionSync: return .deviceBleConnected
-        case .bandAlarms: return .alarmWake
-        case .sleepPlanner: return .alarmSleepGoal
-        case .guidedBreathing: return .healthRespiratory
-        case .healthIntegrations: return .settingsIntegrations
-        case .notifications: return .settingsNotifications
-        default: return nil
         }
     }
 
@@ -71,7 +57,7 @@ struct MoreView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 16) {
                 profileHeaderCard
 
                 // SECTION 1: DEVICE
@@ -261,11 +247,9 @@ struct MoreView: View {
     }
 
     private func moreRow(_ item: MoreMenuItem, subtitle: String? = nil) -> some View {
-        HStack(spacing: 14) {
-            StrapIconView(item.metadata.icon, asset: item.iconAsset, size: 16,
-                          frameWidth: 24, color: .appAccent)
-                .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 11) {
+            MoreSettingsIcon(symbol: item.metadata.icon)
+            VStack(alignment: .leading, spacing: 3) {
                 Text(item.metadata.title)
                     .font(StrapTypography.body(13.5, weight: .semibold))
                     .foregroundStyle(Color.appFG)
@@ -282,8 +266,8 @@ struct MoreView: View {
                 .foregroundStyle(Color.appMuted)
                 .accessibilityHidden(true)
         }
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .leading)
         .contentShape(Rectangle())
         .accessibilityIdentifier(item.accessibilityID)
     }

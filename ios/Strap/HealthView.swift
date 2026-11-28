@@ -26,7 +26,7 @@ struct HealthView: View {
                     }
                     .padding(.bottom, 14)
                 }
-                Hint("Personal ranges need seven qualifying prior nights. Green checks indicate readings within your personal range; arrows indicate favourable departures, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
+                Hint("Personal ranges need seven qualifying prior nights. Green checks indicate a personal in-range reading or a favourable HRV/RHR direction, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
             }
         }
         .navigationTitle("HEALTH MONITOR")
@@ -41,13 +41,13 @@ struct HealthView: View {
     }
 
     private var fiveMetricGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 18), GridItem(.flexible())], spacing: 18) {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible())], spacing: 12) {
             healthMetric("RESPIRATORY RATE", symbol: StrapIcon.Metric.respiration, value: demo ? "18.4" : monitor[.respiration].monitorValueText ?? "—",
                          unit: "rpm", reading: monitor[.respiration])
             // Explicitly named research estimate, never a measured oxygen value.
             let oxygen = monitor[.oxygen]
             healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen,
-                         value: oxygen.nightlyOxygenCandidate.map { String(format: "≈%.1f", $0) } ?? "—",
+                         value: oxygen.nightlyOxygenCandidate.map { String(format: "≈%.0f", $0) } ?? "—",
                          unit: "%", reading: oxygen)
             healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : monitor[.rhr].monitorValueText ?? "—",
                          unit: "bpm", reading: monitor[.rhr])
@@ -64,10 +64,9 @@ struct HealthView: View {
         let reading = monitor[.temperature]
         let hasDelta = reading.baselineDays >= 7 && reading.value != nil
         let hasNightlyCandidate = !hasDelta && reading.nightlyTemperatureCandidate != nil
-        return VStack(alignment: .leading, spacing: 15) {
+        return VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 7) {
-                StrapIconView(asset: .healthTemperature, size: 16, weight: .light,
-                              frameWidth: 20, color: .appMuted)
+                DashboardMetricIcon(symbol: "thermometer")
                     .accessibilityHidden(true)
                 Text(hasNightlyCandidate ? "SKIN TEMP\n(NIGHTLY CANDIDATE)" : "SKIN TEMP\n(FROM BASELINE)")
                     .font(StrapTypography.body(10, weight: .bold))
@@ -88,16 +87,25 @@ struct HealthView: View {
                 .foregroundStyle(Color.appMuted)
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.dashboardCard))
+    }
+
+    private func healthIcon(for vital: HealthVital) -> String {
+        switch vital {
+        case .respiration: return "lungs"
+        case .oxygen: return "drop"
+        case .rhr: return "heart.pulse"
+        case .hrv: return "waveform.path.ecg"
+        case .temperature: return "thermometer"
+        }
     }
 
     private func healthMetric(_ title: String, symbol: String, value: String,
                               unit: String, reading: HealthReading) -> some View {
-        VStack(alignment: .leading, spacing: 15) {
+        VStack(alignment: .leading, spacing: 9) {
             HStack(alignment: .top, spacing: 7) {
-                StrapIconView(symbol, asset: StrapIconView.healthAsset(for: reading.vital),
-                              size: 16, weight: .light, frameWidth: 20, color: .appMuted)
+                DashboardMetricIcon(symbol: healthIcon(for: reading.vital))
                     .accessibilityHidden(true)
                 Text(title)
                     .font(StrapTypography.body(10, weight: .bold))
@@ -121,14 +129,12 @@ struct HealthView: View {
                         .baselineOffset(unit == "%" ? 0 : 1)
                 }
             }
-            let positive = reading.verifiedWithinRange
-            let tint = demo ? Color.appMuted : (positive ? Color.appGood :
+            let positive = reading.verifiedWithinRange || reading.monitorShowsPositiveDirection
+            let tint = demo ? Color.appMuted : (positive ? Color.healthMonitorGood :
                 (reading.monitorShowsWarning ? Color.appWarn : Color.appMuted))
             HStack(spacing: 5) {
                 if !demo && positive {
                     Image(systemName: "checkmark")
-                } else if !demo && reading.monitorShowsPositiveDirection {
-                    Image(systemName: reading.vital == .rhr ? "arrow.down" : "arrow.up")
                 } else {
                     Circle().fill(tint).frame(width: 7, height: 7)
                 }
@@ -148,8 +154,8 @@ struct HealthView: View {
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 16).fill(Color(hex: 0x292E31)))
+        .frame(maxWidth: .infinity, minHeight: 116, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(LinearGradient.dashboardCard))
     }
 
     // Full-bleed WHOOP-style monitor. Sensor readings are never synthesized.

@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import UIKit
 @testable import Strap
 
 final class MoreTabNavigationTests: XCTestCase {
@@ -65,6 +66,12 @@ final class MoreTabNavigationTests: XCTestCase {
         XCTAssertEqual(entries.count, 16)
         XCTAssertEqual(Set(entries.map { $0.metadata.title }).count, entries.count)
         XCTAssertEqual(Set(entries.map { $0.metadata.icon }).count, entries.count)
+        for entry in entries {
+            XCTAssertNotNil(UIImage(systemName: entry.metadata.icon), "Missing More symbol: \(entry.metadata.icon)")
+        }
+        for symbol in ["link", "xmark.circle", "cpu", "arrow.clockwise", "trash", "lock.shield", "doc.text", "checkmark.shield"] {
+            XCTAssertNotNil(UIImage(systemName: symbol), "Missing Device Settings symbol: \(symbol)")
+        }
         XCTAssertEqual(Set(entries.map { $0.accessibilityID }).count, entries.count)
         let counts = Dictionary(grouping: entries, by: { $0.metadata.section }).mapValues { $0.count }
         XCTAssertEqual(counts, [

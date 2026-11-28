@@ -48,6 +48,8 @@ extension Color {
     static let appRingTrack = Color.adaptive(dark: 0x343C40, light: 0xCBD5DC).opacity(0.85) // Unfilled ring track #2A333A @ 85%
 
     // Interactive & Badge Fill Tokens
+    // Health Monitor status mint; keep the shared semantic palette stable.
+    static let healthMonitorGood = Color.adaptive(dark: 0x38E7B0, light: 0x007B48)
     static let appGoodChipBG = Color.adaptive(dark: 0x16261B, light: 0xDDF2E4)
     static let appDemoFlagBG = Color.adaptive(dark: 0x2A2114, light: 0xFFF0D8)
     static let appButtonFill = Color.adaptive(dark: 0x2A3339, light: 0xE2E8EC)         // Action pill buttons (+ ADD ACTIVITY)
@@ -65,7 +67,7 @@ enum AppLayout {
     static let metricRadius: CGFloat = 15
 
     static let dashboardRowHeight: CGFloat = 60
-    static let dashboardRowSpacing: CGFloat = 12
+    static let dashboardRowSpacing: CGFloat = 10
     static let dashboardRowRadius: CGFloat = 12
 
     // Ring Geometry Constants (WHOOP Reference Specification)
@@ -85,15 +87,15 @@ extension LinearGradient {
     }
 
     static var dashboardCard: LinearGradient {
-        LinearGradient(colors: [Color.adaptive(dark: 0x32363A, light: 0xFFFFFF), Color.adaptive(dark: 0x2B2F32, light: 0xF0F3F5)],
+        LinearGradient(colors: [Color.adaptive(dark: 0x303438, light: 0xFFFFFF), Color.adaptive(dark: 0x282C2F, light: 0xF0F3F5)],
                        startPoint: .top, endPoint: .bottom)
     }
 
     static var appCanvas: LinearGradient {
         LinearGradient(stops: [
             .init(color: .appCanvasTop, location: 0),
-            .init(color: Color.adaptive(dark: 0x242D32, light: 0xEAF0F3), location: 0.12),
-            .init(color: Color.adaptive(dark: 0x1E252B, light: 0xEDF1F4), location: 0.25),
+            .init(color: Color.adaptive(dark: 0x232A30, light: 0xEAF0F3), location: 0.12),
+            .init(color: Color.adaptive(dark: 0x20262B, light: 0xEDF1F4), location: 0.25),
             .init(color: Color.adaptive(dark: 0x161B1F, light: 0xF0F3F5), location: 0.45),
             .init(color: Color.adaptive(dark: 0x13181C, light: 0xF3F5F7), location: 0.55),
             .init(color: Color.adaptive(dark: 0x111518, light: 0xF6F8FA), location: 0.85),
