@@ -19,6 +19,7 @@ overriding production code paths.
 
 import csv
 import struct
+import inspect
 import unittest
 from pathlib import Path
 
