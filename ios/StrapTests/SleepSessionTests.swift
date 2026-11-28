@@ -167,6 +167,35 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(insufficient.map(\.endUnix), [oldEnd])
     }
 
+    func testResetSavedWakeCorrectionAllowsAutomaticExtension() {
+        let oldEnd = start + 68 * 60
+        let newEnd = oldEnd + 3 * 3600
+        let old = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: oldEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: true, sourceEndUnix: oldEnd, bandSleepConfirmed: true)
+        let fresh = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: newEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: false, sourceEndUnix: newEnd, bandSleepConfirmed: true)
+        let otherStart = start - 86400
+        let overrides = [String(start): [start, oldEnd],
+                         String(start + 60): [start + 60, oldEnd],
+                         String(otherStart): [otherStart, otherStart + 3600]]
+        let cleared = SleepCorrectionStore.removing(for: old.sourcePeriod, overrides: overrides)
+        XCTAssertEqual(cleared, [String(otherStart): [otherStart, otherStart + 3600]])
+        let reset = old.resettingCorrection()
+        XCTAssertFalse(reset.isEdited)
+        XCTAssertFalse(reset.isComplete)
+        XCTAssertEqual(reset.startUnix, start)
+        XCTAssertEqual(reset.endUnix, oldEnd)
+        let late = (oldEnd..<newEnd).map { confirmedSleepSample($0) }
+        let repaired = SleepSession.retainingUncovered(previous: [reset], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late, overrides: cleared)
+        XCTAssertEqual(repaired.map(\.endUnix), [newEnd])
+        XCTAssertFalse(repaired.first?.isEdited ?? true)
+    }
+
     private func period(_ seconds: Int, quiet: Double = 0.2) -> SleepPeriod {
         SleepPeriod(startUnix: start, endUnix: start + seconds - 1, quietFraction: quiet, meanHR: 55, wakeEvents: 1436)
     }
