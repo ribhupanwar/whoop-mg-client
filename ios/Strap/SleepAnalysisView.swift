@@ -127,7 +127,7 @@ struct SleepAnalysisView: View {
         }
         .alert("End Sleep?", isPresented: $confirmEndSleep) {
             Button("Cancel", role: .cancel) {}
-            Button("End Sleep") { saveSleepCorrection() }
+            Button("End Sleep") { saveSleepCorrection(explicitlyEndSleep: true) }
         } message: {
             Text("Set the sleep end to the selected time? This updates the sleep window and recalculates available metrics. You can edit it later.")
         }
@@ -167,14 +167,15 @@ struct SleepAnalysisView: View {
         .navigationBarTitleDisplayMode(.inline)
     }
 
-    private func saveSleepCorrection() {
+    private func saveSleepCorrection(explicitlyEndSleep: Bool = false) {
         guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart,
               correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400 else { return }
         let oldCorrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let corrections = SleepCorrectionStore.saving([
             Int(correctedSleepStart.timeIntervalSince1970),
             Int(correctedSleepEnd.timeIntervalSince1970)
-        ], for: period, overrides: oldCorrections)
+        ], for: period, overrides: oldCorrections, explicitlyEndSleep: explicitlyEndSleep)
+        guard corrections != oldCorrections else { showSleepEditor = false; return }
         UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
         store.band.notifySleepCorrectionChanged()
         showSleepEditor = false
