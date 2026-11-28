@@ -167,6 +167,18 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(insufficient.map(\.endUnix), [oldEnd])
     }
 
+    func testUnchangedAutomaticWindowDoesNotCreateManualWakeLock() {
+        let provisional = period(68 * 60)
+        let bounds = [provisional.startUnix, provisional.endUnix + 1]
+        XCTAssertTrue(SleepCorrectionStore.saving(bounds, for: provisional, overrides: [:]).isEmpty)
+        let explicit = SleepCorrectionStore.saving(bounds, for: provisional, overrides: [:],
+                                                   explicitlyEndSleep: true)
+        XCTAssertEqual(explicit[String(provisional.startUnix)], bounds)
+        XCTAssertEqual(SleepCorrectionStore.saving(bounds, for: provisional, overrides: explicit), explicit)
+        let changed = [bounds[0], bounds[1] + 60]
+        XCTAssertEqual(SleepCorrectionStore.saving(changed, for: provisional, overrides: [:])[String(bounds[0])], changed)
+    }
+
     func testResetSavedWakeCorrectionAllowsAutomaticExtension() {
         let oldEnd = start + 68 * 60
         let newEnd = oldEnd + 3 * 3600
