@@ -41,6 +41,20 @@ enum MoreMenuItem: String, CaseIterable {
         }
     }
 
+    // Select artwork by menu identity, never by an ambiguous SF Symbol.
+    var iconAsset: IconAsset? {
+        switch self {
+        case .deviceSettings: return .deviceStrapIdle
+        case .connectionSync: return .deviceBleConnected
+        case .bandAlarms: return .alarmWake
+        case .sleepPlanner: return .alarmSleepGoal
+        case .guidedBreathing: return .healthRespiratory
+        case .healthIntegrations: return .settingsIntegrations
+        case .notifications: return .settingsNotifications
+        default: return nil
+        }
+    }
+
     var accessibilityID: String { "more." + rawValue }
 }
 
@@ -253,10 +267,8 @@ struct MoreView: View {
 
     private func moreRow(_ item: MoreMenuItem, subtitle: String? = nil) -> some View {
         HStack(spacing: 14) {
-            Image(systemName: item.metadata.icon)
-                .font(.system(size: 16, weight: .medium))
-                .frame(width: 24)
-                .foregroundStyle(Color.appAccent)
+            StrapIconView(item.metadata.icon, asset: item.iconAsset, size: 16,
+                          frameWidth: 24, color: .appAccent)
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(item.metadata.title)

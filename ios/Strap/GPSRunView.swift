@@ -280,7 +280,8 @@ struct GPSRunView: View {
                             .frame(width: 192, height: 192)
                             .overlay {
                                 VStack(spacing: 10) {
-                                    Image(systemName: "heart.fill").font(.system(size: 30))
+                                    StrapIconView(asset: .healthHeartRate, size: 30, frameWidth: 30)
+                                        .accessibilityHidden(true)
                                     Text("READY").font(.system(size: 38, weight: .bold))
                                     Text(liveBPM(at: Date()).map { "\($0) BPM" } ?? "HR WAITING")
                                         .font(.system(size: 15, weight: .semibold))
@@ -594,9 +595,8 @@ struct TimerHeader: View {
                 Spacer()
                 if let hr = currentHR {
                     HStack(spacing: 4) {
-                        Image(systemName: "heart.fill")
-                            .foregroundStyle(.red)
-                            .font(.system(size: 14))
+                        StrapIconView(asset: .healthHeartRate, size: 14, frameWidth: 14, color: .red)
+                            .accessibilityHidden(true)
                         Text("\(hr) BPM")
                             .font(.system(size: 17, weight: .bold))
                             .foregroundStyle(.primary)

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 enum AppTab: String, CaseIterable, Hashable {
     static var allCases: [AppTab] { [.home, .health, .humans, .more] }
@@ -10,6 +11,14 @@ enum AppTab: String, CaseIterable, Hashable {
     case more
 
     var label: String { rawValue.capitalized }
+
+    var iconAsset: IconAsset? {
+        switch self {
+        case .home: return .navHome
+        case .more: return .navMore
+        default: return nil
+        }
+    }
 
     var selectedIcon: String {
         switch self {
@@ -188,9 +197,17 @@ struct RootView: View {
                     let selected = tab == item
                     Button { tab = item } label: {
                         VStack(spacing: 3) {
-                            Image(systemName: selected ? item.selectedIcon : item.icon)
-                                .font(.system(size: 19, weight: selected ? .semibold : .regular))
-                                .frame(height: 22)
+                            Group {
+                                if let asset = item.iconAsset, UIImage(named: asset.rawValue) != nil {
+                                    asset.image.resizable().renderingMode(.template)
+                                        .scaledToFit().frame(width: 19, height: 19)
+                                } else {
+                                    Image(systemName: selected ? item.selectedIcon : item.icon)
+                                        .font(.system(size: 19, weight: selected ? .semibold : .regular))
+                                }
+                            }
+                            .frame(height: 22)
+                            .accessibilityHidden(true)
                             Text(item.label)
                                 .font(StrapTypography.body(9.5, weight: selected ? .bold : .medium))
                                 .lineLimit(1)

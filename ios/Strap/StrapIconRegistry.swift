@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Centralized Icon Registry for STRAP.
 ///
@@ -181,9 +182,39 @@ struct StrapIconView: View {
         self.accessibilityLabel = accessibilityLabel
     }
 
+    /// Reuse existing bundled artwork for unambiguous domain symbols.
+    static func defaultAsset(for symbol: String) -> IconAsset? {
+        switch symbol {
+        case StrapIcon.Metric.heartRate: return .healthHeartRate
+        case StrapIcon.Metric.hrv: return .healthHrv
+        case StrapIcon.Metric.respiration: return .healthRespiratory
+        case StrapIcon.Metric.bloodOxygen: return .healthBloodOxygen
+        case StrapIcon.Metric.skinTemp: return .healthTemperature
+        case StrapIcon.Metric.recovery: return .healthRecovery
+        case StrapIcon.Metric.sleep: return .healthSleep
+        case StrapIcon.Metric.strain: return .healthStrain
+        case StrapIcon.Device.batteryFull: return .deviceBatteryFull
+        case StrapIcon.Device.batteryLow: return .deviceBatteryLow
+        case StrapIcon.Device.batteryCritical: return .deviceBatteryCritical
+        case StrapIcon.Device.batteryCharging: return .deviceBatteryCharging
+        default: return nil
+        }
+    }
+
+    /// Explicit context at production call sites avoids ambiguous SF Symbol names.
+    static func healthAsset(for vital: HealthVital) -> IconAsset {
+        switch vital {
+        case .respiration: return .healthRespiratory
+        case .oxygen: return .healthBloodOxygen
+        case .rhr: return .healthHeartRate
+        case .hrv: return .healthHrv
+        case .temperature: return .healthTemperature
+        }
+    }
+
     var body: some View {
         Group {
-            if let asset = asset, UIImage(named: asset.rawValue) != nil {
+            if let asset = asset ?? Self.defaultAsset(for: systemName), UIImage(named: asset.rawValue) != nil {
                 asset.image
                     .resizable()
                     .renderingMode(.template)
