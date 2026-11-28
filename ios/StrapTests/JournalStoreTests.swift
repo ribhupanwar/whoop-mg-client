@@ -180,6 +180,18 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(state.endedAtUnix, 5500)
     }
 
+    func testExplicitEndCompletesUnderTheSavedWindowIdentity() {
+        var state = SleepLifecycleSnapshot()
+        state.confirm(sessionID: "100-4300", startUnix: 100)
+        state.end(sessionID: "100-4300", at: 4350, resultingSessionID: "100-4350")
+        XCTAssertEqual(state.phase, .processing)
+        state.finishProcessing(sessionID: "100-4300", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .processing)
+        state.finishProcessing(sessionID: "100-4350", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .journalPending)
+        XCTAssertEqual(state.endedAtUnix, 4350)
+    }
+
     func testSleepLifecycleRejectsCompletedSessionReplayAndOverlappingHistory() {
         let persistence = SleepLifecyclePersistence(defaults: defaults)
         var state = persistence.load()

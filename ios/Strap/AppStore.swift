@@ -338,7 +338,8 @@ final class AppStore: ObservableObject {
                                                   overrides: overrides, explicitlyEndSleep: true)
         UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
 
-        sleepLifecycle.end(sessionID: sessionID, at: nowUnix)
+        let correctedID = session.applyingSavedBounds(updated).lifecycleID
+        sleepLifecycle.end(sessionID: sessionID, at: nowUnix, resultingSessionID: correctedID)
         sleepLifecyclePersistence.save(sleepLifecycle)
         band.notifySleepCorrectionChanged()
     }
@@ -804,9 +805,10 @@ struct SleepLifecycleSnapshot: Codable, Equatable {
     }
 
     /// Both automatic and manual End Sleep use this idempotent transition.
-    mutating func end(sessionID: String, at unix: Int) {
+    mutating func end(sessionID: String, at unix: Int, resultingSessionID: String? = nil) {
         guard phase == .detected || phase == .provisionalWake, self.sessionID == sessionID,
               let start = confirmedStartUnix, unix > start else { return }
+        self.sessionID = resultingSessionID ?? sessionID
         endedAtUnix = unix
         phase = .processing
     }
