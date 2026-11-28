@@ -112,7 +112,8 @@ struct ConnectionSyncView: View {
                         store.band.autoConnectIfNeeded()
                     } label: {
                         HStack {
-                            Image(systemName: "antenna.radiowaves.left.and.right")
+                            StrapIconView(asset: .deviceBleConnected, size: 16, frameWidth: 20, color: .appAccent)
+                                .accessibilityHidden(true)
                             Text("Reconnect Band Session")
                                 .font(StrapTypography.body(13, weight: .semibold))
                             Spacer()
@@ -692,7 +693,7 @@ struct DataManagementView: View {
 
                     NavigationLink(value: Route.sleepAnalysis) {
                         HStack {
-                            Image(systemName: "moon.stars")
+                            StrapIconView(asset: .healthSleep, size: 16, frameWidth: 16, color: .appFG)
                             Text("Sleep Staging Epoch Export (CSV)")
                                 .font(StrapTypography.body(13.5, weight: .semibold))
                             Spacer()
