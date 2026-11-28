@@ -410,7 +410,21 @@ final class RecordedRunHealthRelay: ObservableObject {
                     start: session.startedAt, end: end))
             }
             for offset in stride(from: 0, to: samples.count, by: 500) {
-                try await builder.add(Array(samples[offset..<min(offset + 500, samples.count)]))
+                let batch = Array(samples[offset..<min(offset + 500, samples.count)])
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    builder.add(batch) { success, error in
+                        if let error {
+                            continuation.resume(throwing: error)
+                        } else if success {
+                            continuation.resume(returning: ())
+                        } else {
+                            continuation.resume(throwing: NSError(
+                                domain: "Strap.HealthKitBridge", code: 2,
+                                userInfo: [NSLocalizedDescriptionKey: "Could not add workout samples"]
+                            ))
+                        }
+                    }
+                }
             }
             let pauses = (session.exportPauses ?? []).filter {
                 $0.start >= session.startedAt && $0.end <= end && $0.end > $0.start
