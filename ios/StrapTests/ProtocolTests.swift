@@ -317,7 +317,17 @@ final class ProtocolTests: XCTestCase {
     func testRRCountAboveFourIsIgnored() {
         var inner = bytes(realV18Hex)
         inner[15] = 9
-        XCTAssertEqual(V18Decoder.decode(inner)?.rrIntervalsMS, [])
+        let sample = V18Decoder.decode(inner)
+        XCTAssertEqual(sample?.rrIntervalsMS, [])
+        XCTAssertEqual(sample?.rrPaddingValid, false)
+
+        for invalidCount: UInt8 in [5, 9, 16, 255] {
+            var mutated = inner
+            mutated[15] = invalidCount
+            let record = V18Decoder.decode(mutated)
+            XCTAssertEqual(record?.rrIntervalsMS, [], "Count \(invalidCount) must drop RR intervals")
+            XCTAssertEqual(record?.rrPaddingValid, false, "Count \(invalidCount) must set rrPaddingValid = false")
+        }
     }
 
     func testRRCountUpToFourIsAccepted() {
