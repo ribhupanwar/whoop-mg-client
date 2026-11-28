@@ -26,7 +26,7 @@ extension Color {
     }
 
     // Canvas & Surface Gradients
-    static let appCanvasTop = Color.adaptive(dark: 0x282F35, light: 0xE7EDF1)          // Reference top-edge sample
+    static let appCanvasTop = Color.adaptive(dark: 0x262D33, light: 0xE7EDF1)          // Reference top-edge sample
     static let appCanvasMid = Color.adaptive(dark: 0x191E22, light: 0xF0F3F5)          // Reference mid-canvas sample
     static let appBG = Color.adaptive(dark: 0x111518, light: 0xF7F8FA)                 // Reference lower-edge sample
     static let appSurface = Color.adaptive(dark: 0x252A2E, light: 0xFFFFFF)            // Dark card interior #1D2429
@@ -41,7 +41,7 @@ extension Color {
     static let appRecoveryGreen = Color.adaptive(dark: 0x1AEC07, light: 0x168B13)
     static let appRecoveryYellow = Color.adaptive(dark: 0xFEDE00, light: 0x9B7600)
     static let appRecoveryRed = Color.adaptive(dark: 0xFC0025, light: 0xD00024)
-    static let appGood = Color.adaptive(dark: 0x00E676, light: 0x007B48)               // Semantic good status (not recovery ring)
+    static let appGood = Color.adaptive(dark: 0x38E7B0, light: 0x007B48)               // Semantic good status (not recovery ring)
     static let appWarn = Color.adaptive(dark: 0xFFDE00, light: 0x856100)               // Semantic caution status
     static let appHigh = Color.adaptive(dark: 0xFF3B30, light: 0xBD251D)               // Semantic error status
     static let appAccent = Color.adaptive(dark: 0x0193E8, light: 0x006BA8)             // Reference strain blue
@@ -65,7 +65,7 @@ enum AppLayout {
     static let metricRadius: CGFloat = 15
 
     static let dashboardRowHeight: CGFloat = 60
-    static let dashboardRowSpacing: CGFloat = 12
+    static let dashboardRowSpacing: CGFloat = 10
     static let dashboardRowRadius: CGFloat = 12
 
     // Ring Geometry Constants (WHOOP Reference Specification)
@@ -85,7 +85,7 @@ extension LinearGradient {
     }
 
     static var dashboardCard: LinearGradient {
-        LinearGradient(colors: [Color.adaptive(dark: 0x32363A, light: 0xFFFFFF), Color.adaptive(dark: 0x2B2F32, light: 0xF0F3F5)],
+        LinearGradient(colors: [Color.adaptive(dark: 0x303438, light: 0xFFFFFF), Color.adaptive(dark: 0x282C2F, light: 0xF0F3F5)],
                        startPoint: .top, endPoint: .bottom)
     }
 
