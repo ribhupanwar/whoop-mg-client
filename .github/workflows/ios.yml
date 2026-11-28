@@ -7,10 +7,16 @@ on:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - "docs/algorithm-freeze.json"
+      - "scripts/check_algorithm_freeze.py"
+      - ".github/workflows/algorithm-freeze.yml"
   pull_request:
     paths:
       - "ios/**"
       - ".github/workflows/ios.yml"
+      - "docs/algorithm-freeze.json"
+      - "scripts/check_algorithm_freeze.py"
+      - ".github/workflows/algorithm-freeze.yml"
 
 permissions:
   contents: read
