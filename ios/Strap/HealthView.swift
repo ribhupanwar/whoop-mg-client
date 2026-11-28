@@ -26,7 +26,7 @@ struct HealthView: View {
                     }
                     .padding(.bottom, 14)
                 }
-                Hint("Personal ranges use at least seven qualifying prior sleep nights. Respiratory rate is an RSA estimate; SpO₂ and skin temperature remain unvalidated sensor candidates. Recorded personal ranges are not clinical limits.")
+                Hint("Personal ranges need seven qualifying prior nights. Arrows describe direction, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
             }
         }
         .navigationTitle("HEALTH MONITOR")
@@ -46,7 +46,7 @@ struct HealthView: View {
                          unit: "rpm", reading: monitor[.respiration])
             // Explicitly named research estimate, never a measured oxygen value.
             let oxygen = monitor[.oxygen]
-            healthMetric("SpO₂ (UNVERIFIED EST.)", symbol: StrapIcon.Metric.bloodOxygen,
+            healthMetric("BLOOD OXYGEN (SpO₂)", symbol: StrapIcon.Metric.bloodOxygen,
                          value: oxygen.nightlyOxygenCandidate.map { String(format: "≈%.1f", $0) } ?? "—",
                          unit: "%", reading: oxygen)
             healthMetric("RHR", symbol: StrapIcon.Metric.restingHeartRate, value: demo ? "62" : ActivityFormat.whole(monitor[.rhr].value) ?? "—",
@@ -81,9 +81,9 @@ struct HealthView: View {
                 .font(StrapTypography.metric(28, weight: .bold))
                 .foregroundStyle(Color.appFG)
                 .accessibilityIdentifier("health.skinTemperature.delta")
-            Text(hasDelta || hasNightlyCandidate ? "UNVALIDATED CANDIDATE" : reading.statusText)
+            Text(hasDelta || hasNightlyCandidate ? "UNVERIFIED ESTIMATE" : reading.monitorStatusText)
                 .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(hasDelta || hasNightlyCandidate ? Color.appWarn : Color.appMuted)
+                .foregroundStyle(Color.appMuted)
             Text(hasDelta ? reading.referenceText : "Personal baseline: \(reading.baselineDays)/7 prior nights")
                 .font(StrapTypography.body(10))
                 .foregroundStyle(Color.appMuted)
@@ -123,18 +123,25 @@ struct HealthView: View {
                         .baselineOffset(unit == "%" ? 0 : 1)
                 }
             }
+            let tint = demo ? Color.appMuted : (reading.verifiedWithinRange ? Color.appGood :
+                (reading.monitorShowsWarning ? Color.appWarn : Color.appMuted))
             HStack(spacing: 5) {
-                Circle()
-                    .fill(reading.verifiedWithinRange ? Color(hex: 0x00E676) :
-                        (reading.status == .outsideRange || reading.status == .candidate ? Color.appWarn : Color.appMuted.opacity(0.5)))
-                    .frame(width: 7, height: 7)
-                Text(demo ? "SAMPLE" : reading.statusText)
+                if !demo && reading.verifiedWithinRange {
+                    Image(systemName: "checkmark")
+                } else if !demo && reading.isFavourableDirection {
+                    Image(systemName: reading.vital == .rhr ? "arrow.down" : "arrow.up")
+                } else {
+                    Circle().fill(tint).frame(width: 7, height: 7)
+                }
+                Text(demo ? "SAMPLE" : reading.monitorStatusText)
             }
-                .font(StrapTypography.body(10, weight: .semibold))
-                .foregroundStyle(reading.verifiedWithinRange ? Color(hex: 0x00E676) :
-                    (reading.status == .outsideRange || reading.status == .candidate ? Color.appWarn : Color.appMuted))
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            .font(StrapTypography.body(10, weight: .semibold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(tint.opacity(0.10), in: RoundedRectangle(cornerRadius: 4))
+            .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
             Text(demo ? "Design preview" : reading.referenceText)
                 .font(StrapTypography.body(10)).foregroundStyle(Color.appMuted)
                 .fixedSize(horizontal: false, vertical: true)

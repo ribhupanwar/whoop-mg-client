@@ -22,6 +22,24 @@ struct HealthReading {
         case .outsideRange: return "OUTSIDE PERSONAL RANGE"
         }
     }
+    // Presentation only: a directional departure from a personal range
+    // is not necessarily an adverse finding. Keep the underlying status
+    // and within-range counts unchanged.
+    var isFavourableDirection: Bool {
+        guard status == .outsideRange, let value, let reference else { return false }
+        return (vital == .rhr && value < reference.lowerBound)
+            || (vital == .hrv && value > reference.upperBound)
+    }
+    var monitorStatusText: String {
+        if status == .candidate { return "UNVERIFIED ESTIMATE" }
+        if isFavourableDirection {
+            return vital == .rhr ? "BELOW PERSONAL RANGE" : "ABOVE PERSONAL RANGE"
+        }
+        return statusText
+    }
+    var monitorShowsWarning: Bool {
+        status == .outsideRange && !isFavourableDirection
+    }
     var referenceText: String {
         if vital == .oxygen { return "Research estimate only — not a validated oxygen reading" }
         guard let reference else { return "Personal baseline: \(baselineDays)/7 prior nights" }

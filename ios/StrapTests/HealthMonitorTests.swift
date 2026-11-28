@@ -85,6 +85,29 @@ final class HealthMonitorTests: XCTestCase {
         XCTAssertNil(weakReport[.rhr].value)
         XCTAssertEqual(weakReport[.rhr].status, .unavailable)
     }
+    func testMonitorDirectionDoesNotChangeMeasuredStatusOrRangeCount() {
+        let prior = (-7 ... -1).map { day($0, rhr: 63, hrv: 49) }
+        let report = HealthMonitor.make(days: prior + [day(0, rhr: 62, hrv: 57)], session: session, calendar: calendar)
+        XCTAssertEqual(report[.rhr].status, .outsideRange)
+        XCTAssertEqual(report[.hrv].status, .outsideRange)
+        XCTAssertEqual(report[.rhr].monitorStatusText, "BELOW PERSONAL RANGE")
+        XCTAssertEqual(report[.hrv].monitorStatusText, "ABOVE PERSONAL RANGE")
+        XCTAssertFalse(report[.rhr].monitorShowsWarning)
+        XCTAssertFalse(report[.hrv].monitorShowsWarning)
+        XCTAssertFalse(report[.rhr].verifiedWithinRange)
+        XCTAssertFalse(report[.hrv].verifiedWithinRange)
+        XCTAssertEqual(report.withinCount, 1)
+        XCTAssertEqual(report[.oxygen].monitorStatusText, "UNVERIFIED ESTIMATE")
+        XCTAssertFalse(report[.oxygen].verifiedWithinRange)
+        XCTAssertNil(report[.oxygen].value)
+        XCTAssertEqual(report[.temperature].monitorStatusText, "UNVERIFIED ESTIMATE")
+        let reverse = HealthMonitor.make(days: prior + [day(0, rhr: 76, hrv: 23)], session: session, calendar: calendar)
+        XCTAssertTrue(reverse[.rhr].monitorShowsWarning)
+        XCTAssertTrue(reverse[.hrv].monitorShowsWarning)
+        let short = HealthMonitor.make(days: Array(prior.dropFirst()) + [day(0, rhr: 62, hrv: 57)], session: session, calendar: calendar)
+        XCTAssertEqual(short[.rhr].monitorStatusText, "BUILDING BASELINE")
+        XCTAssertFalse(short[.rhr].isFavourableDirection)
+    }
     func testTemperatureDeviationAndEmpiricalRangeUseMatchingRecordedSource() throws {
         let prior = (-7 ... -1).map { day($0, temp: 34) }
         let report = HealthMonitor.make(days: prior + [day(0, temp: 34.6)], session: session, calendar: calendar)
