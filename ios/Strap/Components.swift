@@ -579,39 +579,181 @@ struct ChartLegend: View {
     }
 }
 
-// Dashboard pictograms: consistent thin outline treatment matching the WHOOP reference.
+// Original, reference-inspired 24-unit outline pictograms. No third-party artwork.
+// All paths use a shared optical grid; tint is inherited from the owning surface.
+struct ReferencePictogram: View {
+    let symbol: String
+    var size: CGFloat = 20
+
+    var body: some View {
+        Group {
+            if let path = Self.outline(for: symbol) {
+                path.applying(CGAffineTransform(scaleX: size / 24, y: size / 24))
+                    .stroke(style: StrokeStyle(lineWidth: 1.45 * size / 24, lineCap: .round, lineJoin: .round))
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: size * 0.9, weight: .light))
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    static func outline(for symbol: String) -> Path? {
+        var p = Path()
+        func move(_ x: CGFloat, _ y: CGFloat) { p.move(to: CGPoint(x: x, y: y)) }
+        func line(_ x: CGFloat, _ y: CGFloat) { p.addLine(to: CGPoint(x: x, y: y)) }
+        func curve(_ x: CGFloat, _ y: CGFloat, _ a: CGFloat, _ b: CGFloat, _ c: CGFloat, _ d: CGFloat) {
+            p.addCurve(to: CGPoint(x: x, y: y), control1: CGPoint(x: a, y: b), control2: CGPoint(x: c, y: d))
+        }
+        func oval(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) {
+            p.addEllipse(in: CGRect(x: x, y: y, width: w, height: h))
+        }
+        func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat, _ r: CGFloat = 1.5) {
+            p.addRoundedRect(in: CGRect(x: x, y: y, width: w, height: h), cornerSize: CGSize(width: r, height: r))
+        }
+        func heart() {
+            move(12, 20); curve(3, 10, 9, 17, 3, 13); curve(12, 6, 3, 4, 9, 3)
+            curve(21, 10, 15, 3, 21, 4); curve(12, 20, 21, 13, 15, 17); p.closeSubpath()
+        }
+        func pulse() {
+            move(2.5, 11); line(8, 11); line(12.4, 4.5); curve(14.6, 5.5, 13.4, 3.3, 15.3, 3.9)
+            line(12.7, 10); line(20.5, 10); curve(20.5, 13, 22.5, 10, 22.5, 13)
+            line(13.8, 13); line(9.6, 19); curve(7.6, 18, 8.6, 20.1, 7, 19.4)
+            line(9, 14); line(3, 14); curve(2.5, 11, 1, 14, 1, 11); p.closeSubpath()
+        }
+        func lungs() {
+            move(12, 3); line(12, 9); line(8.5, 12); move(12, 9); line(15.5, 12)
+            move(9.5, 6); curve(5.5, 7, 8, 4, 7, 5); curve(2.5, 17, 3, 10, 2, 15)
+            curve(6, 19.5, 2.5, 19.5, 4, 20.5); curve(10, 17, 8, 19, 10, 19); line(10, 11)
+            move(14.5, 6); curve(18.5, 7, 16, 4, 17, 5); curve(21.5, 17, 21, 10, 22, 15)
+            curve(18, 19.5, 21.5, 19.5, 20, 20.5); curve(14, 17, 16, 19, 14, 19); line(14, 11)
+        }
+        func moon() {
+            move(14, 3); curve(21, 16, 8, 12, 15, 19)
+            curve(5, 19, 17, 23, 9, 23); curve(14, 3, 0, 12, 5, 4); p.closeSubpath()
+        }
+        switch symbol {
+        case "waveform.path.ecg": pulse()
+        case "heart.pulse":
+            move(10, 18); curve(2, 9, 6, 15, 2, 12); curve(10, 5.5, 2, 4, 7, 3)
+            curve(17, 9, 13, 3, 17, 4); curve(10, 18, 17, 12, 13, 15)
+            move(20, 8); line(20, 17); move(16.5, 13.5); line(20, 17); line(23, 13.5)
+        case "figure.walk":
+            move(8, 3); line(12, 6); line(10.5, 10); curve(14, 14, 11, 12, 13, 13)
+            line(19, 15.5); curve(21, 19.5, 21, 16, 22, 18); line(11, 19.5); line(3, 11.5)
+            curve(3.5, 8, 2, 10, 2, 9); line(8, 3); p.closeSubpath()
+            move(5, 8); line(13, 17); line(21, 17); move(10.5, 10); line(14, 8)
+            move(7, 4); line(10, 7)
+        case "zones.low", "zones.high":
+            heart()
+            if symbol == "zones.low" {
+                move(7.5, 13); line(16.5, 13); move(9.5, 15.5); line(14.5, 15.5)
+            } else {
+                move(5, 10); line(8.5, 7.5); line(12, 10); line(15.5, 7.5); line(19, 10)
+                move(5, 12); line(19, 12)
+            }
+        case "dumbbell":
+            rect(4.5, 5, 3, 14); rect(16.5, 5, 3, 14); rect(1.5, 8, 3, 8); rect(19.5, 8, 3, 8)
+            move(7.5, 10.5); line(16.5, 10.5); move(7.5, 13.5); line(16.5, 13.5)
+        case "lungs", "wind": lungs()
+        case "flame":
+            move(11, 2.5); curve(16, 11, 17, 5, 18, 8)
+            curve(20, 15, 19, 10, 21, 12); curve(12, 21, 20, 19, 16, 21)
+            curve(4, 15, 7, 21, 3, 19); curve(10, 7, 4, 11, 10, 10)
+            curve(11, 2.5, 12, 5, 11, 4); p.closeSubpath()
+            move(13, 12); curve(12, 19, 8, 15, 9, 19); curve(15, 16, 15, 19, 16, 17)
+        case "drop":
+            move(11, 3); curve(18, 15, 13, 7, 18, 11); curve(11, 21, 18, 19, 15, 21)
+            curve(4, 15, 7, 21, 4, 19); curve(11, 3, 4, 11, 9, 7); p.closeSubpath()
+            move(7, 15); curve(10, 18, 7, 17, 8, 18); oval(17.5, 3, 3, 3)
+        case "thermometer":
+            move(9, 14); line(9, 5); curve(15, 5, 9, 1.5, 15, 1.5); line(15, 14)
+            curve(12, 22, 21, 20, 15, 23); curve(9, 14, 5, 22, 4, 18); p.closeSubpath()
+            oval(10, 16, 4, 4); move(12, 7); line(12, 16)
+        case "nav.home":
+            move(2, 11); line(12, 3); line(22, 11); move(5, 10); line(5, 21); line(19, 21); line(19, 10)
+            move(8, 16); line(11, 13); line(14, 15); line(17, 11)
+        case "nav.health":
+            heart(); move(5, 11); line(9, 11); line(11, 8); line(14, 15); line(16, 11); line(19, 11)
+        case "nav.humans":
+            oval(9.5, 2.5, 5, 5.5); oval(2.5, 5, 4, 5); oval(17.5, 5, 4, 5)
+            move(8, 21); line(8, 13); curve(16, 13, 8, 9, 16, 9); line(16, 21)
+            move(2, 19); line(2, 14); curve(6, 12, 2, 11, 5, 11)
+            move(18, 12); curve(22, 14, 21, 11, 22, 12); line(22, 19)
+        case "nav.more":
+            move(9, 5); line(22, 5); move(12, 11); line(22, 11); move(12, 18); line(22, 18)
+            rect(2, 12, 7, 7, 0.8); move(1, 12); line(10, 12); move(5.5, 12); line(5.5, 19)
+            move(5.5, 12); curve(2, 9, 0, 11, 0, 7); curve(5.5, 12, 4, 8, 5, 10)
+            curve(9, 9, 6, 10, 8, 8); curve(5.5, 12, 11, 10, 10, 11)
+        case "applewatch":
+            oval(7, 2, 13, 20); move(11, 2); curve(5, 21, 3, 3, 1, 19)
+            line(13, 22); move(4.5, 6); line(11, 6); move(3, 16); line(10, 16)
+        case "arrow.triangle.2.circlepath":
+            move(3, 10); curve(20, 8, 5, 2, 16, 2); move(16, 8); line(20, 8); line(20, 4)
+            move(21, 14); curve(4, 16, 19, 22, 8, 22); move(8, 16); line(4, 16); line(4, 20)
+        case "alarm":
+            oval(4, 5, 16, 16); move(12, 8); line(12, 13); line(15, 15)
+            move(3, 5); line(6, 2); move(18, 2); line(21, 5)
+        case "moon.stars": moon(); move(19, 3); line(19, 7); move(17, 5); line(21, 5)
+        case "book.closed":
+            rect(5, 3, 14, 18); move(8, 3); line(8, 21); move(11, 8); line(16, 8); move(11, 12); line(16, 12)
+        case "calendar":
+            rect(3, 5, 18, 16); move(3, 10); line(21, 10); move(8, 3); line(8, 7); move(16, 3); line(16, 7)
+            for x in [CGFloat(7), 12, 17] { oval(x - 0.6, 14, 1.2, 1.2) }
+        case "link.circle":
+            oval(9, 9, 6, 6); oval(9, 1.5, 6, 5); oval(2, 17, 6, 5); oval(16, 17, 6, 5)
+            move(12, 6.5); line(12, 9); move(9.5, 14); line(7, 17); move(14.5, 14); line(17, 17)
+        case "tray.and.arrow.down":
+            move(3, 13); line(6, 6); line(18, 6); line(21, 13); line(21, 20); line(3, 20); p.closeSubpath()
+            move(3, 13); line(9, 13); line(10, 16); line(14, 16); line(15, 13); line(21, 13)
+            move(12, 2); line(12, 10); move(9, 7); line(12, 10); line(15, 7)
+        case "clock.arrow.circlepath":
+            move(3, 10); curve(12, 3, 4, 6, 8, 3); curve(21, 12, 17, 3, 21, 7)
+            curve(12, 21, 21, 17, 17, 21); curve(3, 14, 7, 21, 4, 18)
+            move(3, 4); line(3, 10); line(9, 10); move(12, 7); line(12, 12); line(16, 14)
+        case "heart.text.square":
+            rect(3, 3, 18, 18); move(12, 14); curve(7, 9, 9, 12, 7, 11)
+            curve(12, 7, 7, 6, 10, 6); curve(17, 9, 14, 6, 17, 6)
+            curve(12, 14, 17, 11, 14, 12); move(7, 17); line(17, 17)
+        case "bell":
+            move(5, 16); curve(7, 8, 7, 14, 7, 11); curve(17, 8, 7, 2, 17, 2)
+            curve(19, 16, 17, 11, 17, 14); line(21, 18); line(3, 18); line(5, 16)
+            move(9, 20); curve(15, 20, 10, 23, 14, 23)
+        case "gearshape":
+            oval(8, 8, 8, 8)
+            for i in 0..<8 {
+                let angle = CGFloat(i) * .pi / 4
+                let next = angle + .pi / 8
+                move(12 + 9 * cos(angle), 12 + 9 * sin(angle))
+                line(12 + 11 * cos(angle), 12 + 11 * sin(angle))
+                line(12 + 11 * cos(next), 12 + 11 * sin(next))
+                line(12 + 9 * cos(next), 12 + 9 * sin(next))
+                let end = angle + .pi / 4
+                line(12 + 9 * cos(end), 12 + 9 * sin(end))
+            }
+        case "square.grid.2x2":
+            rect(3, 3, 7, 7); rect(14, 3, 7, 7); rect(3, 14, 7, 7); rect(14, 14, 7, 7)
+        case "info.circle":
+            oval(3, 3, 18, 18); oval(11.3, 7, 1.4, 1.4); move(12, 11); line(12, 17)
+        case "wrench.and.screwdriver":
+            move(4, 19); line(14, 9); curve(15, 3, 12, 5, 13, 3); line(16, 7); line(20, 8)
+            line(21, 4); curve(19, 11, 23, 7, 22, 10); line(8, 22); line(4, 19); p.closeSubpath()
+            move(3, 3); line(11, 11); move(14, 14); line(21, 21)
+        default: return nil
+        }
+        return p
+    }
+}
+
+// Dashboard pictograms: consistent thin outline treatment matching the reference.
 struct DashboardMetricIcon: View {
     let symbol: String
     var body: some View {
-        Group {
-            switch symbol {
-            case "heart.pulse":
-                HStack(spacing: -2) {
-                    Image(systemName: "heart")
-                    Image(systemName: "arrow.down")
-                        .font(.system(size: 11, weight: .medium))
-                }
-            case "zones.low", "zones.high":
-                ZStack {
-                    Image(systemName: "heart")
-                    VStack(spacing: 2) {
-                        Capsule().frame(width: 9, height: 1)
-                        if symbol == "zones.high" {
-                            Capsule().frame(width: 6, height: 1)
-                        }
-                    }
-                    .offset(y: symbol == "zones.high" ? -2 : 2)
-                }
-            case "figure.walk":
-                Image(systemName: UIImage(systemName: "shoe") != nil ? "shoe" : "shoeprints.fill")
-            default:
-                Image(systemName: symbol)
-            }
-        }
-        .font(.system(size: 18, weight: .light))
-        .foregroundStyle(Color.appMuted)
-        .frame(width: 24, height: 25)
-        .accessibilityHidden(true)
+        ReferencePictogram(symbol: symbol, size: 21)
+            .foregroundStyle(Color.appMuted)
+            .frame(width: 24, height: 25)
+            .accessibilityHidden(true)
     }
 }
 
