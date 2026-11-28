@@ -894,6 +894,7 @@ final class BandLink: NSObject, ObservableObject {
         let request = metricsRequest
         let correctionRevision = sleepCorrectionRevision
         let syncGeneration = historySyncGeneration
+        metricsRefreshPending = false
         isAnalyzingHistory = true
         let began = Date()
         historyProgress = HistoryProgress(stage: .preparing, completed: 0, total: 0, reused: 0,
