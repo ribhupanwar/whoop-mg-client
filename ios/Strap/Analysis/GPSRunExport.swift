@@ -136,3 +136,81 @@ enum GPSRunExport {
         return file
     }
 }
+
+
+/// Independent TCX activity writer. Uses only saved workout data and measured
+/// sample timestamps. Never guesses missing GPS/HR/calories or upload status.
+enum StravaTCXExport {
+    static func render(_ session: WorkoutSession) throws -> Data {
+        guard session.phase == .saved, let end = session.endedAt,
+              end > session.startedAt, session.metrics.elapsedSeconds > 0,
+              Double(session.metrics.elapsedSeconds) <= end.timeIntervalSince(session.startedAt) + 1,
+              session.metrics.distanceMeters.isFinite, session.metrics.distanceMeters >= 0 else {
+            throw GPSRunExport.Failure(message: "A completed recorded workout is required.")
+        }
+        let startUnix = session.startedAt.timeIntervalSince1970
+        let endUnix = end.timeIntervalSince1970
+        guard startUnix.isFinite, endUnix.isFinite else {
+            throw GPSRunExport.Failure(message: "Invalid workout timestamps.")
+        }
+        struct Point { var gps: WorkoutRoutePoint?; var hr: Int? }
+        var points: [Double: Point] = [:]
+        for p in session.route where p.unix.isFinite && p.unix >= startUnix && p.unix <= endUnix
+            && p.latitude.isFinite && p.longitude.isFinite
+            && (-90...90).contains(p.latitude) && (-180...180).contains(p.longitude) {
+            var point = points[p.unix] ?? Point()
+            if point.gps == nil { point.gps = p }
+            if let bpm = p.heartRate, (35...220).contains(bpm), point.hr == nil { point.hr = bpm }
+            points[p.unix] = point
+        }
+        for h in session.exportHeartRate ?? [] where h.unix.isFinite && h.unix >= startUnix
+            && h.unix <= endUnix && (35...220).contains(h.bpm) {
+            var point = points[h.unix] ?? Point()
+            if point.hr == nil { point.hr = h.bpm }
+            points[h.unix] = point
+        }
+        guard !points.isEmpty else {
+            throw GPSRunExport.Failure(message: "No recorded route or timestamped HR is available for this workout.")
+        }
+        let kind = session.activityKind.lowercased()
+        let sport = kind.contains("run") || kind.contains("treadmill") ? "Running" :
+            (kind.contains("cycl") || kind.contains("bik") ? "Biking" : "Other")
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let start = iso.string(from: session.startedAt)
+        var xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        xml += "<TrainingCenterDatabase xmlns=\"http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2\"><Activities><Activity Sport=\"\(sport)\"><Id>\(start)</Id><Lap StartTime=\"\(start)\">"
+        xml += "<TotalTimeSeconds>\(session.metrics.elapsedSeconds)</TotalTimeSeconds><DistanceMeters>\(session.metrics.distanceMeters)</DistanceMeters>"
+        if let calories = session.metrics.calories, calories >= 0 { xml += "<Calories>\(calories)</Calories>" }
+        if let hr = session.metrics.averageHeartRate, (35...220).contains(hr) {
+            xml += "<AverageHeartRateBpm><Value>\(hr)</Value></AverageHeartRateBpm>"
+        }
+        if let hr = session.metrics.maximumHeartRate, (35...220).contains(hr) {
+            xml += "<MaximumHeartRateBpm><Value>\(hr)</Value></MaximumHeartRateBpm>"
+        }
+        xml += "<Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>"
+        for time in points.keys.sorted() {
+            guard let p = points[time] else { continue }
+            xml += "<Trackpoint><Time>\(iso.string(from: Date(timeIntervalSince1970: time)))</Time>"
+            if let gps = p.gps {
+                xml += "<Position><LatitudeDegrees>\(gps.latitude)</LatitudeDegrees><LongitudeDegrees>\(gps.longitude)</LongitudeDegrees></Position>"
+            }
+            if let hr = p.hr { xml += "<HeartRateBpm><Value>\(hr)</Value></HeartRateBpm>" }
+            xml += "</Trackpoint>"
+        }
+        xml += "</Track></Lap></Activity></Activities></TrainingCenterDatabase>"
+        let data = Data(xml.utf8)
+        guard data.count <= 25_000_000 else {
+            throw GPSRunExport.Failure(message: "TCX exceeds Strava's 25 MB file limit.")
+        }
+        return data
+    }
+
+    static func write(_ session: WorkoutSession, directory: URL = FileManager.default.temporaryDirectory) throws -> URL {
+        let data = try render(session)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let url = directory.appendingPathComponent("STRAP-\(session.id.uuidString).tcx")
+        try data.write(to: url, options: [.atomic, .completeFileProtection])
+        return url
+    }
+}

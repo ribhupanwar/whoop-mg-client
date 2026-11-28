@@ -38,6 +38,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
     private var profileAge: Int?
 
     private var heartRateSamples: [Int] = []
+    private var exportHeartRate: [WorkoutExportHeartRate] = []
     private var hrSampleCount: Int = 0
     private var energyTotal = 0.0
     private var activityTRIMP = 0.0
@@ -82,6 +83,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
         nextSplitMeters = 1000
         lastSplitElapsed = 0
         heartRateSamples = []
+        exportHeartRate = []
         hrSampleCount = 0
         energyTotal = 0
         activityTRIMP = 0
@@ -193,6 +195,7 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
                     heartRate: nil // HR is sampled separately
                 )
             }
+            session.exportHeartRate = exportHeartRate
             guard history.save(session) else {
                 status = "Workout finished, but saving failed."
                 phase = .recording
@@ -238,6 +241,8 @@ final class WorkoutRecorder: NSObject, ObservableObject, CLLocationManagerDelega
             return
         }
         heartRateSamples.append(hr)
+        // Keep observed timestamps separately; existing metrics remain unchanged.
+        exportHeartRate.append(.init(unix: observedAt.timeIntervalSince1970, bpm: hr))
         hrSampleCount += 1
         // Never charge an interval through a pause, invalid reading or
         // long BLE gap. Use the same established Keytel/BMR/gate as the

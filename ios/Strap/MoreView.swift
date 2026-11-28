@@ -113,7 +113,7 @@ struct MoreView: View {
 
                 MoreSettingsCard("DATA & INTEGRATIONS") {
                     NavigationLink { AppleHealthImportView() } label: {
-                        moreRow(.healthIntegrations, subtitle: "Apple HealthKit sync & data exchange")
+                        moreRow(.healthIntegrations, subtitle: "Apple Health, WorkoutPort & Strava")
                     }
                     .buttonStyle(MoreSettingsPressStyle())
 

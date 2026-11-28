@@ -80,3 +80,47 @@ private final class GPXCollector: NSObject, XMLParserDelegate {
         text = ""
     }
 }
+
+
+final class StravaTCXExportTests: XCTestCase {
+    private func workout() -> WorkoutSession {
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        return WorkoutSession(id: UUID(), activityKind: "running", activityLabel: "Running",
+            startedAt: start, endedAt: start.addingTimeInterval(60), phase: .saved,
+            metrics: WorkoutMetrics(elapsedSeconds: 60, distanceMeters: 120, averageHeartRate: 135),
+            route: [], hasGPS: false)
+    }
+
+    func testIndoorHRAndMissingGPS() throws {
+        var w = workout()
+        w.exportHeartRate = [.init(unix: w.startedAt.timeIntervalSince1970 + 1, bpm: 135)]
+        let data = try StravaTCXExport.render(w)
+        let xml = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(XMLParser(data: data).parse())
+        XCTAssertTrue(xml.contains("Sport=\"Running\""))
+        XCTAssertTrue(xml.contains("<HeartRateBpm><Value>135</Value></HeartRateBpm>"))
+        XCTAssertFalse(xml.contains("<Position>"))
+        XCTAssertFalse(xml.contains("<Calories>"))
+    }
+
+    func testOldWorkoutWithoutTrackIsRejected() {
+        XCTAssertThrowsError(try StravaTCXExport.render(workout()))
+    }
+
+    func testRouteAndExactTimestampHRDeduplicate() throws {
+        var w = workout()
+        let time = w.startedAt.timeIntervalSince1970 + 2
+        w.route = [.init(latitude: 28.5, longitude: 77.2, unix: time, accuracyMeters: 5, heartRate: nil)]
+        w.exportHeartRate = [.init(unix: time, bpm: 142), .init(unix: time, bpm: 142)]
+        let xml = String(decoding: try StravaTCXExport.render(w), as: UTF8.self)
+        XCTAssertTrue(xml.contains("<LatitudeDegrees>28.5</LatitudeDegrees>"))
+        XCTAssertTrue(xml.contains("<HeartRateBpm><Value>142</Value></HeartRateBpm>"))
+        XCTAssertEqual(xml.components(separatedBy: "<Trackpoint>").count, 2)
+    }
+
+    func testLegacyWorkoutDecodesWithoutOptionalExportHeartRate() throws {
+        let old = workout()
+        let data = try JSONEncoder().encode(old)
+        XCTAssertNil(try JSONDecoder().decode(WorkoutSession.self, from: data).exportHeartRate)
+    }
+}
