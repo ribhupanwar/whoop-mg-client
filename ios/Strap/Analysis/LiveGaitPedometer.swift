@@ -218,7 +218,7 @@ struct LiveWorkoutStepAccumulator {
 
     mutating func ingest(_ block: Gen5IMUBuffer, at date: Date) -> LiveWorkoutStepReading? {
         guard block.version == 21, block.accelerationG.count == 3,
-              block.accelerationG.allSatisfy({ $0.count == 100 && $0.allSatisfy(\\.isFinite) }) else {
+              block.accelerationG.allSatisfy({ $0.count == 100 && $0.allSatisfy(\.isFinite) }) else {
             interrupt()
             return nil
         }
