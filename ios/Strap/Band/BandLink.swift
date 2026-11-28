@@ -1351,6 +1351,8 @@ final class BandLink: NSObject, ObservableObject {
                 sleepPerformancePct: assessment.day?.sleepPerformancePct,
                 skinTemperatureC: assessment.day?.skinTemperatureC,
                 oxygenCandidatePct: assessment.day?.oxygenCandidatePct,
+                sensorCalibrationEvidence: SensorCalibrationResearch.nightEvidence(
+                    samples: samples, startUnix: session.startUnix, endUnix: session.endUnix),
                 temperatureFunnel: NightTemperature.funnel(archived, session: session),
                 oxygenCandidateSummary: Recovery.spo2Summary(samples),
                 stageDecisionEvidence: stageEvidence)
