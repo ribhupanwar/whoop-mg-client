@@ -564,6 +564,24 @@ def decode_v20(inner: bytes) -> V20OpticalBuffer | None:
 
 
 @dataclass
+class V20DrainQuality:
+    """Tracks aggregate sample quality metrics across decoded V20 optical frames."""
+    frames: int = 0
+    invalid_samples: int = 0
+    saturated_samples: int = 0
+    flatline_slots: int = 0
+
+    def record(self, frame: V20OpticalBuffer) -> None:
+        self.frames += 1
+        for block in frame.blocks:
+            for slot in (block.detector_a, block.detector_b):
+                self.invalid_samples += sum(sample is None for sample in slot.samples)
+                self.saturated_samples += slot.saturated_sample_count
+                if slot.is_flatline:
+                    self.flatline_slots += 1
+
+
+@dataclass
 class V22ResearchRecord:
     header: RecordHeader
     tag: int

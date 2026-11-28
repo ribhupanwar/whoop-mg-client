@@ -7,6 +7,7 @@ from whoop.records import (
     V18,
     V20,
     V20_INNER_LEN,
+    V20DrainQuality,
     V22,
     V22_INNER_LEN,
     V26,
@@ -543,11 +544,53 @@ class TestV20(unittest.TestCase):
         buf[1] = V20
         self.assertIsNone(decode_v20(bytes(buf[:-1])))
         self.assertIsNone(decode_v20(bytes(buf) + b"\x00"))
-        buf[1] = 18
-        self.assertIsNone(decode_v20(bytes(buf)))
+        # Invalid revisions
+        for rev in (0, 10, 18, 21, 22, 26, 255):
+            buf[1] = rev
+            self.assertIsNone(decode_v20(bytes(buf)))
         buf[1] = V20
-        buf[0] = 0x28
-        self.assertIsNone(decode_v20(bytes(buf)))
+        # Invalid packet types
+        for pt in (0x00, 0x10, 0x24, 0x28, 0x2B, 0x30, 0x32, 0xFF):
+            buf[0] = pt
+            self.assertIsNone(decode_v20(bytes(buf)))
+
+    def test_v20_drain_quality_aggregation(self):
+        buf = bytearray(V20_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V20
+        struct.pack_into("<H", buf, 15, 25)
+        start = 18 + 4 * 422
+        struct.pack_into("<BBHBHBIh", buf, start, 3, 2, 200, 4, 0, 3, 32, -800)
+        struct.pack_into("<3i", buf, start + 21, -524288, 524287, 524288)
+        struct.pack_into("<3i", buf, start + 221, 7, 7, 7)
+        buf[start + 421] = 0xA5
+
+        record = decode_v20(bytes(buf))
+        self.assertIsNotNone(record)
+        quality = V20DrainQuality()
+        quality.record(record)
+        self.assertEqual(quality.frames, 1)
+        self.assertEqual(quality.invalid_samples, 1)
+        self.assertEqual(quality.saturated_samples, 2)
+        self.assertEqual(quality.flatline_slots, 1)
+
+    def test_v20_zero_sample_rate_yields_none(self):
+        buf = bytearray(V20_INNER_LEN)
+        buf[0] = 0x2F
+        buf[1] = V20
+        struct.pack_into("<H", buf, 15, 0)
+        rec = decode_v20(bytes(buf))
+        self.assertIsNotNone(rec)
+        self.assertIsNone(rec.sample_rate_hz)
+
+    def test_v20_block_count_exceeding_capacity_rejected(self):
+        for block_idx in range(5):
+            buf = bytearray(V20_INNER_LEN)
+            buf[0] = 0x2F
+            buf[1] = V20
+            start = 18 + block_idx * 422
+            buf[start] = 51  # capacity guard is 50
+            self.assertIsNone(decode_v20(bytes(buf)), f"Block {block_idx} with count 51 must be rejected")
 
 
 class TestV22(unittest.TestCase):

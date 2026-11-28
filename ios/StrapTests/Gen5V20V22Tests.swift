@@ -71,11 +71,36 @@ final class Gen5V20V22Tests: XCTestCase {
         bytes[0] = 0x2F
         bytes[1] = 20
         XCTAssertNil(Gen5V20Record.decode(Array(bytes.dropLast())))
-        bytes[1] = 18
-        XCTAssertNil(Gen5V20Record.decode(bytes))
+        XCTAssertNil(Gen5V20Record.decode(bytes + [0x00]))
+
+        // Invalid revisions
+        for rev: UInt8 in [0, 10, 18, 21, 22, 26, 255] {
+            bytes[1] = rev
+            XCTAssertNil(Gen5V20Record.decode(bytes), "Revision \(rev) must be rejected")
+        }
         bytes[1] = 20
-        bytes[0] = 0x28
-        XCTAssertNil(Gen5V20Record.decode(bytes))
+
+        // Invalid packet types
+        for pt: UInt8 in [0x00, 0x10, 0x24, 0x28, 0x2B, 0x30, 0x32, 0xFF] {
+            bytes[0] = pt
+            XCTAssertNil(Gen5V20Record.decode(bytes), "Packet type \(pt) must be rejected")
+        }
+        bytes[0] = 0x2F
+
+        // Sample rate 0 yields nil sampleRateHz
+        bytes[15] = 0
+        bytes[16] = 0
+        let rec = Gen5V20Record.decode(bytes)
+        XCTAssertNotNil(rec)
+        XCTAssertNil(rec?.sampleRateHz)
+
+        // Block count exceeding capacity guard (> 50)
+        for blockIdx in 0..<5 {
+            var mutated = bytes
+            let start = 18 + blockIdx * 422
+            mutated[start] = 51
+            XCTAssertNil(Gen5V20Record.decode(mutated), "Block \(blockIdx) with count 51 must be rejected")
+        }
     }
 
     func testGen5V22RecordDecodesValidTelemetry() {
