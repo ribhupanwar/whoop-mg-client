@@ -15,7 +15,8 @@ struct SleepSession: Codable, Equatable {
     // authoritative manual bed/wake corrections are not modified.
     // v9: bounded, positively corroborated nocturnal resumption merge.
     // v10: distinguish missing motion from observed stillness during staging.
-    static let algorithmVersion = 10
+    // v11: include observed short nocturnal resumptions.
+    static let algorithmVersion = 11
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
@@ -67,6 +68,8 @@ struct SleepSession: Codable, Equatable {
         guard let asleepHours, timeInBedHours > 0 else { return nil }
         return 100 * asleepHours / timeInBedHours
     }
+    var lifecycleID: String { "\(sourceStartUnix)-\(endUnix)" }
+
     /// A manual end action belongs to a current window at the archive frontier.
     /// A detector window with newer observations has already ended.
     func canEndNow(lastObservedUnix: Int?, nowUnix: Int) -> Bool {
@@ -223,7 +226,14 @@ struct SleepSession: Codable, Equatable {
                         && (35...220).contains($0.heartRate)
                         && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= 0.015 } ?? false)
                 }
-                return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
+                if Hrv.contiguousRuns(tail).contains(where: { $0.count >= 300 }) { return false }
+                // The detector can also corroborate a short return to sleep
+                // after motion and HR rise, even with a latched up flag.
+                guard first <= old.startUnix, candidate.startUnix <= old.endUnix - 20 * 60,
+                      let resumed = SleepDetect.observedShortResumption(
+                        after: source, samples: samples, before: candidate.endUnix
+                      ) else { return true }
+                return resumed != candidate.endUnix - 1
             }
             // Archive endpoints do not prove usable data throughout a night.
             // An empty/partial detector result is not evidence that a previously
@@ -360,6 +370,18 @@ enum SleepCorrectionStore {
         let magnitude = abs(distance)
         return magnitude <= 6 * 3600 ? magnitude : nil
     }
+    /// Editors may remain open while a BLE sync moves the automatic bounds.
+    /// Compare Save with the bounds shown to the user when they opened it.
+    struct EditorSnapshot {
+        let period: SleepPeriod
+        let displayed: [Int]
+
+        func canSave(_ times: [Int], current: EditorSnapshot, explicitlyEnding: Bool = false) -> Bool {
+            period.startUnix == current.period.startUnix && period.endUnix == current.period.endUnix
+                && displayed == current.displayed && (explicitlyEnding || times != displayed)
+        }
+    }
+
     /// Saving a recovered edit replaces its aliases instead of creating another night.
     static func saving(
         _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]],

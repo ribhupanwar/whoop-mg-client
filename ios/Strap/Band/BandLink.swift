@@ -1204,7 +1204,7 @@ final class BandLink: NSObject, ObservableObject {
         // Load their own durable samples rather than requiring a new BLE drain.
         // A prematurely closed window needs subsequent archive records too.
         // The observation horizon is not a proposed or fabricated sleep end.
-        let from = redetect ? max(1, session.startUnix - 30 * 60) : session.startUnix
+        let from = redetect ? max(1, session.startUnix - 90 * 60) : session.startUnix
         let through = redetect
             ? min(Int(Date().timeIntervalSince1970), max(session.endUnix - 1, session.startUnix + 12 * 3600 - 1))
             : session.endUnix - 1

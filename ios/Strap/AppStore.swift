@@ -296,39 +296,39 @@ final class AppStore: ObservableObject {
     /// sensor sessions without prematurely finalizing or reopening past nights.
     private func syncSleepLifecycle(_ fresh: CaptureSummary?) {
         guard let session = fresh?.latestSleepSession else { return }
-        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        let sessionID = session.lifecycleID
         let nowUnix = Int(Date().timeIntervalSince1970)
         let isOngoing = session.canEndNow(lastObservedUnix: fresh?.lastUnix, nowUnix: nowUnix)
 
         DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
+            guard let self, self.band.latestSleepSession?.lifecycleID == sessionID else { return }
+            let previous = self.sleepLifecycle
+            _ = self.sleepLifecycle.reconcileDetectedWindow(session.sourcePeriod, id: sessionID)
+            self.sleepLifecycle.completeWhenSuperseded(by: session.startUnix)
             if isOngoing {
-                if self.sleepLifecycle.phase == .idle || (self.sleepLifecycle.phase == .completed && self.sleepLifecycle.sessionID != sessionID && session.startUnix >= (self.sleepLifecycle.endedAtUnix ?? 0)) {
-                    self.sleepLifecycle.confirm(sessionID: sessionID, startUnix: session.startUnix)
-                    self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+                self.sleepLifecycle.resume(sessionID: sessionID)
+                self.sleepLifecycle.confirm(sessionID: sessionID, startUnix: session.startUnix)
+            } else if self.sleepLifecycle.sessionID == sessionID {
+                if session.isEdited || (fresh?.lastUnix ?? 0) - session.endUnix >= SleepDetect.wakeObservationWindowS {
+                    self.sleepLifecycle.end(sessionID: sessionID, at: session.endUnix)
+                } else {
+                    self.sleepLifecycle.observeProvisionalWake(sessionID: sessionID)
                 }
-            } else if self.sleepLifecycle.phase == .detected && self.sleepLifecycle.sessionID == sessionID {
-                self.sleepLifecycle.end(sessionID: sessionID, at: session.endUnix)
-                let hasQuestions = !self.journalEntries.isEmpty
-                self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
-                self.sleepLifecyclePersistence.save(self.sleepLifecycle)
-            } else if self.sleepLifecycle.phase == .processing && self.sleepLifecycle.sessionID == sessionID {
-                let hasQuestions = !self.journalEntries.isEmpty
-                self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
-                self.sleepLifecyclePersistence.save(self.sleepLifecycle)
+                self.sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: !self.journalEntries.isEmpty)
             }
+            if self.sleepLifecycle != previous { self.sleepLifecyclePersistence.save(self.sleepLifecycle) }
         }
     }
 
     /// Manual End Sleep immediately bounds the active sleep session and triggers
     /// full recalculation and morning journal progression.
-    func endSleepNow() {
+    func endSleepNow(expectedSessionID: String?) {
         guard let session = band.latestSleepSession, let lastUnix = band.summary?.lastUnix else { return }
         let now = Int(Date().timeIntervalSince1970)
-        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        let sessionID = session.lifecycleID
         // A stale lifecycle card or archive frontier must not save a historical
         // candidate as a newly confirmed manual wake time.
-        guard sleepLifecycle.phase == .detected,
+        guard expectedSessionID == sessionID, sleepLifecycle.phase == .detected,
               sleepLifecycle.sessionID == sessionID,
               session.canEndNow(lastObservedUnix: lastUnix, nowUnix: now) else { return }
         let nowUnix = max(session.startUnix + 60, min(now, lastUnix + 60))
@@ -346,7 +346,7 @@ final class AppStore: ObservableObject {
     /// Manually trigger immediate final processing for a detected sleep window.
     func processSleepNow() {
         guard let session = band.latestSleepSession else { return }
-        let sessionID = "\(session.sourceStartUnix)-\(session.endUnix)"
+        let sessionID = session.lifecycleID
         sleepLifecycle.end(sessionID: sessionID, at: session.endUnix)
         let hasQuestions = !journalEntries.isEmpty
         sleepLifecycle.finishProcessing(sessionID: sessionID, hasJournalQuestions: hasQuestions)
@@ -743,6 +743,7 @@ final class AppStore: ObservableObject {
 enum SleepLifecyclePhase: String, Codable, Equatable {
     case idle
     case detected
+    case provisionalWake
     case processing
     case journalPending
     case completed
@@ -773,9 +774,38 @@ struct SleepLifecycleSnapshot: Codable, Equatable {
         phase = .detected
     }
 
+    /// A history refresh can move either boundary of the same active night.
+    mutating func reconcileDetectedWindow(_ period: SleepPeriod, id: String) -> Bool {
+        guard phase == .detected || phase == .provisionalWake,
+              sessionID != id, let start = confirmedStartUnix,
+              let endText = sessionID?.split(separator: "-").last, let end = Int(endText),
+              start <= period.endUnix, period.startUnix < end else { return false }
+        sessionID = id
+        confirmedStartUnix = period.startUnix
+        return true
+    }
+
+    mutating func completeWhenSuperseded(by start: Int) {
+        guard phase == .detected || phase == .provisionalWake,
+              let id = sessionID, let endText = id.split(separator: "-").last,
+              let end = Int(endText), start >= end else { return }
+        self.end(sessionID: id, at: end)
+        finishProcessing(sessionID: id, hasJournalQuestions: false)
+    }
+
+    mutating func observeProvisionalWake(sessionID: String) {
+        guard phase == .detected, self.sessionID == sessionID else { return }
+        phase = .provisionalWake
+    }
+
+    mutating func resume(sessionID: String) {
+        guard phase == .provisionalWake, self.sessionID == sessionID else { return }
+        phase = .detected
+    }
+
     /// Both automatic and manual End Sleep use this idempotent transition.
     mutating func end(sessionID: String, at unix: Int) {
-        guard phase == .detected, self.sessionID == sessionID,
+        guard phase == .detected || phase == .provisionalWake, self.sessionID == sessionID,
               let start = confirmedStartUnix, unix > start else { return }
         endedAtUnix = unix
         phase = .processing

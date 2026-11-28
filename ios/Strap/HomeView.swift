@@ -37,6 +37,8 @@ struct HomeView: View {
     @State private var showDashboardCustomize = false
     @State private var showSleepEditor = false
     @State private var confirmHomeEndSleep = false
+    @State private var endSleepSessionID: String?
+    @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
     private var sleepCorrections: [String: [Int]] {
@@ -306,15 +308,16 @@ struct HomeView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            if correctedSleepEnd > correctedSleepStart,
-                               correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400,
-                               let period = latestSleepPeriod {
-                                let corrections = SleepCorrectionStore.saving([
-                                    Int(correctedSleepStart.timeIntervalSince1970),
-                                    Int(correctedSleepEnd.timeIntervalSince1970)
-                                ], for: period, overrides: sleepCorrections)
-                                UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
-                                store.band.notifySleepCorrectionChanged()
+                            let times = [Int(correctedSleepStart.timeIntervalSince1970),
+                                         Int(correctedSleepEnd.timeIntervalSince1970)]
+                            if let current = currentSleepEditorSnapshot,
+                               sleepEditorSnapshot?.canSave(times, current: current) == true {
+                                let old = sleepCorrections
+                                let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old)
+                                if corrections != old {
+                                    UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
+                                    store.band.notifySleepCorrectionChanged()
+                                }
                             }
                             showSleepEditor = false
                         }
@@ -872,7 +875,8 @@ struct HomeView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            confirmHomeEndSleep = true
+                            endSleepSessionID = store.band.latestSleepSession?.lifecycleID
+                            confirmHomeEndSleep = endSleepSessionID != nil
                         } label: {
                             Text("END SLEEP")
                                 .font(StrapTypography.body(11, weight: .bold))
@@ -884,7 +888,7 @@ struct HomeView: View {
                         .buttonStyle(.plain)
                         .alert("End Sleep?", isPresented: $confirmHomeEndSleep) {
                             Button("Cancel", role: .cancel) {}
-                            Button("End Sleep", role: .destructive) { store.endSleepNow() }
+                            Button("End Sleep", role: .destructive) { store.endSleepNow(expectedSessionID: endSleepSessionID) }
                         } message: {
                             Text("Only confirm if you have finished sleeping. This saves an explicit wake time; otherwise automatic detection can continue.")
                         }
@@ -1014,13 +1018,20 @@ struct HomeView: View {
 
     // MARK: Activity rows
 
-    private func openHomeSleepEditor() {
-        guard let period = latestSleepPeriod else { return }
+    private var currentSleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot? {
+        guard let period = latestSleepPeriod else { return nil }
         let session = store.band.latestSleepSession
         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-        // Explicit user corrections must win over a stale derived sleep session.
-        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? session?.startUnix ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? session?.endUnix ?? (period.endUnix + 1)))
+        return .init(period: period, displayed: times ?? [
+            session?.startUnix ?? period.startUnix, session?.endUnix ?? (period.endUnix + 1)
+        ])
+    }
+
+    private func openHomeSleepEditor() {
+        guard let snapshot = currentSleepEditorSnapshot else { return }
+        sleepEditorSnapshot = snapshot
+        correctedSleepStart = Date(timeIntervalSince1970: Double(snapshot.displayed[0]))
+        correctedSleepEnd = Date(timeIntervalSince1970: Double(snapshot.displayed[1]))
         showSleepEditor = true
     }
 

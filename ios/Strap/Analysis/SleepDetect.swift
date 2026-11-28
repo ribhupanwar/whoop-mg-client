@@ -9,6 +9,7 @@ enum SleepDetect {
     static let maxSleepS = 12 * 3600 // WHOOP 5.80.2 TWELVE_HOUR limit (SleepWindow.swift)
     static let gapToleranceS = 300
     static let hrDropBPM = 5.0
+    static let wakeObservationWindowS = 45 * 60
     /// Autonomic onset gate: HR must settle ≤ awakeMedian + 5 for ≥10 min sustained stillness.
     static let autonomicOnsetThresholdBPM = 5.0
     static let autonomicOnsetWindowS = 10 * 60
@@ -237,6 +238,10 @@ enum SleepDetect {
                     && Stats.median(earlier.map { Double($0.heartRate) }) >= confirmedHR + 6
                 if verifiedStart - cursor >= 5 * 60 && transitionObserved {
                     verifiedStart = cursor
+                } else if Calendar.current.component(.hour, from: Date(timeIntervalSince1970: Double(verifiedStart))) >= 22,
+                          let onset = settledEveningOnset(in: run, before: verifiedStart, anchorHR: confirmedHR,
+                                                         traceSink: traceSink) {
+                    verifiedStart = onset
                 }
             } else {
                 // For overnight candidates, if the run begins with sustained band-up (state 3)
@@ -481,7 +486,171 @@ enum SleepDetect {
             )
             }
         }
-        return mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
+        let merged = mergeNocturnalPeriods(periods, samples: ordered, quietAccelG: quietAccelG)
+        return merged.enumerated().map { index, period in
+            let nextStart = index + 1 < merged.count ? merged[index + 1].startUnix : Int.max
+            guard let end = observedShortResumption(after: period, samples: ordered,
+                                                    before: nextStart, traceSink: traceSink) else {
+                return period
+            }
+            traceSink?(["gate": "shortResumption", "verdict": "passed",
+                        "previousEnd": period.endUnix, "resumedEnd": end])
+            let rows = ordered.filter { period.startUnix <= $0.unix && $0.unix <= end }
+            let worn = rows.filter { $0.wearing && (35...220).contains($0.heartRate) }
+            let quietCount = worn.filter {
+                $0.dynamicAccelG.map { $0.isFinite && (0...quietAccelG).contains($0) } == true
+            }.count
+            return SleepPeriod(startUnix: period.startUnix, endUnix: end,
+                quietFraction: Double(quietCount) / Double(rows.count),
+                meanHR: Stats.mean(worn.map { Double($0.heartRate) }), wakeEvents: period.wakeEvents + 1)
+        }
+    }
+
+    /// A short return to sleep need not qualify as a new, hour-long session.
+    /// Require an observed interruption followed by dense quiet minutes near
+    /// the preceding night's HR. When state 3 persists, stable wrist angle
+    /// corroborates resettling even if the wearer changed sleeping position.
+    static func observedShortResumption(after period: SleepPeriod, samples: [V18Sample],
+                                        before upperBound: Int, traceSink: TraceSink? = nil) -> Int? {
+        let wake = period.endUnix + 1
+        guard period.durationS >= 3600, isNocturnalPeriod(period),
+              Calendar.current.component(.hour, from: Date(timeIntervalSince1970: Double(wake))) < 8,
+              upperBound - wake >= 6 * 60 else { return nil }
+
+        let horizon = min(upperBound, wake + wakeObservationWindowS)
+        let nearby = samples.filter { wake - 20 * 60 <= $0.unix && $0.unix < horizon }
+        let rows = HistoricalCaptureRecovery.merged(nearby)
+        func observed(_ row: V18Sample) -> Bool {
+            row.wearing && (35...220).contains(row.heartRate)
+                && row.dynamicAccelG.map { $0.isFinite && $0 >= 0 } == true
+        }
+        let reference = rows.values.filter {
+            $0.unix < wake - 2 * 60 && observed($0) && ($0.dynamicAccelG ?? .infinity) <= 0.015
+        }
+        guard reference.count >= 10 * 60 else {
+            traceSink?(["gate": "shortResumption", "verdict": "insufficientBaseline", "wake": wake])
+            return nil
+        }
+        let resting = Stats.median(reference.map { Double($0.heartRate) })
+        let interruption = (wake..<(wake + 3 * 60)).compactMap { rows[$0] }
+        guard interruption.filter({
+            observed($0) && Double($0.heartRate) >= resting + 10
+                && ($0.dynamicAccelG ?? 0) >= 0.08
+        }).count >= 30 else {
+            traceSink?(["gate": "shortResumption", "verdict": "noObservedInterruption", "wake": wake])
+            return nil
+        }
+
+        func stableAngle(_ quiet: [V18Sample]) -> Bool {
+            let vectors = quiet.compactMap { row -> (Double, Double, Double)? in
+                guard let x = row.gravityXG, let y = row.gravityYG, let z = row.gravityZG,
+                      (0.8...1.2).contains(x * x + y * y + z * z) else { return nil }
+                return (x, y, z)
+            }
+            guard vectors.count >= 35 else { return false }
+            let a = Stats.median(vectors.map { $0.0 })
+            let b = Stats.median(vectors.map { $0.1 })
+            let c = Stats.median(vectors.map { $0.2 })
+            return vectors.filter { x, y, z in
+                let dx = x - a, dy = y - b, dz = z - c
+                return dx * dx + dy * dy + dz * dz <= 0.04
+            }.count >= 35
+        }
+
+        var gapCoverage = 0
+        var firstQuiet: Int?
+        var quietMinutes = 0
+        var declaredMinutes = 0
+        var rejectedMinutes = 0
+        var lastQuietEnd: Int?
+        var confirmed = false
+        for minute in stride(from: wake, to: horizon - 59, by: 60) {
+            let window = (minute..<(minute + 60)).compactMap { rows[$0] }.filter(observed)
+            let quiet = window.filter { ($0.dynamicAccelG ?? .infinity) <= 0.015 }
+            let settled = window.count >= 50 && quiet.count >= 38
+                && Stats.median(quiet.map { Double($0.heartRate) }) <= resting + 6
+            let declared = settled && quiet.filter { $0.sleepState == 2 }.count >= 38
+            let returned = settled && stableAngle(quiet.filter { $0.sleepState == 3 })
+            let decision = declared ? "bandSleepAndSettled" : returned ? "latchedUpAndSettled" : "rejected"
+            traceSink?(["gate": "resumptionMinute", "verdict": decision, "start": minute,
+                        "observed": window.count, "quiet": quiet.count, "nightHR": resting])
+            if declared || returned {
+                if firstQuiet == nil {
+                    let gap = minute - wake
+                    guard gap > 0, gapCoverage * 5 >= gap * 4 else { return nil }
+                    firstQuiet = minute
+                }
+                quietMinutes += 1
+                if declared { declaredMinutes += 1 }
+                lastQuietEnd = minute + 59
+                rejectedMinutes = 0
+                if quietMinutes >= 6 || declaredMinutes >= 5 { confirmed = true }
+            } else if firstQuiet != nil {
+                rejectedMinutes += 1
+                // Brief arousals may occur after resettling. A sparse minute
+                // or sustained loss of corroboration ends this search.
+                if window.count < 50 || rejectedMinutes >= 2 {
+                    if confirmed { break }
+                    return nil
+                }
+            }
+            if firstQuiet == nil {
+                gapCoverage += window.count
+                if minute >= wake + 10 * 60 { break }
+            } else if !confirmed, let firstQuiet, minute - firstQuiet >= 8 * 60 {
+                return nil
+            }
+        }
+        guard confirmed else {
+            traceSink?(["gate": "shortResumption", "verdict": "noSustainedResettling", "wake": wake])
+            return nil
+        }
+        return lastQuietEnd
+    }
+
+    /// Find the motion-to-stillness and HR transition before a delayed
+    /// evening sleep declaration. Short arousals inside a dense settling
+    /// prefix do not erase the earlier transition.
+    private static func settledEveningOnset(in run: [V18Sample], before hint: Int,
+                                           anchorHR: Double, traceSink: TraceSink?) -> Int? {
+        let lower = max(run[0].unix, hint - 45 * 60)
+        let rows = Dictionary(uniqueKeysWithValues: run.filter { $0.unix >= lower && $0.unix < hint }
+            .map { ($0.unix, $0) })
+        var settled: [Bool] = []
+        var active: [Bool] = []
+        let floor = hint - ((hint - lower) / 60) * 60
+        for start in stride(from: floor, to: hint, by: 60) {
+            let worn = (start..<(start + 60)).compactMap { rows[$0] }.filter {
+                $0.wearing && (35...220).contains($0.heartRate)
+                    && $0.dynamicAccelG.map { $0.isFinite && $0 >= 0 } == true
+            }
+            guard worn.count >= 50 else {
+                settled.append(false)
+                active.append(false)
+                continue
+            }
+            let quiet = worn.filter { $0.sleepState != 3 && ($0.dynamicAccelG ?? .infinity) <= 0.015 }
+            let median = Stats.median(worn.map { Double($0.heartRate) })
+            settled.append(quiet.count >= 45 && median <= anchorHR + 7)
+            active.append(median >= anchorHR + 10
+                && worn.filter { ($0.dynamicAccelG ?? 0) >= 0.08 }.count >= 15)
+        }
+        for (index, isSettled) in settled.enumerated()
+        where isSettled && index >= 3 && index + 10 <= settled.count {
+            guard active[(index - 3)..<index].contains(true),
+                  settled[index..<(index + 5)].filter({ $0 }).count >= 4 else { continue }
+            let tail = settled[index...]
+            guard tail.filter({ $0 }).count * 4 >= tail.count * 3,
+                  !zip(tail, zip(tail.dropFirst(), tail.dropFirst(2))).contains(where: {
+                      !$0.0 && !$0.1.0 && !$0.1.1
+                  }) else { continue }
+            let onset = floor + index * 60
+            traceSink?(["gate": "eveningSettling", "verdict": "passed", "hint": hint,
+                        "onset": onset, "anchorHR": anchorHR])
+            return onset
+        }
+        traceSink?(["gate": "eveningSettling", "verdict": "noCorroboratedOnset", "hint": hint, "searchStart": floor])
+        return nil
     }
 
     /// The full-run HR median can hide a prolonged elevated-HR lead-in.

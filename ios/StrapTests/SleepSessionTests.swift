@@ -179,6 +179,19 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(SleepCorrectionStore.saving(changed, for: provisional, overrides: [:])[String(bounds[0])], changed)
     }
 
+    func testOpenEditorCannotSaveStaleWakeAfterArchiveReconciliation() {
+        let partial = period(68 * 60)
+        let full = period(8 * 3600)
+        let initial = SleepCorrectionStore.EditorSnapshot(period: partial,
+            displayed: [partial.startUnix, partial.endUnix + 1])
+        let refreshed = SleepCorrectionStore.EditorSnapshot(period: full,
+            displayed: [full.startUnix, full.endUnix + 1])
+        XCTAssertFalse(initial.canSave(initial.displayed, current: refreshed))
+        XCTAssertFalse(initial.canSave(initial.displayed, current: refreshed, explicitlyEnding: true))
+        XCTAssertFalse(refreshed.canSave(refreshed.displayed, current: refreshed))
+        XCTAssertTrue(refreshed.canSave([full.startUnix, full.endUnix], current: refreshed))
+    }
+
     func testResetSavedWakeCorrectionAllowsAutomaticExtension() {
         let oldEnd = start + 68 * 60
         let newEnd = oldEnd + 3 * 3600

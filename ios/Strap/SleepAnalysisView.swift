@@ -15,6 +15,7 @@ struct SleepAnalysisView: View {
     @State private var preparingSleepExport = false
     @State private var showSleepEditor = false
     @State private var confirmEndSleep = false
+    @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
 
@@ -168,13 +169,15 @@ struct SleepAnalysisView: View {
     }
 
     private func saveSleepCorrection(explicitlyEndSleep: Bool = false) {
-        guard let period = editablePeriod, correctedSleepEnd > correctedSleepStart,
-              correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400 else { return }
+        let times = [Int(correctedSleepStart.timeIntervalSince1970),
+                     Int(correctedSleepEnd.timeIntervalSince1970)]
+        guard let current = currentSleepEditorSnapshot,
+              sleepEditorSnapshot?.canSave(times, current: current, explicitlyEnding: explicitlyEndSleep) == true
+        else { showSleepEditor = false; return }
         let oldCorrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
-        let corrections = SleepCorrectionStore.saving([
-            Int(correctedSleepStart.timeIntervalSince1970),
-            Int(correctedSleepEnd.timeIntervalSince1970)
-        ], for: period, overrides: oldCorrections, explicitlyEndSleep: explicitlyEndSleep)
+        let corrections = SleepCorrectionStore.saving(
+            times, for: current.period, overrides: oldCorrections, explicitlyEndSleep: explicitlyEndSleep
+        )
         guard corrections != oldCorrections else { showSleepEditor = false; return }
         UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
         store.band.notifySleepCorrectionChanged()
@@ -299,12 +302,20 @@ struct SleepAnalysisView: View {
         return periods.max(by: { $0.endUnix < $1.endUnix })
     }
 
-    private func openSleepEditor() {
-        guard let period = editablePeriod else { return }
+    private var currentSleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot? {
+        guard let period = editablePeriod else { return nil }
         let corrections = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
         let times = SleepCorrectionStore.times(for: period, overrides: corrections)
-        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? session?.startUnix ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? session?.endUnix ?? (period.endUnix + 1)))
+        return .init(period: period, displayed: times ?? [
+            session?.startUnix ?? period.startUnix, session?.endUnix ?? (period.endUnix + 1)
+        ])
+    }
+
+    private func openSleepEditor() {
+        guard let snapshot = currentSleepEditorSnapshot else { return }
+        sleepEditorSnapshot = snapshot
+        correctedSleepStart = Date(timeIntervalSince1970: Double(snapshot.displayed[0]))
+        correctedSleepEnd = Date(timeIntervalSince1970: Double(snapshot.displayed[1]))
         showSleepEditor = true
     }
 
@@ -318,12 +329,13 @@ struct SleepAnalysisView: View {
 
     private func requestEndSleepNow() {
         let now = Date()
-        guard canEndSleepNow(at: now), let period = editablePeriod else { return }
-        let start = Date(timeIntervalSince1970: TimeInterval(session?.startUnix ?? period.startUnix))
+        guard canEndSleepNow(at: now), let snapshot = currentSleepEditorSnapshot else { return }
+        let start = Date(timeIntervalSince1970: Double(snapshot.displayed[0]))
         guard now > start, now.timeIntervalSince(start) <= 86400 else {
             openSleepEditor()
             return
         }
+        sleepEditorSnapshot = snapshot
         correctedSleepStart = start
         correctedSleepEnd = now
         confirmEndSleep = true
