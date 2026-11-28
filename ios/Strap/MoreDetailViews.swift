@@ -11,7 +11,7 @@ struct ConnectionSyncView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Panel {
                     SectionTitle("BAND STATUS")
                     HStack(spacing: 12) {
@@ -260,7 +260,7 @@ struct BandAlarmsView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 // Section 1: Master Wake Alarm Card
                 Panel {
                     SectionTitle("WAKE ALARM")
@@ -503,7 +503,7 @@ struct DataManagementView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 // SECTION 1: WHOOP DATA IMPORT
                 Panel {
                     SectionTitle("WHOOP ARCHIVE IMPORT")
@@ -835,7 +835,7 @@ struct NotificationSettingsView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Panel {
                     SectionTitle("SYSTEM NOTIFICATION STATUS")
                     HStack {
@@ -875,11 +875,11 @@ struct NotificationSettingsView: View {
                     NavigationLink {
                         BandAlarmsView()
                     } label: {
-                        Label("Edit wake alarm schedule", systemImage: "alarm")
-                            .font(StrapTypography.body(13.5, weight: .semibold))
-                            .foregroundStyle(Color.appAccent)
+                        MoreSettingsDetailRow(title: "Edit wake alarm schedule",
+                            subtitle: "Configure your band alarm and weekly schedule.",
+                            titleColor: .appAccent, accessory: .navigation)
                     }
-                    .padding(.vertical, 6)
+                    .buttonStyle(MoreSettingsPressStyle())
                 }
 
                 Panel {
@@ -887,9 +887,11 @@ struct NotificationSettingsView: View {
                     Toggle("Low band battery reminder", isOn: $lowBatteryNoticeEnabled)
                         .tint(Color.appAccent)
                     Hint("At most once per local day for a newly received battery reading of 15% or less while connected and not charging.")
+                    Divider().overlay(Color.appLine).padding(.vertical, 10)
                     Toggle("Morning recovery recap", isOn: $recoveryRecapNoticeEnabled)
                         .tint(Color.appAccent)
                     Hint("Once today's recorded recovery is available.")
+                    Divider().overlay(Color.appLine).padding(.vertical, 10)
                     Toggle("Workout saved reminder", isOn: $workoutSavedNoticeEnabled)
                         .tint(Color.appAccent)
                     Hint("Only after a recording is successfully saved. No personal metrics in notification text.")
@@ -982,7 +984,7 @@ struct AppPreferencesView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Panel {
                     SectionTitle("APPEARANCE & DISPLAY")
                     Picker("Appearance", selection: $appearanceMode) {
@@ -991,14 +993,18 @@ struct AppPreferencesView: View {
                         Text("Dark").tag("dark")
                     }
                     .pickerStyle(.segmented)
+                    .padding(.bottom, 12)
                     Toggle("Keep workout screen awake", isOn: $keepScreenOn)
                         .tint(Color.appAccent)
                     Hint("Optional. Keeps the display awake only while actively recording on the workout screen. Normal sleep is restored when paused, backgrounded or leaving the screen.")
+                    Divider().overlay(Color.appLine).padding(.vertical, 10)
                     Toggle("Liquid Glass navigation", isOn: $navigationGlass)
                         .tint(Color.appAccent)
+                    Divider().overlay(Color.appLine).padding(.vertical, 10)
                     Toggle("Share health metrics with widgets", isOn: $healthWidgetEnabled)
                         .tint(Color.appAccent)
                     Hint("Off by default. Enabling makes your daily score snapshot available to your installed Home Screen widget. Turning off removes the shared snapshot; iOS controls widget refresh.")
+                    Divider().overlay(Color.appLine).padding(.vertical, 10)
                     Text("Measurements are shown in metric units. Localized times follow your iPhone settings.")
                         .font(StrapTypography.body(12))
                         .foregroundStyle(Color.appMuted)
@@ -1051,7 +1057,7 @@ struct AppPreferencesView: View {
 struct AppInfoView: View {
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 Panel {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("STRAP")
@@ -1155,7 +1161,7 @@ struct DiagnosticsSupportView: View {
 
     var body: some View {
         Screen {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: 6) {
                 // Section 1: CoreBluetooth & Central State
                 Panel {
                     SectionTitle("COREBLUETOOTH RESTORATION & LINK")
