@@ -72,12 +72,12 @@ class WhoopUIParityTests(unittest.TestCase):
     def test_theme_color_tokens(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")
         expected_tokens = {
-            "appCanvasTop": "0x283138",
+            "appCanvasTop": "0x282F35",
             "appCanvasMid": "0x191E22",
-            "appBG": "0x0D1112",
-            "appSurface": "0x1D2429",
-            "appRaised": "0x252D33",
-            "appCardBorder": "0x303940",
+            "appBG": "0x111518",
+            "appSurface": "0x252A2E",
+            "appRaised": "0x303438",
+            "appCardBorder": "0x363C40",
             "appSleep": "0x7CA1BB",
             "appGood": "0x00E676",
             "appRecoveryGreen": "0x1AEC07",
@@ -86,11 +86,11 @@ class WhoopUIParityTests(unittest.TestCase):
             "appWarn": "0xFFDE00",
             "appHigh": "0xFF3B30",
             "appAccent": "0x0193E8",
-            "appRingTrack": "0x2A333A",
+            "appRingTrack": "0x343C40",
             "appButtonFill": "0x2A3339",
         }
         for token, hex_val in expected_tokens.items():
-            pattern = rf"static\s+let\s+{token}\s*=\s*Color\(hex:\s*{hex_val}\)"
+            pattern = rf"static\s+let\s+{token}\s*=\s*Color\.adaptive\(dark:\s*{hex_val},\s*light:\s*0x[0-9A-F]{{6}}\)"
             self.assertRegex(theme_src, pattern, f"Token {token} must be defined with hex {hex_val}")
 
     def test_ring_geometry_constants(self):

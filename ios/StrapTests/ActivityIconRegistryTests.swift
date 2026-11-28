@@ -3,6 +3,55 @@ import XCTest
 @testable import Strap
 
 final class ActivityIconRegistryTests: XCTestCase {
+    func testIconAssetCatalogAndSemanticFallbacks() {
+        for asset in IconAsset.allCases {
+            XCTAssertNotNil(UIImage(named: asset.rawValue), "Missing bundled icon asset: \(asset.rawValue)")
+            XCTAssertNotNil(UIImage(systemName: asset.sfSymbolFallback), "Invalid fallback: \(asset)")
+        }
+        XCTAssertEqual(IconAsset.healthBloodOxygen.sfSymbolFallback, "o.circle")
+        XCTAssertEqual(IconAsset.deviceStrapIdle.sfSymbolFallback, "sensor.fill")
+        XCTAssertEqual(IconAsset.navMore.sfSymbolFallback, "ellipsis.circle")
+    }
+
+    func testSemanticDomainSymbolsResolveToExistingAssets() {
+        let expected: [(String, IconAsset)] = [
+            (StrapIcon.Metric.heartRate, .healthHeartRate),
+            (StrapIcon.Metric.hrv, .healthHrv),
+            (StrapIcon.Metric.respiration, .healthRespiratory),
+            (StrapIcon.Metric.bloodOxygen, .healthBloodOxygen),
+            (StrapIcon.Metric.skinTemp, .healthTemperature),
+            (StrapIcon.Metric.recovery, .healthRecovery),
+            (StrapIcon.Metric.sleep, .healthSleep),
+            (StrapIcon.Metric.strain, .healthStrain),
+            (StrapIcon.Device.batteryFull, .deviceBatteryFull),
+            (StrapIcon.Device.batteryLow, .deviceBatteryLow),
+            (StrapIcon.Device.batteryCritical, .deviceBatteryCritical),
+            (StrapIcon.Device.batteryCharging, .deviceBatteryCharging)
+        ]
+        for (symbol, asset) in expected {
+            XCTAssertEqual(StrapIconView.defaultAsset(for: symbol), asset, "Domain mapping changed: \\(symbol)")
+            XCTAssertNotNil(UIImage(named: asset.rawValue), "Mapped asset is missing: \\(asset.rawValue)")
+        }
+        XCTAssertNil(StrapIconView.defaultAsset(for: StrapIcon.Metric.steps))
+        XCTAssertNil(StrapIconView.defaultAsset(for: StrapIcon.Navigation.community))
+    }
+
+    func testExplicitPresentationMappings() {
+        XCTAssertEqual(StrapIconView.healthAsset(for: .rhr), .healthHeartRate)
+        XCTAssertEqual(StrapIconView.healthAsset(for: .hrv), .healthHrv)
+        XCTAssertEqual(StrapIconView.healthAsset(for: .respiration), .healthRespiratory)
+        XCTAssertEqual(StrapIconView.healthAsset(for: .oxygen), .healthBloodOxygen)
+        XCTAssertEqual(StrapIconView.healthAsset(for: .temperature), .healthTemperature)
+        XCTAssertEqual(MoreMenuItem.bandAlarms.iconAsset, .alarmWake)
+        XCTAssertEqual(MoreMenuItem.sleepPlanner.iconAsset, .alarmSleepGoal)
+        XCTAssertEqual(MoreMenuItem.notifications.iconAsset, .settingsNotifications)
+        XCTAssertEqual(AppTab.home.iconAsset, .navHome)
+        XCTAssertEqual(AppTab.more.iconAsset, .navMore)
+        XCTAssertNil(AppTab.humans.iconAsset)
+        XCTAssertEqual(IconAsset.deviceBatteryLow.sfSymbolFallback, StrapIcon.Device.batteryLow)
+        XCTAssertEqual(IconAsset.deviceBatteryCritical.sfSymbolFallback, StrapIcon.Device.batteryCritical)
+    }
+
     func testMappedLegacySportIDsSelectTheirEstablishedActivityKind() {
         let expected: [(Int, ActivityKind)] = [
             // Core cardio

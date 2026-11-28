@@ -1,0 +1,3 @@
+# STRAP engineering instructions
+
+Read `docs/ALGORITHM_FREEZE.md` before changing the app. Preserve the owner-approved Sleep, HRV, RHR, RR filtering, Recovery and historical step algorithms at the pinned baseline. Automatic tracking must continue normally. Do not tune, port, replace, reroute or weaken protected logic/tests without explicit owner approval for a reproducible defect. Shared decoder, archive, cache and lifecycle changes must preserve protected results and receive regression review. Continue independent feature work; do not change working metrics to improve superficial parity. Do not commit private captures or personal golden results. Run all protocol and native iOS/IPA checks. Do not modify the freeze manifest or guard to make routine CI pass.

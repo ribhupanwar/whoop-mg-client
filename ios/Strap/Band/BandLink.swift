@@ -1355,7 +1355,9 @@ final class BandLink: NSObject, ObservableObject {
                     samples: samples, startUnix: session.startUnix, endUnix: session.endUnix),
                 temperatureFunnel: NightTemperature.funnel(archived, session: session),
                 oxygenCandidateSummary: Recovery.spo2Summary(samples),
-                stageDecisionEvidence: stageEvidence)
+                stageDecisionEvidence: stageEvidence,
+                shadowSpectralRespiration: OpenStrapAdoptionResearch.respiratoryReport(
+                    samples: samples, startUnix: session.startUnix, endUnix: session.endUnix))
             return try RecoveryDiagnostics.write(report, to: directory)
         }.value
     }

@@ -10,8 +10,6 @@ struct DeviceSettingsView: View {
     @State private var showSafetySheet = false
     @State private var showRebootConfirmation = false
     @State private var showClearCacheConfirmation = false
-    @State private var checkingFirmware = false
-    @State private var firmwareCheckResult: String? = nil
 
     var body: some View {
         Screen {
@@ -464,30 +462,17 @@ struct DeviceSettingsView: View {
         Panel {
             SectionTitle("MAINTENANCE CONTROLS")
 
-            // FIRMWARE CHECK
-            Button {
-                checkFirmware()
+            NavigationLink {
+                FirmwareImageLabView()
             } label: {
                 VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text("FIRMWARE CHECK")
-                            .font(StrapTypography.body(13, weight: .bold))
-                            .foregroundStyle(Color.appFG)
-                        Spacer()
-                        if checkingFirmware {
-                            ProgressView()
-                                .scaleEffect(0.8)
-                        } else {
-                            Text(firmwareCheckResult ?? (store.band.firmwareRevision != nil ? "UP TO DATE" : "CHECK"))
-                                .font(StrapTypography.metric(10, weight: .bold))
-                                .foregroundStyle(Color.appAccent)
-                        }
-                    }
-                    Text("Check and install the latest WHOOP firmware.")
+                    Text("FIRMWARE LAB")
+                        .font(StrapTypography.body(13, weight: .bold))
+                        .foregroundStyle(Color.appFG)
+                    Text("Inspect a local image. Hardware installation disabled.")
                         .font(StrapTypography.body(11))
                         .foregroundStyle(Color.appMuted)
                 }
-                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
 
@@ -678,13 +663,6 @@ struct DeviceSettingsView: View {
         }
     }
 
-    private func checkFirmware() {
-        checkingFirmware = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            checkingFirmware = false
-            firmwareCheckResult = "NO NEW UPDATES"
-        }
-    }
 
     private func infoRow(label: String, value: String) -> some View {
         HStack {

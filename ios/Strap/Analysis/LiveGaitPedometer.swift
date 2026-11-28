@@ -255,6 +255,8 @@ struct LiveWorkoutStepAccumulator {
             recordGait(end: block.unix, seconds: seconds, steps: estimate.fractionalSteps)
             total += estimate.fractionalSteps
             contextCredited = true
+        } else {
+            contextCredited = false
         }
         return LiveWorkoutStepReading(count: Int(total.rounded()), observedAt: date,
             sessionCadenceSPM: sessionCadenceSPM, gaitObservedSeconds: gaitObservedSeconds,
