@@ -1274,24 +1274,12 @@ final class BandLink: NSObject, ObservableObject {
 
     var recoveryNight: DayMetrics? {
         guard let session = latestSleepSession else { return nil }
-        return recoveryNight(for: session, calendar: .current)
-    }
-
-    private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
-        let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
-        let key = JournalStore.dayKey(for: date, calendar: calendar)
-        if let exact = days.last(where: {
-            $0.dateKey == key && $0.state == "sleep"
-                && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
-        }) {
-            return exact
-        }
-        return days.last { $0.dateKey == key && $0.state == "sleep" }
+        return DailyAnalysis.recoveryDay(for: session, in: days)
     }
 
     private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
         let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
-        return DatedRecovery.evaluate(day: recoveryNight(for: session, calendar: calendar), priorDays: days,
+        return DatedRecovery.evaluate(day: DailyAnalysis.recoveryDay(for: session, in: days, calendar: calendar), priorDays: days,
                                       date: date, sleepNeedHours: needHours, calendar: calendar)
     }
 

@@ -116,6 +116,19 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(partial.sleepStartUnix, old.sleepStartUnix)
     }
 
+    func testRecoveryUsesOnlyDailyMetricsForTheCanonicalWindow() {
+        let session = SleepSession.make(samples: [], period: period(8 * 3600))
+        let key = JournalStore.dayKey(for: Date(timeIntervalSince1970: Double(session.endUnix - 1)))
+        let stale = DayMetrics(dateKey: key, state: "sleep", restingHR: 64, lnRMSSD: log(27),
+            hrvWindowSeconds: 300, sleepHours: 1, sleepStartUnix: session.startUnix,
+            sleepEndUnix: session.startUnix + 3599, strain: nil, steps: nil, sleepDurationReliable: true)
+        let canonical = DayMetrics(dateKey: key, state: "sleep", restingHR: 61, lnRMSSD: log(45),
+            hrvWindowSeconds: 300, sleepHours: 7, sleepStartUnix: session.startUnix,
+            sleepEndUnix: session.endUnix - 1, strain: nil, steps: nil, sleepDurationReliable: true)
+        XCTAssertNil(DailyAnalysis.recoveryDay(for: session, in: [stale]))
+        XCTAssertEqual(DailyAnalysis.recoveryDay(for: session, in: [canonical, stale]), canonical)
+    }
+
     private let start = 1_800_000_000
 
     private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01, stepCounter: Int? = nil) -> V18Sample {

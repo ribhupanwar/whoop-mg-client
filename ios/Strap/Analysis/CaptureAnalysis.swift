@@ -199,6 +199,18 @@ enum DailyAnalysis {
         return ordered[first..<last]
     }
 
+    /// Recovery may be read while a refreshed session is published and its
+    /// daily metrics are still pending. A same-day row can describe old bounds.
+    static func recoveryDay(for session: SleepSession, in days: [DayMetrics],
+                            calendar: Calendar = .current) -> DayMetrics? {
+        let wake = Date(timeIntervalSince1970: Double(session.endUnix - 1))
+        let key = JournalStore.dayKey(for: wake, calendar: calendar)
+        return days.last {
+            $0.dateKey == key && $0.state == "sleep"
+                && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
+        }
+    }
+
     static func metrics(
         from samples: [V18Sample],
         sex: Sex,
