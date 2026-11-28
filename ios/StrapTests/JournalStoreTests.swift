@@ -158,6 +158,40 @@ final class JournalStoreTests: XCTestCase {
         XCTAssertEqual(persistence.load(), restored)
     }
 
+    func testProvisionalWakeSurvivesRelaunchAndRejoinsTheSameNight() {
+        let persistence = SleepLifecyclePersistence(defaults: defaults)
+        var state = SleepLifecycleSnapshot()
+        state.confirm(sessionID: "100-4300", startUnix: 100)
+        state.observeProvisionalWake(sessionID: "100-4300")
+        persistence.save(state)
+        state = persistence.load()
+        XCTAssertEqual(state.phase, .provisionalWake)
+        XCTAssertNil(state.endedAtUnix)
+
+        let resumed = SleepPeriod(startUnix: 90, endUnix: 5499, quietFraction: 0.9,
+                                  meanHR: 60, wakeEvents: 1)
+        XCTAssertTrue(state.reconcileDetectedWindow(resumed, id: "90-5500"))
+        state.resume(sessionID: "90-5500")
+        XCTAssertEqual(state.phase, .detected)
+        state.observeProvisionalWake(sessionID: "90-5500")
+        state.end(sessionID: "90-5500", at: 5500)
+        state.finishProcessing(sessionID: "90-5500", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .journalPending)
+        XCTAssertEqual(state.endedAtUnix, 5500)
+    }
+
+    func testExplicitEndCompletesUnderTheSavedWindowIdentity() {
+        var state = SleepLifecycleSnapshot()
+        state.confirm(sessionID: "100-4300", startUnix: 100)
+        state.end(sessionID: "100-4300", at: 4350, resultingSessionID: "100-4350")
+        XCTAssertEqual(state.phase, .processing)
+        state.finishProcessing(sessionID: "100-4300", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .processing)
+        state.finishProcessing(sessionID: "100-4350", hasJournalQuestions: true)
+        XCTAssertEqual(state.phase, .journalPending)
+        XCTAssertEqual(state.endedAtUnix, 4350)
+    }
+
     func testSleepLifecycleRejectsCompletedSessionReplayAndOverlappingHistory() {
         let persistence = SleepLifecyclePersistence(defaults: defaults)
         var state = persistence.load()

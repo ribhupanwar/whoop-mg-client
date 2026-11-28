@@ -36,6 +36,9 @@ struct HomeView: View {
     @State private var showDeviceSettings = false
     @State private var showDashboardCustomize = false
     @State private var showSleepEditor = false
+    @State private var confirmHomeEndSleep = false
+    @State private var endSleepSessionID: String?
+    @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
     @State private var correctedSleepStart = Date()
     @State private var correctedSleepEnd = Date()
     private var sleepCorrections: [String: [Int]] {
@@ -295,6 +298,11 @@ struct HomeView: View {
                         Label("Mark sleep ended now", systemImage: "moon.zzz")
                             .font(StrapTypography.body(14, weight: .bold))
                     }
+                    if store.band.isAnalyzingHistory {
+                        Text("Sleep history is updating. Your draft is still open.")
+                    } else if !sleepEditorIsCurrent {
+                        Text("Sleep times changed. Close and reopen the editor to review the current window.")
+                    }
                     Text("Bed and wake times are editable. Recovery uses estimated time asleep (excluding awake periods); HRV and RHR remain sensor-derived.")
                         .font(StrapTypography.body(11))
                 }
@@ -305,19 +313,21 @@ struct HomeView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            if correctedSleepEnd > correctedSleepStart,
-                               correctedSleepEnd.timeIntervalSince(correctedSleepStart) <= 86400,
-                               let period = latestSleepPeriod {
-                                let corrections = SleepCorrectionStore.saving([
-                                    Int(correctedSleepStart.timeIntervalSince1970),
-                                    Int(correctedSleepEnd.timeIntervalSince1970)
-                                ], for: period, overrides: sleepCorrections)
+                            let times = [Int(correctedSleepStart.timeIntervalSince1970),
+                                         Int(correctedSleepEnd.timeIntervalSince1970)]
+                            guard let current = currentSleepEditorSnapshot,
+                                  sleepEditorSnapshot?.matches(current) == true else { return }
+                            let old = sleepCorrections
+                            let corrections = SleepCorrectionStore.saving(times, for: current.period, overrides: old,
+                                competingPeriods: store.band.sleepCorrectionSourcePeriods)
+                            if times != current.displayed && corrections != old {
                                 UserDefaults.standard.set(corrections, forKey: SleepCorrectionStore.defaultsKey)
                                 store.band.notifySleepCorrectionChanged()
                             }
                             showSleepEditor = false
                         }
-                        .disabled(correctedSleepEnd <= correctedSleepStart || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
+                        .disabled(!sleepEditorIsCurrent || correctedSleepEnd <= correctedSleepStart
+                            || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
                 }
             }
@@ -871,7 +881,8 @@ struct HomeView: View {
 
                     HStack(spacing: 10) {
                         Button {
-                            store.endSleepNow()
+                            endSleepSessionID = store.band.latestSleepSession?.lifecycleID
+                            confirmHomeEndSleep = endSleepSessionID != nil
                         } label: {
                             Text("END SLEEP")
                                 .font(StrapTypography.body(11, weight: .bold))
@@ -881,6 +892,12 @@ struct HomeView: View {
                                 .foregroundStyle(Color.black)
                         }
                         .buttonStyle(.plain)
+                        .alert("End Sleep?", isPresented: $confirmHomeEndSleep) {
+                            Button("Cancel", role: .cancel) {}
+                            Button("End Sleep", role: .destructive) { store.endSleepNow(expectedSessionID: endSleepSessionID) }
+                        } message: {
+                            Text("Only confirm if you have finished sleeping. This saves an explicit wake time; otherwise automatic detection can continue.")
+                        }
 
                         Button {
                             store.processSleepNow()
@@ -1007,13 +1024,25 @@ struct HomeView: View {
 
     // MARK: Activity rows
 
-    private func openHomeSleepEditor() {
-        guard let period = latestSleepPeriod else { return }
+    private var sleepEditorIsCurrent: Bool {
+        guard let current = currentSleepEditorSnapshot else { return false }
+        return sleepEditorSnapshot?.matches(current) == true
+    }
+
+    private var currentSleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot? {
+        guard let period = latestSleepPeriod else { return nil }
         let session = store.band.latestSleepSession
         let times = SleepCorrectionStore.times(for: period, overrides: sleepCorrections)
-        // Explicit user corrections must win over a stale derived sleep session.
-        correctedSleepStart = Date(timeIntervalSince1970: TimeInterval(times?.first ?? session?.startUnix ?? period.startUnix))
-        correctedSleepEnd = Date(timeIntervalSince1970: TimeInterval(times?.last ?? session?.endUnix ?? (period.endUnix + 1)))
+        return .init(period: period, displayed: times ?? [
+            session?.startUnix ?? period.startUnix, session?.endUnix ?? (period.endUnix + 1)
+        ])
+    }
+
+    private func openHomeSleepEditor() {
+        guard let snapshot = currentSleepEditorSnapshot else { return }
+        sleepEditorSnapshot = snapshot
+        correctedSleepStart = Date(timeIntervalSince1970: Double(snapshot.displayed[0]))
+        correctedSleepEnd = Date(timeIntervalSince1970: Double(snapshot.displayed[1]))
         showSleepEditor = true
     }
 

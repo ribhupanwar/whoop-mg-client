@@ -49,6 +49,7 @@ final class HistoryAnalysisCache {
             let algorithm: Int
             let sourceStart: Int
             let sourceEnd: Int
+            let resumptionWake: Int?
             let times: [Int]?
         }
         let times = SleepCorrectionStore.validated(correctedTimes)
@@ -56,7 +57,8 @@ final class HistoryAnalysisCache {
         let end = times?.last ?? (period.endUnix + 1)
         let rows = samples.filter { start <= $0.unix && $0.unix < end }
         let context = Context(algorithm: SleepSession.algorithmVersion,
-                              sourceStart: period.startUnix, sourceEnd: period.endUnix, times: times)
+                              sourceStart: period.startUnix, sourceEnd: period.endUnix,
+                              resumptionWake: period.resumptionWakeUnix, times: times)
         let ticket = ticket(key: "night:\(period.startUnix)", samples: rows, context: context)
         if let saved = load(SleepSession.self, ticket: ticket) { return (saved, true) }
         let fresh = SleepSession.make(samples: rows, period: period, correctedTimes: times)

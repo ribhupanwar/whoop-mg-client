@@ -116,6 +116,32 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertEqual(partial.sleepStartUnix, old.sleepStartUnix)
     }
 
+    func testRecoveryUsesOnlyDailyMetricsForTheCanonicalWindow() {
+        let session = SleepSession.make(samples: [], period: period(8 * 3600))
+        let key = JournalStore.dayKey(for: Date(timeIntervalSince1970: Double(session.endUnix - 1)))
+        let stale = DayMetrics(dateKey: key, state: "sleep", restingHR: 64, lnRMSSD: log(27),
+            hrvWindowSeconds: 300, sleepHours: 1, sleepStartUnix: session.startUnix,
+            sleepEndUnix: session.startUnix + 3599, strain: nil, steps: nil, sleepDurationReliable: true)
+        let canonical = DayMetrics(dateKey: key, state: "sleep", restingHR: 61, lnRMSSD: log(45),
+            hrvWindowSeconds: 300, sleepHours: 7, sleepStartUnix: session.startUnix,
+            sleepEndUnix: session.endUnix - 1, strain: nil, steps: nil, sleepDurationReliable: true)
+        XCTAssertNil(DailyAnalysis.recoveryDay(for: session, in: [stale]))
+        XCTAssertEqual(DailyAnalysis.recoveryDay(for: session, in: [canonical, stale]), canonical)
+    }
+
+    func testHomeAndDailyBiometricsSelectTheSamePrimaryNight() throws {
+        let midnight = Int(Calendar.current.startOfDay(for: Date()).timeIntervalSince1970)
+        let main = SleepPeriod(startUnix: midnight - 2 * 3600, endUnix: midnight + 4 * 3600 - 1,
+                               quietFraction: 0.98, meanHR: 60, wakeEvents: 0)
+        let tail = SleepPeriod(startUnix: midnight + 5 * 3600, endUnix: midnight + 6 * 3600 - 1,
+                               quietFraction: 0.98, meanHR: 60, wakeEvents: 0)
+        let sessions = SleepSession.makeAll(samples: [], periods: [main, tail], overrides: [:])
+        var summary = CaptureSummary.empty
+        summary.sleepSessions = sessions
+        XCTAssertEqual(try XCTUnwrap(summary.latestSleepSession).startUnix, main.startUnix)
+        XCTAssertEqual(summary.latestSleepSession, DailyAnalysis.primaryNight(sessions))
+    }
+
     private let start = 1_800_000_000
 
     private func sample(_ unix: Int, hr: Int = 55, accel: Double = 0.01, stepCounter: Int? = nil) -> V18Sample {
@@ -165,6 +191,60 @@ final class SleepSessionTests: XCTestCase {
         let insufficient = SleepSession.retainingUncovered(previous: [old], fresh: [fresh],
             coverageStart: start, coverageEnd: newEnd - 1, samples: Array(late.prefix(299)))
         XCTAssertEqual(insufficient.map(\.endUnix), [oldEnd])
+    }
+
+    func testUnchangedAutomaticWindowDoesNotCreateManualWakeLock() {
+        let provisional = period(68 * 60)
+        let bounds = [provisional.startUnix, provisional.endUnix + 1]
+        XCTAssertTrue(SleepCorrectionStore.saving(bounds, for: provisional, overrides: [:]).isEmpty)
+        let explicit = SleepCorrectionStore.saving(bounds, for: provisional, overrides: [:],
+                                                   explicitlyEndSleep: true)
+        XCTAssertEqual(explicit[String(provisional.startUnix)], bounds)
+        XCTAssertEqual(SleepCorrectionStore.saving(bounds, for: provisional, overrides: explicit), explicit)
+        let changed = [bounds[0], bounds[1] + 60]
+        XCTAssertEqual(SleepCorrectionStore.saving(changed, for: provisional, overrides: [:])[String(bounds[0])], changed)
+    }
+
+    func testOpenEditorCannotSaveStaleWakeAfterArchiveReconciliation() {
+        let partial = period(68 * 60)
+        let full = period(8 * 3600)
+        let initial = SleepCorrectionStore.EditorSnapshot(period: partial,
+            displayed: [partial.startUnix, partial.endUnix + 1])
+        let refreshed = SleepCorrectionStore.EditorSnapshot(period: full,
+            displayed: [full.startUnix, full.endUnix + 1])
+        XCTAssertFalse(initial.canSave(initial.displayed, current: refreshed))
+        XCTAssertFalse(initial.canSave(initial.displayed, current: refreshed, explicitlyEnding: true))
+        XCTAssertFalse(refreshed.canSave(refreshed.displayed, current: refreshed))
+        XCTAssertTrue(refreshed.canSave([full.startUnix, full.endUnix], current: refreshed))
+    }
+
+    func testResetSavedWakeCorrectionAllowsAutomaticExtension() {
+        let oldEnd = start + 68 * 60
+        let newEnd = oldEnd + 3 * 3600
+        let old = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: oldEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: true, sourceEndUnix: oldEnd, bandSleepConfirmed: true)
+        let fresh = SleepSession(version: SleepSession.algorithmVersion,
+            sourceStartUnix: start, startUnix: start, endUnix: newEnd,
+            staging: .unavailable, heartRate: [], movementBouts: 0,
+            isEdited: false, sourceEndUnix: newEnd, bandSleepConfirmed: true)
+        let otherStart = start - 86400
+        let overrides = [String(start): [start, oldEnd],
+                         String(start + 60): [start + 60, oldEnd],
+                         String(otherStart): [otherStart, otherStart + 3600]]
+        let cleared = SleepCorrectionStore.removing(for: old.sourcePeriod, overrides: overrides)
+        XCTAssertEqual(cleared, [String(otherStart): [otherStart, otherStart + 3600]])
+        let reset = old.resettingCorrection()
+        XCTAssertFalse(reset.isEdited)
+        XCTAssertFalse(reset.isComplete)
+        XCTAssertEqual(reset.startUnix, start)
+        XCTAssertEqual(reset.endUnix, oldEnd)
+        let late = (oldEnd..<newEnd).map { confirmedSleepSample($0) }
+        let repaired = SleepSession.retainingUncovered(previous: [reset], fresh: [fresh],
+            coverageStart: start, coverageEnd: newEnd - 1, samples: late, overrides: cleared)
+        XCTAssertEqual(repaired.map(\.endUnix), [newEnd])
+        XCTAssertFalse(repaired.first?.isEdited ?? true)
     }
 
     private func period(_ seconds: Int, quiet: Double = 0.2) -> SleepPeriod {
@@ -435,6 +515,54 @@ final class SleepSessionTests: XCTestCase {
         XCTAssertNil(saved[String(start + 3900)])
         XCTAssertEqual(saved[nextKey], overrides[nextKey])
         XCTAssertEqual(SleepCorrectionStore.saving(times, for: shifted, overrides: saved), saved)
+    }
+
+    func testResetRemovesAlternateAliasThatMatchesOriginalSourceBounds() {
+        let source = period(8 * 3600)
+        let exact = [start + 7200, start + 14400]
+        let olderAlias = [start, start + 9000]
+        let otherNight = String(start + 86400)
+        let overrides = [String(start): exact, String(start + 60): olderAlias,
+                         otherNight: [start + 86400, start + 93600]]
+        let cleared = SleepCorrectionStore.removing(for: source, overrides: overrides)
+        XCTAssertNil(SleepCorrectionStore.times(for: source, overrides: cleared))
+        XCTAssertEqual(cleared, [otherNight: overrides[otherNight]!])
+    }
+
+    func testResetPreservesCorrectionOwnedByDifferentDetectorPeriod() {
+        let evening = period(2 * 3600)
+        let overnightStart = start + 3 * 3600
+        let overnight = SleepPeriod(startUnix: overnightStart, endUnix: overnightStart + 8 * 3600 - 1,
+                                    quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let eveningEdit = [start + 90 * 60, start + 270 * 60]
+        let nightEdit = [start + 5 * 3600, overnight.endUnix + 1]
+        let olderAlias = [overnightStart + 60, start + 4 * 3600]
+        let overrides = [String(start): eveningEdit, String(overnightStart): nightEdit,
+                         String(overnightStart + 60): olderAlias]
+        let remaining = SleepCorrectionStore.removing(for: overnight, overrides: overrides,
+                                                       competingPeriods: [evening, overnight])
+        XCTAssertEqual(remaining, [String(start): eveningEdit])
+    }
+
+    func testResetClearsAliasAtShiftedDetectorStartForTheSameNight() {
+        let older = period(8 * 3600)
+        let shifted = SleepPeriod(startUnix: start + 300, endUnix: older.endUnix,
+                                   quietFraction: 0.9, meanHR: 55, wakeEvents: 0)
+        let edited = [start + 120, start + 4 * 3600]
+        let overrides = [String(start): edited, String(shifted.startUnix): edited]
+        let cleared = SleepCorrectionStore.removing(for: older, overrides: overrides,
+                                                     competingPeriods: [older, shifted])
+        XCTAssertTrue(cleared.isEmpty)
+        XCTAssertNil(SleepCorrectionStore.times(for: shifted, overrides: cleared))
+    }
+
+    func testResetRequiresSourceCoverageInsteadOfOnlyTheEditedTail() {
+        let source = period(3600)
+        let rows = (source.startUnix...source.endUnix).map { sample($0) }
+        XCTAssertTrue(SleepCorrectionStore.coversSourceWindow(source, with: rows))
+        XCTAssertFalse(SleepCorrectionStore.coversSourceWindow(source, with: Array(rows.suffix(2000))))
+        let sparseWithReplays = [rows[0]] + Array(repeating: rows[10], count: 3600) + [rows.last!]
+        XCTAssertFalse(SleepCorrectionStore.coversSourceWindow(source, with: sparseWithReplays))
     }
 
     func testMissingRawCoverageRetainsEditedCanonicalNight() {

@@ -1175,25 +1175,72 @@ final class BandLink: NSObject, ObservableObject {
     /// neither the heart rates nor R-R measurements are modified.
     var lastNightHours: Double? { latestSleepSession?.asleepHours }
 
+    var sleepCorrectionSourcePeriods: [SleepPeriod] {
+        (summary?.sleepPeriods ?? []) + (summary?.sleepSessions ?? []).map(\.sourcePeriod)
+    }
+
+    /// Load the redetection context before removing the correction so a
+    /// failed read can be retried with the original edit still intact.
+    func resetLatestSleepCorrection(expectedSessionID: String) {
+        guard !isAnalyzingHistory, !hasIncompleteHistory, let session = latestSleepSession,
+              session.lifecycleID == expectedSessionID else { return }
+        let overrides = UserDefaults.standard.dictionary(forKey: SleepCorrectionStore.defaultsKey) as? [String: [Int]] ?? [:]
+        let source = session.sourcePeriod
+        let updated = SleepCorrectionStore.removing(for: source, overrides: overrides,
+                                                    competingPeriods: sleepCorrectionSourcePeriods)
+        guard session.isEdited || updated != overrides else { return }
+        let revision = sleepCorrectionRevision
+        let from = max(1, source.startUnix - 90 * 60)
+        let through = max(source.endUnix, session.endUnix - 1,
+                          min(Int(Date().timeIntervalSince1970), source.startUnix + 12 * 3600 - 1))
+        archiveWriter.samples(from: from, through: through) { [weak self] result in
+            guard let self, self.sleepCorrectionRevision == revision, !self.hasIncompleteHistory,
+                  self.latestSleepSession == session, var saved = self.summary, var sessions = saved.sleepSessions,
+                  let index = sessions.firstIndex(of: session) else { return }
+            switch result {
+            case .success(let rows) where SleepCorrectionStore.coversSourceWindow(source, with: rows):
+                self.sleepCorrectionRevision += 1
+                self.analysisCancellation?.cancel()
+                self.mergeSleepReplayRows(rows)
+                UserDefaults.standard.set(updated, forKey: SleepCorrectionStore.defaultsKey)
+                sessions[index] = session.resettingCorrection()
+                saved.sleepSessions = sessions
+                saved.sleepStaging = saved.latestSleepSession?.staging
+                self.summary = saved
+                self.lastSleepAnalysis = nil
+                self.persistMetricsSnapshot()
+                self.recalculateRetainedMetrics()
+            case .success:
+                self.historySyncError = "Saved sleep times preserved; retained history does not cover the original sleep window."
+            case .failure(let error):
+                self.historySyncError = "Saved sleep times preserved; sensor history could not be read: \(error.localizedDescription)"
+            }
+        }
+    }
+
     func notifySleepCorrectionChanged() {
         sleepCorrectionRevision += 1
         analysisCancellation?.cancel()
         applySavedSleepBounds()
         guard let session = latestSleepSession else { recalculateRetainedMetrics(); return }
         let revision = sleepCorrectionRevision
-        // Edited nights can be older than the active 72-hour analysis window.
-        // Load their own durable samples rather than requiring a new BLE drain.
+        // Load the edited night's own durable samples, including edits
+        // outside the active 72-hour analysis window.
         archiveWriter.samples(from: session.startUnix, through: session.endUnix - 1) { [weak self] result in
             guard let self, self.sleepCorrectionRevision == revision else { return }
             switch result {
             case .success(let rows):
-                self.retainedHistoricalSamples = HistoricalCaptureRecovery.merged(self.retainedHistoricalSamples + rows)
-                    .values.sorted { $0.unix < $1.unix }
+                self.mergeSleepReplayRows(rows)
             case .failure(let error):
                 self.historySyncError = "Saved sleep times preserved; sensor history could not be read: \(error.localizedDescription)"
             }
             self.recalculateRetainedMetrics()
         }
+    }
+
+    private func mergeSleepReplayRows(_ rows: [V18Sample]) {
+        retainedHistoricalSamples = HistoricalCaptureRecovery.merged(retainedHistoricalSamples + rows)
+            .values.sorted { $0.unix < $1.unix }
     }
 
     private func applySavedSleepBounds() {
@@ -1235,24 +1282,12 @@ final class BandLink: NSObject, ObservableObject {
 
     var recoveryNight: DayMetrics? {
         guard let session = latestSleepSession else { return nil }
-        return recoveryNight(for: session, calendar: .current)
-    }
-
-    private func recoveryNight(for session: SleepSession, calendar: Calendar) -> DayMetrics? {
-        let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
-        let key = JournalStore.dayKey(for: date, calendar: calendar)
-        if let exact = days.last(where: {
-            $0.dateKey == key && $0.state == "sleep"
-                && $0.sleepStartUnix == session.startUnix && $0.sleepEndUnix == session.endUnix - 1
-        }) {
-            return exact
-        }
-        return days.last { $0.dateKey == key && $0.state == "sleep" }
+        return DailyAnalysis.recoveryDay(for: session, in: days)
     }
 
     private func recoveryAssessment(for session: SleepSession, calendar: Calendar = .current) -> DatedRecovery {
         let date = Date(timeIntervalSince1970: TimeInterval(session.endUnix - 1))
-        return DatedRecovery.evaluate(day: recoveryNight(for: session, calendar: calendar), priorDays: days,
+        return DatedRecovery.evaluate(day: DailyAnalysis.recoveryDay(for: session, in: days, calendar: calendar), priorDays: days,
                                       date: date, sleepNeedHours: needHours, calendar: calendar)
     }
 

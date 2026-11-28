@@ -90,6 +90,8 @@ struct SleepPeriod: Codable, Equatable {
     /// Movement bursts that ended inside the period. Actigraphy events, not
     /// verified awakenings.
     let wakeEvents: Int
+    /// Provisional wake that was superseded by an observed return to sleep.
+    var resumptionWakeUnix: Int? = nil
 
     var durationS: Int { endUnix - startUnix + 1 }
     var hours: Double { Double(durationS) / 3600.0 }

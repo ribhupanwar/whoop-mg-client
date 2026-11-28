@@ -15,7 +15,8 @@ struct SleepSession: Codable, Equatable {
     // authoritative manual bed/wake corrections are not modified.
     // v9: bounded, positively corroborated nocturnal resumption merge.
     // v10: distinguish missing motion from observed stillness during staging.
-    static let algorithmVersion = 10
+    // v11: include observed short nocturnal resumptions.
+    static let algorithmVersion = 11
     let version: Int
     let sourceStartUnix: Int
     let startUnix: Int
@@ -29,6 +30,7 @@ struct SleepSession: Codable, Equatable {
     /// Recorded evidence, rather than duration or inactivity, identifies a nap.
     var bandSleepConfirmed: Bool? = nil
     var timezoneIdentifier: String? = nil
+    var resumptionWakeUnix: Int? = nil
 
     enum Classification { case overnight, nap, pendingCandidate }
     var classification: Classification {
@@ -67,6 +69,8 @@ struct SleepSession: Codable, Equatable {
         guard let asleepHours, timeInBedHours > 0 else { return nil }
         return 100 * asleepHours / timeInBedHours
     }
+    var lifecycleID: String { "\(sourceStartUnix)-\(endUnix)" }
+
     /// A manual end action belongs to a current window at the archive frontier.
     /// A detector window with newer observations has already ended.
     func canEndNow(lastObservedUnix: Int?, nowUnix: Int) -> Bool {
@@ -81,6 +85,17 @@ struct SleepSession: Codable, Equatable {
         if let reason = staging.reason { return reason }
         if !isComplete { return "Part of this window has no usable HR; the full sleep duration is unknown." }
         return nil
+    }
+
+    /// Explicit user reset restores the detector source window provisionally.
+    /// Old edited stages cannot be reused for the automatic window.
+    func resettingCorrection() -> SleepSession {
+        let period = sourcePeriod
+        return SleepSession(version: Self.algorithmVersion, sourceStartUnix: period.startUnix,
+            startUnix: period.startUnix, endUnix: period.endUnix + 1,
+            staging: .unavailable, heartRate: [], movementBouts: 0, isEdited: false,
+            sourceEndUnix: period.endUnix + 1, bandSleepConfirmed: nil,
+            timezoneIdentifier: timezoneIdentifier)
     }
 
     /// Apply authoritative saved bounds immediately, without doing staging on
@@ -114,11 +129,8 @@ struct SleepSession: Codable, Equatable {
             // Reuse the same overflow-safe alias distance as saved correction
             // lookup. A corrupt extreme source key must not crash makeAll.
             let candidates = ordered.enumerated().compactMap { index, period -> (index: Int, distance: Int)? in
-                guard let distance = SleepCorrectionStore.sourceDistance(source, period.startUnix) else { return nil }
-                if period.startUnix == source { return (index, distance) }
-                let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
-                guard overlap > 0, overlap * 2 >= min(period.durationS, times[1] - times[0]) else { return nil }
-                return (index, distance)
+                SleepCorrectionStore.matchDistance(source: source, times: times, period: period)
+                    .map { (index, $0) }
             }
             guard let candidate = candidates.min(by: { $0.distance < $1.distance }) else { continue }
             let distance = candidate.distance
@@ -212,7 +224,14 @@ struct SleepSession: Codable, Equatable {
                         && (35...220).contains($0.heartRate)
                         && ($0.dynamicAccelG.map { $0.isFinite && $0 >= 0 && $0 <= 0.015 } ?? false)
                 }
-                return !Hrv.contiguousRuns(tail).contains { $0.count >= 300 }
+                if Hrv.contiguousRuns(tail).contains(where: { $0.count >= 300 }) { return false }
+                // Late packets may shift the provisional wake within the
+                // observed interruption. Match the detector's corroborated
+                // interruption, rather than re-anchoring its minute grid to the old end.
+                guard first <= old.startUnix, last >= candidate.endUnix - 1,
+                      candidate.startUnix <= old.endUnix - 20 * 60,
+                      let wake = candidate.resumptionWakeUnix else { return true }
+                return SleepCorrectionStore.sourceDistance(wake, old.endUnix, toleranceS: 3 * 60) == nil
             }
             // Archive endpoints do not prove usable data throughout a night.
             // An empty/partial detector result is not evidence that a previously
@@ -328,7 +347,8 @@ struct SleepSession: Codable, Equatable {
             sourceEndUnix: period.endUnix + 1,
             bandSleepConfirmed: Hrv.contiguousRuns(night.filter {
                 $0.wearing && (35...220).contains($0.heartRate) && $0.sleepState == 2
-            }).contains { $0.count >= 300 }, timezoneIdentifier: TimeZone.current.identifier
+            }).contains { $0.count >= 300 }, timezoneIdentifier: TimeZone.current.identifier,
+            resumptionWakeUnix: times == nil ? period.resumptionWakeUnix : nil
         )
     }
 }
@@ -343,41 +363,98 @@ enum SleepCorrectionStore {
         return times
     }
     /// Corrupt or legacy override keys must never overflow Int distance arithmetic.
-    static func sourceDistance(_ source: Int, _ start: Int) -> Int? {
+    static func sourceDistance(_ source: Int, _ start: Int, toleranceS: Int = 6 * 3600) -> Int? {
         let (distance, overflow) = source.subtractingReportingOverflow(start)
         guard !overflow, distance != Int.min else { return nil }
         let magnitude = abs(distance)
-        return magnitude <= 6 * 3600 ? magnitude : nil
+        return magnitude <= toleranceS ? magnitude : nil
     }
+    /// Editors may remain open while a BLE sync moves the automatic bounds.
+    /// Compare Save with the bounds shown to the user when they opened it.
+    struct EditorSnapshot {
+        let period: SleepPeriod
+        let displayed: [Int]
+
+        func matches(_ current: EditorSnapshot) -> Bool {
+            period.startUnix == current.period.startUnix && period.endUnix == current.period.endUnix
+                && displayed == current.displayed
+        }
+
+        func canSave(_ times: [Int], current: EditorSnapshot, explicitlyEnding: Bool = false) -> Bool {
+            matches(current) && (explicitlyEnding || times != displayed)
+        }
+    }
+
     /// Saving a recovered edit replaces its aliases instead of creating another night.
     static func saving(
-        _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]]
+        _ times: [Int], for period: SleepPeriod, overrides: [String: [Int]],
+        explicitlyEndSleep: Bool = false, competingPeriods: [SleepPeriod] = []
     ) -> [String: [Int]] {
         guard let times = validated(times) else { return overrides }
-        let reference = self.times(for: period, overrides: overrides)
-            ?? [period.startUnix, period.endUnix + 1]
-        var result = overrides
-        for (key, value) in overrides {
-            guard let source = Int(key), sourceDistance(source, period.startUnix) != nil,
-                  let existing = validated(value) else { continue }
-            let overlap = min(reference[1], existing[1]) - max(reference[0], existing[0])
-            if source == period.startUnix
-                || (overlap > 0 && overlap * 2 >= min(reference[1] - reference[0], existing[1] - existing[0])) {
-                result.removeValue(forKey: key)
-            }
-        }
+        // Merely saving an unchanged automatic window must not freeze an
+        // archive-frontier candidate before the rest of the night arrives.
+        // A deliberate End Sleep or an existing edit remains authoritative.
+        if !explicitlyEndSleep, self.times(for: period, overrides: overrides) == nil,
+           times == [period.startUnix, period.endUnix + 1] { return overrides }
+        var result = removing(for: period, overrides: overrides, competingPeriods: competingPeriods)
         result[String(period.startUnix)] = times
         return result
+    }
+
+    private static func overlaps(_ a: [Int], _ b: [Int]) -> Bool {
+        let overlap = min(a[1], b[1]) - max(a[0], b[0])
+        return overlap > 0 && overlap * 2 >= min(a[1] - a[0], b[1] - b[0])
+    }
+
+    static func coversSourceWindow(_ period: SleepPeriod, with rows: [V18Sample]) -> Bool {
+        guard let first = rows.first, let last = rows.last,
+              first.unix <= period.startUnix, last.unix >= period.endUnix else { return false }
+        let wornSeconds = Set(rows.lazy.filter {
+            period.startUnix <= $0.unix && $0.unix <= period.endUnix
+                && $0.wearing && (35...220).contains($0.heartRate)
+        }.map(\.unix)).count
+        return wornSeconds * 2 >= period.durationS
+    }
+
+    static func matchDistance(source: Int, times: [Int], period: SleepPeriod) -> Int? {
+        guard let distance = sourceDistance(source, period.startUnix),
+              distance == 0 || overlaps([period.startUnix, period.endUnix + 1], times) else { return nil }
+        return distance
+    }
+
+    /// Explicit reset removes aliases owned by the selected night.
+    static func removing(for period: SleepPeriod, overrides: [String: [Int]],
+                         competingPeriods: [SleepPeriod] = []) -> [String: [Int]] {
+        let sourceBounds = [period.startUnix, period.endUnix + 1]
+        let reference = times(for: period, overrides: overrides) ?? sourceBounds
+        return overrides.filter { key, value in
+            guard let source = Int(key), let existing = validated(value),
+                  sourceDistance(source, period.startUnix, toleranceS: 450 * 60) != nil else { return true }
+            if source == period.startUnix { return false }
+            guard overlaps(reference, existing) || overlaps(sourceBounds, existing) else { return true }
+            let ownDistance = sourceDistance(source, period.startUnix) ?? Int.max
+            let otherOwnsCorrection = competingPeriods.contains { other in
+                guard other.startUnix != period.startUnix,
+                      let distance = matchDistance(source: source, times: existing, period: other) else { return false }
+                // A replay can report a shifted detector window for the same
+                // substantially overlapping edit. Such a window is an alias,
+                // while a separate, disjoint edit can still have its own source.
+                let otherBounds = [other.startUnix, other.endUnix + 1]
+                if overlaps(reference, existing), overlaps(sourceBounds, otherBounds) { return false }
+                // Respect the same earliest-end tie break as makeAll.
+                return distance < ownDistance || (distance == ownDistance && other.endUnix <= period.endUnix)
+            }
+            // Beyond the lookup radius, remove only an alias that also
+            // substantially overlaps the selected corrected window.
+            return otherOwnsCorrection || (ownDistance == Int.max && !overlaps(reference, existing))
+        }
     }
 
     static func times(for period: SleepPeriod, overrides: [String: [Int]]) -> [Int]? {
         if let exact = validated(overrides[String(period.startUnix)]) { return exact }
         let candidates = overrides.compactMap { key, value -> (Int, [Int])? in
-            guard let source = Int(key), let distance = sourceDistance(source, period.startUnix),
-                  let times = validated(value) else { return nil }
-            let overlap = min(period.endUnix + 1, times[1]) - max(period.startUnix, times[0])
-            let shorter = min(period.durationS, times[1] - times[0])
-            guard overlap > 0, overlap * 2 >= shorter else { return nil }
+            guard let source = Int(key), let times = validated(value),
+                  let distance = matchDistance(source: source, times: times, period: period) else { return nil }
             return (distance, times)
         }
         // Dictionary iteration order is undefined. Equal-distance aliases must

@@ -212,4 +212,117 @@ final class SleepWakeTailBoundaryTests: XCTestCase {
                        "Do not end sleep at the bathroom start when sleep resumes")
     }
 
+    func testLateEveningSettlingSurvivesBriefArousalBeforeBandDeclaration() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 21, minute: 30))!.timeIntervalSince1970)
+        let quietRest = base + 10 * 60
+        let bedtimeMovement = quietRest + 35 * 60
+        let onset = bedtimeMovement + 2 * 60
+        let hint = onset + 28 * 60
+        let active = (base..<quietRest).map { row($0, hr: 99, accel: 0.2, state: 0) }
+        let presleep = (quietRest..<bedtimeMovement).map { row($0, hr: 76, accel: 0.02, state: 0) }
+        let settling = (bedtimeMovement..<onset).map {
+            row($0, hr: 84, accel: $0 < bedtimeMovement + 24 ? 0.18 : 0.02, state: 0)
+        }
+        let delayed = (onset..<hint).map {
+            let arousal = (onset + 12 * 60..<(onset + 14 * 60)).contains($0)
+            return row($0, hr: arousal ? 74 : 64, accel: arousal ? 0.03 : 0.007, state: 1)
+        }
+        let confirmed = (hint..<(hint + 7200)).map { row($0, hr: 61, accel: 0.007, state: 2) }
+        let rows = active + presleep + settling + delayed + confirmed
+        XCTAssertEqual(try XCTUnwrap(SleepDetect.detect(rows).first).startUnix, onset)
+        let unobserved = rows.filter { !((onset + 4 * 60)..<(onset + 7 * 60)).contains($0.unix) }
+        XCTAssertGreaterThan(try XCTUnwrap(SleepDetect.detect(unobserved).first).startUnix, onset)
+    }
+
+    func testLateArchiveRecoversShortMorningResumptionWithLatchedUp() throws {
+        let base = Int(Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 4, minute: 30))!.timeIntervalSince1970)
+        let start = base + 600
+        let interruption = start + 7200
+        let resumed = interruption + 6 * 60
+        let finalWake = resumed + 14 * 60
+        let active = (base..<start).map { row($0, hr: 90, accel: 0.3, state: 0) }
+        let sleeping = (start..<interruption).map { row($0, hr: 55, accel: 0.008, state: 2) }
+        let bathroom = (interruption..<resumed).map { row($0, hr: 81, accel: 0.25, state: 3) }
+        let returned = (resumed..<finalWake).map { row($0, hr: 57, accel: 0.008, state: 3) }
+        let awake = (finalWake..<(finalWake + 600)).map { row($0, hr: 76, accel: 0.03, state: 3) }
+        let partial = active + sleeping + bathroom
+        let original = try XCTUnwrap(SleepDetect.detect(partial).first)
+        XCTAssertEqual(original.endUnix, interruption - 1)
+
+        let full = partial + returned + awake
+        let periods = SleepDetect.detect(full)
+        let reconciled = try XCTUnwrap(periods.first)
+        XCTAssertEqual(periods.count, 1)
+        XCTAssertEqual(reconciled.startUnix, start)
+        XCTAssertEqual(reconciled.endUnix, finalWake - 1)
+        XCTAssertEqual(SleepDetect.detect(full + returned), periods)
+
+        let previous = SleepSession.make(samples: partial, period: original)
+        let next = SleepSession.make(samples: full, period: reconciled)
+        let observedWake = next.staging.segments.filter { $0.stage == .wake }.reduce(0) {
+            $0 + max(0, min($1.endUnix, resumed) - max($1.startUnix, interruption))
+        }
+        XCTAssertGreaterThanOrEqual(observedWake, 5 * 60)
+        let retained = SleepSession.retainingUncovered(previous: [previous], fresh: [next],
+            coverageStart: full.first?.unix, coverageEnd: full.last?.unix, samples: full)
+        XCTAssertEqual(retained.map(\.endUnix), [finalWake])
+
+        // A partial offload can stop inside the interruption. Reconciliation
+        // uses the corroborated transition from the later, complete replay.
+        let frontier = interruption + 64
+        let provisionalPeriod = SleepPeriod(startUnix: start, endUnix: frontier - 1,
+            quietFraction: 0.99, meanHR: 55, wakeEvents: 1)
+        let provisional = SleepSession.make(samples: partial, period: provisionalPeriod)
+        let restored = try JSONDecoder().decode(SleepSession.self, from: JSONEncoder().encode(provisional))
+        let extended = SleepSession.retainingUncovered(previous: [restored], fresh: [next],
+            coverageStart: full.first?.unix, coverageEnd: full.last?.unix, samples: full)
+        XCTAssertEqual(extended.map(\.endUnix), [finalWake])
+
+        // Quiet elevated-HR reading after the same movement is not a return to sleep.
+        let awakeInBed = (resumed..<finalWake).map { row($0, hr: 70, accel: 0.008, state: 3) }
+        XCTAssertEqual(SleepDetect.detect(partial + awakeInBed + awake).first?.endUnix, interruption - 1)
+        XCTAssertEqual(SleepDetect.detect(partial + Array(returned.enumerated().compactMap {
+            $0.offset.isMultiple(of: 2) ? $0.element : nil
+        }) + awake).first?.endUnix, interruption - 1)
+    }
+
+    func testWakeAnchorMinuteCanBeQuietBeforeObservedMovementAndResettling() throws {
+        let (early, wake, _) = capture(upSeconds: 0)
+        let anchor = (wake..<(wake + 60)).map { row($0, hr: 55, accel: 0.008, state: 3) }
+        let interruption = ((wake + 60)..<(wake + 180)).map { row($0, hr: 85, accel: 0.2, state: 3) }
+        let end = wake + 12 * 60
+        let returned = ((wake + 180)..<end).map { row($0, hr: 56, accel: 0.008, state: 3) }
+        let period = try XCTUnwrap(SleepDetect.detect(early).first)
+        let rows = early + anchor + interruption + returned
+        XCTAssertEqual(SleepDetect.observedShortResumption(after: period, samples: rows, before: end), end - 1)
+    }
+
+    func testPartialArchiveFrontierReplaysIntoOneFullSessionAfterRelaunch() throws {
+        let day = Calendar.current.date(from: DateComponents(
+            year: 2026, month: 11, day: 18, hour: 0, minute: 0))!
+        let frontier = Int(day.timeIntervalSince1970)
+        let start = frontier - 68 * 60
+        let wake = frontier + 5 * 3600
+        let active = ((start - 600)..<start).map { row($0, hr: 85, accel: 0.2, state: 0) }
+        let early = (start..<frontier).map { row($0, hr: 55, accel: 0.007, state: 2) }
+        let late = (frontier..<wake).map { row($0, hr: 56, accel: 0.007, state: 2) }
+        let awake = (wake..<(wake + 600)).map { row($0, hr: 80, accel: 0.2, state: 3) }
+        let partial = CaptureSummary.make(samples: active + early, sex: .unspecified, maxHR: nil)
+        let old = try XCTUnwrap(partial.latestSleepSession)
+        XCTAssertEqual(old.endUnix, frontier)
+        XCTAssertFalse(old.isEdited)
+        let restored = try JSONDecoder().decode(SleepSession.self, from: JSONEncoder().encode(old))
+
+        let rows = active + early + late + awake
+        let full = CaptureSummary.make(samples: rows, sex: .unspecified, maxHR: nil)
+        let firstPass = SleepSession.retainingUncovered(previous: [restored], fresh: full.sleepSessions ?? [],
+            coverageStart: full.firstUnix, coverageEnd: full.lastUnix, samples: rows)
+        XCTAssertEqual(firstPass.map(\.endUnix), [wake])
+        XCTAssertEqual(firstPass.first?.startUnix, start)
+        XCTAssertEqual(firstPass.first?.isEdited, false)
+        XCTAssertEqual(SleepSession.retainingUncovered(previous: firstPass, fresh: full.sleepSessions ?? [],
+            coverageStart: full.firstUnix, coverageEnd: full.lastUnix, samples: rows), firstPass)
+    }
 }
