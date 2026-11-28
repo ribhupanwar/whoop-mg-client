@@ -187,6 +187,11 @@ class V18Sample:
     # 4-bit quality counter. Semantics are inferred from OpenStrap/protocol and
     # require device validation before any clinical use.
     @property
+    def step_counter(self) -> int | None:
+        """Alias for step_motion_counter to match Swift V18Sample property naming."""
+        return self.step_motion_counter
+
+    @property
     def ir_source_selected(self) -> bool | None:
         if self.hr_quality_flags is None:
             return None
@@ -263,6 +268,10 @@ def decode_v18(inner: bytes) -> V18Sample | None:
             value = _i16(inner, 16 + 2 * i)
             if value is not None and MIN_RR_MS <= value <= MAX_RR_MS:
                 rr.append(value)
+    else:
+        # Corrupted/oversized declared beat count (> 4) fails padding validity
+        # matching Swift V18Decoder and Ghidra 0x1008d0a4c (RRIntervalsCountTooLarge).
+        rr_padding_valid = False
 
     dyn = _f32(inner, 33)
     if dyn is not None and not (0 <= dyn <= FULL_SCALE_G):
