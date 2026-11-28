@@ -15,6 +15,7 @@ struct SleepAnalysisView: View {
     @State private var preparingSleepExport = false
     @State private var showSleepEditor = false
     @State private var confirmEndSleep = false
+    @State private var confirmShortenedSleep = false
     @State private var sleepEditorSnapshot: SleepCorrectionStore.EditorSnapshot?
     @State private var sleepEditorSessionID: String?
     @State private var correctedSleepStart = Date()
@@ -96,6 +97,13 @@ struct SleepAnalysisView: View {
                 Form {
                     DatePicker("Bed Time", selection: $correctedSleepStart)
                     DatePicker("Wake Time", selection: $correctedSleepEnd)
+                    if let change = shortenedSleepDescription {
+                        Text(change)
+                            .font(StrapTypography.body(12))
+                            .foregroundStyle(Color.appMuted)
+                        Text("Saving a shorter window creates a manual correction. Later band history will not extend it automatically. Use Automatic Detection to remove the correction.")
+                            .font(StrapTypography.body(11))
+                    }
                     Button("End Sleep") {
                         confirmEndSleep = true
                     }
@@ -126,11 +134,24 @@ struct SleepAnalysisView: View {
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button("Save") {
-                            saveSleepCorrection()
+                            if shortenedSleepDescription != nil {
+                                confirmShortenedSleep = true
+                            } else {
+                                saveSleepCorrection()
+                            }
                         }
                         .disabled(!sleepEditorIsCurrent || correctedSleepEnd <= correctedSleepStart
                             || correctedSleepEnd.timeIntervalSince(correctedSleepStart) > 86400)
                     }
+                }
+                .alert("Shorten recorded sleep?", isPresented: $confirmShortenedSleep) {
+                    Button("Cancel", role: .cancel) {}
+                    Button("Save shorter sleep", role: .destructive) {
+                        // Save still rechecks the original editor snapshot against the current session.
+                        saveSleepCorrection()
+                    }
+                } message: {
+                    Text((shortenedSleepDescription ?? "Review the selected times.") + "\n\nThis saves a manual correction. If you are still sleeping, cancel and let automatic detection continue.")
                 }
             }
         }
@@ -138,7 +159,7 @@ struct SleepAnalysisView: View {
             Button("Cancel", role: .cancel) {}
             Button("End Sleep") { saveSleepCorrection(explicitlyEndSleep: true) }
         } message: {
-            Text("Set the sleep end to the selected time? This updates the sleep window and recalculates available metrics. You can edit it later.")
+            Text("Set the sleep end to the selected time? Only confirm if you have finished sleeping. This creates a manual correction; later band history will not extend it automatically. You can remove it using Automatic Detection.")
         }
         .navigationTitle("TODAY")
         .toolbar {
@@ -174,6 +195,14 @@ struct SleepAnalysisView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private var shortenedSleepDescription: String? {
+        guard let snapshot = sleepEditorSnapshot, snapshot.displayed.count == 2 else { return nil }
+        let previous = snapshot.displayed[1] - snapshot.displayed[0]
+        let proposed = Int(correctedSleepEnd.timeIntervalSince1970) - Int(correctedSleepStart.timeIntervalSince1970)
+        guard proposed > 0, proposed < previous else { return nil }
+        return "Time in bed: \\(CoachFormat.duration(Double(previous) / 3600)) → \\(CoachFormat.duration(Double(proposed) / 3600))."
     }
 
     private func saveSleepCorrection(explicitlyEndSleep: Bool = false) {
