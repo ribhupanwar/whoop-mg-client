@@ -228,7 +228,9 @@ final class WorkoutLiveActivityCoordinator {
     private func pushUpdate(now: Date = Date(), connectedOverride: Bool? = nil) {
         reconcileBandSteps()
         let connected = connectedOverride ?? band.isConnected
-        let liveSteps = band.liveWorkoutSteps
+        let liveSteps = connected ? band.liveWorkoutSteps.flatMap { reading in
+            (0...5).contains(now.timeIntervalSince(reading.observedAt)) ? reading : nil
+        } : nil
         let freshBPM = LiveHeartRateState.fresh(
             band.liveHeartRate, receivedAt: band.lastLiveHRAt, connected: connected, now: now
         )
