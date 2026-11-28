@@ -876,6 +876,7 @@ final class BandLink: NSObject, ObservableObject {
 
     func recalculateRetainedMetrics() {
         guard drainStartedAt == nil else {
+            metricsRefreshPending = true
             BLEDiagnosticLog.shared.log("analysis deferred: active historical drain in progress")
             return
         }
@@ -2633,8 +2634,12 @@ final class BandLink: NSObject, ObservableObject {
                     guard let self else { return }
                     UserDefaults.standard.set(self.lastHistoryRecordCount, forKey: Keys.retainedHistoryCount)
                     if completed, self.historySyncGeneration == generation { self.recordCompletedHistorySync() }
+                    self.metricsRefreshPending = false
                     self.recalculateRetainedMetrics()
                 }
+            } else if metricsRefreshPending {
+                metricsRefreshPending = false
+                recalculateRetainedMetrics()
             }
             if completed && historicalRecordFrames == 0 {
                 lastMessage = "History sync completed. No new stored sensor records."
