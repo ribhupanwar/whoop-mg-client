@@ -907,7 +907,7 @@ struct SleepAnalysisView: View {
             .tint(Color.appMuted)
         }
         .padding(16)
-        .background(Color(hex: 0x16181D), in: RoundedRectangle(cornerRadius: 12))
+        .background(Color.adaptive(dark: 0x16181D, light: 0xFFFFFF), in: RoundedRectangle(cornerRadius: 12))
         .foregroundStyle(Color.appFG)
     }
 
@@ -953,10 +953,10 @@ struct SleepAnalysisView: View {
             }
         }
         .padding(14)
-        .background(Color(hex: 0x161A24), in: RoundedRectangle(cornerRadius: 14))
+        .background(Color.adaptive(dark: 0x161A24, light: 0xFFFFFF), in: RoundedRectangle(cornerRadius: 14))
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Color.appLine.opacity(0.35), lineWidth: 1)
         )
         .padding(.top, 8)
     }

@@ -196,7 +196,7 @@ struct RootView: View {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.85)
                         }
-                        .foregroundStyle(selected ? Color.white : Color(hex: 0x7E8B94))
+                        .foregroundStyle(selected ? Color.appFG : Color.appMuted)
                         .frame(maxWidth: .infinity)
                         .frame(minHeight: 50)
                         .contentShape(Rectangle())
@@ -217,7 +217,7 @@ struct RootView: View {
                     RoundedRectangle(cornerRadius: 26).fill(Color.clear)
                         .strapLiquidGlass(cornerRadius: 26)
                 } else {
-                    RoundedRectangle(cornerRadius: 26).fill(Color(hex: 0x1A2228).opacity(0.94))
+                    RoundedRectangle(cornerRadius: 26).fill(Color.appNavBarBG)
                 }
             }
             .overlay(RoundedRectangle(cornerRadius: 26)
@@ -233,11 +233,11 @@ struct RootView: View {
                         .stroke(Color(hex: 0x7995F7), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 38, height: 38)
-                    WhoopWGlyph(color: .white)
+                    WhoopWGlyph(color: .appFG)
                         .frame(width: 22, height: 22)
                 }
                 .frame(width: 50, height: 50)
-                .background(Color(hex: 0x181F27).opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
+                .background(Color.adaptive(dark: 0x24292F, light: 0xE8EDF1).opacity(0.95), in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color(hex: 0x3E4854).opacity(0.65), lineWidth: 0.6))
                 .shadow(color: Color(hex: 0x5C6BC0).opacity(0.20), radius: 6, x: 0, y: 2)
             }
@@ -261,7 +261,7 @@ private extension View {
     @ViewBuilder
     func strapLiquidGlass(cornerRadius: CGFloat) -> some View {
         if #available(iOS 26.0, *) {
-            self.glassEffect(.regular, in: .rect(cornerRadius: cornerRadius))
+            self.glassEffect(.regular.tint(Color.appNavBarBG), in: .rect(cornerRadius: cornerRadius))
         } else {
             self.background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: cornerRadius))
                 .overlay(RoundedRectangle(cornerRadius: cornerRadius).stroke(Color.appLine, lineWidth: 1))
