@@ -80,6 +80,7 @@ class WhoopUIParityTests(unittest.TestCase):
             "appCardBorder": "0x363C40",
             "appSleep": "0x7CA1BB",
             "appGood": "0x00E676",
+            "healthMonitorGood": "0x38E7B0",
             "appRecoveryGreen": "0x1AEC07",
             "appRecoveryYellow": "0xFEDE00",
             "appRecoveryRed": "0xFC0025",
@@ -92,6 +93,13 @@ class WhoopUIParityTests(unittest.TestCase):
         for token, hex_val in expected_tokens.items():
             pattern = rf"static\s+let\s+{token}\s*=\s*Color\.adaptive\(dark:\s*{hex_val},\s*light:\s*0x[0-9A-F]{{6}}\)"
             self.assertRegex(theme_src, pattern, f"Token {token} must be defined with hex {hex_val}")
+
+    def test_health_monitor_display_only_polish(self):
+        health_src = (IOS_DIR / "HealthView.swift").read_text(encoding="utf-8")
+        self.assertIn('String(format: "≈%.0f", $0)', health_src)
+        self.assertIn("reading.verifiedWithinRange || reading.monitorShowsPositiveDirection", health_src)
+        self.assertIn("positive ? Color.healthMonitorGood :", health_src)
+        self.assertIn("nightlyOxygenCandidate", health_src)
 
     def test_ring_geometry_constants(self):
         theme_src = (IOS_DIR / "Theme.swift").read_text(encoding="utf-8")

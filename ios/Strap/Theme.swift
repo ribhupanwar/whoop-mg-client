@@ -26,7 +26,7 @@ extension Color {
     }
 
     // Canvas & Surface Gradients
-    static let appCanvasTop = Color.adaptive(dark: 0x262D33, light: 0xE7EDF1)          // Reference top-edge sample
+    static let appCanvasTop = Color.adaptive(dark: 0x282F35, light: 0xE7EDF1)          // Reference top-edge sample
     static let appCanvasMid = Color.adaptive(dark: 0x191E22, light: 0xF0F3F5)          // Reference mid-canvas sample
     static let appBG = Color.adaptive(dark: 0x111518, light: 0xF7F8FA)                 // Reference lower-edge sample
     static let appSurface = Color.adaptive(dark: 0x252A2E, light: 0xFFFFFF)            // Dark card interior #1D2429
@@ -41,13 +41,15 @@ extension Color {
     static let appRecoveryGreen = Color.adaptive(dark: 0x1AEC07, light: 0x168B13)
     static let appRecoveryYellow = Color.adaptive(dark: 0xFEDE00, light: 0x9B7600)
     static let appRecoveryRed = Color.adaptive(dark: 0xFC0025, light: 0xD00024)
-    static let appGood = Color.adaptive(dark: 0x38E7B0, light: 0x007B48)               // Semantic good status (not recovery ring)
+    static let appGood = Color.adaptive(dark: 0x00E676, light: 0x007B48)               // Semantic good status (not recovery ring)
     static let appWarn = Color.adaptive(dark: 0xFFDE00, light: 0x856100)               // Semantic caution status
     static let appHigh = Color.adaptive(dark: 0xFF3B30, light: 0xBD251D)               // Semantic error status
     static let appAccent = Color.adaptive(dark: 0x0193E8, light: 0x006BA8)             // Reference strain blue
     static let appRingTrack = Color.adaptive(dark: 0x343C40, light: 0xCBD5DC).opacity(0.85) // Unfilled ring track #2A333A @ 85%
 
     // Interactive & Badge Fill Tokens
+    // Health Monitor status mint; keep the shared semantic palette stable.
+    static let healthMonitorGood = Color.adaptive(dark: 0x38E7B0, light: 0x007B48)
     static let appGoodChipBG = Color.adaptive(dark: 0x16261B, light: 0xDDF2E4)
     static let appDemoFlagBG = Color.adaptive(dark: 0x2A2114, light: 0xFFF0D8)
     static let appButtonFill = Color.adaptive(dark: 0x2A3339, light: 0xE2E8EC)         // Action pill buttons (+ ADD ACTIVITY)
@@ -92,8 +94,8 @@ extension LinearGradient {
     static var appCanvas: LinearGradient {
         LinearGradient(stops: [
             .init(color: .appCanvasTop, location: 0),
-            .init(color: Color.adaptive(dark: 0x242D32, light: 0xEAF0F3), location: 0.12),
-            .init(color: Color.adaptive(dark: 0x1E252B, light: 0xEDF1F4), location: 0.25),
+            .init(color: Color.adaptive(dark: 0x232A30, light: 0xEAF0F3), location: 0.12),
+            .init(color: Color.adaptive(dark: 0x20262B, light: 0xEDF1F4), location: 0.25),
             .init(color: Color.adaptive(dark: 0x161B1F, light: 0xF0F3F5), location: 0.45),
             .init(color: Color.adaptive(dark: 0x13181C, light: 0xF3F5F7), location: 0.55),
             .init(color: Color.adaptive(dark: 0x111518, light: 0xF6F8FA), location: 0.85),

@@ -26,7 +26,7 @@ struct HealthView: View {
                     }
                     .padding(.bottom, 14)
                 }
-                Hint("Personal ranges need seven qualifying prior nights. Green checks indicate readings within your personal range; green favourable-direction chips describe personal history, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
+                Hint("Personal ranges need seven qualifying prior nights. Green checks indicate a personal in-range reading or a favourable HRV/RHR direction, not clinical normality. Respiratory rate is an RSA estimate; SpO₂ and skin temperature are unverified sensor estimates.")
             }
         }
         .navigationTitle("HEALTH MONITOR")
@@ -130,7 +130,7 @@ struct HealthView: View {
                 }
             }
             let positive = reading.verifiedWithinRange || reading.monitorShowsPositiveDirection
-            let tint = demo ? Color.appMuted : (positive ? Color.appGood :
+            let tint = demo ? Color.appMuted : (positive ? Color.healthMonitorGood :
                 (reading.monitorShowsWarning ? Color.appWarn : Color.appMuted))
             HStack(spacing: 5) {
                 if !demo && positive {
