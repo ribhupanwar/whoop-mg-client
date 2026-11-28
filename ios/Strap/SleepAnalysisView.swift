@@ -99,6 +99,15 @@ struct SleepAnalysisView: View {
                     }
                     .disabled(correctedSleepEnd <= correctedSleepStart || editablePeriod == nil)
                     .accessibilityHint("Confirm the selected wake-up time as the end of this sleep session")
+                    if session?.isEdited == true {
+                        Button("Use Automatic Detection", role: .destructive) {
+                            store.band.resetLatestSleepCorrection()
+                            showSleepEditor = false
+                        }
+                        .disabled(store.band.isAnalyzingHistory)
+                        Text("Remove this night's saved bed/wake correction and re-detect using retained sensor history. Raw records and other nights are preserved.")
+                            .font(StrapTypography.body(11))
+                    }
                     Text("Sleep duration and its Recovery input update; HRV/RHR require overnight sensor data.")
                         .font(StrapTypography.body(11))
                 }
