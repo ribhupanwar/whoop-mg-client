@@ -111,6 +111,21 @@ final class WorkoutLiveActivityCoordinatorTests: XCTestCase {
         XCTAssertGreaterThan(firstCredit.count - stationary.count, 4)
     }
 
+    func testOverlappingGaitWindowsAreCreditedAtMostOnceAfterClassificationDrop() {
+        var ledger = LiveGaitCreditLedger()
+        func windows() -> [LiveGaitPedometer.WindowCredit] {
+            (3...10).map { .init(endSecond: $0, steps: 2) }
+        }
+        let first = ledger.accept(windows(), endingAt: 11)
+        XCTAssertEqual(first.map { $0.second }, Array(UInt32(4)...11))
+        XCTAssertTrue(ledger.accept([], endingAt: 12).isEmpty)
+        let resumed = ledger.accept(windows(), endingAt: 13)
+        XCTAssertEqual(resumed.map { $0.second }, [12, 13])
+        XCTAssertTrue(ledger.accept(windows(), endingAt: 13).isEmpty)
+        XCTAssertTrue(ledger.accept(windows(), endingAt: 11).isEmpty)
+        XCTAssertEqual(ledger.accept(windows(), endingAt: 30).count, 8)
+    }
+
     func testWidgetReloadCoalescerFiresTrailingUpdateAfterCooldown() async throws {
         var now: TimeInterval = 100
         let coalescer = WidgetReloadCoalescer(minimumInterval: 0.15, now: { now })
